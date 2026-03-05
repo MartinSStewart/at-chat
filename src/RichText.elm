@@ -41,6 +41,7 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
+import String.Extra
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..))
@@ -406,18 +407,18 @@ parser users modifiers =
                     |> Parser.backtrackable
                 , urlParser
                     |> Parser.map
-                        (\( protocol, rest ) ->
-                            (case Url.fromString ("https://" ++ rest) of
+                        (\{ protocol, url, trailing } ->
+                            (case Url.fromString ("https://" ++ url) of
                                 Just _ ->
-                                    { current = Array.empty
+                                    { current = Array.fromList [ trailing ]
                                     , rest =
                                         Array.append
                                             state.rest
-                                            (Array.push (Hyperlink protocol rest) (parserHelper state))
+                                            (Array.push (Hyperlink protocol url) (parserHelper state))
                                     }
 
                                 Nothing ->
-                                    { current = Array.push (hyperlinkToString protocol rest) state.current
+                                    { current = Array.push (hyperlinkToString protocol url ++ trailing) state.current
                                     , rest = state.rest
                                     }
                             )
@@ -453,9 +454,32 @@ parser users modifiers =
         )
 
 
-urlParser : Parser ( Protocol, String )
+urlParser : Parser { protocol : Protocol, url : String, trailing : String }
 urlParser =
-    Parser.succeed Tuple.pair
+    Parser.succeed
+        (\protocol url ->
+            let
+                urlLength : Int
+                urlLength =
+                    String.length url
+
+                ( index, _ ) =
+                    String.foldr
+                        (\char (( index2, stop ) as state) ->
+                            if stop then
+                                state
+
+                            else if char == '.' || char == ')' || char == ',' then
+                                ( index2 - 1, False )
+
+                            else
+                                ( index2, True )
+                        )
+                        ( urlLength, False )
+                        url
+            in
+            { protocol = protocol, url = String.slice 0 index url, trailing = String.slice index urlLength url }
+        )
         |= Parser.oneOf
             [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
             , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
@@ -1491,18 +1515,18 @@ discordParser modifiers =
                     |> Parser.backtrackable
                 , urlParser
                     |> Parser.map
-                        (\( protocol, rest ) ->
-                            (case Url.fromString ("https://" ++ rest) of
+                        (\{ protocol, url, trailing } ->
+                            (case Url.fromString ("https://" ++ url) of
                                 Just _ ->
-                                    { current = Array.empty
+                                    { current = Array.fromList [ trailing ]
                                     , rest =
                                         Array.append
                                             state.rest
-                                            (Array.push (Hyperlink protocol rest) (parserHelper state))
+                                            (Array.push (Hyperlink protocol url) (parserHelper state))
                                     }
 
                                 Nothing ->
-                                    { current = Array.push (hyperlinkToString protocol rest) state.current
+                                    { current = Array.push (hyperlinkToString protocol url ++ trailing) state.current
                                     , rest = state.rest
                                     }
                             )

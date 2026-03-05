@@ -4,6 +4,7 @@ import Discord.Id
 import Expect
 import List.Nonempty exposing (Nonempty(..))
 import RichText exposing (RichText(..))
+import SeqDict
 import Test exposing (Test)
 import Unsafe
 
@@ -23,7 +24,7 @@ test =
 
 fromDiscordHelper : String -> List (RichText (Discord.Id.Id Discord.Id.UserId))
 fromDiscordHelper text =
-    RichText.fromDiscord text |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty |> List.Nonempty.toList
 
 
 basicFormattingTests : Test

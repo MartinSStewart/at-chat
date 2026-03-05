@@ -9,6 +9,7 @@ import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Unsafe
+import Url exposing (Protocol(..))
 
 
 users : SeqDict.SeqDict (Id.Id a) { name : PersonName }
@@ -112,6 +113,16 @@ test =
                                 )
                             )
                             []
+                        )
+        , Test.test "Parser url with trailing punctuation" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString 'G' "o to https://abc.com/. Click on the sign up.")
+                    |> Expect.equal
+                        (Nonempty
+                            (NormalText 'G' "o to ")
+                            [ Hyperlink Https "abc.com/"
+                            , NormalText '.' " Click on the sign up."
+                            ]
                         )
 
         --, Test.test " ~~~~" <|
