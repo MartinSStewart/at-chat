@@ -100,7 +100,7 @@ type alias EnterEmail2 =
     { email : String
     , pressedSubmitEmail : Bool
     , rateLimited : Bool
-    , signupsDisabled : Bool
+    , showSignupsDisabled : Bool
     }
 
 
@@ -702,12 +702,12 @@ rateLimited loginForm =
                 { email = EmailAddress.toString enterLoginCode.sentTo
                 , pressedSubmitEmail = False
                 , rateLimited = True
-                , signupsDisabled = False
+                , showSignupsDisabled = False
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = True, signupsDisabled = False }
+                { email = "", pressedSubmitEmail = False, rateLimited = True, showSignupsDisabled = False }
 
         EnterUserData _ ->
             loginForm
@@ -717,19 +717,19 @@ signupsDisabled : LoginForm -> LoginForm
 signupsDisabled loginForm =
     case loginForm of
         EnterEmail enterEmail ->
-            EnterEmail { enterEmail | signupsDisabled = True }
+            EnterEmail { enterEmail | showSignupsDisabled = True }
 
         EnterLoginCode enterLoginCode ->
             EnterEmail
                 { email = EmailAddress.toString enterLoginCode.sentTo
                 , pressedSubmitEmail = False
                 , rateLimited = False
-                , signupsDisabled = True
+                , showSignupsDisabled = True
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = False, signupsDisabled = True }
+                { email = "", pressedSubmitEmail = False, rateLimited = False, showSignupsDisabled = True }
 
         EnterUserData _ ->
             loginForm
@@ -795,7 +795,7 @@ enterEmailView model =
         , if model.rateLimited then
             errorView "Too many login attempts have been made. Please try again later."
 
-          else if model.signupsDisabled then
+          else if model.showSignupsDisabled then
             errorView "New sign ups are currently disabled."
 
           else
@@ -821,5 +821,5 @@ init =
         { email = ""
         , pressedSubmitEmail = False
         , rateLimited = False
-        , signupsDisabled = False
+        , showSignupsDisabled = False
         }
