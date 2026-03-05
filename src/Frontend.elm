@@ -305,13 +305,7 @@ initLoadedFrontend loading time userAgent loginResult =
         [ cmdB
         , cmdA
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
-        , Http.get
-            { url = "/_i"
-            , expect =
-                Http.expectJson
-                    GotVersionNumber
-                    (Json.Decode.field "v" Json.Decode.string)
-            }
+        , Http.get { url = "/_i", expect = Http.expectJson GotVersionNumber (Json.Decode.field "v" Json.Decode.int) }
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker

@@ -409,9 +409,9 @@ view isMobile time local loggedIn loaded model =
                 isMobile
                 "Connected devices"
                 (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
-            , Ui.el
-                [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]
-                (MyUi.simpleButton
+            , Ui.row
+                [ Ui.paddingXY 16 0 ]
+                [ MyUi.simpleButton
                     (Dom.id "options_logout")
                     PressedLogOut
                     (Ui.row
@@ -420,18 +420,19 @@ view isMobile time local loggedIn loaded model =
                         , Ui.text "Logout"
                         ]
                     )
-                )
-            , case loaded.versionNumber of
-                Just version ->
-                    Ui.el
-                        [ Ui.paddingXY 16 0
-                        , Ui.Font.size 12
-                        , Ui.Font.color MyUi.font3
-                        ]
-                        (Ui.text ("Version " ++ version))
+                , case loaded.versionNumber of
+                    Just version ->
+                        Ui.el
+                            [ Ui.Font.size 12
+                            , Ui.Font.color MyUi.font3
+                            , Ui.alignRight
+                            , Ui.centerY
+                            ]
+                            (Ui.text ("Version " ++ String.fromInt version))
 
-                Nothing ->
-                    Ui.none
+                    Nothing ->
+                        Ui.none
+                ]
             ]
         )
 

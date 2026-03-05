@@ -145,7 +145,7 @@ type alias LoadedFrontend =
     , scrollbarWidth : Int
     , userAgent : UserAgent
     , pageHasFocus : Bool
-    , versionNumber : Maybe String
+    , versionNumber : Maybe Int
     }
 
 
@@ -490,7 +490,7 @@ type FrontendMsg
         }
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | TypedDiscordLinkBookmarklet
-    | GotVersionNumber (Result Http.Error String)
+    | GotVersionNumber (Result Http.Error Int)
 
 
 type ScrollPosition
