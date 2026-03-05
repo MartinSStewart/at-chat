@@ -164,14 +164,14 @@ decodePostmark =
         (Json.Decode.field "TextBody" Json.Decode.string)
 
 
-isLogErrorEmail : EmailAddress -> HttpRequest -> Maybe String
+isLogErrorEmail : String -> HttpRequest -> Maybe String
 isLogErrorEmail emailAddress httpRequest =
     if httpRequest.url == "https://api.postmarkapp.com/email" then
         case httpRequest.body of
             T.JsonBody value ->
                 case Json.Decode.decodeValue decodePostmark value of
                     Ok ( subject, to, body ) ->
-                        case ( emailAddress == to, subject, String.split ":" body ) of
+                        case ( emailAddress == EmailAddress.toString to, subject, String.split ":" body ) of
                             ( True, "An error was logged that needs attention", [ _, log ] ) ->
                                 String.split "." log |> List.head |> Maybe.map String.trim
 
@@ -604,7 +604,16 @@ tests fileData =
                     response
 
                 Nothing ->
-                    if currentRequest.url == "http://localhost:3000/file/vapid" then
+                    if currentRequest.url == "/_i" then
+                        StringHttpResponse
+                            { url = currentRequest.url
+                            , statusCode = 200
+                            , statusText = "OK"
+                            , headers = Dict.empty
+                            }
+                            """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
+
+                    else if currentRequest.url == "http://localhost:3000/file/vapid" then
                         StringHttpResponse
                             { url = currentRequest.url
                             , statusCode = 200
@@ -1246,11 +1255,7 @@ tests fileData =
         , T.checkState
             (Duration.hours 4.01 |> Duration.inMilliseconds)
             (\data ->
-                case
-                    List.filterMap
-                        (isLogErrorEmail Backend.emailToNotifyWhenErrorsAreLogged)
-                        data.httpRequests
-                of
+                case List.filterMap (isLogErrorEmail Env.adminEmail) data.httpRequests of
                     [ "LoginsRateLimited" ] ->
                         Ok ()
 
@@ -1298,7 +1303,7 @@ tests fileData =
     , T.start
         "Add and remove reaction emojis"
         (Time.millisToPosix 1756739527046)
-        config
+        normalConfig
         [ T.connectFrontend
             0
             (Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
@@ -1390,7 +1395,7 @@ tests fileData =
     , T.start
         "Opening non-existent guild shouldn't show \"Unable to reach the server.\" warning"
         (Time.millisToPosix 1757158297558)
-        config
+        normalConfig
         [ T.connectFrontend
             0
             (Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")
@@ -1423,7 +1428,7 @@ checkNoErrorLogs =
     T.checkState
         100
         (\data ->
-            case List.filterMap (isLogErrorEmail Backend.emailToNotifyWhenErrorsAreLogged) data.httpRequests of
+            case List.filterMap (isLogErrorEmail Env.adminEmail) data.httpRequests of
                 [] ->
                     Ok ()
 

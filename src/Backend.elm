@@ -2,13 +2,11 @@ module Backend exposing
     ( adminUser
     , app
     , app_
-    , emailToNotifyWhenErrorsAreLogged
-    , loginEmailContent
-    , loginEmailSubject
     )
 
 import AiChat
 import Array exposing (Array)
+import BackendExtra
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
@@ -26,14 +24,11 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
-import Email.Html
-import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
-import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -49,15 +44,12 @@ import NonemptySet
 import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pagination
-import PersonName
-import Postmark
 import Quantity
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
-import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
@@ -66,7 +58,6 @@ import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
-import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WireHelper
@@ -191,92 +182,6 @@ init =
     )
 
 
-adminData : BackendModel -> Int -> InitAdminData
-adminData model lastLogPageViewed =
-    { lastLogPageViewed = lastLogPageViewed
-    , users = model.users
-    , emailNotificationsEnabled = model.emailNotificationsEnabled
-    , signupsEnabled = model.signupsEnabled
-    , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
-    , privateVapidKey = model.privateVapidKey
-    , slackClientSecret = model.slackClientSecret
-    , openRouterKey = model.openRouterKey
-    , discordDmChannels =
-        SeqDict.map
-            (\_ channel ->
-                { members = channel.members
-                , messageCount = Array.length channel.messages
-                , firstMessage = Array.get 0 channel.messages
-                }
-            )
-            model.discordDmChannels
-    , discordUsers =
-        SeqDict.map
-            (\_ discordUser ->
-                case discordUser of
-                    FullData data ->
-                        FullData_ForAdmin
-                            { user = data.user
-                            , linkedTo = data.linkedTo
-                            , icon = data.icon
-                            , linkedAt = data.linkedAt
-                            , isLoadingData = data.isLoadingData
-                            }
-
-                    BasicData data ->
-                        BasicData_ForAdmin data
-
-                    NeedsAuthAgain data ->
-                        NeedsAuthAgain_ForAdmin data
-            )
-            model.discordUsers
-    , discordGuilds =
-        SeqDict.map
-            (\_ guild ->
-                { name = guild.name
-                , channels =
-                    SeqDict.map
-                        (\_ channel ->
-                            { name = channel.name
-                            , messageCount = Array.length channel.messages
-                            , threadCount = SeqDict.size channel.threads
-                            , firstMessage = Array.get 0 channel.messages
-                            }
-                        )
-                        guild.channels
-                , members = guild.members
-                , owner = guild.owner
-                }
-            )
-            model.discordGuilds
-    , guilds =
-        SeqDict.map
-            (\_ guild ->
-                { name = guild.name
-                , channels =
-                    SeqDict.map
-                        (\_ channel ->
-                            { name = channel.name
-                            , messageCount = Array.length channel.messages
-                            }
-                        )
-                        guild.channels
-                , memberCount = SeqDict.size guild.members
-                , owner = guild.owner
-                }
-            )
-            model.guilds
-    , loadingDiscordChannels =
-        SeqDict.map
-            (\_ channel ->
-                LocalState.loadingDiscordChannelMap
-                    (List.foldl (\message count -> count + List.length message.attachments) 0)
-                    channel
-            )
-            model.loadingDiscordChannels
-    }
-
-
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
 subscriptions model =
     Subscription.batch
@@ -386,7 +291,7 @@ update msg model =
                 }
 
         SentLoginEmail time emailAddress result ->
-            addLog time (Log.LoginEmail result emailAddress) model
+            BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
 
         SentLogErrorEmail time email result ->
             case result of
@@ -394,7 +299,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.SendLogErrorEmailFailed error email) model
+                    BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
         DiscordUserWebsocketMsg discordUserId discordMsg ->
             DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
@@ -416,11 +321,11 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLogWithCmd
+                    BackendExtra.addLogWithCmd
                         time
                         (Log.FailedToSendDiscordGuildMessage discordUserId guildId channelId threadRoute error)
                         model
-                        (invalidChangeResponse changeId clientId)
+                        (BackendExtra.invalidChangeResponse changeId clientId)
 
         SentDiscordDmMessage time changeId _ clientId channelId discordUserId result ->
             case result of
@@ -429,11 +334,11 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLogWithCmd
+                    BackendExtra.addLogWithCmd
                         time
                         (Log.FailedToSendDiscordDmMessage discordUserId channelId error)
                         model
-                        (invalidChangeResponse changeId clientId)
+                        (BackendExtra.invalidChangeResponse changeId clientId)
 
         DeletedDiscordGuildMessage time guildId channelId threadRoute messageId result ->
             case result of
@@ -441,7 +346,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToDeleteDiscordGuildMessage guildId channelId threadRoute messageId error) model
+                    BackendExtra.addLog time (Log.FailedToDeleteDiscordGuildMessage guildId channelId threadRoute messageId error) model
 
         DeletedDiscordDmMessage time channelId messageId discordMessageId result ->
             case result of
@@ -449,7 +354,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToDeleteDiscordDmMessage channelId messageId discordMessageId error) model
+                    BackendExtra.addLog time (Log.FailedToDeleteDiscordDmMessage channelId messageId discordMessageId error) model
 
         EditedDiscordGuildMessage time guildId channelId threadRoute messageId result ->
             case result of
@@ -457,7 +362,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToEditDiscordGuildMessage guildId channelId threadRoute messageId error) model
+                    BackendExtra.addLog time (Log.FailedToEditDiscordGuildMessage guildId channelId threadRoute messageId error) model
 
         EditedDiscordDmMessage time channelId messageId discordMessageId result ->
             case result of
@@ -465,7 +370,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToEditDiscordDmMessage channelId messageId discordMessageId error) model
+                    BackendExtra.addLog time (Log.FailedToEditDiscordDmMessage channelId messageId discordMessageId error) model
 
         DiscordAddedReactionToGuildMessage time guildId channelId threadRoute discordMessageId emoji result ->
             case result of
@@ -473,7 +378,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
+                    BackendExtra.addLog time (Log.FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
 
         DiscordAddedReactionToDmMessage time channelId messageId discordMessageId emoji result ->
             case result of
@@ -481,7 +386,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
+                    BackendExtra.addLog time (Log.FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
 
         DiscordRemovedReactionToGuildMessage time guildId channelId threadRoute discordMessageId emoji result ->
             case result of
@@ -489,7 +394,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
+                    BackendExtra.addLog time (Log.FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
 
         DiscordRemovedReactionToDmMessage time channelId messageId discordMessageId emoji result ->
             case result of
@@ -497,7 +402,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
+                    BackendExtra.addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
 
         DiscordTypingIndicatorSent ->
             ( model, Command.none )
@@ -534,7 +439,7 @@ update msg model =
                     )
 
                 Err error ->
-                    addLog time (Log.FailedToGetDiscordUserAvatars error) model
+                    BackendExtra.addLog time (Log.FailedToGetDiscordUserAvatars error) model
 
         SentNotification sessionId userId time result ->
             case result of
@@ -542,7 +447,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLogWithCmd
+                    BackendExtra.addLogWithCmd
                         time
                         (Log.PushNotificationError userId error)
                         { model
@@ -641,7 +546,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUser.id
-                                (discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
+                                (BackendExtra.discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -674,7 +579,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUserId
-                                (discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
+                                (BackendExtra.discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -802,7 +707,7 @@ update msg model =
                                     }
 
                                 ( otherDiscordUsers, linkedDiscordUsers ) =
-                                    getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
+                                    BackendExtra.getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
                             in
                             ( model2
                             , Broadcast.toUser
@@ -817,7 +722,7 @@ update msg model =
                                                 (\guildId _ ->
                                                     case SeqDict.get guildId model2.discordGuilds of
                                                         Just guild ->
-                                                            discordGuildToFrontendForUser Nothing guild linkedDiscordUsers
+                                                            BackendExtra.discordGuildToFrontendForUser Nothing guild linkedDiscordUsers
 
                                                         Nothing ->
                                                             Nothing
@@ -828,7 +733,7 @@ update msg model =
                                                 (\data ->
                                                     case SeqDict.get data.dmChannelId model2.discordDmChannels of
                                                         Just dmChannel ->
-                                                            case discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
+                                                            case BackendExtra.discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
                                                                 Just dmChannel2 ->
                                                                     Just ( data.dmChannelId, dmChannel2 )
 
@@ -849,7 +754,7 @@ update msg model =
                             )
 
                         Err error ->
-                            addLogWithCmd
+                            BackendExtra.addLogWithCmd
                                 time
                                 (Log.FailedToLoadDiscordUserData discordUserId error)
                                 { model
@@ -868,7 +773,7 @@ update msg model =
                                 )
 
                 _ ->
-                    addLog
+                    BackendExtra.addLog
                         time
                         (Log.FailedToLoadDiscordUserData discordUserId (Discord.UnexpectedError "Couldn't find FullData Discord user"))
                         model
@@ -1264,279 +1169,6 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
-discordFullDataUserToFrontendCurrentUser :
-    Bool
-    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
-    -> DiscordUserLoadingData
-    -> DiscordFrontendCurrentUser
-discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
-    { name = PersonName.fromStringLossy data.user.username
-    , icon = data.icon
-    , email =
-        case data.user.email of
-            Included maybeText ->
-                case maybeText of
-                    Just text ->
-                        EmailAddress.fromString text
-
-                    Nothing ->
-                        Nothing
-
-            Missing ->
-                Nothing
-    , needsAuthAgain = needsAuthAgain
-    , linkedAt = data.linkedAt
-    , isLoadingData = isLoadingData
-    }
-
-
-getLinkedDiscordUsersAndOtherUsers :
-    Id UserId
-    -> BackendModel
-    ->
-        ( SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
-        , SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
-        )
-getLinkedDiscordUsersAndOtherUsers userId model =
-    SeqDict.foldl
-        (\discordUserId userData ( otherDiscordUsers2, linkedDiscordUsers2 ) ->
-            case userData of
-                FullData data ->
-                    if data.linkedTo == userId then
-                        ( otherDiscordUsers2
-                        , SeqDict.insert
-                            discordUserId
-                            (discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
-                            linkedDiscordUsers2
-                        )
-
-                    else
-                        ( SeqDict.insert
-                            discordUserId
-                            { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                            otherDiscordUsers2
-                        , linkedDiscordUsers2
-                        )
-
-                BasicData data ->
-                    ( SeqDict.insert
-                        discordUserId
-                        { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                        otherDiscordUsers2
-                    , linkedDiscordUsers2
-                    )
-
-                NeedsAuthAgain data ->
-                    if data.linkedTo == userId then
-                        ( otherDiscordUsers2
-                        , SeqDict.insert
-                            discordUserId
-                            (discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
-                            linkedDiscordUsers2
-                        )
-
-                    else
-                        ( SeqDict.insert
-                            discordUserId
-                            { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                            otherDiscordUsers2
-                        , linkedDiscordUsers2
-                        )
-        )
-        ( SeqDict.empty, SeqDict.empty )
-        model.discordUsers
-
-
-getLoginData :
-    SessionId
-    -> UserSession
-    -> BackendUser
-    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
-    -> BackendModel
-    -> LoginData
-getLoginData sessionId session user requestMessagesFor model =
-    let
-        ( otherDiscordUsers, linkedDiscordUsers ) =
-            getLinkedDiscordUsersAndOtherUsers session.userId model
-    in
-    { session = session
-    , adminData =
-        if user.isAdmin then
-            IsAdminLoginData (adminData model user.lastLogPageViewed)
-
-        else
-            IsNotAdminLoginData
-    , twoFactorAuthenticationEnabled =
-        SeqDict.get session.userId model.twoFactorAuthentication |> Maybe.map .finishedAt
-    , guilds =
-        SeqDict.filterMap
-            (\guildId guild ->
-                LocalState.guildToFrontendForUser
-                    (case requestMessagesFor of
-                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdB channelId), threadRoute ) ->
-                            if guildId == guildIdB then
-                                Just ( channelId, threadRoute )
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    session.userId
-                    guild
-            )
-            model.guilds
-    , discordGuilds =
-        SeqDict.filterMap
-            (\guildId guild ->
-                discordGuildToFrontendForUser
-                    (case requestMessagesFor of
-                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId), threadRoute ) ->
-                            if requestedGuildId == guildId then
-                                Just ( requestChannelId, threadRoute )
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    guild
-                    linkedDiscordUsers
-            )
-            model.discordGuilds
-    , discordDmChannels =
-        SeqDict.filterMap
-            (\dmChannelId dmChannel ->
-                discordDmChannelToFrontend
-                    (case requestMessagesFor of
-                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
-                            dmChannelId == data.channelId
-
-                        _ ->
-                            False
-                    )
-                    dmChannel
-                    linkedDiscordUsers
-            )
-            model.discordDmChannels
-    , dmChannels =
-        SeqDict.foldl
-            (\dmChannelId dmChannel dict ->
-                case DmChannel.otherUserId session.userId dmChannelId of
-                    Just otherUserId ->
-                        SeqDict.insert otherUserId
-                            (DmChannel.toFrontend
-                                (case requestMessagesFor of
-                                    Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdB), threadRoute ) ->
-                                        if otherUserId == otherUserIdB then
-                                            Just threadRoute
-
-                                        else
-                                            Nothing
-
-                                    _ ->
-                                        Nothing
-                                )
-                                dmChannel
-                            )
-                            dict
-
-                    Nothing ->
-                        dict
-            )
-            SeqDict.empty
-            model.dmChannels
-    , user = User.backendToFrontendCurrent user
-    , otherUsers =
-        NonemptyDict.toList model.users
-            |> List.filterMap
-                (\( otherUserId, otherUser ) ->
-                    if otherUserId == session.userId then
-                        Nothing
-
-                    else
-                        Just ( otherUserId, User.backendToFrontendForUser otherUser )
-                )
-            |> SeqDict.fromList
-    , otherDiscordUsers = otherDiscordUsers
-    , linkedDiscordUsers = linkedDiscordUsers
-    , otherSessions =
-        SeqDict.remove sessionId model.sessions
-            |> SeqDict.toList
-            |> List.filterMap
-                (\( _, otherSession ) ->
-                    case UserSession.toFrontend session.userId otherSession of
-                        Just frontendSession ->
-                            Just ( otherSession.sessionIdHash, frontendSession )
-
-                        Nothing ->
-                            Nothing
-                )
-            |> SeqDict.fromList
-    , publicVapidKey = model.publicVapidKey
-    , textEditor = model.textEditor
-    }
-
-
-discordGuildToFrontendForUser :
-    Maybe ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
-    -> DiscordBackendGuild
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
-    -> Maybe DiscordFrontendGuild
-discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
-    if
-        SeqDict.member guild.owner linkedDiscordUsers
-            || not (SeqDict.isEmpty (SeqDict.intersect guild.members linkedDiscordUsers))
-    then
-        { name = guild.name
-        , icon = guild.icon
-        , channels =
-            SeqDict.filterMap
-                (\channelId channel ->
-                    LocalState.discordChannelToFrontend
-                        (case requestMessagesFor of
-                            Just ( channelIdB, threadRoute ) ->
-                                if channelId == channelIdB then
-                                    Just threadRoute
-
-                                else
-                                    Nothing
-
-                            _ ->
-                                Nothing
-                        )
-                        channel
-                )
-                guild.channels
-        , members = guild.members
-        , owner = guild.owner
-        }
-            |> Just
-
-    else
-        Nothing
-
-
-discordDmChannelToFrontend :
-    Bool
-    -> DiscordDmChannel
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
-    -> Maybe DiscordFrontendDmChannel
-discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
-    if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
-        { messages = DmChannel.toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
-        , visibleMessages = VisibleMessages.init preloadMessages dmChannel
-        , lastTypedAt = dmChannel.lastTypedAt
-        , members = dmChannel.members
-        }
-            |> Just
-
-    else
-        Nothing
-
-
 discordStartThread :
     DiscordFullUserData
     -> DiscordBackendChannel
@@ -1597,7 +1229,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 cmd =
                     case Broadcast.getUserFromSessionId sessionId model of
                         Just ( session, user ) ->
-                            getLoginData sessionId session user requestMessagesFor model
+                            BackendExtra.getLoginData sessionId session user requestMessagesFor model
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
@@ -1620,7 +1252,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 ( model, cmd )
 
         LoginWithTokenRequest requestMessagesFor loginCode userAgent ->
-            loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model
+            BackendExtra.loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model
 
         FinishUserCreationRequest requestMessagesFor personName userAgent ->
             case SeqDict.get sessionId model.pendingLogins of
@@ -1655,7 +1287,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 }
                         in
                         ( model3
-                        , getLoginData sessionId session newUser requestMessagesFor model3
+                        , BackendExtra.getLoginData sessionId session newUser requestMessagesFor model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -1688,7 +1320,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                                       }
                                     , Command.batch
-                                        [ getLoginData sessionId session user requestMessagesFor model
+                                        [ BackendExtra.getLoginData sessionId session user requestMessagesFor model
                                             |> LoginSuccess
                                             |> LoginWithTokenResponse
                                             |> Lamdera.sendToFrontends sessionId
@@ -1745,7 +1377,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
         GetLoginTokenRequest email ->
             let
                 ( model3, result ) =
-                    getLoginCode time model
+                    BackendExtra.getLoginCode time model
             in
             case
                 ( NonemptyDict.toList model3.users
@@ -1754,10 +1386,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
             of
                 ( Just ( userId, user ), Ok loginCode ) ->
-                    if shouldRateLimit time user then
+                    if BackendExtra.shouldRateLimit time user then
                         let
                             ( model4, cmd ) =
-                                addLog time (Log.LoginsRateLimited userId) model3
+                                BackendExtra.addLog time (Log.LoginsRateLimited userId) model3
                         in
                         ( model4
                         , Command.batch [ cmd, Lamdera.sendToFrontend clientId GetLoginTokenRateLimited ]
@@ -1782,7 +1414,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
                                     model3.users
                           }
-                        , sendLoginEmail (SentLoginEmail time email) email loginCode
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode
                         )
 
                 ( Nothing, Ok loginCode ) ->
@@ -1800,7 +1432,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                     model3.pendingLogins
                           }
-                        , sendLoginEmail (SentLoginEmail time email) email loginCode
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode
                         )
 
                     else
@@ -1836,7 +1468,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
         LocalModelChangeRequest changeId localMsg ->
             case localMsg of
                 Local_Invalid ->
-                    ( model, invalidChangeResponse changeId clientId )
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 Local_Admin adminChange ->
                     asAdmin
@@ -1851,7 +1483,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 guildId
-                                (sendGuildMessage
+                                (DiscordSync.sendGuildMessage
                                     model
                                     time
                                     clientId
@@ -1860,14 +1492,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     channelId
                                     threadRoute
                                     text
-                                    (validateAttachedFiles model.files attachedFiles)
+                                    (BackendExtra.validateAttachedFiles model.files attachedFiles)
                                 )
 
                         GuildOrDmId_Dm otherUserId ->
                             asUser
                                 model
                                 sessionId
-                                (sendDirectMessage
+                                (DiscordSync.sendDirectMessage
                                     model
                                     time
                                     clientId
@@ -1875,7 +1507,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     otherUserId
                                     threadRoute
                                     text
-                                    (validateAttachedFiles model.files attachedFiles)
+                                    (BackendExtra.validateAttachedFiles model.files attachedFiles)
                                 )
 
                 Local_Discord_SendMessage _ guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
@@ -1892,7 +1524,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             let
                                                 attachedFiles2 : SeqDict (Id FileId) FileData
                                                 attachedFiles2 =
-                                                    validateAttachedFiles model.files attachedFiles
+                                                    BackendExtra.validateAttachedFiles model.files attachedFiles
                                             in
                                             case threadRouteWithMaybeReplyTo of
                                                 NoThreadWithMaybeMessage maybeReplyTo ->
@@ -1991,10 +1623,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
 
                                                         _ ->
-                                                            ( model, invalidChangeResponse changeId clientId )
+                                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         Nothing ->
-                                            ( model, invalidChangeResponse changeId clientId )
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
                                 )
 
                         DiscordGuildOrDmId_Dm data ->
@@ -2006,7 +1638,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         attachedFiles2 : SeqDict (Id FileId) FileData
                                         attachedFiles2 =
-                                            validateAttachedFiles model.files attachedFiles
+                                            BackendExtra.validateAttachedFiles model.files attachedFiles
                                     in
                                     case threadRouteWithMaybeReplyTo of
                                         NoThreadWithMaybeMessage maybeReplyTo ->
@@ -2043,7 +1675,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ViewThreadWithMaybeMessage _ _ ->
                                             -- Not supported for Discord DM changes
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2444,7 +2076,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2636,7 +2268,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2699,7 +2331,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     let
                         attachedFiles2 : SeqDict (Id FileId) FileData
                         attachedFiles2 =
-                            validateAttachedFiles model.files attachedFiles
+                            BackendExtra.validateAttachedFiles model.files attachedFiles
                     in
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
@@ -2776,12 +2408,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err () ->
                                                     ( model
-                                                    , invalidChangeResponse changeId clientId
+                                                    , BackendExtra.invalidChangeResponse changeId clientId
                                                     )
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2861,12 +2493,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err () ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
 
                                 Nothing ->
                                     ( model
-                                    , invalidChangeResponse changeId clientId
+                                    , BackendExtra.invalidChangeResponse changeId clientId
                                     )
                         )
 
@@ -2926,7 +2558,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Err () ->
                                     ( model
-                                    , invalidChangeResponse changeId clientId
+                                    , BackendExtra.invalidChangeResponse changeId clientId
                                     )
                         )
 
@@ -2957,7 +2589,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err () ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3000,12 +2632,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 _ ->
                                                     ( model
-                                                    , invalidChangeResponse changeId clientId
+                                                    , BackendExtra.invalidChangeResponse changeId clientId
                                                     )
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3035,7 +2667,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err () ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3048,7 +2680,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     case threadRoute of
                                         ViewThreadWithMessage _ _ ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
 
                                         NoThreadWithMessage messageId ->
@@ -3084,7 +2716,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err () ->
                                                     ( model
-                                                    , invalidChangeResponse changeId clientId
+                                                    , BackendExtra.invalidChangeResponse changeId clientId
                                                     )
                                 )
 
@@ -3147,7 +2779,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err _ ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3185,12 +2817,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err _ ->
                                                     ( model
-                                                    , invalidChangeResponse changeId clientId
+                                                    , BackendExtra.invalidChangeResponse changeId clientId
                                                     )
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3237,7 +2869,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err _ ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3293,7 +2925,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err _ ->
                                                     ( model
-                                                    , invalidChangeResponse changeId clientId
+                                                    , BackendExtra.invalidChangeResponse changeId clientId
                                                     )
 
                                         ViewThreadWithMessage _ _ ->
@@ -3347,7 +2979,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3384,7 +3016,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3441,7 +3073,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3486,7 +3118,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing ->
                                             ( model
                                             , Command.batch
-                                                [ invalidChangeResponse changeId clientId
+                                                [ BackendExtra.invalidChangeResponse changeId clientId
                                                 , broadcastCmd session
                                                 ]
                                             )
@@ -3533,7 +3165,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , invalidChangeResponse changeId clientId
+                                            , BackendExtra.invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -3580,7 +3212,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing ->
                                             ( model
                                             , Command.batch
-                                                [ invalidChangeResponse changeId clientId
+                                                [ BackendExtra.invalidChangeResponse changeId clientId
                                                 , broadcastCmd session
                                                 ]
                                             )
@@ -3622,7 +3254,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            invalidChangeResponse changeId clientId
+                                            BackendExtra.invalidChangeResponse changeId clientId
                                     )
                                 )
 
@@ -3660,7 +3292,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            invalidChangeResponse changeId clientId
+                                            BackendExtra.invalidChangeResponse changeId clientId
                                     )
                                 )
 
@@ -3700,7 +3332,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            invalidChangeResponse changeId clientId
+                                            BackendExtra.invalidChangeResponse changeId clientId
                                     )
                                 )
 
@@ -3738,12 +3370,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            invalidChangeResponse changeId clientId
+                                            BackendExtra.invalidChangeResponse changeId clientId
                                     )
                                 )
 
                         DiscordGuildOrDmId_Dm _ ->
-                            ( model, invalidChangeResponse changeId clientId )
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 --asUser
                 --    model2
@@ -3884,7 +3516,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         )
 
                                     else
-                                        ( model, invalidChangeResponse changeId clientId )
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
                             in
                             case SeqDict.get discordUserId model.discordUsers of
                                 Just (FullData discordUser) ->
@@ -3904,10 +3536,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing
 
                                 Just (BasicData _) ->
-                                    ( model, invalidChangeResponse changeId clientId )
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                 Nothing ->
-                                    ( model, invalidChangeResponse changeId clientId )
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_StartReloadingDiscordUser _ discordUserId ->
@@ -3935,7 +3567,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             False
                             in
                             if isAlreadyLoading then
-                                ( model, invalidChangeResponse changeId clientId )
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                             else
                                 let
@@ -3984,7 +3616,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             ( model
             , case Broadcast.getUserFromSessionId sessionId model of
                 Just ( userId, user ) ->
-                    getLoginData sessionId userId user requestMessagesFor model
+                    BackendExtra.getLoginData sessionId userId user requestMessagesFor model
                         |> Ok
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId
@@ -4177,12 +3809,12 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
 
                 Err () ->
                     ( model2
-                    , invalidChangeResponse changeId clientId
+                    , BackendExtra.invalidChangeResponse changeId clientId
                     )
 
         Nothing ->
             ( model2
-            , invalidChangeResponse changeId clientId
+            , BackendExtra.invalidChangeResponse changeId clientId
             )
 
 
@@ -4393,7 +4025,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     )
 
                 Err _ ->
-                    ( model, invalidChangeResponse changeId clientId )
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
         Pages.Admin.ExpandSection section ->
             ( { model
@@ -4550,7 +4182,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
-                        , DiscordSync.getManyMessages auth { channelId = channelId, limit = reloadChannelMaxMessages }
+                        , DiscordSync.getManyMessages auth { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
                             |> Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId)
 
                         --(DiscordSync.getChannelThreads auth guildId channelId model)
@@ -4567,7 +4199,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     )
 
                 _ ->
-                    ( model, invalidChangeResponse changeId clientId )
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
         Pages.Admin.StartReloadingDiscordDmChannel _ userIdToLoadWith channelId ->
             case
@@ -4592,7 +4224,9 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
                         , DiscordSync.getManyMessages
                             (Discord.userToken discordUser.auth)
-                            { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = reloadChannelMaxMessages }
+                            { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64
+                            , limit = DiscordSync.reloadChannelMaxMessages
+                            }
                             |> Task.attempt (GotDiscordDmChannelMessages time userIdToLoadWith channelId)
 
                         --, DiscordSync.getManyMessages
@@ -4613,7 +4247,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     )
 
                 _ ->
-                    ( model, invalidChangeResponse changeId clientId )
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
         Pages.Admin.ExpandGuild guildId ->
             ( { model
@@ -4658,313 +4292,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
               }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
-
-
-reloadChannelMaxMessages : Int
-reloadChannelMaxMessages =
-    10000
-
-
-sendDirectMessage :
-    BackendModel
-    -> Time.Posix
-    -> ClientId
-    -> ChangeId
-    -> Id UserId
-    -> ThreadRouteWithMaybeMessage
-    -> Nonempty (RichText (Id UserId))
-    -> SeqDict (Id FileId) FileData
-    -> UserSession
-    -> BackendUser
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user =
-    let
-        dmChannelId : DmChannelId
-        dmChannelId =
-            DmChannel.channelIdFromUserIds session.userId otherUserId
-
-        dmChannel : DmChannel
-        dmChannel =
-            SeqDict.get dmChannelId model.dmChannels
-                |> Maybe.withDefault DmChannel.backendInit
-    in
-    case threadRouteWithReplyTo of
-        ViewThreadWithMaybeMessage threadMessageIndex _ ->
-            let
-                thread : BackendThread
-                thread =
-                    SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.withDefault Thread.backendInit
-            in
-            ( { model
-                | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
-                , users =
-                    NonemptyDict.insert
-                        session.userId
-                        { user
-                            | lastViewedThreads =
-                                SeqDict.insert
-                                    ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                                    (DmChannel.latestThreadMessageId thread)
-                                    user.lastViewedThreads
-                        }
-                        model.users
-              }
-            , if session.userId == otherUserId then
-                Command.none
-
-              else
-                Broadcast.broadcastDm
-                    changeId
-                    time
-                    clientId
-                    session.userId
-                    otherUserId
-                    text
-                    threadRouteWithReplyTo
-                    attachedFiles
-                    model
-            )
-
-        NoThreadWithMaybeMessage repliedTo ->
-            let
-                messageIndex : Id ChannelMessageId
-                messageIndex =
-                    DmChannel.latestMessageId dmChannel2
-
-                dmChannel2 : DmChannel
-                dmChannel2 =
-                    LocalState.createChannelMessageBackend
-                        (UserTextMessage
-                            { createdAt = time
-                            , createdBy = session.userId
-                            , content = text
-                            , reactions = SeqDict.empty
-                            , editedAt = Nothing
-                            , repliedTo = repliedTo
-                            , attachedFiles = attachedFiles
-                            }
-                        )
-                        dmChannel
-            in
-            ( { model
-                | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
-                , users =
-                    NonemptyDict.insert
-                        session.userId
-                        { user
-                            | lastViewed =
-                                SeqDict.insert
-                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                                    messageIndex
-                                    user.lastViewed
-                        }
-                        model.users
-              }
-            , Command.batch
-                [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
-                ]
-            )
-
-
-validateAttachedFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
-validateAttachedFiles uploadedFiles dict =
-    SeqDict.filterMap
-        (\id fileData ->
-            if Id.toInt id < 1 then
-                Nothing
-
-            else
-                case SeqDict.get fileData.fileHash uploadedFiles of
-                    Just { fileSize } ->
-                        Just { fileData | fileSize = fileSize }
-
-                    Nothing ->
-                        Nothing
-        )
-        dict
-
-
-sendGuildMessage :
-    BackendModel
-    -> Time.Posix
-    -> ClientId
-    -> ChangeId
-    -> Id GuildId
-    -> Id ChannelId
-    -> ThreadRouteWithMaybeMessage
-    -> Nonempty (RichText (Id UserId))
-    -> SeqDict (Id FileId) FileData
-    -> UserSession
-    -> BackendUser
-    -> BackendGuild
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
-    case SeqDict.get channelId guild.channels of
-        Just channel ->
-            let
-                channel2 : BackendChannel
-                channel2 =
-                    case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                            LocalState.createThreadMessageBackend
-                                threadId
-                                (UserTextMessage
-                                    { createdAt = time
-                                    , createdBy = session.userId
-                                    , content = text
-                                    , reactions = SeqDict.empty
-                                    , editedAt = Nothing
-                                    , repliedTo = maybeReplyTo
-                                    , attachedFiles = attachedFiles
-                                    }
-                                )
-                                channel
-
-                        NoThreadWithMaybeMessage maybeReplyTo ->
-                            LocalState.createChannelMessageBackend
-                                (UserTextMessage
-                                    { createdAt = time
-                                    , createdBy = session.userId
-                                    , content = text
-                                    , reactions = SeqDict.empty
-                                    , editedAt = Nothing
-                                    , repliedTo = maybeReplyTo
-                                    , attachedFiles = attachedFiles
-                                    }
-                                )
-                                channel
-
-                guildOrDmId : GuildOrDmId
-                guildOrDmId =
-                    GuildOrDmId_Guild guildId channelId
-
-                threadRouteNoReply : ThreadRoute
-                threadRouteNoReply =
-                    case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId _ ->
-                            ViewThread threadId
-
-                        NoThreadWithMaybeMessage _ ->
-                            NoThread
-
-                usersMentioned : SeqSet (Id UserId)
-                usersMentioned =
-                    LocalState.usersMentionedOrRepliedToBackend
-                        threadRouteWithMaybeReplyTo
-                        text
-                        (guild.owner :: SeqDict.keys guild.members)
-                        channel2
-
-                users2 : NonemptyDict (Id UserId) BackendUser
-                users2 =
-                    SeqSet.foldl
-                        (\userId2 users ->
-                            let
-                                isViewing =
-                                    List.any
-                                        (\( _, userSession ) ->
-                                            userSession.currentlyViewing == Just ( GuildOrDmId guildOrDmId, threadRouteNoReply )
-                                        )
-                                        (Broadcast.userGetAllSessions userId2 model)
-                            in
-                            if isViewing then
-                                users
-
-                            else
-                                NonemptyDict.updateIfExists
-                                    userId2
-                                    (User.addDirectMention guildId channelId threadRouteNoReply)
-                                    users
-                        )
-                        model.users
-                        usersMentioned
-            in
-            ( { model
-                | guilds =
-                    SeqDict.insert
-                        guildId
-                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
-                        model.guilds
-                , users =
-                    NonemptyDict.insert
-                        session.userId
-                        (case threadRouteWithMaybeReplyTo of
-                            ViewThreadWithMaybeMessage threadMessageIndex _ ->
-                                { user
-                                    | lastViewedThreads =
-                                        SeqDict.insert
-                                            ( GuildOrDmId guildOrDmId, threadMessageIndex )
-                                            (SeqDict.get threadMessageIndex channel2.threads
-                                                |> Maybe.withDefault Thread.backendInit
-                                                |> DmChannel.latestThreadMessageId
-                                            )
-                                            user.lastViewedThreads
-                                }
-
-                            NoThreadWithMaybeMessage _ ->
-                                { user
-                                    | lastViewed =
-                                        SeqDict.insert
-                                            (GuildOrDmId guildOrDmId)
-                                            (DmChannel.latestMessageId channel2)
-                                            user.lastViewed
-                                }
-                        )
-                        users2
-              }
-            , Command.batch
-                [ LocalChangeResponse
-                    changeId
-                    (Local_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
-                    |> Lamdera.sendToFrontend clientId
-                , Broadcast.toGuildExcludingOne
-                    clientId
-                    guildId
-                    (Server_SendMessage session.userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
-                        |> ServerChange
-                    )
-                    model
-                , Broadcast.messageNotification
-                    usersMentioned
-                    time
-                    session.userId
-                    guildId
-                    channelId
-                    threadRouteNoReply
-                    text
-                    (guild.owner :: SeqDict.keys guild.members)
-                    model
-                ]
-            )
-
-        Nothing ->
-            ( model
-            , invalidChangeResponse changeId clientId
-            )
-
-
-invalidChangeResponse : ChangeId -> ClientId -> Command BackendOnly ToFrontend backendMsg
-invalidChangeResponse changeId clientId =
-    LocalChangeResponse changeId Local_Invalid
-        |> Lamdera.sendToFrontend clientId
-
-
-shouldRateLimit : Time.Posix -> BackendUser -> Bool
-shouldRateLimit time user =
-    let
-        loginsInLast5Minutes : Int
-        loginsInLast5Minutes =
-            List.Extra.count
-                (\loginTime -> Duration.from loginTime time |> Quantity.lessThan (Duration.minutes 5))
-                user.recentLoginEmails
-
-        loginsInLast120Minutes : Int
-        loginsInLast120Minutes =
-            List.Extra.count
-                (\loginTime -> Duration.from loginTime time |> Quantity.lessThan (Duration.minutes 120))
-                user.recentLoginEmails
-    in
-    loginsInLast5Minutes > 5 || loginsInLast120Minutes > 10
 
 
 updateFromFrontendAdmin :
@@ -5253,268 +4580,3 @@ asAdmin model sessionId func =
             else
                 ( model, Command.none )
         )
-
-
-getLoginCode : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Result () Int )
-getLoginCode time model =
-    let
-        ( model2, id ) =
-            SecretId.getUniqueId time model
-    in
-    ( model2
-    , case String.left LoginForm.loginCodeLength (SecretId.toString id) |> Hex.fromString of
-        Ok int ->
-            case String.fromInt int |> String.left LoginForm.loginCodeLength |> String.toInt of
-                Just int2 ->
-                    Ok int2
-
-                Nothing ->
-                    Err ()
-
-        Err _ ->
-            Err ()
-    )
-
-
-sendLoginEmail :
-    (Result Postmark.SendEmailError () -> backendMsg)
-    -> EmailAddress
-    -> Int
-    -> Command BackendOnly toFrontend backendMsg
-sendLoginEmail msg emailAddress loginCode =
-    let
-        _ =
-            Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
-    in
-    { from = { name = "", email = Env.noReplyEmailAddress }
-    , to = List.Nonempty.fromElement { name = "", email = emailAddress }
-    , subject = loginEmailSubject
-    , body =
-        Postmark.BodyBoth
-            (loginEmailContent loginCode)
-            ("Here is your code " ++ String.fromInt loginCode ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
-    , messageStream = "outbound"
-    }
-        |> Postmark.sendEmail msg Env.postmarkServerToken
-
-
-loginEmailContent : Int -> Email.Html.Html
-loginEmailContent loginCode =
-    Email.Html.div
-        [ Email.Html.Attributes.padding "8px" ]
-        [ Email.Html.div [] [ Email.Html.text "Here is your code." ]
-        , Email.Html.div
-            [ Email.Html.Attributes.fontSize "36px"
-            , Email.Html.Attributes.fontFamily "monospace"
-            ]
-            (String.fromInt loginCode
-                |> String.toList
-                |> List.map
-                    (\char ->
-                        Email.Html.span
-                            [ Email.Html.Attributes.padding "0px 3px 0px 4px" ]
-                            [ Email.Html.text (String.fromChar char) ]
-                    )
-                |> (\a ->
-                        List.take (LoginForm.loginCodeLength // 2) a
-                            ++ [ Email.Html.span
-                                    [ Email.Html.Attributes.backgroundColor "black"
-                                    , Email.Html.Attributes.padding "0px 4px 0px 5px"
-                                    , Email.Html.Attributes.style "vertical-align" "middle"
-                                    , Email.Html.Attributes.fontSize "2px"
-                                    ]
-                                    []
-                               ]
-                            ++ List.drop (LoginForm.loginCodeLength // 2) a
-                   )
-            )
-        , Email.Html.text "Please type it in the login page you were previously on."
-        , Email.Html.br [] []
-        , Email.Html.br [] []
-        , Email.Html.text "If you weren't expecting this email you can safely ignore it."
-        ]
-
-
-loginEmailSubject : NonemptyString
-loginEmailSubject =
-    NonemptyString 'L' "ogin code"
-
-
-isLoginTooOld : { a | loginAttempts : number, creationTime : Time.Posix } -> Time.Posix -> Bool
-isLoginTooOld pendingLogin time =
-    (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
-        && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
-
-
-loginWithToken :
-    Time.Posix
-    -> SessionId
-    -> ClientId
-    -> Int
-    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
-    -> UserAgent
-    -> BackendModel
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model =
-    case SeqDict.get sessionId model.pendingLogins of
-        Just (WaitingForLoginToken pendingLogin) ->
-            if isLoginTooOld pendingLogin time then
-                if loginCode == pendingLogin.loginCode then
-                    case
-                        ( NonemptyDict.get pendingLogin.userId model.users
-                        , SeqDict.get pendingLogin.userId model.twoFactorAuthentication
-                        )
-                    of
-                        ( Just _, Just _ ) ->
-                            ( { model
-                                | pendingLogins =
-                                    SeqDict.insert
-                                        sessionId
-                                        (WaitingForTwoFactorToken
-                                            { creationTime = pendingLogin.creationTime
-                                            , userId = pendingLogin.userId
-                                            , loginAttempts = 0
-                                            }
-                                        )
-                                        model.pendingLogins
-                              }
-                            , NeedsTwoFactorToken
-                                |> LoginWithTokenResponse
-                                |> Lamdera.sendToFrontends sessionId
-                            )
-
-                        ( Just user, Nothing ) ->
-                            let
-                                session : UserSession
-                                session =
-                                    UserSession.init sessionId pendingLogin.userId requestMessagesFor userAgent
-                            in
-                            ( { model
-                                | sessions = SeqDict.insert sessionId session model.sessions
-                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
-                              }
-                            , Command.batch
-                                [ getLoginData sessionId session user requestMessagesFor model
-                                    |> LoginSuccess
-                                    |> LoginWithTokenResponse
-                                    |> Lamdera.sendToFrontends sessionId
-                                , Broadcast.toUser
-                                    (Just clientId)
-                                    Nothing
-                                    pendingLogin.userId
-                                    (Server_NewSession
-                                        session.sessionIdHash
-                                        { notificationMode = session.notificationMode
-                                        , currentlyViewing = session.currentlyViewing
-                                        , userAgent = session.userAgent
-                                        }
-                                        |> ServerChange
-                                    )
-                                    model
-                                ]
-                            )
-
-                        ( Nothing, _ ) ->
-                            ( model
-                            , LoginTokenInvalid loginCode
-                                |> LoginWithTokenResponse
-                                |> Lamdera.sendToFrontend clientId
-                            )
-
-                else
-                    ( { model
-                        | pendingLogins =
-                            SeqDict.insert
-                                sessionId
-                                (WaitingForLoginToken { pendingLogin | loginAttempts = pendingLogin.loginAttempts + 1 })
-                                model.pendingLogins
-                      }
-                    , LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
-                    )
-
-            else
-                ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
-
-        Just (WaitingForLoginTokenForSignup pendingLogin) ->
-            if isLoginTooOld pendingLogin time then
-                if loginCode == pendingLogin.loginCode then
-                    ( { model
-                        | pendingLogins =
-                            SeqDict.insert
-                                sessionId
-                                (WaitingForUserDataForSignup
-                                    { creationTime = pendingLogin.creationTime
-                                    , emailAddress = pendingLogin.emailAddress
-                                    }
-                                )
-                                model.pendingLogins
-                      }
-                    , LoginWithTokenResponse NeedsAccountSetup |> Lamdera.sendToFrontends sessionId
-                    )
-
-                else
-                    ( { model
-                        | pendingLogins =
-                            SeqDict.insert
-                                sessionId
-                                (WaitingForLoginTokenForSignup
-                                    { pendingLogin | loginAttempts = pendingLogin.loginAttempts + 1 }
-                                )
-                                model.pendingLogins
-                      }
-                    , LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
-                    )
-
-            else
-                ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
-
-        _ ->
-            ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
-
-
-addLogWithCmd :
-    Time.Posix
-    -> Log
-    -> BackendModel
-    -> Command BackendOnly ToFrontend BackendMsg
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-addLogWithCmd time log model cmd =
-    let
-        ( model2, logCmd ) =
-            addLog time log model
-    in
-    ( model2, Command.batch [ logCmd, cmd ] )
-
-
-addLog : Time.Posix -> Log -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-addLog time log model =
-    let
-        model2 : BackendModel
-        model2 =
-            { model | logs = Array.push { time = time, log = log } model.logs }
-    in
-    case
-        ( Log.shouldNotifyAdmin log
-        , Duration.from model2.lastErrorLogEmail time |> Quantity.lessThan (Duration.minutes 30)
-        )
-    of
-        ( Just text, False ) ->
-            ( { model2 | lastErrorLogEmail = time }
-            , Postmark.sendEmailTask
-                Env.postmarkServerToken
-                { from = { name = "", email = Env.noReplyEmailAddress }
-                , to = Nonempty { name = "", email = emailToNotifyWhenErrorsAreLogged } []
-                , subject = NonemptyString 'A' "n error was logged that needs attention"
-                , body = "The following error was logged: " ++ text ++ ". Note that any additional errors logged for the next 30 minutes will be ignored to avoid spamming emails." |> Postmark.BodyText
-                , messageStream = "outbound"
-                }
-                |> Task.attempt (SentLogErrorEmail time emailToNotifyWhenErrorsAreLogged)
-            )
-
-        _ ->
-            ( model2, Command.none )
-
-
-emailToNotifyWhenErrorsAreLogged : EmailAddress
-emailToNotifyWhenErrorsAreLogged =
-    Unsafe.emailAddress "martinsstewart@gmail.com"

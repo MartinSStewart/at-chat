@@ -124,6 +124,7 @@ config =
             []
         , modules =
             [ [ "Backend" ]
+            , [ "BackendExtra" ]
             , [ "UiViewer" ]
             , [ "TwoFactorAuthentication" ]
             ]
