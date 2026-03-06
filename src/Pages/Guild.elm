@@ -6289,20 +6289,35 @@ friendsColumn canScroll2 isMobile openedOtherUserId local =
 
                         MessageUnloaded ->
                             Time.millisToPosix 0
-                    , Ui.Lazy.lazy6
-                        discordFriendLabel
-                        isMobile
-                        (case openedOtherUserId of
-                            SelectedDiscordDmChannel routeData ->
-                                routeData.channelId == channelId
+                    , if isMobile then
+                        Ui.Lazy.lazy5
+                            discordFriendLabelMobile
+                            (case openedOtherUserId of
+                                SelectedDiscordDmChannel routeData ->
+                                    routeData.channelId == channelId
 
-                            _ ->
-                                False
-                        )
-                        channelId
-                        dmChannel.members
-                        local.localUser
-                        message
+                                _ ->
+                                    False
+                            )
+                            channelId
+                            dmChannel.members
+                            local.localUser
+                            message
+
+                      else
+                        Ui.Lazy.lazy5
+                            discordFriendLabelNotMobile
+                            (case openedOtherUserId of
+                                SelectedDiscordDmChannel routeData ->
+                                    routeData.channelId == channelId
+
+                                _ ->
+                                    False
+                            )
+                            channelId
+                            dmChannel.members
+                            local.localUser
+                            message
                     )
                 )
                 (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
@@ -6373,6 +6388,28 @@ friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers mes
             , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
             ]
         ]
+
+
+discordFriendLabelMobile :
+    Bool
+    -> Discord.Id Discord.PrivateChannelId
+    -> NonemptySet (Discord.Id Discord.UserId)
+    -> LocalUser
+    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
+    -> Element FrontendMsg
+discordFriendLabelMobile isSelected dmChannelId members localUser message =
+    discordFriendLabel True isSelected dmChannelId members localUser message
+
+
+discordFriendLabelNotMobile :
+    Bool
+    -> Discord.Id Discord.PrivateChannelId
+    -> NonemptySet (Discord.Id Discord.UserId)
+    -> LocalUser
+    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
+    -> Element FrontendMsg
+discordFriendLabelNotMobile isSelected dmChannelId members localUser message =
+    discordFriendLabel False isSelected dmChannelId members localUser message
 
 
 discordFriendLabel :

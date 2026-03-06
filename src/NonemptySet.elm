@@ -3,7 +3,7 @@ module NonemptySet exposing
     , singleton
     , member, size
     , fromNonemptyList, toNonemptyList, toList, fromList
-    , map, toSeqSet, fromSeqSet
+    , map, toSeqSet, fromSeqSet, remove
     , all, any, head, insert, unorderedEquals
     )
 
@@ -39,7 +39,7 @@ Insert, remove, and query operations all take _O(log n)_ time.
 
 # Transform
 
-@docs map, toSeqSet, fromSeqSet
+@docs map, toSeqSet, fromSeqSet, remove
 
 -}
 
@@ -98,6 +98,15 @@ unorderedEquals (NonemptySet a setA) (NonemptySet b setB) =
 map : (k -> b) -> NonemptySet k -> NonemptySet b
 map func (NonemptySet id set) =
     SeqSet.map func set |> NonemptySet (func id)
+
+
+remove : k -> NonemptySet k -> SeqSet k
+remove k (NonemptySet id set) =
+    if k == id then
+        set
+
+    else
+        SeqSet.remove k set |> SeqSet.insert k
 
 
 
