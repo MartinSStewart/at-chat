@@ -489,7 +489,7 @@ multipleProfileImages profileImages =
             Ui.el
                 [ Ui.width (Ui.px 40)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
                 , Ui.inFront (smallProfileImage one)
                 ]
                 Ui.none
@@ -498,32 +498,33 @@ multipleProfileImages profileImages =
             Ui.el
                 [ Ui.width (Ui.px 55)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 10, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
                 , Ui.inFront (smallProfileImage one)
                 ]
                 Ui.none
 
         [ one, two, three, four ] ->
             Ui.el
-                [ Ui.width (Ui.px 75)
+                [ Ui.width (Ui.px 70)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 10, z = 0 } ] (smallProfileImage three))
-                , Ui.inFront (Ui.el [ Ui.move { x = 50, y = 10, z = 0 } ] (smallProfileImage four))
+                , Ui.inFront (Ui.el [ Ui.move { x = 45, y = 15, z = 0 } ] (smallProfileImage four))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
                 , Ui.inFront (smallProfileImage one)
                 ]
                 Ui.none
 
         one :: two :: three :: rest ->
             Ui.el
-                [ Ui.width (Ui.px 75)
+                [ Ui.width (Ui.px 70)
                 , Ui.height (Ui.px 40)
-                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
-                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 10, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 0, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 15, y = 15, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (smallProfileImage one)
                 , Ui.inFront
                     (Ui.el
-                        [ Ui.move { x = 50, y = 10, z = 0 }
+                        [ Ui.move { x = 45, y = 15, z = 0 }
                         , Ui.background MyUi.background1
                         , Ui.width (Ui.px smallProfileImageSize)
                         , Ui.height (Ui.px smallProfileImageSize)
@@ -531,13 +532,12 @@ multipleProfileImages profileImages =
                         , Ui.Font.bold
                         , Ui.rounded 8
                         , Ui.Font.color MyUi.font3
-                        , Ui.Font.size 12
+                        , Ui.Font.size 14
                         , Ui.contentCenterY
                         , MyUi.htmlStyle "white-space" "pre"
                         ]
                         (Ui.text ("+" ++ String.fromInt (List.length rest)))
                     )
-                , Ui.inFront (smallProfileImage one)
                 ]
                 Ui.none
 

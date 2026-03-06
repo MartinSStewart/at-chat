@@ -488,7 +488,6 @@ type FrontendMsg
         { currentUserId : Discord.Id Discord.UserId
         , otherUserId : Discord.Id Discord.UserId
         }
-    | PressedDiscordFriendLabel (Discord.Id Discord.PrivateChannelId)
     | TypedDiscordLinkBookmarklet
     | GotVersionNumber (Result Http.Error Int)
 

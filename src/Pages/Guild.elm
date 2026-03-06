@@ -6425,10 +6425,6 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
         _ =
             Debug.log "rerender discord friendLabel" ()
 
-        members2 : List.Nonempty.Nonempty (Discord.Id Discord.UserId)
-        members2 =
-            NonemptySet.toNonemptyList members
-
         messagePreview : String
         messagePreview =
             case message of
@@ -6451,63 +6447,93 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
 
                 MessageUnloaded ->
                     ""
-    in
-    MyUi.rowButton
-        ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
-        (PressedDiscordFriendLabel dmChannelId)
-        [ Ui.clipWithEllipsis
-        , Ui.spacing 8
-        , MyUi.hoverText messagePreview
-        , Ui.padding 4
-        , Ui.Font.color
-            (if isSelected then
-                MyUi.font1
 
-             else
-                MyUi.font3
-            )
-        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-        ]
-        (case List.Nonempty.tail members2 of
-            [] ->
-                case LocalState.getDiscordUser (List.Nonempty.head members2) localUser of
-                    Just otherUser ->
-                        [ User.profileImage otherUser.icon
+        maybeCurrentUserId : Maybe (Discord.Id Discord.UserId)
+        maybeCurrentUserId =
+            List.Extra.findMap
+                (\( userId, _ ) ->
+                    if NonemptySet.member userId members then
+                        Just userId
+
+                    else
+                        Nothing
+                )
+                (SeqDict.toList localUser.linkedDiscordUsers)
+    in
+    case maybeCurrentUserId of
+        Just currentUserId ->
+            let
+                members2 : List (Discord.Id Discord.UserId)
+                members2 =
+                    NonemptySet.remove currentUserId members |> SeqSet.toList
+            in
+            MyUi.rowButton
+                ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
+                (PressedLink
+                    (DiscordDmRoute
+                        { currentDiscordUserId = currentUserId
+                        , channelId = dmChannelId
+                        , viewingMessage = Nothing
+                        , showMembersTab = HideMembersTab
+                        }
+                    )
+                )
+                [ Ui.clipWithEllipsis
+                , Ui.spacing 8
+                , MyUi.hoverText messagePreview
+                , Ui.padding 4
+                , Ui.Font.color
+                    (if isSelected then
+                        MyUi.font1
+
+                     else
+                        MyUi.font3
+                    )
+                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                ]
+                (case members2 of
+                    [] ->
+                        case LocalState.getDiscordUser currentUserId localUser of
+                            Just otherUser ->
+                                [ User.profileImage otherUser.icon
+                                , Ui.column
+                                    []
+                                    [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
+                                    , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+                                    ]
+                                ]
+
+                            Nothing ->
+                                []
+
+                    rest ->
+                        [ List.filterMap
+                            (\userId -> LocalState.getDiscordUser userId localUser |> Maybe.map .icon)
+                            members2
+                            |> User.multipleProfileImages
                         , Ui.column
                             []
-                            [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
+                            [ List.filterMap
+                                (\userId ->
+                                    case LocalState.getDiscordUser userId localUser of
+                                        Just otherUser ->
+                                            PersonName.toString otherUser.name |> Just
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                rest
+                                |> String.join ", "
+                                |> Ui.text
+                                |> Ui.el [ Ui.Font.bold ]
                             , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
                             ]
                         ]
+                )
 
-                    Nothing ->
-                        []
-
-            rest ->
-                [ List.filterMap
-                    (\userId -> LocalState.getDiscordUser userId localUser |> Maybe.map .icon)
-                    (List.Nonempty.toList members2)
-                    |> User.multipleProfileImages
-                , Ui.column
-                    []
-                    [ List.filterMap
-                        (\userId ->
-                            case LocalState.getDiscordUser userId localUser of
-                                Just otherUser ->
-                                    PersonName.toString otherUser.name |> Just
-
-                                Nothing ->
-                                    Nothing
-                        )
-                        rest
-                        |> String.join ", "
-                        |> Ui.text
-                        |> Ui.el [ Ui.Font.bold ]
-                    , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
-                    ]
-                ]
-        )
+        Nothing ->
+            Ui.text "Something went wrong"
 
 
 newChannelFormInit : NewChannelForm

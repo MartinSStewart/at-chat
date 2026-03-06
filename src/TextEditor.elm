@@ -11,8 +11,6 @@ module TextEditor exposing
     , init
     , initLocalState
     , inputId
-    , insertTextHelper
-    , insertTextHelperInverse
     , isPress
     , localChangeUpdate
     , update
@@ -351,68 +349,6 @@ addEditAdjustRange change range =
                     String.length string
             in
             insertTextHelper insertCount insertionRange range
-
-
-{-| Does the inverse of insertTextHelper
-
-    let
-        input =
-            { start = 8, end = 11 }
-
-        output =
-            insertTextHelper 5 { start = 6, end = 10 } input
-    in
-    input == insertTextHelperInverse 5 { start = 6, end = 10 } output
-
--}
-insertTextHelperInverse : Int -> Range -> Range -> Range
-insertTextHelperInverse insertCount removeRange output =
-    let
-        size : Int
-        size =
-            RichText.rangeSize removeRange
-
-        -- If output moved due to insertion, determine where input was
-        inputStart : Int
-        inputStart =
-            if removeRange.start < output.start then
-                -- Output was shifted by insertCount - size
-                output.start + size - insertCount
-
-            else
-                output.start
-
-        inputEnd : Int
-        inputEnd =
-            if removeRange.start <= output.end then
-                -- Output was shifted by insertCount - size
-                output.end + size - insertCount
-
-            else
-                output.end
-
-        -- Now check if input was clipped by removeRange
-        wasStartClipped : Bool
-        wasStartClipped =
-            removeRange.start <= inputStart && inputStart < removeRange.end
-
-        wasEndClipped : Bool
-        wasEndClipped =
-            removeRange.start < inputEnd && inputEnd <= removeRange.end
-    in
-    { start =
-        if wasStartClipped then
-            removeRange.start
-
-        else
-            inputStart
-    , end =
-        if wasEndClipped then
-            removeRange.start
-
-        else
-            inputEnd
-    }
 
 
 insertTextHelper : Int -> Range -> Range -> Range

@@ -3089,50 +3089,6 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
-        PressedDiscordFriendLabel channelId ->
-            case model.loginStatus of
-                LoggedIn loggedIn ->
-                    let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-                    in
-                    case SeqDict.get channelId local.discordDmChannels of
-                        Just channel ->
-                            let
-                                maybeCurrentDiscordUser : Maybe (Discord.Id Discord.UserId)
-                                maybeCurrentDiscordUser =
-                                    List.Extra.findMap
-                                        (\( userId, _ ) ->
-                                            if NonemptySet.member userId channel.members then
-                                                Just userId
-
-                                            else
-                                                Nothing
-                                        )
-                                        (SeqDict.toList local.localUser.linkedDiscordUsers)
-                            in
-                            case maybeCurrentDiscordUser of
-                                Just currentUserId ->
-                                    FrontendExtra.routePush
-                                        model
-                                        (DiscordDmRoute
-                                            { currentDiscordUserId = currentUserId
-                                            , channelId = channelId
-                                            , viewingMessage = Nothing
-                                            , showMembersTab = HideMembersTab
-                                            }
-                                        )
-
-                                Nothing ->
-                                    ( model, Command.none )
-
-                        Nothing ->
-                            ( model, Command.none )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
-
         TypedDiscordLinkBookmarklet ->
             ( model, Command.none )
 

@@ -106,7 +106,7 @@ remove k (NonemptySet id set) =
         set
 
     else
-        SeqSet.remove k set |> SeqSet.insert k
+        SeqSet.remove k set |> SeqSet.insert id
 
 
 
