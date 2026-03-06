@@ -53,11 +53,12 @@ import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
+import Quantity
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Thread exposing (BackendThread)
+import Thread exposing (BackendThread, DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordFullUserData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User exposing (BackendUser)
 import UserSession exposing (UserSession)
@@ -288,33 +289,29 @@ discordChannelIdToChannelId channelId messageId guild =
 discordChannelIdToChannelIdNoMessage :
     Discord.Id Discord.ChannelId
     -> DiscordBackendGuild
-    -> Maybe ( Discord.Id Discord.ChannelId, DiscordBackendChannel, ThreadRoute )
+    -> Maybe ( Discord.Id Discord.ChannelId, DiscordBackendChannel, Maybe { threadId : Id ChannelMessageId, thread : DiscordBackendThread } )
 discordChannelIdToChannelIdNoMessage channelId guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            Just ( channelId, channel, NoThread )
+            Just ( channelId, channel, Nothing )
 
         Nothing ->
             List.Extra.findMap
                 (\( otherChannelId, channel ) ->
                     case
-                        List.Extra.findMap
+                        List.Extra.find
                             (\( threadId, _ ) ->
                                 case OneToOne.first threadId channel.linkedMessageIds of
                                     Just discordThreadId ->
-                                        if Discord.idFromUInt64 (Discord.idToUInt64 discordThreadId) == channelId then
-                                            Just threadId
-
-                                        else
-                                            Nothing
+                                        Discord.idFromUInt64 (Discord.idToUInt64 discordThreadId) == channelId
 
                                     Nothing ->
-                                        Nothing
+                                        False
                             )
                             (SeqDict.toList channel.threads)
                     of
-                        Just threadId ->
-                            Just ( otherChannelId, channel, ViewThread threadId )
+                        Just ( threadId, thread ) ->
+                            Just ( otherChannelId, channel, Just { threadId = threadId, thread = thread } )
 
                         Nothing ->
                             Nothing
@@ -1483,36 +1480,75 @@ handleTypingStarted typingStart model =
                 Just guild ->
                     case discordChannelIdToChannelIdNoMessage typingStart.channelId guild of
                         Just ( channelId, channel, threadRoute ) ->
-                            ( { model
-                                | discordGuilds =
-                                    SeqDict.insert
-                                        guildId
-                                        { guild
-                                            | channels =
-                                                SeqDict.insert channelId
-                                                    { channel
-                                                        | lastTypedAt =
-                                                            SeqDict.insert
-                                                                typingStart.userId
-                                                                { time = typingStart.timestamp, messageIndex = Nothing }
-                                                                channel.lastTypedAt
-                                                    }
-                                                    guild.channels
-                                        }
-                                        model.discordGuilds
-                              }
-                            , Broadcast.toDiscordGuild
-                                guildId
-                                (Server_DiscordGuildMemberTyping
-                                    typingStart.timestamp
-                                    typingStart.userId
+                            let
+                                ( lastTypedAt, channel2 ) =
+                                    case threadRoute of
+                                        Nothing ->
+                                            ( SeqDict.get typingStart.userId channel.lastTypedAt
+                                            , { channel
+                                                | lastTypedAt =
+                                                    SeqDict.insert
+                                                        typingStart.userId
+                                                        { time = typingStart.timestamp, messageIndex = Nothing }
+                                                        channel.lastTypedAt
+                                              }
+                                            )
+
+                                        Just { threadId, thread } ->
+                                            ( SeqDict.get typingStart.userId thread.lastTypedAt
+                                            , { channel
+                                                | threads =
+                                                    SeqDict.insert
+                                                        threadId
+                                                        { thread
+                                                            | lastTypedAt =
+                                                                SeqDict.insert
+                                                                    typingStart.userId
+                                                                    { time = typingStart.timestamp, messageIndex = Nothing }
+                                                                    thread.lastTypedAt
+                                                        }
+                                                        channel.threads
+                                              }
+                                            )
+
+                                lastTypedAt3 : Time.Posix
+                                lastTypedAt3 =
+                                    case lastTypedAt of
+                                        Just lastTypedAt2 ->
+                                            lastTypedAt2.time
+
+                                        Nothing ->
+                                            Time.millisToPosix 0
+                            in
+                            if Duration.from lastTypedAt3 typingStart.timestamp |> Quantity.lessThan (Duration.seconds 2) then
+                                ( model, Command.none )
+
+                            else
+                                ( { model
+                                    | discordGuilds =
+                                        SeqDict.insert
+                                            guildId
+                                            { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                                            model.discordGuilds
+                                  }
+                                , Broadcast.toDiscordGuild
                                     guildId
-                                    channelId
-                                    threadRoute
-                                    |> ServerChange
+                                    (Server_DiscordGuildMemberTyping
+                                        typingStart.timestamp
+                                        typingStart.userId
+                                        guildId
+                                        channelId
+                                        (case threadRoute of
+                                            Just a ->
+                                                ViewThread a.threadId
+
+                                            Nothing ->
+                                                NoThread
+                                        )
+                                        |> ServerChange
+                                    )
+                                    model
                                 )
-                                model
-                            )
 
                         Nothing ->
                             ( model, Command.none )
