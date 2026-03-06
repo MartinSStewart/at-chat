@@ -1368,7 +1368,27 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                     ( model2, Command.none )
 
                                         Missing ->
-                                            ( model2, Command.none )
+                                            let
+                                                ( discordUsers, users2 ) =
+                                                    List.foldl
+                                                        (\participant ( dict, users ) ->
+                                                            case participant.member of
+                                                                Included member ->
+                                                                    ( addDiscordUserData
+                                                                        (discordUserToPartialUser member.user)
+                                                                        dict
+                                                                    , member.user :: users
+                                                                    )
+
+                                                                Missing ->
+                                                                    ( dict, users )
+                                                        )
+                                                        ( model2.discordUsers, [] )
+                                                        embeddedActivityUpdateV2.participants
+                                            in
+                                            ( { model2 | discordUsers = discordUsers }
+                                            , getUserAvatars model2.discordUsers users2
+                                            )
                             in
                             ( model3, cmd2 :: cmds )
 
