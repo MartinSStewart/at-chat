@@ -1325,7 +1325,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             case SeqDict.get guildId model2.discordGuilds of
                                                 Just guild ->
                                                     let
-                                                        ( discordUsers, guild3, users ) =
+                                                        ( discordUsers, guild3, users2 ) =
                                                             List.foldl
                                                                 (\participant ( dict, guild2, users ) ->
                                                                     case participant.member of
@@ -1354,7 +1354,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                         , discordGuilds =
                                                             SeqDict.insert guildId guild3 model2.discordGuilds
                                                       }
-                                                    , getUserAvatars model2.discordUsers users
+                                                    , getUserAvatars model2.discordUsers users2
                                                     )
 
                                                 Nothing ->
