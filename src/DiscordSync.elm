@@ -1299,9 +1299,16 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                 guildId
                                                                 { guild
                                                                     | members =
-                                                                        SeqDict.insert
+                                                                        SeqDict.update
                                                                             presence.userId
-                                                                            { joinedAt = Nothing }
+                                                                            (\maybe ->
+                                                                                case maybe of
+                                                                                    Just _ ->
+                                                                                        maybe
+
+                                                                                    Nothing ->
+                                                                                        Just { joinedAt = Nothing }
+                                                                            )
                                                                             guild.members
                                                                 }
                                                                 model2.discordGuilds
@@ -1337,7 +1344,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                                 | members =
                                                                                     SeqDict.insert
                                                                                         participant.userId
-                                                                                        { joinedAt = Nothing }
+                                                                                        { joinedAt = Just member.joinedAt }
                                                                                         guild2.members
                                                                               }
                                                                             , member.user :: users
@@ -1364,6 +1371,44 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             ( model2, Command.none )
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_GuildMemberAddEvent guildId guildMember ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleGuildMemberUpdate guildId guildMember model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_GuildMemberRemoveEvent guildId user ->
+                            let
+                                ( model3, cmd2 ) =
+                                    case SeqDict.get guildId model2.discordGuilds of
+                                        Just guild ->
+                                            ( { model2
+                                                | discordUsers =
+                                                    addDiscordUserData
+                                                        (discordUserToPartialUser user)
+                                                        model2.discordUsers
+                                                , discordGuilds =
+                                                    SeqDict.insert
+                                                        guildId
+                                                        { guild | members = SeqDict.remove user.id guild.members }
+                                                        model2.discordGuilds
+                                              }
+                                            , getUserAvatars model2.discordUsers [ user ]
+                                            )
+
+                                        Nothing ->
+                                            ( model2, Command.none )
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_GuildMemberUpdateEvent guildMemberUpdate ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleGuildMemberUpdate guildMemberUpdate.guildId guildMemberUpdate model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1379,6 +1424,35 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
         _ ->
             ( model, Command.none )
+
+
+handleGuildMemberUpdate :
+    Discord.Id Discord.GuildId
+    -> { b | user : Discord.User, joinedAt : Time.Posix }
+    -> BackendModel
+    -> ( BackendModel, Command restriction toMsg BackendMsg )
+handleGuildMemberUpdate guildId guildMember model2 =
+    case SeqDict.get guildId model2.discordGuilds of
+        Just guild ->
+            ( { model2
+                | discordUsers = addDiscordUserData (discordUserToPartialUser guildMember.user) model2.discordUsers
+                , discordGuilds =
+                    SeqDict.insert
+                        guildId
+                        { guild
+                            | members =
+                                SeqDict.insert
+                                    guildMember.user.id
+                                    { joinedAt = Just guildMember.joinedAt }
+                                    guild.members
+                        }
+                        model2.discordGuilds
+              }
+            , getUserAvatars model2.discordUsers [ guildMember.user ]
+            )
+
+        Nothing ->
+            ( model2, Command.none )
 
 
 handleTypingStarted : Discord.TypingStart -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
@@ -2044,6 +2118,19 @@ handleListGuildMembersResponse chunkData model =
     )
 
 
+userAvatar : DiscordUserData -> Maybe (Discord.ImageHash Discord.AvatarHash)
+userAvatar user =
+    case user of
+        BasicData data ->
+            data.user.avatar
+
+        FullData data ->
+            data.user.avatar
+
+        NeedsAuthAgain data ->
+            data.user.avatar
+
+
 getUserAvatars :
     SeqDict (Discord.Id Discord.UserId) DiscordUserData
     -> List { a | id : Discord.Id Discord.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
@@ -2053,10 +2140,17 @@ getUserAvatars existingUsers users =
         GotDiscordUserAvatars
         (List.filterMap
             (\user ->
-                if SeqDict.member user.id existingUsers then
-                    Nothing
+                let
+                    needsUpdate : Bool
+                    needsUpdate =
+                        case SeqDict.get user.id existingUsers of
+                            Just existingUser ->
+                                userAvatar existingUser /= user.avatar
 
-                else
+                            Nothing ->
+                                True
+                in
+                if needsUpdate then
                     Task.map
                         (\maybeAvatar -> ( user.id, maybeAvatar ))
                         (case user.avatar of
@@ -2074,6 +2168,9 @@ getUserAvatars existingUsers users =
                                 Task.succeed Nothing
                         )
                         |> Just
+
+                else
+                    Nothing
             )
             users
             |> Task.sequence

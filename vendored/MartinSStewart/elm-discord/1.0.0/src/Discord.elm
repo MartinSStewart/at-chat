@@ -4830,6 +4830,9 @@ decodeDispatchUserEvent eventName =
         "EMBEDDED_ACTIVITY_UPDATE_V2" ->
             JD.field "d" decodeEmbeddedActivityUpdateV2 |> JD.map DispatchUser_EmbeddedActivityUpdateV2
 
+        "MESSAGE_ACK" ->
+            JD.succeed DispatchUser_MessageAck
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5009,14 +5012,17 @@ type OpDispatchUserEvent
     | DispatchUser_IntegrationUpdate IntegrationUpdate
     | DispatchUser_SessionsReplace
     | DispatchUser_EmbeddedActivityUpdateV2 EmbeddedActivityUpdateV2
+    | DispatchUser_MessageAck
 
 
+decodeEmbeddedActivityUpdateV2 : JD.Decoder EmbeddedActivityUpdateV2
 decodeEmbeddedActivityUpdateV2 =
     JD.succeed EmbeddedActivityUpdateV2
         |> JD.andMap (JD.field "participants" (JD.list decodeParticipant))
         |> JD.andMap (JD.field "location" decodeEmbeddedActivityLocation)
 
 
+decodeParticipant : JD.Decoder Participant
 decodeParticipant =
     JD.succeed Participant
         |> JD.andMap (JD.field "userId" decodeId)
@@ -5660,6 +5666,9 @@ type UserOutMsg connection
     | UserOutMsg_TypingStarted TypingStart
     | UserOutMsg_PresenceUpdate Presence
     | UserOutMsg_EmbeddedActivityUpdateV2 EmbeddedActivityUpdateV2
+    | UserOutMsg_GuildMemberAddEvent (Id GuildId) GuildMember
+    | UserOutMsg_GuildMemberRemoveEvent (Id GuildId) User
+    | UserOutMsg_GuildMemberUpdateEvent GuildMemberUpdate
 
 
 type alias Presence =
@@ -5960,17 +5969,13 @@ handleUserGateway authToken intents response model =
                                     ( model, [] )
 
                         DispatchUser_GuildMemberAddEvent guildId guildMember ->
-                            ( model
-                            , []
-                            )
+                            ( model, [ UserOutMsg_GuildMemberAddEvent guildId guildMember ] )
 
                         DispatchUser_GuildMemberRemoveEvent guildId user ->
-                            ( model
-                            , []
-                            )
+                            ( model, [ UserOutMsg_GuildMemberRemoveEvent guildId user ] )
 
-                        DispatchUser_GuildMemberUpdateEvent _ ->
-                            ( model, [] )
+                        DispatchUser_GuildMemberUpdateEvent guildMemberUpdate ->
+                            ( model, [ UserOutMsg_GuildMemberUpdateEvent guildMemberUpdate ] )
 
                         DispatchUser_ThreadCreatedOrUserAddedToThreadEvent channel ->
                             ( model, [ UserOutMsg_ThreadCreatedOrUserAddedToThread channel ] )
@@ -6010,6 +6015,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_EmbeddedActivityUpdateV2 embeddedActivityUpdateV2 ->
                             ( model, [ UserOutMsg_EmbeddedActivityUpdateV2 embeddedActivityUpdateV2 ] )
+
+                        DispatchUser_MessageAck ->
+                            ( model, [] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
