@@ -1226,9 +1226,6 @@ isPressMsg msg =
         PressedDiscordGuildMemberLabel _ ->
             True
 
-        PressedDiscordFriendLabel _ ->
-            True
-
         TypedDiscordLinkBookmarklet ->
             False
 
