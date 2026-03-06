@@ -33,7 +33,6 @@ module User exposing
 import Base64
 import Codec exposing (Codec)
 import Discord
-import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
@@ -66,21 +65,21 @@ type alias BackendUser =
     , lastViewedThreads : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
-    , lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
+    , lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
-    , discordNotifyOnAllMessages : SeqSet (Discord.Id.Id Discord.Id.GuildId)
+    , discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
-    , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+    , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     , expandedGuilds : SeqSet (Id GuildId)
-    , expandedDiscordGuilds : SeqSet (Discord.Id.Id Discord.Id.GuildId)
+    , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     }
 
 
 type LastDmViewed
     = DmChannelLastViewed (Id UserId) ThreadRoute
-    | DiscordDmChannelLastViewed (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | DiscordDmChannelLastViewed (Discord.Id Discord.PrivateChannelId)
     | NoLastDmViewed
 
 
@@ -160,11 +159,11 @@ addDirectMention guildId channelId threadRoute user =
 
 
 addDiscordDirectMention :
-    Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> { a | discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater) }
-    -> { a | discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater) }
+    -> { a | discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater) }
+    -> { a | discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater) }
 addDiscordDirectMention guildId channelId threadRoute user =
     { user | discordDirectMentions = addDirectMentionHelper guildId channelId threadRoute user.discordDirectMentions }
 
@@ -251,18 +250,18 @@ setLastChannelViewed guildId channelId threadRoute user =
 
 
 setLastDiscordChannelViewed :
-    Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
     -> ThreadRoute
     ->
         { a
-            | lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
-            , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+            | lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+            , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
         }
     ->
         { a
-            | lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
-            , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+            | lastDiscordChannelViewed : SeqDict (Discord.Id Discord.GuildId) ( Discord.Id Discord.ChannelId, ThreadRoute )
+            , discordDirectMentions : SeqDict (Discord.Id Discord.GuildId) (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
         }
 setLastDiscordChannelViewed guildId channelId threadRoute user =
     { user

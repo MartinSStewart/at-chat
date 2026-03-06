@@ -104,7 +104,6 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord
-import Discord.Id
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -140,9 +139,9 @@ import VisibleMessages exposing (VisibleMessages)
 type alias LocalState =
     { adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
-    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
-    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
+    , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
@@ -155,8 +154,8 @@ type alias LocalUser =
     { session : UserSession
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
-    , otherDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
-    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    , otherDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    , linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
@@ -183,9 +182,9 @@ type alias BackendGuild =
 type alias DiscordBackendGuild =
     { name : GuildName
     , icon : Maybe FileHash
-    , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordBackendChannel
-    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
-    , owner : Discord.Id.Id Discord.Id.UserId
+    , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
+    , members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , owner : Discord.Id Discord.UserId
     }
 
 
@@ -204,9 +203,9 @@ type alias FrontendGuild =
 type alias DiscordFrontendGuild =
     { name : GuildName
     , icon : Maybe FileHash
-    , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordFrontendChannel
-    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
-    , owner : Discord.Id.Id Discord.Id.UserId
+    , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
+    , members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , owner : Discord.Id Discord.UserId
     }
 
 
@@ -293,10 +292,10 @@ type alias BackendChannel =
 
 type alias DiscordBackendChannel =
     { name : ChannelName
-    , messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , messages : Array (Message ChannelMessageId (Discord.Id Discord.UserId))
     , status : ChannelStatus
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
     }
 
@@ -315,9 +314,9 @@ type alias FrontendChannel =
 
 type alias DiscordFrontendChannel =
     { name : ChannelName
-    , messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     }
 
@@ -422,19 +421,19 @@ type alias AdminData =
     , openRouterKey : Maybe String
     , discordDmChannels :
         SeqDict
-            (Discord.Id.Id Discord.Id.PrivateChannelId)
+            (Discord.Id Discord.PrivateChannelId)
             AdminData_DiscordDmChannel
-    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
-    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
+    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
-    , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel Int)
+    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     }
 
 
 type LoadingDiscordChannel messages
-    = LoadingDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (LoadingDiscordChannelStep messages)
-    | LoadingDiscordGuildChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (LoadingDiscordChannelStep messages)
+    = LoadingDiscordDmChannel Time.Posix (Discord.Id Discord.PrivateChannelId) (LoadingDiscordChannelStep messages)
+    | LoadingDiscordGuildChannel Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (LoadingDiscordChannelStep messages)
 
 
 type LoadingDiscordChannelStep messages
@@ -443,7 +442,7 @@ type LoadingDiscordChannelStep messages
     | LoadingDiscordChannelAttachments Time.Posix messages
 
 
-userIsLoadingDiscordChannel : Discord.Id.Id Discord.Id.UserId -> SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel a) -> Bool
+userIsLoadingDiscordChannel : Discord.Id Discord.UserId -> SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel a) -> Bool
 userIsLoadingDiscordChannel userId loadingDiscordChannels =
     case SeqDict.get userId loadingDiscordChannels of
         Just (LoadingDiscordGuildChannel _ _ _ step) ->
@@ -473,8 +472,8 @@ userIsLoadingDiscordChannel userId loadingDiscordChannels =
 
 
 isDiscordGuildChannelReloading :
-    Discord.Id.Id Discord.Id.ChannelId
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel a)
+    Discord.Id Discord.ChannelId
+    -> SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel a)
     -> Maybe (LoadingDiscordChannelStep a)
 isDiscordGuildChannelReloading channelId loadingDiscordChannels =
     List.Extra.findMap
@@ -494,8 +493,8 @@ isDiscordGuildChannelReloading channelId loadingDiscordChannels =
 
 
 isDiscordDmChannelReloading :
-    Discord.Id.Id Discord.Id.PrivateChannelId
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel a)
+    Discord.Id Discord.PrivateChannelId
+    -> SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel a)
     -> Maybe (LoadingDiscordChannelStep a)
 isDiscordDmChannelReloading channelId loadingDiscordChannels =
     List.Extra.findMap
@@ -545,9 +544,9 @@ loadingDiscordChannelMap mapFunc channel =
 
 
 type alias AdminData_DiscordDmChannel =
-    { members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    { members : NonemptySet (Discord.Id Discord.UserId)
     , messageCount : Int
-    , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , firstMessage : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
     }
 
 
@@ -567,9 +566,9 @@ type alias AdminData_GuildChannel =
 
 type alias AdminData_DiscordGuild =
     { name : GuildName
-    , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) AdminData_DiscordChannel
-    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
-    , owner : Discord.Id.Id Discord.Id.UserId
+    , channels : SeqDict (Discord.Id Discord.ChannelId) AdminData_DiscordChannel
+    , members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , owner : Discord.Id Discord.UserId
     }
 
 
@@ -577,7 +576,7 @@ type alias AdminData_DiscordChannel =
     { name : ChannelName
     , messageCount : Int
     , threadCount : Int
-    , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , firstMessage : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
     }
 
 
@@ -652,7 +651,7 @@ getUser userId localUser =
         SeqDict.get userId localUser.otherUsers
 
 
-getDiscordUser : Discord.Id.Id Discord.Id.UserId -> LocalUser -> Maybe DiscordFrontendUser
+getDiscordUser : Discord.Id Discord.UserId -> LocalUser -> Maybe DiscordFrontendUser
 getDiscordUser userId localUser =
     case SeqDict.get userId localUser.linkedDiscordUsers of
         Just user ->
@@ -730,8 +729,8 @@ type DiscordMessageAlreadyExists
 
 
 createDiscordChannelMessageBackend :
-    Discord.Id.Id Discord.Id.MessageId
-    -> Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
+    Discord.Id Discord.MessageId
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> DiscordBackendChannel
     -> Result DiscordMessageAlreadyExists DiscordBackendChannel
 createDiscordChannelMessageBackend messageId message channel =
@@ -739,9 +738,9 @@ createDiscordChannelMessageBackend messageId message channel =
 
 
 createDiscordThreadMessageBackend :
-    Discord.Id.Id Discord.Id.MessageId
+    Discord.Id Discord.MessageId
     -> Id ChannelMessageId
-    -> Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> DiscordBackendChannel
     -> Result DiscordMessageAlreadyExists DiscordBackendChannel
 createDiscordThreadMessageBackend messageId threadId message channel =
@@ -759,8 +758,8 @@ createDiscordThreadMessageBackend messageId threadId message channel =
 
 
 createDiscordDmChannelMessageBackend :
-    Discord.Id.Id Discord.Id.MessageId
-    -> Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
+    Discord.Id Discord.MessageId
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> DiscordDmChannel
     -> Result DiscordMessageAlreadyExists DiscordDmChannel
 createDiscordDmChannelMessageBackend messageId message channel =
@@ -768,21 +767,21 @@ createDiscordDmChannelMessageBackend messageId message channel =
 
 
 createDiscordMessageBackend :
-    Discord.Id.Id Discord.Id.MessageId
-    -> Message messageId (Discord.Id.Id Discord.Id.UserId)
+    Discord.Id Discord.MessageId
+    -> Message messageId (Discord.Id Discord.UserId)
     ->
         { d
-            | messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
-            , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt messageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+            | messages : Array (Message messageId (Discord.Id Discord.UserId))
+            , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt messageId)
+            , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         }
     ->
         Result
             DiscordMessageAlreadyExists
             { d
-                | messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
-                , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt messageId)
-                , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+                | messages : Array (Message messageId (Discord.Id Discord.UserId))
+                , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt messageId)
+                , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
             }
 createDiscordMessageBackend messageId message channel =
     if OneToOne.memberFirst messageId channel.linkedMessageIds then
@@ -1314,10 +1313,10 @@ announcementChannel guild =
 
 
 discordAnnouncementChannel :
-    { a | channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) b }
-    -> Discord.Id.Id Discord.Id.ChannelId
+    { a | channels : SeqDict (Discord.Id Discord.ChannelId) b }
+    -> Discord.Id Discord.ChannelId
 discordAnnouncementChannel guild =
-    SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Discord.Id.fromUInt64 (UInt64.fromInt 0))
+    SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Discord.idFromUInt64 (UInt64.fromInt 0))
 
 
 allUsers : LocalState -> SeqDict (Id UserId) FrontendUser
@@ -1333,7 +1332,7 @@ allUsers2 localUser =
         localUser.otherUsers
 
 
-allDiscordUsers2 : LocalUser -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+allDiscordUsers2 : LocalUser -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
 allDiscordUsers2 localUser =
     SeqDict.union
         (SeqDict.map (\_ user -> User.discordCurrentUserToFrontend user) localUser.linkedDiscordUsers)
@@ -1962,16 +1961,16 @@ getGuildAndChannel guildId channelId local =
 
 
 getDiscordGuildAndChannel :
-    Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
     ->
         { a
             | discordGuilds :
                 SeqDict
-                    (Discord.Id.Id Discord.Id.GuildId)
-                    { b | channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) channel }
+                    (Discord.Id Discord.GuildId)
+                    { b | channels : SeqDict (Discord.Id Discord.ChannelId) channel }
         }
-    -> Maybe ( { b | channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) channel }, channel )
+    -> Maybe ( { b | channels : SeqDict (Discord.Id Discord.ChannelId) channel }, channel )
 getDiscordGuildAndChannel guildId channelId local =
     case SeqDict.get guildId local.discordGuilds of
         Just guild ->
@@ -2338,7 +2337,7 @@ discordGuildOrDmIdToMessage :
     DiscordGuildOrDmId
     -> ThreadRouteWithMessage
     -> LocalState
-    -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )
+    -> Maybe ( UserTextMessageDataNoReply (Discord.Id Discord.UserId), ThreadRouteWithMaybeMessage )
 discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
     let
         helper messageId channel =
@@ -2485,7 +2484,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                     Nothing
 
 
-discordGuildOrDmIdToMessages : DiscordGuildOrDmId -> ThreadRoute -> LocalState -> Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
+discordGuildOrDmIdToMessages : DiscordGuildOrDmId -> ThreadRoute -> LocalState -> Maybe (Array (MessageStateNoReply (Discord.Id Discord.UserId)))
 discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
     let
         helper2 : { a | messages : Array (MessageState messageId userId) } -> Maybe (Array (MessageStateNoReply userId))

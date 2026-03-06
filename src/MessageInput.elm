@@ -12,7 +12,7 @@ module MessageInput exposing
     )
 
 import Diff
-import Discord.Id
+import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
@@ -612,10 +612,10 @@ userDropdownList guildOrDmId local =
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
 
 
-discordUserDropdownList : DiscordGuildOrDmId -> LocalState -> List ( Discord.Id.Id Discord.Id.UserId, DiscordFrontendUser )
+discordUserDropdownList : DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
 discordUserDropdownList guildOrDmId local =
     let
-        allUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+        allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
             LocalState.allDiscordUsers2 local.localUser
     in

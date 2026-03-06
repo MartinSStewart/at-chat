@@ -6,7 +6,6 @@ Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 
 import BackendExtra
 import Discord
-import Discord.Id
 import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
@@ -103,10 +102,10 @@ logExamples =
         , logEntry (Log.PushNotificationError (Id.fromInt 15) (Http.BadStatus 403))
         , logEntry
             (Log.FailedToDeleteDiscordGuildMessage
-                (Unsafe.uint64 "111222333444555666" |> Discord.Id.fromUInt64)
-                (Unsafe.uint64 "777888999000111222" |> Discord.Id.fromUInt64)
+                (Unsafe.uint64 "111222333444555666" |> Discord.idFromUInt64)
+                (Unsafe.uint64 "777888999000111222" |> Discord.idFromUInt64)
                 (Id.NoThreadWithMessage (Id.fromInt 0))
-                (Unsafe.uint64 "333444555666777888" |> Discord.Id.fromUInt64)
+                (Unsafe.uint64 "333444555666777888" |> Discord.idFromUInt64)
                 (Discord.NotFound404 Discord.UnknownMessage10008)
             )
         , logEntry

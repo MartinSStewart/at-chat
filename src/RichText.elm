@@ -22,7 +22,7 @@ module RichText exposing
 
 import Array exposing (Array)
 import Coord
-import Discord.Id
+import Discord
 import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileName
@@ -1361,7 +1361,7 @@ fromSlack blocks =
         |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : String -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+fromDiscord : String -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Discord.Id Discord.UserId))
 fromDiscord text attachments =
     case String.Nonempty.fromString text of
         Just nonempty ->
@@ -1433,7 +1433,7 @@ discordModifierToSymbol modifier =
 
 {-| <https://discord.com/developers/docs/reference#message-formatting>
 -}
-discordParser : List DiscordModifiers -> Parser (Array (RichText (Discord.Id.Id Discord.Id.UserId)))
+discordParser : List DiscordModifiers -> Parser (Array (RichText (Discord.Id Discord.UserId)))
 discordParser modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
@@ -1449,7 +1449,7 @@ discordParser modifiers =
                                         Array.append
                                             state.rest
                                             (Array.push
-                                                (UserMention (Discord.Id.fromUInt64 discordUserId))
+                                                (UserMention (Discord.idFromUInt64 discordUserId))
                                                 (parserHelper state)
                                             )
                                     }
@@ -1566,7 +1566,7 @@ discordStopOnChar =
 
 
 toDiscord :
-    Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    Nonempty (RichText (Discord.Id Discord.UserId))
     -> List (Discord.Markdown.Markdown a)
 toDiscord content =
     List.map
@@ -1619,10 +1619,10 @@ toDiscord content =
 discordModifierHelper :
     Bool
     -> DiscordModifiers
-    -> (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)) -> RichText (Discord.Id.Id Discord.Id.UserId))
-    -> LoopState (Discord.Id.Id Discord.Id.UserId)
+    -> (Nonempty (RichText (Discord.Id Discord.UserId)) -> RichText (Discord.Id Discord.UserId))
+    -> LoopState (Discord.Id Discord.UserId)
     -> List DiscordModifiers
-    -> Parser (Step (LoopState (Discord.Id.Id Discord.Id.UserId)) (Array (RichText (Discord.Id.Id Discord.Id.UserId))))
+    -> Parser (Step (LoopState (Discord.Id Discord.UserId)) (Array (RichText (Discord.Id Discord.UserId))))
 discordModifierHelper noTrailingWhitespace modifier container state modifiers =
     let
         symbol : NonemptyString
@@ -1702,9 +1702,9 @@ discordModifierHelper noTrailingWhitespace modifier container state modifiers =
 
 
 discordBailOut :
-    LoopState (Discord.Id.Id Discord.Id.UserId)
+    LoopState (Discord.Id Discord.UserId)
     -> List DiscordModifiers
-    -> Step state (Array (RichText (Discord.Id.Id Discord.Id.UserId)))
+    -> Step state (Array (RichText (Discord.Id Discord.UserId)))
 discordBailOut state modifiers =
     Array.append
         (case modifiers of

@@ -20,7 +20,7 @@ module DmChannel exposing
     )
 
 import Array exposing (Array)
-import Discord.Id
+import Discord
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptySet exposing (NonemptySet)
@@ -39,18 +39,18 @@ type alias DmChannel =
 
 
 type alias DiscordDmChannel =
-    { messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-    , members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    { messages : Array (Message ChannelMessageId (Discord.Id Discord.UserId))
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
+    , members : NonemptySet (Discord.Id Discord.UserId)
     }
 
 
 type alias DiscordFrontendDmChannel =
-    { messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    { messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
-    , members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
+    , members : NonemptySet (Discord.Id Discord.UserId)
     }
 
 

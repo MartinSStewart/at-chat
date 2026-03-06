@@ -1,6 +1,6 @@
 module UserOptions exposing (discordBookmarkletId, init, view)
 
-import Discord.Id
+import Discord
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress
@@ -445,7 +445,7 @@ view isMobile time local loggedIn loaded model =
         )
 
 
-discordUserCard : LoadedFrontend -> Discord.Id.Id Discord.Id.UserId -> DiscordFrontendCurrentUser -> Element FrontendMsg
+discordUserCard : LoadedFrontend -> Discord.Id Discord.UserId -> DiscordFrontendCurrentUser -> Element FrontendMsg
 discordUserCard loaded discordUserId data =
     Ui.column
         [ Ui.spacing 8

@@ -24,7 +24,6 @@ Most of the stuff in there doesn't neatly fit into it's own module so instead I'
 import Array
 import Broadcast
 import Discord exposing (OptionalData(..))
-import Discord.Id
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -522,9 +521,9 @@ getLoginData sessionId session user requestMessagesFor model =
 
 
 discordGuildToFrontendForUser :
-    Maybe ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
+    Maybe ( Discord.Id Discord.ChannelId, ThreadRoute )
     -> DiscordBackendGuild
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendGuild
 discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
     if
@@ -563,7 +562,7 @@ discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
 discordDmChannelToFrontend :
     Bool
     -> DiscordDmChannel
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendDmChannel
 discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
     if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
@@ -582,8 +581,8 @@ getLinkedDiscordUsersAndOtherUsers :
     Id UserId
     -> BackendModel
     ->
-        ( SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
-        , SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+        ( SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+        , SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
         )
 getLinkedDiscordUsersAndOtherUsers userId model =
     SeqDict.foldl

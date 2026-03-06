@@ -11,7 +11,6 @@ import Broadcast
 import Bytes.Decode
 import Bytes.Encode
 import Discord exposing (OptionalData(..))
-import Discord.Id
 import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -617,7 +616,7 @@ update msg model =
                             let
                                 guildDataDict :
                                     SeqDict
-                                        (Discord.Id.Id Discord.Id.GuildId)
+                                        (Discord.Id Discord.GuildId)
                                         { guild : Discord.GatewayGuild
                                         , channels : List Discord.Channel
                                         , icon : Maybe FileStatus.UploadResponse
@@ -876,7 +875,7 @@ update msg model =
                             --                    (\thread ->
                             --                        case
                             --                            OneToOne.second
-                            --                                (Discord.Id.toUInt64 thread.channel.id |> Discord.Id.fromUInt64)
+                            --                                (Discord.toUInt64 thread.channel.id |> Discord.fromUInt64)
                             --                                linkedMessageIds
                             --                        of
                             --                            Just channelMessageIndex ->
@@ -1065,11 +1064,11 @@ update msg model =
 attachmentsUploadedHelper :
     BackendModel
     -> { a | attachments : List Discord.Attachment }
-    -> List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse ))
+    -> List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
     -> ( SeqDict (Id FileId) FileData, SeqDict DiscordAttachmentId DiscordAttachmentData )
 attachmentsUploadedHelper model message results =
     let
-        uploadResponses : SeqDict (Discord.Id.Id Discord.Id.AttachmentId) FileStatus.UploadResponse
+        uploadResponses : SeqDict (Discord.Id Discord.AttachmentId) FileStatus.UploadResponse
         uploadResponses =
             List.filterMap Result.toMaybe results |> SeqDict.fromList
     in
@@ -1176,10 +1175,10 @@ updateFromFrontend sessionId clientId msg model =
 discordStartThread :
     DiscordFullUserData
     -> DiscordBackendChannel
-    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id Discord.ChannelId
     -> Id ChannelMessageId
-    -> Discord.Id.Id Discord.Id.MessageId
-    -> { d | discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData }
+    -> Discord.Id Discord.MessageId
+    -> { d | discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData }
     -> Task restriction Discord.HttpError Discord.Channel
 discordStartThread discordUser channel channelId threadId messageId model =
     Discord.startThreadFromMessagePayload
@@ -1599,9 +1598,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     SeqDict.get threadId channel.threads
                                                                         |> Maybe.withDefault Thread.discordBackendInit
 
-                                                                discordThreadId : Discord.Id.Id Discord.Id.ChannelId
+                                                                discordThreadId : Discord.Id Discord.ChannelId
                                                                 discordThreadId =
-                                                                    Discord.Id.toUInt64 messageId |> Discord.Id.fromUInt64
+                                                                    Discord.idToUInt64 messageId |> Discord.idFromUInt64
                                                             in
                                                             ( { model
                                                                 | pendingDiscordCreateMessages =
@@ -1681,7 +1680,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                               }
                                             , DiscordSync.sendMessage
                                                 discordUser
-                                                (Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64)
+                                                (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
                                                 (case maybeReplyTo of
                                                     Just replyTo ->
                                                         OneToOne.first replyTo dmChannel.linkedMessageIds
@@ -1985,7 +1984,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             model
                                         , Discord.triggerTypingIndicatorPayload
                                             (Discord.userToken userData.auth)
-                                            (Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64)
+                                            (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
                                             |> DiscordSync.http
                                             |> Task.attempt (\_ -> DiscordTypingIndicatorSent)
                                         ]
@@ -2142,7 +2141,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     Just discordMessageId ->
                                                         Discord.createReactionPayload
                                                             (Discord.userToken userData.auth)
-                                                            { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
+                                                            { channelId = Discord.idToUInt64 data.channelId |> Discord.idFromUInt64
                                                             , messageId = discordMessageId
                                                             , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
                                                             }
@@ -2334,7 +2333,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     Just discordMessageId ->
                                                         Discord.deleteOwnReactionPayload
                                                             (Discord.userToken userData.auth)
-                                                            { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
+                                                            { channelId = Discord.idToUInt64 data.channelId |> Discord.idFromUInt64
                                                             , messageId = discordMessageId
                                                             , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
                                                             }
@@ -2571,7 +2570,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             Just discordMessageId ->
                                                 Discord.editMessagePayload
                                                     (Discord.userToken userData.auth)
-                                                    { channelId = Discord.Id.toUInt64 dmData.channelId |> Discord.Id.fromUInt64
+                                                    { channelId = Discord.idToUInt64 dmData.channelId |> Discord.idFromUInt64
                                                     , messageId = discordMessageId
                                                     , content =
                                                         RichText.toDiscord newContent
@@ -2935,8 +2934,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 Discord.deleteMessagePayload
                                                                     (Discord.userToken userData.auth)
                                                                     { channelId =
-                                                                        Discord.Id.toUInt64 data.channelId
-                                                                            |> Discord.Id.fromUInt64
+                                                                        Discord.idToUInt64 data.channelId
+                                                                            |> Discord.idFromUInt64
                                                                     , messageId = discordMessageId
                                                                     }
                                                                     |> DiscordSync.http
@@ -3722,10 +3721,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
 
 threadRouteToDiscordMessageId :
-    Discord.Id.Id Discord.Id.ChannelId
+    Discord.Id Discord.ChannelId
     -> DiscordBackendChannel
     -> ThreadRouteWithMessage
-    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, Discord.Id.Id Discord.Id.MessageId )
+    -> Maybe ( Discord.Id Discord.ChannelId, Discord.Id Discord.MessageId )
 threadRouteToDiscordMessageId channelId channel threadRoute =
     case threadRoute of
         NoThreadWithMessage messageId ->
@@ -3741,7 +3740,7 @@ threadRouteToDiscordMessageId channelId channel threadRoute =
                 ( Just thread, Just discordThreadId ) ->
                     case OneToOne.first messageId thread.linkedMessageIds of
                         Just discordMessageId ->
-                            Just ( Discord.Id.toUInt64 discordThreadId |> Discord.Id.fromUInt64, discordMessageId )
+                            Just ( Discord.idToUInt64 discordThreadId |> Discord.idFromUInt64, discordMessageId )
 
                         Nothing ->
                             Nothing
@@ -4268,14 +4267,14 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
                         , DiscordSync.getManyMessages
                             (Discord.userToken discordUser.auth)
-                            { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64
+                            { channelId = Discord.idToUInt64 channelId |> Discord.idFromUInt64
                             , limit = DiscordSync.reloadChannelMaxMessages
                             }
                             |> Task.attempt (GotDiscordDmChannelMessages time userIdToLoadWith channelId)
 
                         --, DiscordSync.getManyMessages
                         --    (Discord.userToken discordUser.auth)
-                        --    { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = reloadChannelMaxMessages }
+                        --    { channelId = Discord.toUInt64 channelId |> Discord.fromUInt64, limit = reloadChannelMaxMessages }
                         --    |> Task.andThen
                         --        (\messages ->
                         --            DiscordSync.uploadAttachmentsForMessages model messages
@@ -4409,7 +4408,7 @@ asUser model sessionId func =
 asDiscordUser :
     BackendModel
     -> SessionId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     ->
         (UserSession
          -> DiscordFullUserData
@@ -4543,8 +4542,8 @@ asGuildMember model sessionId guildId func =
 asDiscordGuildMember :
     BackendModel
     -> SessionId
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.UserId
     -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDiscordGuildMember model sessionId guildId discordUserId func =
@@ -4569,8 +4568,8 @@ asDiscordGuildMember model sessionId guildId discordUserId func =
 asDiscordGuildMember_AllowUserThatNeedsAuthAgain :
     BackendModel
     -> SessionId
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.UserId
     -> (UserSession -> NeedsAuthAgainData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discordUserId func =

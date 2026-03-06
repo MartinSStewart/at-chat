@@ -19,7 +19,7 @@ module Discord.Markdown exposing
     , underlineMarkdown
     )
 
-import Discord.Id exposing (CustomEmojiId, Id, UserId)
+import Discord exposing (CustomEmojiId, Id, UserId)
 
 
 type Quotable
@@ -187,10 +187,10 @@ toStringHelper markdown =
             "~~" ++ toString markdown2 ++ "~~"
 
         Ping userId ->
-            "<@!" ++ Discord.Id.toString userId ++ ">"
+            "<@!" ++ Discord.idToString userId ++ ">"
 
         CustomEmoji name id ->
-            "<:" ++ name ++ ":" ++ Discord.Id.toString id ++ ">"
+            "<:" ++ name ++ ":" ++ Discord.idToString id ++ ">"
 
         Spoiler content ->
             "||" ++ (List.map toStringHelper content |> String.concat) ++ "||"

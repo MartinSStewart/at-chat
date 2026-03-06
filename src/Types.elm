@@ -49,7 +49,6 @@ import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
-import Discord.Id
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
@@ -164,7 +163,7 @@ type LoginStatus
 type GuildChannelNameHover
     = NoChannelNameHover
     | GuildChannelNameHover (Id GuildId) (Id ChannelId) ThreadRoute
-    | DiscordGuildChannelNameHover (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
+    | DiscordGuildChannelNameHover (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
 
 
 type alias LoggedIn2 =
@@ -281,9 +280,9 @@ type alias BackendModel =
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
     , backendInitialized : Bool
-    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
+    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
-    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
+    , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
@@ -295,11 +294,11 @@ type alias BackendModel =
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
-    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
-    , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
+    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
-    , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel (List Discord.Message))
+    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
     , signupsEnabled : Bool
     }
 
@@ -395,8 +394,8 @@ type FrontendMsg
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId) ThreadRoute
     | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
-    | MouseEnteredDiscordChannelName (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
-    | MouseExitedDiscordChannelName (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
+    | MouseEnteredDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
+    | MouseExitedDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
     | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
@@ -483,13 +482,13 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscordUser
-    | PressedReloadDiscordUser (Discord.Id.Id Discord.Id.UserId)
-    | PressedUnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
+    | PressedReloadDiscordUser (Discord.Id Discord.UserId)
+    | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)
     | PressedDiscordGuildMemberLabel
-        { currentUserId : Discord.Id.Id Discord.Id.UserId
-        , otherUserId : Discord.Id.Id Discord.Id.UserId
+        { currentUserId : Discord.Id Discord.UserId
+        , otherUserId : Discord.Id Discord.UserId
         }
-    | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | PressedDiscordFriendLabel (Discord.Id Discord.PrivateChannelId)
     | TypedDiscordLinkBookmarklet
     | GotVersionNumber (Result Http.Error Int)
 
@@ -543,20 +542,20 @@ type BackendMsg
     | UserDisconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
-    | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
-    | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
-    | DeletedDiscordGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
-    | DeletedDiscordDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
-    | EditedDiscordGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
-    | EditedDiscordDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
-    | DiscordAddedReactionToGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
-    | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
-    | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
-    | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
+    | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) Discord.Msg
+    | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
+    | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
+    | DeletedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
+    | DeletedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
+    | EditedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
+    | EditedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
+    | DiscordAddedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
+    | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
+    | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
+    | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordTypingIndicatorSent
     | AiChatBackendMsg AiChat.BackendMsg
-    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
+    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
     | SentNotification SessionId (Id UserId) Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackChannels
@@ -572,18 +571,18 @@ type BackendMsg
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
-    | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.User)
+    | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
         Time.Posix
-        (Discord.Id.Id Discord.Id.UserId)
+        (Discord.Id Discord.UserId)
         (Result
             Discord.HttpError
             ( List
-                { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
-                , members : List (Discord.Id.Id Discord.Id.UserId)
+                { dmChannelId : Discord.Id Discord.PrivateChannelId
+                , members : List (Discord.Id Discord.UserId)
                 }
             , List
-                ( Discord.Id.Id Discord.Id.GuildId
+                ( Discord.Id Discord.GuildId
                 , { guild : Discord.GatewayGuild
                   , channels : List Discord.Channel
                   , icon : Maybe FileStatus.UploadResponse
@@ -591,15 +590,15 @@ type BackendMsg
                 )
             )
         )
-    | WebsocketCreatedHandleForUser (Discord.Id.Id Discord.Id.UserId) Websocket.Connection
-    | WebsocketClosedByBackendForUser (Discord.Id.Id Discord.Id.UserId) Bool
-    | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
-    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
-    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
-    | ReloadedDiscordGuildChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
-    | ReloadedDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
-    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError (List Discord.Message))
-    | GotDiscordDmChannelMessages Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
+    | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
+    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool
+    | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
+    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
+    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
+    | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
+    | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
+    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
+    | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket String Time.Posix
 
 
@@ -633,12 +632,12 @@ type alias LoginData =
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
-    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
-    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
-    , otherDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
-    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    , otherDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    , linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
@@ -658,7 +657,7 @@ type LocalMsg
 
 type ServerChange
     = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -674,21 +673,21 @@ type ServerChange
             }
         )
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId ThreadRoute
-    | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
-    | Server_DiscordDmMemberTyping Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
+    | Server_DiscordDmMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
-    | Server_DiscordAddReactionGuildEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage Emoji
-    | Server_DiscordAddReactionDmEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) Emoji
-    | Server_DiscordRemoveReactionGuildEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage Emoji
-    | Server_DiscordRemoveReactionDmEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) Emoji
+    | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage Emoji
+    | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) Emoji
+    | Server_DiscordRemoveReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage Emoji
+    | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
-    | Server_DiscordSendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
+    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
+    | Server_DiscordSendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
-    | Server_DiscordDeleteGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage
-    | Server_DiscordDeleteDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId)
+    | Server_DiscordDeleteGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage
+    | Server_DiscordDeleteDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
     | Server_SetUserIcon (Id UserId) FileHash
     | Server_PushNotificationsReset String
@@ -698,22 +697,22 @@ type ServerChange
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
-    | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
-    | Server_UnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
-    | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
-    | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
-    | Server_DiscordNeedsAuthAgain (Discord.Id.Id Discord.Id.UserId)
+    | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
+    | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
+    | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName
+    | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptySet (Discord.Id Discord.UserId))
+    | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone
-        (Discord.Id.Id Discord.Id.UserId)
+        (Discord.Id Discord.UserId)
         (Result
             Time.Posix
-            { discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
-            , discordDms : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
-            , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+            { discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
+            , discordDms : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+            , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
             }
         )
-    | Server_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
-    | Server_LoadingDiscordChannelChanged (Discord.Id.Id Discord.Id.UserId) (Maybe (LoadingDiscordChannel Int))
+    | Server_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
+    | Server_LoadingDiscordChannelChanged (Discord.Id Discord.UserId) (Maybe (LoadingDiscordChannel Int))
     | Server_LoadAdminData InitAdminData
 
 
@@ -721,7 +720,7 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
     | Local_SendMessage Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -731,8 +730,8 @@ type LocalChange
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
-    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
+    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
+    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
@@ -740,11 +739,11 @@ type LocalChange
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
-    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
-    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
+    | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData
     | Local_TextEditor TextEditor.LocalChange
-    | Local_UnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
-    | Local_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
+    | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)
+    | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)

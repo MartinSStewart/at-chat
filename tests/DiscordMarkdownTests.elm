@@ -1,6 +1,5 @@
 module DiscordMarkdownTests exposing (test)
 
-import Discord.Id
 import Expect
 import List.Nonempty exposing (Nonempty(..))
 import RichText exposing (RichText(..))
@@ -22,7 +21,7 @@ test =
         ]
 
 
-fromDiscordHelper : String -> List (RichText (Discord.Id.Id Discord.Id.UserId))
+fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
     RichText.fromDiscord text SeqDict.empty |> List.Nonempty.toList
 
@@ -86,9 +85,9 @@ basicFormattingTests =
         ]
 
 
-userId : Discord.Id.Id Discord.Id.UserId
+userId : Discord.Id Discord.UserId
 userId =
-    Unsafe.uint64 "137748026084163580" |> Discord.Id.fromUInt64
+    Unsafe.uint64 "137748026084163580" |> Discord.idFromUInt64
 
 
 discordSpecificTests : Test
@@ -111,22 +110,22 @@ discordSpecificTests =
         --, Test.test "custom emoji" <|
         --    \_ ->
         --        fromDiscordHelper "<:smile:123456789>"
-        --            |> Expect.equal [ CustomEmoji "smile" (Discord.Id.fromUInt64 (UInt64.fromString "123456789" |> Maybe.withDefault UInt64.zero)) ]
+        --            |> Expect.equal [ CustomEmoji "smile" (Discord.fromUInt64 (UInt64.fromString "123456789" |> Maybe.withDefault UInt64.zero)) ]
         --, Test.test "custom emoji with text" <|
         --    \_ ->
         --        fromDiscordHelper "Hello <:wave:987654321> world"
         --            |> Expect.equal
         --                [ NormalText "Hello "
-        --                , CustomEmoji "wave" (Discord.Id.fromUInt64 (UInt64.fromString "987654321" |> Maybe.withDefault UInt64.zero))
+        --                , CustomEmoji "wave" (Discord.fromUInt64 (UInt64.fromString "987654321" |> Maybe.withDefault UInt64.zero))
         --                , NormalText " world"
         --                ]
         --, Test.test "multiple pings" <|
         --    \_ ->
         --        fromDiscordHelper "<@!123> and <@!456>"
         --            |> Expect.equal
-        --                [ Ping (Discord.Id.fromUInt64 (UInt64.fromString "123" |> Maybe.withDefault UInt64.zero))
+        --                [ Ping (Discord.fromUInt64 (UInt64.fromString "123" |> Maybe.withDefault UInt64.zero))
         --                , NormalText " and "
-        --                , Ping (Discord.Id.fromUInt64 (UInt64.fromString "456" |> Maybe.withDefault UInt64.zero))
+        --                , Ping (Discord.fromUInt64 (UInt64.fromString "456" |> Maybe.withDefault UInt64.zero))
         --                ]
         --, Test.test "ping inside formatting" <|
         --    \_ ->
@@ -134,7 +133,7 @@ discordSpecificTests =
         --            |> Expect.equal
         --                [ Bold
         --                    [ NormalText "Hello "
-        --                    , Ping (Discord.Id.fromUInt64 (UInt64.fromString "123456789" |> Maybe.withDefault UInt64.zero))
+        --                    , Ping (Discord.fromUInt64 (UInt64.fromString "123456789" |> Maybe.withDefault UInt64.zero))
         --                    ]
         --                ]
         ]

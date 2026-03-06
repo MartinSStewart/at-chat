@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord.Id
+import Discord
 import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Editable
@@ -1473,7 +1473,7 @@ updateLoaded msg model =
                                         of
                                             ( Just nonempty, Just ( message, _ ) ) ->
                                                 let
-                                                    richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                                                    richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                     richText =
                                                         RichText.fromNonemptyString
                                                             (LocalState.allDiscordUsers2 local.localUser)
@@ -1666,11 +1666,11 @@ updateLoaded msg model =
                                 local =
                                     Local.model loggedIn.localState
 
-                                maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
+                                maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id Discord.UserId)))
                                 maybeMessages =
                                     LocalState.discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
 
-                                currentUserId : Discord.Id.Id Discord.Id.UserId
+                                currentUserId : Discord.Id Discord.UserId
                                 currentUserId =
                                     case guildOrDmId2 of
                                         DiscordGuildOrDmId_Guild currentUserId2 _ _ ->
@@ -1686,7 +1686,7 @@ updateLoaded msg model =
                                         messageCount =
                                             Array.length messages
 
-                                        mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId) )
+                                        mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id Discord.UserId) )
                                         mostRecentMessage =
                                             (if messageCount < 5 then
                                                 Array.toList messages
@@ -3100,7 +3100,7 @@ updateLoaded msg model =
                     case SeqDict.get channelId local.discordDmChannels of
                         Just channel ->
                             let
-                                maybeCurrentDiscordUser : Maybe (Discord.Id.Id Discord.Id.UserId)
+                                maybeCurrentDiscordUser : Maybe (Discord.Id Discord.UserId)
                                 maybeCurrentDiscordUser =
                                     List.Extra.findMap
                                         (\( userId, _ ) ->

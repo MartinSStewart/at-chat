@@ -24,7 +24,7 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
-import Discord.Id
+import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -150,9 +150,9 @@ guildNewMessageCount currentUser guildId guild =
 
 
 discordGuildNewMessageCount :
-    Discord.Id.Id Discord.Id.UserId
+    Discord.Id Discord.UserId
     -> FrontendCurrentUser
-    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id Discord.GuildId
     -> DiscordFrontendGuild
     -> Int
 discordGuildNewMessageCount currentDiscordUserId currentUser guildId guild =
@@ -191,9 +191,9 @@ guildHasNotifications currentUser guildId guild =
 
 
 discordGuildHasNotifications :
-    Discord.Id.Id Discord.Id.UserId
+    Discord.Id Discord.UserId
     -> FrontendCurrentUser
-    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id Discord.GuildId
     -> DiscordFrontendGuild
     -> ChannelNotificationType
 discordGuildHasNotifications currentDiscordUserId currentUser guildId guild =
@@ -242,7 +242,7 @@ guildColumn :
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Bool
     -> Element FrontendMsg
 guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 =
@@ -359,7 +359,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                 ++ List.filterMap
                     (\( guildId, guild ) ->
                         let
-                            maybeDiscordUserId : Maybe ( Discord.Id.Id Discord.Id.UserId, User.DiscordFrontendCurrentUser )
+                            maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, User.DiscordFrontendCurrentUser )
                             maybeDiscordUserId =
                                 SeqDict.filter
                                     (\linkedUserId _ -> SeqDict.member linkedUserId guild.members || linkedUserId == guild.owner)
@@ -370,7 +370,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                         case maybeDiscordUserId of
                             Just ( discordUserId, _ ) ->
                                 elLinkButton
-                                    (Dom.id ("guild_openDiscordGuild_" ++ Discord.Id.toString guildId))
+                                    (Dom.id ("guild_openDiscordGuild_" ++ Discord.idToString guildId))
                                     ({ currentDiscordUserId = discordUserId
                                      , guildId = guildId
                                      , channelRoute =
@@ -596,7 +596,7 @@ guildColumnCanScroll :
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Element FrontendMsg
 guildColumnCanScroll isMobile route localUser dmChannels guilds discordGuilds =
     guildColumn isMobile route localUser dmChannels guilds discordGuilds True
@@ -608,7 +608,7 @@ guildColumnCannotScroll :
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
     -> Element FrontendMsg
 guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds =
     guildColumn isMobile route localUser dmChannels guilds discordGuilds False
@@ -1159,9 +1159,9 @@ memberColumnNotMobile localUser guildOwner guildMembers =
 
 discordMemberColumnNotMobile :
     LocalUser
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.UserId
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.UserId
+    -> SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg
 discordMemberColumnNotMobile localUser currentDiscordUserId guildOwner guildMembers =
     let
@@ -1244,9 +1244,9 @@ memberColumnMobile canScroll2 localUser guildOwner guildMembers =
 discordMemberColumnMobile :
     Bool
     -> LocalUser
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.UserId
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.UserId
+    -> SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg
 discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildOwner guildMembers =
     let
@@ -1322,12 +1322,12 @@ memberLabel isMobile localUser userId =
 discordMemberLabel :
     Bool
     -> LocalUser
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.UserId
     -> Element FrontendMsg
 discordMemberLabel isMobile localUser currentUserId userId =
     MyUi.rowButton
-        (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
+        (Dom.id ("guild_openDiscordDm_" ++ Discord.idToString userId))
         (PressedDiscordGuildMemberLabel { currentUserId = currentUserId, otherUserId = userId })
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
@@ -2038,14 +2038,14 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
 discordConversationViewHelper :
     Id ChannelMessageId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> DiscordGuildOrDmId
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
+            , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
         }
     -> LoggedIn2
@@ -2150,7 +2150,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId) )
+                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
                         maybeRepliedTo =
                             case message of
                                 UserTextMessage data ->
@@ -2577,7 +2577,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
 discordThreadConversationViewHelper :
     Id ThreadMessageId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> DiscordGuildOrDmId
     -> Id ChannelMessageId
     -> Maybe (Id ThreadMessageId)
@@ -2679,7 +2679,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId) )
+                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
                         maybeRepliedTo =
                             case message of
                                 UserTextMessage data ->
@@ -3284,7 +3284,7 @@ chattingWithYourself data local =
 
 discordConversationView :
     Id ChannelMessageId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> DiscordGuildOrDmId
     -> Maybe (Id ChannelMessageId)
     -> LoggedIn2
@@ -3293,9 +3293,9 @@ discordConversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
-            , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
+            , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
         }
     -> Element FrontendMsg
@@ -3305,7 +3305,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         guildOrDmId =
             ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread )
 
-        allUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+        allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
             LocalState.allDiscordUsers2 local.localUser
 
@@ -3776,7 +3776,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
 discordThreadConversationView :
     Id ThreadMessageId
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> DiscordGuildOrDmId
     -> Maybe (Id ThreadMessageId)
     -> Id ChannelMessageId
@@ -3792,7 +3792,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         guildOrDmId =
             ( DiscordGuildOrDmId guildOrDmIdNoThread, ViewThread threadId )
 
-        allUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+        allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
             LocalState.allDiscordUsers2 local.localUser
 
@@ -4068,14 +4068,14 @@ discordThreadStarterMessage :
     Bool
     -> DiscordGuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId)) }
+    -> { a | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId)) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> Element FrontendMsg
 discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex channel loggedIn local model =
     let
-        currentUserId : Discord.Id.Id Discord.Id.UserId
+        currentUserId : Discord.Id Discord.UserId
         currentUserId =
             case discordGuildOrDmId of
                 DiscordGuildOrDmId_Guild currentUserId2 _ _ ->
@@ -4531,10 +4531,10 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
 discordMessageViewNotThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> LocalUser
     -> Int
-    -> Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
@@ -4605,11 +4605,11 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
 discordMessageViewThreadStarter :
     Int
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> LocalUser
     -> Int
     -> DiscordFrontendThread
-    -> Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
     let
@@ -4679,10 +4679,10 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
 discordThreadMessageViewLazy :
     Int
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
-    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id Discord.UserId
     -> LocalUser
     -> Int
-    -> Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> Element MessageViewMsg
 discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
@@ -5665,7 +5665,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
         guildName =
             GuildName.toString guild.name
 
-        directMentions : Maybe (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+        directMentions : Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
         directMentions =
             SeqDict.get routeData.guildId localUser.user.discordDirectMentions
     in
@@ -5885,9 +5885,9 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
 discordChannelColumnThreads :
     Bool
     -> DiscordGuildRouteData
-    -> Maybe (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+    -> Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
-    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> SeqDict (Id ChannelMessageId) DiscordFrontendThread
     -> Element FrontendMsg
@@ -5929,7 +5929,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                         , MyUi.noShrinking
                         ]
                         [ elLinkButton
-                            (Dom.id ("guild_viewThread_" ++ Discord.Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
+                            (Dom.id ("guild_viewThread_" ++ Discord.idToString channelId ++ "_" ++ Id.toString threadMessageIndex))
                             (DiscordGuildRoute
                                 { currentDiscordUserId = routeData.currentDiscordUserId
                                 , guildId = routeData.guildId
@@ -6104,10 +6104,10 @@ channelColumnRow isMobile channelNameHover directMentions channelRoute localUser
 discordChannelColumnRow :
     Bool
     -> GuildChannelNameHover
-    -> Maybe (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+    -> Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     -> DiscordGuildRouteData
     -> LocalUser
-    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> Element FrontendMsg
 discordChannelColumnRow isMobile channelNameHover directMentions routeData localUser channelId channel =
@@ -6143,7 +6143,7 @@ discordChannelColumnRow isMobile channelNameHover directMentions routeData local
         , MyUi.noShrinking
         ]
         [ elLinkButton
-            (Dom.id ("guild_openChannel_" ++ Discord.Id.toString channelId))
+            (Dom.id ("guild_openChannel_" ++ Discord.idToString channelId))
             (DiscordGuildRoute
                 { currentDiscordUserId = routeData.currentDiscordUserId
                 , guildId = routeData.guildId
@@ -6193,7 +6193,7 @@ discordChannelColumnRow isMobile channelNameHover directMentions routeData local
             (Ui.text (ChannelName.toString channel.name))
         , if isHover then
             elLinkButton
-                (Dom.id ("guild_editChannel_" ++ Discord.Id.toString channelId))
+                (Dom.id ("guild_editChannel_" ++ Discord.idToString channelId))
                 (DiscordGuildRoute
                     { currentDiscordUserId = routeData.currentDiscordUserId
                     , guildId = routeData.guildId
@@ -6225,7 +6225,7 @@ friendsColumn canScroll2 isMobile openedOtherUserId local =
                 (\maybe -> Maybe.withDefault DmChannel.frontendInit maybe |> Just)
                 local.dmChannels
 
-        discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
+        discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
         discordDmChannelsIncludingLinkedUsers =
             local.discordDmChannels
 
@@ -6378,17 +6378,17 @@ friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers mes
 discordFriendLabel :
     Bool
     -> Bool
-    -> Discord.Id.Id Discord.Id.PrivateChannelId
-    -> NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    -> Discord.Id Discord.PrivateChannelId
+    -> NonemptySet (Discord.Id Discord.UserId)
     -> LocalUser
-    -> MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
 discordFriendLabel isMobile isSelected dmChannelId members localUser message =
     let
         _ =
             Debug.log "rerender discord friendLabel" ()
 
-        members2 : List.Nonempty.Nonempty (Discord.Id.Id Discord.Id.UserId)
+        members2 : List.Nonempty.Nonempty (Discord.Id Discord.UserId)
         members2 =
             NonemptySet.toNonemptyList members
 
@@ -6416,7 +6416,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
                     ""
     in
     MyUi.rowButton
-        ("guild_discordFriendLabel_" ++ Discord.Id.toString dmChannelId |> Dom.id)
+        ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
         (PressedDiscordFriendLabel dmChannelId)
         [ Ui.clipWithEllipsis
         , Ui.spacing 8

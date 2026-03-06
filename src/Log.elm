@@ -2,7 +2,6 @@ module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, time
 
 import Array exposing (Array)
 import Discord
-import Discord.Id
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
@@ -24,17 +23,17 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError (Id UserId) Http.Error
-    | FailedToDeleteDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
-    | FailedToDeleteDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
-    | FailedToEditDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
-    | FailedToEditDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
-    | FailedToAddReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
-    | FailedToAddReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
-    | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
-    | FailedToRemoveReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
-    | FailedToLoadDiscordUserData (Discord.Id.Id Discord.Id.UserId) Discord.HttpError
-    | FailedToSendDiscordGuildMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
-    | FailedToSendDiscordDmMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) Discord.HttpError
+    | FailedToDeleteDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Discord.HttpError
+    | FailedToDeleteDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Discord.HttpError
+    | FailedToEditDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Discord.HttpError
+    | FailedToEditDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Discord.HttpError
+    | FailedToAddReactionToDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji Discord.HttpError
+    | FailedToAddReactionToDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji Discord.HttpError
+    | FailedToLoadDiscordUserData (Discord.Id Discord.UserId) Discord.HttpError
+    | FailedToSendDiscordGuildMessage (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
+    | FailedToSendDiscordDmMessage (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) Discord.HttpError
     | FailedToGetDiscordUserAvatars Discord.HttpError
     | FailedToParseDiscordWebsocket String
 
@@ -252,9 +251,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord guild message delete failed"
-                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -262,9 +261,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord DM message delete failed"
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -272,9 +271,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord guild message edit failed"
-                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -282,9 +281,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord DM message edit failed"
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -292,9 +291,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Adding Discord guild reaction failed"
-                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
@@ -303,9 +302,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Adding Discord DM reaction failed"
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
@@ -314,9 +313,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Removing Discord guild reaction failed"
-                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
@@ -325,9 +324,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Removing Discord DM reaction failed"
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
-                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
                 , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
@@ -336,7 +335,7 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Loading Discord user data failed"
-                , fieldRow "Discord user id" (Ui.text (Discord.Id.toString discordUserId))
+                , fieldRow "Discord user id" (Ui.text (Discord.idToString discordUserId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -344,9 +343,9 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Sending Discord guild message failed"
-                , fieldRow "User" (Ui.text (Discord.Id.toString discordUserId))
-                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "User" (Ui.text (Discord.idToString discordUserId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -354,8 +353,8 @@ logContent onPressCopy log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Sending Discord DM message failed"
-                , fieldRow "User" (Ui.text (Discord.Id.toString discordUserId))
-                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "User" (Ui.text (Discord.idToString discordUserId))
+                , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

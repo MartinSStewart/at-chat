@@ -26,7 +26,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
-import Discord.Id
+import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
@@ -67,10 +67,10 @@ addOrRemoveDiscordReaction :
     Bool
     ->
         { a
-            | userId : Discord.Id.Id Discord.Id.UserId
-            , channelId : Discord.Id.Id Discord.Id.ChannelId
-            , messageId : Discord.Id.Id Discord.Id.MessageId
-            , guildId : OptionalData (Discord.Id.Id Discord.Id.GuildId)
+            | userId : Discord.Id Discord.UserId
+            , channelId : Discord.Id Discord.ChannelId
+            , messageId : Discord.Id Discord.MessageId
+            , guildId : OptionalData (Discord.Id Discord.GuildId)
             , emoji : Discord.EmojiData
         }
     -> BackendModel
@@ -136,9 +136,9 @@ addOrRemoveDiscordReaction isAdding reaction model =
 
         Missing ->
             let
-                dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                dmChannelId : Discord.Id Discord.PrivateChannelId
                 dmChannelId =
-                    Discord.Id.toUInt64 reaction.channelId |> Discord.Id.fromUInt64
+                    Discord.idToUInt64 reaction.channelId |> Discord.idFromUInt64
             in
             case SeqDict.get dmChannelId model.discordDmChannels of
                 Just channel ->
@@ -199,14 +199,14 @@ handleDiscordDmEditMessage :
 handleDiscordDmEditMessage edit attachments model =
     let
         channelId =
-            Discord.Id.toUInt64 edit.channelId |> Discord.Id.fromUInt64
+            Discord.idToUInt64 edit.channelId |> Discord.idFromUInt64
     in
     case SeqDict.get channelId model.discordDmChannels of
         Just channel ->
             case OneToOne.second edit.id channel.linkedMessageIds of
                 Just messageIndex ->
                     let
-                        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                        richText : Nonempty (RichText (Discord.Id Discord.UserId))
                         richText =
                             RichText.fromDiscord edit.content attachments
                     in
@@ -247,10 +247,10 @@ handleDiscordDmEditMessage edit attachments model =
 
 
 discordChannelIdToChannelId :
-    Discord.Id.Id Discord.Id.ChannelId
-    -> Discord.Id.Id Discord.Id.MessageId
+    Discord.Id Discord.ChannelId
+    -> Discord.Id Discord.MessageId
     -> DiscordBackendGuild
-    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRouteWithMessage )
+    -> Maybe ( Discord.Id Discord.ChannelId, DiscordBackendChannel, ThreadRouteWithMessage )
 discordChannelIdToChannelId channelId messageId guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
@@ -286,9 +286,9 @@ discordChannelIdToChannelId channelId messageId guild =
 
 
 discordChannelIdToChannelIdNoMessage :
-    Discord.Id.Id Discord.Id.ChannelId
+    Discord.Id Discord.ChannelId
     -> DiscordBackendGuild
-    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRoute )
+    -> Maybe ( Discord.Id Discord.ChannelId, DiscordBackendChannel, ThreadRoute )
 discordChannelIdToChannelIdNoMessage channelId guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
@@ -302,7 +302,7 @@ discordChannelIdToChannelIdNoMessage channelId guild =
                             (\( threadId, _ ) ->
                                 case OneToOne.first threadId channel.linkedMessageIds of
                                     Just discordThreadId ->
-                                        if Discord.Id.fromUInt64 (Discord.Id.toUInt64 discordThreadId) == channelId then
+                                        if Discord.idFromUInt64 (Discord.idToUInt64 discordThreadId) == channelId then
                                             Just threadId
 
                                         else
@@ -323,7 +323,7 @@ discordChannelIdToChannelIdNoMessage channelId guild =
 
 
 handleDiscordGuildEditMessage :
-    Discord.Id.Id Discord.Id.GuildId
+    Discord.Id Discord.GuildId
     -> DiscordBackendGuild
     -> Discord.UserMessageUpdate
     -> SeqDict (Id FileId) FileData
@@ -331,7 +331,7 @@ handleDiscordGuildEditMessage :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
-        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+        richText : Nonempty (RichText (Discord.Id Discord.UserId))
         richText =
             RichText.fromDiscord edit.content attachments
     in
@@ -378,7 +378,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
 
         Nothing ->
             let
-                maybeThread : Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ( Id ChannelMessageId, Id ThreadMessageId ) )
+                maybeThread : Maybe ( Discord.Id Discord.ChannelId, DiscordBackendChannel, ( Id ChannelMessageId, Id ThreadMessageId ) )
                 maybeThread =
                     List.Extra.findMap
                         (\( channelId, channel ) ->
@@ -443,9 +443,9 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
 
 
 handleDiscordDeleteGuildMessage :
-    Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
-    -> Discord.Id.Id Discord.Id.MessageId
+    Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
+    -> Discord.Id Discord.MessageId
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId model =
@@ -477,7 +477,7 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
                                 (\( channelId, channel ) ->
                                     case
                                         OneToOne.second
-                                            (Discord.Id.toUInt64 discordChannelId |> Discord.Id.fromUInt64)
+                                            (Discord.idToUInt64 discordChannelId |> Discord.idFromUInt64)
                                             channel.linkedMessageIds
                                     of
                                         Just threadId ->
@@ -526,12 +526,12 @@ handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId
 
 
 deleteMessageHelper :
-    Discord.Id.Id Discord.Id.MessageId
-    -> { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
+    Discord.Id Discord.MessageId
+    -> { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id Discord.UserId)) }
     ->
         Maybe
             ( Id messageId
-            , { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
+            , { b | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id Discord.UserId)) }
             )
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
@@ -557,8 +557,8 @@ deleteMessageHelper discordMessageId channel =
 
 
 handleDiscordDeleteDmMessage :
-    Discord.Id.Id Discord.Id.PrivateChannelId
-    -> Discord.Id.Id Discord.Id.MessageId
+    Discord.Id Discord.PrivateChannelId
+    -> Discord.Id Discord.MessageId
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordDeleteDmMessage discordChannelId discordMessageId model =
@@ -649,8 +649,8 @@ messagesAndLinks :
     List Discord.Message
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
-        ( Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
-        , OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+        ( Array (Message messageId (Discord.Id Discord.UserId))
+        , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
 messagesAndLinks messages discordAttachments =
     List.indexedMap
@@ -703,7 +703,7 @@ addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachment
 
 referencedMessageToMessageId :
     Discord.Message
-    -> { a | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId) }
+    -> { a | linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId) }
     -> Maybe (Id messageId)
 referencedMessageToMessageId message channel =
     case message.referencedMessage of
@@ -739,9 +739,9 @@ handleDiscordCreateMessage message attachments model =
             case message.guildId of
                 Missing ->
                     let
-                        dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                        dmChannelId : Discord.Id Discord.PrivateChannelId
                         dmChannelId =
-                            Discord.Id.toUInt64 message.channelId |> Discord.Id.fromUInt64
+                            Discord.idToUInt64 message.channelId |> Discord.idFromUInt64
                     in
                     case SeqDict.get dmChannelId model.discordDmChannels of
                         Just channel ->
@@ -750,7 +750,7 @@ handleDiscordCreateMessage message attachments model =
 
                             else
                                 let
-                                    richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                                    richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                     richText =
                                         RichText.fromDiscord message.content attachments
 
@@ -854,7 +854,7 @@ handleDiscordCreateMessage message attachments model =
 discordGetGuildChannel :
     Discord.Message
     -> DiscordBackendGuild
-    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRouteWithMaybeMessage )
+    -> Maybe ( Discord.Id Discord.ChannelId, DiscordBackendChannel, ThreadRouteWithMaybeMessage )
 discordGetGuildChannel message guild =
     case SeqDict.get message.channelId guild.channels of
         Just channel ->
@@ -868,7 +868,7 @@ discordGetGuildChannel message guild =
         Nothing ->
             List.Extra.findMap
                 (\( channelId2, channel ) ->
-                    case OneToOne.second (Discord.Id.toUInt64 message.channelId |> Discord.Id.fromUInt64) channel.linkedMessageIds of
+                    case OneToOne.second (Discord.idToUInt64 message.channelId |> Discord.idFromUInt64) channel.linkedMessageIds of
                         Just messageIndex ->
                             let
                                 replyTo : Maybe (Id ThreadMessageId)
@@ -893,7 +893,7 @@ discordGetGuildChannel message guild =
 
 
 handleDiscordCreateGuildMessage :
-    Discord.Id.Id Discord.Id.GuildId
+    Discord.Id Discord.GuildId
     -> Discord.Message
     -> SeqDict (Id FileId) FileData
     -> BackendModel
@@ -908,17 +908,17 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
 
                     else
                         let
-                            richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                            richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
                                 RichText.fromDiscord message.content attachments
 
-                            threadOrChannelId : Discord.Id.Id Discord.Id.ChannelId
+                            threadOrChannelId : Discord.Id Discord.ChannelId
                             threadOrChannelId =
                                 case threadRoute of
                                     ViewThreadWithMaybeMessage threadId _ ->
                                         case OneToOne.first threadId channel.linkedMessageIds of
                                             Just messageId ->
-                                                Discord.Id.toUInt64 messageId |> Discord.Id.fromUInt64
+                                                Discord.idToUInt64 messageId |> Discord.idFromUInt64
 
                                             Nothing ->
                                                 channelId
@@ -935,7 +935,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                     NoThreadWithMaybeMessage _ ->
                                         NoThread
 
-                            usersMentioned : SeqSet (Discord.Id.Id Discord.Id.UserId)
+                            usersMentioned : SeqSet (Discord.Id Discord.UserId)
                             usersMentioned =
                                 LocalState.usersMentionedOrRepliedToBackend
                                     threadRoute
@@ -1095,7 +1095,7 @@ websocketClose debugName connection =
         |> Task.andThen (\() -> Websocket.close connection)
 
 
-discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+discordUserWebsocketMsg : Discord.Id Discord.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 discordUserWebsocketMsg discordUserId discordMsg model =
     case SeqDict.get discordUserId model.discordUsers of
         Just (FullData userData) ->
@@ -1380,9 +1380,9 @@ handleTypingStarted typingStart model =
 
         Missing ->
             let
-                channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                channelId : Discord.Id Discord.PrivateChannelId
                 channelId =
-                    Discord.Id.toUInt64 typingStart.channelId |> Discord.Id.fromUInt64
+                    Discord.idToUInt64 typingStart.channelId |> Discord.idFromUInt64
             in
             case SeqDict.get channelId model.discordDmChannels of
                 Just channel ->
@@ -1432,7 +1432,7 @@ handleDiscordEditMessage edit attachments model2 =
 
 loadMessageAttachment :
     Discord.Attachment
-    -> Task restriction x (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse ))
+    -> Task restriction x (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
 loadMessageAttachment attachment =
     FileStatus.uploadUrl backendSessionIdHash attachment.url
         |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
@@ -1486,16 +1486,16 @@ handleChannelCreated channel model =
             case channel.recipients of
                 Included (head :: rest) ->
                     let
-                        channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                        channelId : Discord.Id Discord.PrivateChannelId
                         channelId =
-                            Discord.Id.toUInt64 channel.id |> Discord.Id.fromUInt64
+                            Discord.idToUInt64 channel.id |> Discord.idFromUInt64
 
-                        members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+                        members : NonemptySet (Discord.Id Discord.UserId)
                         members =
                             NonemptySet.fromNonemptyList
                                 (Nonempty head.id (List.map .id rest))
 
-                        existingUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+                        existingUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
                         existingUsers =
                             model.discordUsers
 
@@ -1629,7 +1629,7 @@ handleReadySupplementalData data model =
 handleReadyData : Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleReadyData readyData model =
     let
-        discordDmChannels : List { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId, members : List (Discord.Id.Id Discord.Id.UserId) }
+        discordDmChannels : List { dmChannelId : Discord.Id Discord.PrivateChannelId, members : List (Discord.Id Discord.UserId) }
         discordDmChannels =
             case readyData.privateChannels of
                 Included privateChannels ->
@@ -1728,7 +1728,7 @@ getDiscordGuildData :
             (Task
                 BackendOnly
                 Discord.HttpError
-                ( Discord.Id.Id Discord.Id.GuildId
+                ( Discord.Id Discord.GuildId
                 , { guild : Discord.GatewayGuild
                   , channels :
                         List
@@ -1830,7 +1830,7 @@ getDiscordGuildData model gatewayGuild =
 --        )
 
 
-getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id.Id Discord.Id.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)
+getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id Discord.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)
 getManyMessages authentication { channelId, limit } =
     Discord.getMessagesPayload authentication { channelId = channelId, limit = min limit 100, relativeTo = Discord.MostRecent }
         |> http
@@ -1839,7 +1839,7 @@ getManyMessages authentication { channelId, limit } =
 
 getManyMessagesHelper :
     Discord.Authentication
-    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id Discord.ChannelId
     -> Int
     -> Array Discord.Message
     -> Array Discord.Message
@@ -1890,8 +1890,8 @@ getManyMessagesHelper authentication channelId limit restOfMessages messages =
 
 addDiscordUserData :
     Discord.PartialUser
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+    -> SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> SeqDict (Discord.Id Discord.UserId) DiscordUserData
 addDiscordUserData user discordUsers =
     SeqDict.update
         user.id
@@ -1940,7 +1940,7 @@ addDiscordUserData user discordUsers =
 
 discordUserToPartialUser :
     { a
-        | id : Discord.Id.Id Discord.Id.UserId
+        | id : Discord.Id Discord.UserId
         , username : String
         , avatar : Maybe (Discord.ImageHash Discord.AvatarHash)
         , discriminator : Discord.UserDiscriminator
@@ -1997,8 +1997,8 @@ handleListGuildMembersResponse chunkData model =
 
 
 getUserAvatars :
-    SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
-    -> List { a | id : Discord.Id.Id Discord.Id.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
+    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    -> List { a | id : Discord.Id Discord.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
     -> Command restriction toMsg BackendMsg
 getUserAvatars existingUsers users =
     Task.map2
@@ -2130,10 +2130,10 @@ http request =
 
 sendMessage :
     DiscordFullUserData
-    -> Discord.Id.Id Discord.Id.ChannelId
-    -> Maybe (Discord.Id.Id Discord.Id.MessageId)
+    -> Discord.Id Discord.ChannelId
+    -> Maybe (Discord.Id Discord.MessageId)
     -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
 sendMessage discordUser channelId maybeReplyTo attachedFiles text =
     List.map
@@ -2198,10 +2198,10 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                             uploadAttachments attachments2 uploadAttachmentsResponse
                                 |> Task.andThen
                                     (\_ ->
-                                        Discord.createMarkdownMessagePayload
+                                        Discord.createMessagePayload
                                             (Discord.userToken discordUser.auth)
                                             { channelId = channelId
-                                            , content = RichText.toDiscord text
+                                            , content = RichText.toDiscord text |> Discord.Markdown.toString
                                             , replyTo = maybeReplyTo
                                             , attachments =
                                                 List.map2
@@ -2209,7 +2209,8 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                                                         { filename = FileName.toString fileData.fileName
                                                         , uploadedFilename = a.uploadFilename
                                                         , contentType =
-                                                            OneToOne.second fileData.contentType FileStatus.contentTypes |> Maybe.withDefault ""
+                                                            OneToOne.second fileData.contentType FileStatus.contentTypes
+                                                                |> Maybe.withDefault ""
                                                         }
                                                     )
                                                     uploadAttachmentsResponse

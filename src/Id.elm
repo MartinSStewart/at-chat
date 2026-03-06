@@ -24,7 +24,7 @@ module Id exposing
     , toString
     )
 
-import Discord.Id
+import Discord
 import List.Extra
 import SeqDict exposing (SeqDict)
 
@@ -35,13 +35,13 @@ type GuildOrDmId
 
 
 type DiscordGuildOrDmId
-    = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    = DiscordGuildOrDmId_Guild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | DiscordGuildOrDmId_Dm DiscordGuildOrDmId_DmData
 
 
 type alias DiscordGuildOrDmId_DmData =
-    { currentUserId : Discord.Id.Id Discord.Id.UserId
-    , channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    { currentUserId : Discord.Id Discord.UserId
+    , channelId : Discord.Id Discord.PrivateChannelId
     }
 
 

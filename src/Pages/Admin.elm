@@ -29,7 +29,6 @@ import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
 import Discord
-import Discord.Id
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -97,9 +96,9 @@ type Msg
     | ToggledEmailNotifications Bool
     | ToggledSignupsEnabled Bool
     | ToggleIsAdmin UserTableId Bool
-    | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
-    | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
-    | PressedExpandDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | PressedDeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
+    | PressedDeleteDiscordGuild (Discord.Id Discord.GuildId)
+    | PressedExpandDiscordGuild (Discord.Id Discord.GuildId)
     | PressedExpandGuild (Id GuildId)
     | PressedDeleteGuild (Id GuildId)
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
@@ -107,8 +106,8 @@ type Msg
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | PressedHomepageLink
-    | PressedReloadDiscordChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | PressedReloadDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
+    | PressedReloadDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | PressedCopyText String
     | TypedInReadOnlyTextInput
     | PressedExportBackend
@@ -179,11 +178,11 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) AdminData_DiscordDmChannel
-    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
-    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
+    , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
+    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+    , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
-    , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel Int)
+    , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     }
 
@@ -204,15 +203,15 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
-    | DeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
-    | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
+    | DeleteDiscordGuild (Discord.Id Discord.GuildId)
     | DeleteGuild (Id GuildId)
-    | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | StartReloadingDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
+    | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ExpandGuild (Id GuildId)
     | CollapseGuild (Id GuildId)
-    | ExpandDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
-    | CollapseDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | ExpandDiscordGuild (Discord.Id Discord.GuildId)
+    | CollapseDiscordGuild (Discord.Id Discord.GuildId)
 
 
 type alias EditedBackendUser =
@@ -467,12 +466,12 @@ collapseGuild guildId user =
     { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds }
 
 
-expandDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> BackendUser -> BackendUser
+expandDiscordGuild : Discord.Id Discord.GuildId -> BackendUser -> BackendUser
 expandDiscordGuild guildId user =
     { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds }
 
 
-collapseDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> BackendUser -> BackendUser
+collapseDiscordGuild : Discord.Id Discord.GuildId -> BackendUser -> BackendUser
 collapseDiscordGuild guildId user =
     { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
 
@@ -1132,14 +1131,14 @@ deleteGuildButtonId guildId =
     "Admin_deleteGuildButton_" ++ Id.toString guildId |> Dom.id
 
 
-deleteDiscordGuildButtonId : Discord.Id.Id Discord.Id.GuildId -> HtmlId
+deleteDiscordGuildButtonId : Discord.Id Discord.GuildId -> HtmlId
 deleteDiscordGuildButtonId guildId =
-    "Admin_deleteDiscordGuildButton_" ++ Discord.Id.toString guildId |> Dom.id
+    "Admin_deleteDiscordGuildButton_" ++ Discord.idToString guildId |> Dom.id
 
 
-deleteDiscordDmChannelButtonId : Discord.Id.Id Discord.Id.PrivateChannelId -> HtmlId
+deleteDiscordDmChannelButtonId : Discord.Id Discord.PrivateChannelId -> HtmlId
 deleteDiscordDmChannelButtonId channelId =
-    "Admin_deleteDiscordDmChannelButton_" ++ Discord.Id.toString channelId |> Dom.id
+    "Admin_deleteDiscordDmChannelButton_" ++ Discord.idToString channelId |> Dom.id
 
 
 pendingChangesText : AdminChange -> String
@@ -1541,7 +1540,7 @@ discordGuildsSection user adminData =
                                      else
                                         Icons.expandContainer
                                     )
-                                , Ui.text (Discord.Id.toString guildId)
+                                , Ui.text (Discord.idToString guildId)
                                 , Ui.text (GuildName.toString guild.name)
                                 , Ui.row
                                     [ Ui.spacing 8 ]
@@ -1551,7 +1550,7 @@ discordGuildsSection user adminData =
                                             discordUserLabel discordUser
 
                                         Nothing ->
-                                            Ui.text (Discord.Id.toString guild.owner)
+                                            Ui.text (Discord.idToString guild.owner)
                                     ]
                                 , Ui.text ("Channels: " ++ String.fromInt channelCount)
                                 , Ui.text ("Members: " ++ String.fromInt (SeqDict.size guild.members))
@@ -1559,7 +1558,7 @@ discordGuildsSection user adminData =
                                 ]
                             , if isExpanded then
                                 let
-                                    userThatCanReload : Maybe (Discord.Id.Id Discord.Id.UserId)
+                                    userThatCanReload : Maybe (Discord.Id Discord.UserId)
                                     userThatCanReload =
                                         SeqDict.intersect
                                             (SeqDict.filter
@@ -1632,10 +1631,10 @@ loadingChannelErrorView channelId isReloading =
 
 
 discordGuildChannel :
-    Maybe (Discord.Id.Id Discord.Id.UserId)
-    -> Discord.Id.Id Discord.Id.GuildId
+    Maybe (Discord.Id Discord.UserId)
+    -> Discord.Id Discord.GuildId
     -> AdminData
-    -> ( Discord.Id.Id Discord.Id.ChannelId, AdminData_DiscordChannel )
+    -> ( Discord.Id Discord.ChannelId, AdminData_DiscordChannel )
     -> Element Msg
 discordGuildChannel maybeUserId guildId adminData ( channelId, channel ) =
     let
@@ -1650,7 +1649,7 @@ discordGuildChannel maybeUserId guildId adminData ( channelId, channel ) =
             (case maybeUserId of
                 Just userId ->
                     resetButton
-                        (Dom.id ("admin_reloadDiscordChannel_" ++ Discord.Id.toString channelId))
+                        (Dom.id ("admin_reloadDiscordChannel_" ++ Discord.idToString channelId))
                         (PressedReloadDiscordChannel userId guildId channelId)
 
                 Nothing ->
@@ -1660,7 +1659,7 @@ discordGuildChannel maybeUserId guildId adminData ( channelId, channel ) =
         , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
         , firstMessageView channel
         , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
-        , loadingChannelErrorView (Discord.Id.toString channelId) isReloading
+        , loadingChannelErrorView (Discord.idToString channelId) isReloading
         ]
 
 
@@ -1716,7 +1715,7 @@ discordDmChannelsSection user adminData =
                             isReloading =
                                 LocalState.isDiscordDmChannelReloading channelId adminData.loadingDiscordChannels
 
-                            userThatCanReload : Maybe (Discord.Id.Id Discord.Id.UserId)
+                            userThatCanReload : Maybe (Discord.Id Discord.UserId)
                             userThatCanReload =
                                 SeqSet.intersect
                                     (SeqDict.filter
@@ -1743,13 +1742,13 @@ discordDmChannelsSection user adminData =
                                 (case userThatCanReload of
                                     Just userId ->
                                         resetButton
-                                            (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.Id.toString channelId))
+                                            (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.idToString channelId))
                                             (PressedReloadDiscordDmChannel userId channelId)
 
                                     Nothing ->
                                         Ui.none
                                 )
-                            , Ui.text (Discord.Id.toString channelId)
+                            , Ui.text (Discord.idToString channelId)
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ Ui.text "Members:"
@@ -1761,13 +1760,13 @@ discordDmChannelsSection user adminData =
                                                     discordUserLabel discordUser
 
                                                 Nothing ->
-                                                    Ui.text (Discord.Id.toString discordUserId)
+                                                    Ui.text (Discord.idToString discordUserId)
                                         )
                                     |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
                                 ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
                             , firstMessageView channel
-                            , loadingChannelErrorView (Discord.Id.toString channelId) isReloading
+                            , loadingChannelErrorView (Discord.idToString channelId) isReloading
                             , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
                             ]
                     )
@@ -1791,7 +1790,7 @@ discordUsersSection user adminData =
                     (\( discordUserId, discordUser ) ->
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.Id.toString discordUserId))
+                            [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
                             , discordUserLabel discordUser
                             , Ui.el
                                 [ Ui.width (Ui.px 200) ]

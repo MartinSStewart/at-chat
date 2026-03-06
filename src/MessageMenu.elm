@@ -13,7 +13,7 @@ module MessageMenu exposing
 import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord.Id
+import Discord
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -351,7 +351,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 _ ->
                     Nothing
 
-        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id.Id Discord.Id.UserId)) } -> Maybe ( Bool, String )
+        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String )
         discordHelper messageId thread =
             case DmChannel.getArray messageId thread.messages of
                 Just (MessageLoaded message) ->

@@ -15,7 +15,7 @@ module Thread exposing
     )
 
 import Array exposing (Array)
-import Discord.Id
+import Discord
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
 import Message exposing (Message, MessageState(..))
@@ -31,9 +31,9 @@ type alias BackendThread =
 
 
 type alias DiscordBackendThread =
-    { messages : Array (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+    { messages : Array (Message ThreadMessageId (Discord.Id Discord.UserId))
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ThreadMessageId)
     }
 
 
@@ -52,9 +52,9 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
+    { messages : Array (MessageState ThreadMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
+    , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     }
 
 

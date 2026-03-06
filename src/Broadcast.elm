@@ -28,7 +28,7 @@ module Broadcast exposing
     )
 
 import Codec exposing (Codec)
-import Discord.Id
+import Discord
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -75,7 +75,7 @@ toGuildExcludingOne clientToSkip guildId msg model =
         |> Command.batch
 
 
-toDiscordGuildExcludingOne : ClientId -> Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordGuildExcludingOne : ClientId -> Discord.Id Discord.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toDiscordGuildExcludingOne clientToSkip guildId msg model =
     List.filterMap
         (\clientId ->
@@ -107,7 +107,7 @@ guildConnections guildId model =
             []
 
 
-discordGuildConnections : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> List ClientId
+discordGuildConnections : Discord.Id Discord.GuildId -> BackendModel -> List ClientId
 discordGuildConnections guildId model =
     case SeqDict.get guildId model.discordGuilds of
         Just guild ->
@@ -128,7 +128,7 @@ discordGuildConnections guildId model =
             []
 
 
-discordDmConnections : Discord.Id.Id Discord.Id.PrivateChannelId -> BackendModel -> List ClientId
+discordDmConnections : Discord.Id Discord.PrivateChannelId -> BackendModel -> List ClientId
 discordDmConnections guildId model =
     case SeqDict.get guildId model.discordDmChannels of
         Just channel ->
@@ -149,7 +149,7 @@ discordDmConnections guildId model =
             []
 
 
-toDiscordDmChannelExcludingOne : ClientId -> Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordDmChannelExcludingOne : ClientId -> Discord.Id Discord.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toDiscordDmChannelExcludingOne clientToSkip channelId msg model =
     List.filterMap
         (\clientId ->
@@ -165,7 +165,7 @@ toDiscordDmChannelExcludingOne clientToSkip channelId msg model =
         |> Command.batch
 
 
-toDiscordDmChannel : Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordDmChannel : Discord.Id Discord.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toDiscordDmChannel channelId msg model =
     List.map
         (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
@@ -181,7 +181,7 @@ toGuild guildId msg model =
         |> Command.batch
 
 
-toDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordGuild : Discord.Id Discord.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toDiscordGuild guildId msg model =
     List.map
         (\otherClientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend otherClientId)
@@ -469,19 +469,19 @@ discordRichTextToString content discordUsers =
 
 
 discordMessageNotification :
-    SeqSet (Discord.Id.Id Discord.Id.UserId)
+    SeqSet (Discord.Id Discord.UserId)
     -> Time.Posix
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
     -> ThreadRoute
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-    -> List (Discord.Id.Id Discord.Id.UserId)
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
 discordMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
-        alwaysNotify : SeqSet (Discord.Id.Id Discord.Id.UserId)
+        alwaysNotify : SeqSet (Discord.Id Discord.UserId)
         alwaysNotify =
             List.filter
                 (\userId ->

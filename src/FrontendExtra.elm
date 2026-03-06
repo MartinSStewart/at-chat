@@ -2,7 +2,7 @@ module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, i
 
 import AiChat
 import Array exposing (Array)
-import Discord.Id
+import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Editable
@@ -359,16 +359,16 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
 
 
 playNotificationSoundForDiscordMessage :
-    Discord.Id.Id Discord.Id.UserId
+    Discord.Id Discord.UserId
     -> DiscordGuildOrDmId
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
-            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id.Id Discord.Id.UserId))
+            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
@@ -2841,7 +2841,7 @@ initAdminData adminData =
     }
 
 
-startReloadingDiscordUser : Time.Posix -> Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
+startReloadingDiscordUser : Time.Posix -> Discord.Id Discord.UserId -> LocalState -> LocalState
 startReloadingDiscordUser time discordUserId local =
     let
         localUser : LocalUser
@@ -2860,7 +2860,7 @@ startReloadingDiscordUser time discordUserId local =
     }
 
 
-unlinkDiscordUser : Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
+unlinkDiscordUser : Discord.Id Discord.UserId -> LocalState -> LocalState
 unlinkDiscordUser userId local =
     let
         localUser =
@@ -2896,9 +2896,9 @@ memberTyping time userId guildOrDmId threadRoute local =
 
 discordGuildMemberTyping :
     Time.Posix
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.ChannelId
     -> ThreadRoute
     -> LocalState
     -> LocalState
@@ -2914,8 +2914,8 @@ discordGuildMemberTyping time userId guildId channelId threadRoute local =
 
 discordDmMemberTyping :
     Time.Posix
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.PrivateChannelId
+    -> Discord.Id Discord.UserId
+    -> Discord.Id Discord.PrivateChannelId
     -> LocalState
     -> LocalState
 discordDmMemberTyping time userId channelId local =

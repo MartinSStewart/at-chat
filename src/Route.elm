@@ -19,7 +19,6 @@ import AppUrl
 import Codec
 import Dict
 import Discord
-import Discord.Id
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
@@ -49,16 +48,16 @@ type LinkDiscordError
 
 
 type alias DiscordDmRouteData =
-    { currentDiscordUserId : Discord.Id.Id Discord.Id.UserId
-    , channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    { currentDiscordUserId : Discord.Id Discord.UserId
+    , channelId : Discord.Id Discord.PrivateChannelId
     , viewingMessage : Maybe (Id ChannelMessageId)
     , showMembersTab : ShowMembersTab
     }
 
 
 type alias DiscordGuildRouteData =
-    { currentDiscordUserId : Discord.Id.Id Discord.Id.UserId
-    , guildId : Discord.Id.Id Discord.Id.GuildId
+    { currentDiscordUserId : Discord.Id Discord.UserId
+    , guildId : Discord.Id Discord.GuildId
     , channelRoute : DiscordChannelRoute
     }
 
@@ -72,9 +71,9 @@ type ChannelRoute
 
 
 type DiscordChannelRoute
-    = DiscordChannel_ChannelRoute (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithFriends
+    = DiscordChannel_ChannelRoute (Discord.Id Discord.ChannelId) ThreadRouteWithFriends
     | DiscordChannel_NewChannelRoute
-    | DiscordChannel_EditChannelRoute (Discord.Id.Id Discord.Id.ChannelId)
+    | DiscordChannel_EditChannelRoute (Discord.Id Discord.ChannelId)
     | DiscordChannel_GuildSettingsRoute
 
 
@@ -183,11 +182,11 @@ decode url =
                     HomePageRoute
 
         "dg" :: userId :: guildId :: rest ->
-            case ( Discord.Id.fromString userId, Discord.Id.fromString guildId ) of
+            case ( Discord.idFromString userId, Discord.idFromString guildId ) of
                 ( Just userId2, Just guildId2 ) ->
                     case rest of
                         "c" :: channelId :: rest2 ->
-                            case ( Discord.Id.fromString channelId, rest2 ) of
+                            case ( Discord.idFromString channelId, rest2 ) of
                                 ( Just channelId2, [ "t", threadMessageIndex, "m", messageIndex ] ) ->
                                     DiscordGuildRouteData
                                         userId2
@@ -267,7 +266,7 @@ decode url =
                     HomePageRoute
 
         "dd" :: userId :: otherUserId :: rest ->
-            case ( Discord.Id.fromString userId, Discord.Id.fromString otherUserId ) of
+            case ( Discord.idFromString userId, Discord.idFromString otherUserId ) of
                 ( Just userId2, Just otherUserId2 ) ->
                     DiscordDmRoute
                         { currentDiscordUserId = userId2
@@ -379,10 +378,10 @@ encode route =
                             case thread of
                                 ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                                     ( [ "dg"
-                                      , Discord.Id.toString currentDiscordUserId
-                                      , Discord.Id.toString guildId
+                                      , Discord.idToString currentDiscordUserId
+                                      , Discord.idToString guildId
                                       , "c"
-                                      , Discord.Id.toString channelId
+                                      , Discord.idToString channelId
                                       , "t"
                                       , Id.toString threadMessageIndex
                                       ]
@@ -392,10 +391,10 @@ encode route =
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
                                     ( [ "dg"
-                                      , Discord.Id.toString currentDiscordUserId
-                                      , Discord.Id.toString guildId
+                                      , Discord.idToString currentDiscordUserId
+                                      , Discord.idToString guildId
                                       , "c"
-                                      , Discord.Id.toString channelId
+                                      , Discord.idToString channelId
                                       ]
                                         ++ maybeMessageIdToString maybeMessageId
                                     , encodeShowMembers showMembers
@@ -403,22 +402,22 @@ encode route =
 
                         DiscordChannel_EditChannelRoute channelId ->
                             ( [ "dg"
-                              , Discord.Id.toString currentDiscordUserId
-                              , Discord.Id.toString guildId
+                              , Discord.idToString currentDiscordUserId
+                              , Discord.idToString guildId
                               , "c"
-                              , Discord.Id.toString channelId
+                              , Discord.idToString channelId
                               , "edit"
                               ]
                             , []
                             )
 
                         DiscordChannel_NewChannelRoute ->
-                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "new" ]
+                            ( [ "dg", Discord.idToString currentDiscordUserId, Discord.idToString guildId, "new" ]
                             , []
                             )
 
                         DiscordChannel_GuildSettingsRoute ->
-                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "settings" ]
+                            ( [ "dg", Discord.idToString currentDiscordUserId, Discord.idToString guildId, "settings" ]
                             , []
                             )
 
@@ -437,8 +436,8 @@ encode route =
 
                 DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab } ->
                     ( [ "dd"
-                      , Discord.Id.toString currentDiscordUserId
-                      , Discord.Id.toString channelId
+                      , Discord.idToString currentDiscordUserId
+                      , Discord.idToString channelId
                       ]
                         ++ maybeMessageIdToString viewingMessage
                     , encodeShowMembers showMembersTab

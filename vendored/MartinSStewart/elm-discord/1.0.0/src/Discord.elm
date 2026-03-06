@@ -1,13 +1,14 @@
 module Discord exposing
     ( Authentication, botToken, bearerToken
     , HttpError(..), ErrorCode(..), RateLimit, httpErrorToString, errorCodeToString
-    , getChannel, deleteChannel, getMessages, getMessage, MessagesRelativeTo(..), createMessage, createMarkdownMessage, getReactions, createReaction, deleteOwnReaction, deleteUserReaction, deleteAllReactions, deleteAllReactionsForEmoji, deleteMessage, bulkDeleteMessage, Channel, PartialChannel, Message, Reaction, Attachment
+    , getChannel, deleteChannel, getMessages, getMessage, MessagesRelativeTo(..), createMessage, getReactions, createReaction, deleteOwnReaction, deleteUserReaction, deleteAllReactions, deleteAllReactionsForEmoji, deleteMessage, bulkDeleteMessage, Channel, PartialChannel, ChannelId, Message, MessageId, Reaction, Attachment, AttachmentId
     , Emoji(..)
-    , Guild, GuildMember, PartialGuild
+    , Guild, GuildId, GuildMember, RoleId, PartialGuild
     , Invite, InviteWithMetadata, InviteCode(..)
-    , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
+    , getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
+    , WebhookId
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, ArchivedThreads, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, PrivateChannel, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerType(..), SupplementalGuild, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
+    , AchievementId, ActiveThreads, ApplicationId, ArchivedThreads, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, CustomEmojiId(..), DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, Id, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, OverwriteId, PrivateChannel, PrivateChannelId, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerId, StickerPackId, StickerType(..), SupplementalGuild, TagId, TeamId, ThreadMember, ThreadSortType(..), TypingStart, UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, idFromString, idFromUInt64, idToString, idToUInt64, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -76,14 +77,9 @@ These are functions that return a url pointing to a particular image.
 -}
 
 import Array exposing (Array)
-import Array.Extra
 import Base64
-import Binary
 import Bitwise
-import Bytes exposing (Bytes)
 import Dict exposing (Dict)
-import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, PrivateChannelId, RoleId, StickerId, StickerPackId, TagId, TeamId, UserId, WebhookId)
-import Discord.Markdown exposing (Markdown)
 import Duration exposing (Duration, Seconds)
 import Http
 import Iso8601
@@ -93,12 +89,129 @@ import Json.Encode as JE
 import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
 import SafeJson exposing (SafeJson)
-import Set exposing (Set)
-import String.Nonempty exposing (NonemptyString)
 import Task exposing (Task)
 import Time exposing (Posix(..))
+import UInt64 exposing (UInt64)
 import Url exposing (Url)
 import Url.Builder exposing (QueryParameter)
+
+
+
+--- IDs ---
+
+
+type Id idType
+    = Id UInt64
+
+
+type MessageId
+    = MessageId Never
+
+
+type UserId
+    = UserId Never
+
+
+type RoleId
+    = RoleId Never
+
+
+type ChannelId
+    = ChannelId Never
+
+
+{-| Only for user tokens. Bots can't access private channels
+-}
+type PrivateChannelId
+    = PrivateChannelId Never
+
+
+type GuildId
+    = GuildId Never
+
+
+type WebhookId
+    = WebhookId Never
+
+
+type AttachmentId
+    = AttachmentId Never
+
+
+type CustomEmojiId
+    = CustomEmojiId Never
+
+
+type ApplicationId
+    = ApplicationId Never
+
+
+type OverwriteId
+    = OverwriteId Never
+
+
+type TeamId
+    = TeamId Never
+
+
+type AchievementId
+    = AchievementId Never
+
+
+type StickerId
+    = StickerId Never
+
+
+type StickerPackId
+    = StickerPackId Never
+
+
+type TagId
+    = TagId Never
+
+
+encodeId : Id idType -> JE.Value
+encodeId id =
+    JE.string (idToString id)
+
+
+decodeId : JD.Decoder (Id idType)
+decodeId =
+    JD.andThen
+        (\text ->
+            case idFromString text of
+                Just id ->
+                    JD.succeed id
+
+                Nothing ->
+                    JD.fail "Invalid snowflake ID."
+        )
+        JD.string
+
+
+idToString : Id idType -> String
+idToString id =
+    idToUInt64 id |> UInt64.toString
+
+
+idFromString : String -> Maybe (Id idType)
+idFromString text =
+    case UInt64.fromString text of
+        Just uint ->
+            Id uint |> Just
+
+        Nothing ->
+            Nothing
+
+
+idToUInt64 : Id idType -> UInt64
+idToUInt64 (Id id) =
+    id
+
+
+idFromUInt64 : UInt64 -> Id idType
+idFromUInt64 =
+    Id
 
 
 
@@ -114,7 +227,7 @@ getChannel authentication channelId =
 
 getChannelPayload : Authentication -> Id ChannelId -> HttpRequest Channel
 getChannelPayload authentication channelId =
-    httpGet authentication decodeChannel [ "channels", Discord.Id.toString channelId ] []
+    httpGet authentication decodeChannel [ "channels", idToString channelId ] []
 
 
 
@@ -141,7 +254,7 @@ deleteChannel authentication channelId =
 
 deleteChannelPayload : Authentication -> Id ChannelId -> HttpRequest Channel
 deleteChannelPayload authentication channelId =
-    httpDelete authentication decodeChannel [ "channels", Discord.Id.toString channelId ] [] (JE.string "")
+    httpDelete authentication decodeChannel [ "channels", idToString channelId ] [] (JE.string "")
 
 
 toTask : HttpRequest a -> Task HttpError a
@@ -182,17 +295,17 @@ getMessagesPayload authentication { channelId, limit, relativeTo } =
     httpGet
         authentication
         (JD.list decodeMessage)
-        [ "channels", Discord.Id.toString channelId, "messages" ]
+        [ "channels", idToString channelId, "messages" ]
         (Url.Builder.int "limit" limit
             :: (case relativeTo of
                     Around messageId ->
-                        [ Url.Builder.string "around" (Discord.Id.toString messageId) ]
+                        [ Url.Builder.string "around" (idToString messageId) ]
 
                     Before messageId ->
-                        [ Url.Builder.string "before" (Discord.Id.toString messageId) ]
+                        [ Url.Builder.string "before" (idToString messageId) ]
 
                     After messageId ->
-                        [ Url.Builder.string "after" (Discord.Id.toString messageId) ]
+                        [ Url.Builder.string "after" (idToString messageId) ]
 
                     MostRecent ->
                         []
@@ -210,17 +323,17 @@ getDirectMessagesPayload authentication { channelId, limit, relativeTo } =
     httpGet
         (UserToken authentication)
         (JD.list decodeMessage)
-        [ "channels", Discord.Id.toString channelId, "messages" ]
+        [ "channels", idToString channelId, "messages" ]
         (Url.Builder.int "limit" limit
             :: (case relativeTo of
                     Around messageId ->
-                        [ Url.Builder.string "around" (Discord.Id.toString messageId) ]
+                        [ Url.Builder.string "around" (idToString messageId) ]
 
                     Before messageId ->
-                        [ Url.Builder.string "before" (Discord.Id.toString messageId) ]
+                        [ Url.Builder.string "before" (idToString messageId) ]
 
                     After messageId ->
-                        [ Url.Builder.string "after" (Discord.Id.toString messageId) ]
+                        [ Url.Builder.string "after" (idToString messageId) ]
 
                     MostRecent ->
                         []
@@ -241,7 +354,7 @@ getMessagePayload authentication { channelId, messageId } =
     httpGet
         authentication
         decodeMessage
-        [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId ]
+        [ "channels", idToString channelId, "messages", idToString messageId ]
         []
 
 
@@ -286,14 +399,14 @@ createMessagePayload authentication { channelId, content, replyTo, attachments }
         (Just "eyJsb2NhdGlvbiI6ImNoYXRfaW5wdXQifQ==")
         authentication
         decodeMessage
-        [ "channels", Discord.Id.toString channelId, "messages" ]
+        [ "channels", idToString channelId, "messages" ]
         []
         (( "content", JE.string content )
             :: (case replyTo of
                     Just replyTo_ ->
                         [ ( "message_reference"
                           , JE.object
-                                [ ( "message_id", Discord.Id.encodeId replyTo_ ) ]
+                                [ ( "message_id", encodeId replyTo_ ) ]
                           )
                         ]
 
@@ -309,21 +422,6 @@ createMessagePayload authentication { channelId, content, replyTo, attachments }
                )
             |> JE.object
         )
-
-
-{-| Same as `createMessage` but instead of taking a String, it takes a list of Markdown values.
--}
-createMarkdownMessage :
-    Authentication
-    ->
-        { channelId : Id ChannelId
-        , content : List (Markdown ())
-        , replyTo : Maybe (Id MessageId)
-        , attachments : List CreateMessageAttachment
-        }
-    -> Task HttpError Message
-createMarkdownMessage authentication data =
-    createMarkdownMessagePayload authentication data |> toTask
 
 
 type alias CreateMessageAttachment =
@@ -343,25 +441,6 @@ encodeCreateMessageAttachment index attachment =
         ]
 
 
-createMarkdownMessagePayload :
-    Authentication
-    ->
-        { channelId : Id ChannelId
-        , content : List (Markdown ())
-        , replyTo : Maybe (Id MessageId)
-        , attachments : List CreateMessageAttachment
-        }
-    -> HttpRequest Message
-createMarkdownMessagePayload authentication { channelId, content, replyTo, attachments } =
-    createMessagePayload
-        authentication
-        { channelId = channelId
-        , content = Discord.Markdown.toString content
-        , replyTo = replyTo
-        , attachments = attachments
-        }
-
-
 {-| Create a reaction for the message.
 This endpoint requires the `READ_MESSAGE_HISTORY` permission to be present on the current user.
 Additionally, if nobody else has reacted to the message using this emoji, this endpoint requires the `ADD_REACTIONS` permission to be present on the current user.
@@ -377,9 +456,9 @@ createReactionPayload authentication { channelId, messageId, emoji } =
         authentication
         (JD.succeed ())
         [ "channels"
-        , Discord.Id.toString channelId
+        , idToString channelId
         , "messages"
-        , Discord.Id.toString messageId
+        , idToString messageId
         , "reactions"
         , urlEncodeEmoji emoji
         , "@me"
@@ -401,9 +480,9 @@ deleteOwnReactionPayload authentication { channelId, messageId, emoji } =
         authentication
         (JD.succeed ())
         [ "channels"
-        , Discord.Id.toString channelId
+        , idToString channelId
         , "messages"
-        , Discord.Id.toString messageId
+        , idToString messageId
         , "reactions"
         , urlEncodeEmoji emoji
         , "@me"
@@ -432,12 +511,12 @@ deleteUserReactionPayload authentication { channelId, messageId, emoji, userId }
         authentication
         (JD.succeed ())
         [ "channels"
-        , Discord.Id.toString channelId
+        , idToString channelId
         , "messages"
-        , Discord.Id.toString messageId
+        , idToString messageId
         , "reactions"
         , urlEncodeEmoji emoji
-        , Discord.Id.toString userId
+        , idToString userId
         ]
         []
         (JE.object [])
@@ -456,9 +535,9 @@ getReactionsPayload authentication { channelId, messageId, emoji } =
         authentication
         (JD.succeed ())
         [ "channels"
-        , Discord.Id.toString channelId
+        , idToString channelId
         , "messages"
-        , Discord.Id.toString messageId
+        , idToString messageId
         , "reactions"
         , urlEncodeEmoji emoji
         ]
@@ -478,7 +557,7 @@ deleteAllReactionsPayload authentication { channelId, messageId } =
     httpDelete
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId, "reactions" ]
+        [ "channels", idToString channelId, "messages", idToString messageId, "reactions" ]
         []
         (JE.object [])
 
@@ -503,9 +582,9 @@ deleteAllReactionsForEmojiPayload authentication { channelId, messageId, emoji }
         authentication
         (JD.succeed ())
         [ "channels"
-        , Discord.Id.toString channelId
+        , idToString channelId
         , "messages"
-        , Discord.Id.toString messageId
+        , idToString messageId
         , "reactions"
         , urlEncodeEmoji emoji
         ]
@@ -526,7 +605,7 @@ editMessagePayload authentication { channelId, messageId, content } =
     httpPatch
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId ]
+        [ "channels", idToString channelId, "messages", idToString messageId ]
         []
         (JE.object [ ( "content", JE.string content ) ])
 
@@ -544,7 +623,7 @@ deleteMessagePayload authentication { channelId, messageId } =
     httpDelete
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId ]
+        [ "channels", idToString channelId, "messages", idToString messageId ]
         []
         (JE.object [])
 
@@ -582,9 +661,9 @@ bulkDeleteMessagePayload authentication { channelId, firstMessage, secondMessage
     httpDelete
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "messages", "bulk-delete" ]
+        [ "channels", idToString channelId, "messages", "bulk-delete" ]
         []
-        (JE.list JE.string (Discord.Id.toString firstMessage :: Discord.Id.toString secondMessage :: List.map Discord.Id.toString restOfMessages))
+        (JE.list JE.string (idToString firstMessage :: idToString secondMessage :: List.map idToString restOfMessages))
 
 
 
@@ -604,7 +683,7 @@ getChannelInvitesPayload authentication channelId =
     httpGet
         authentication
         (JD.list decodeInviteWithMetadata)
-        [ "channels", Discord.Id.toString channelId, "invites" ]
+        [ "channels", idToString channelId, "invites" ]
         []
 
 
@@ -642,7 +721,7 @@ createChannelInvitePayload authentication channelId { maxAge, maxUses, temporary
         Nothing
         authentication
         decodeInvite
-        [ "channels", Discord.Id.toString channelId, "invites" ]
+        [ "channels", idToString channelId, "invites" ]
         []
         (JE.object
             (( "max_age"
@@ -665,7 +744,7 @@ createChannelInvitePayload authentication channelId { maxAge, maxUses, temporary
                 :: ( "unique", JE.bool unique )
                 :: (case targetUser of
                         Just targetUserId ->
-                            [ ( "target_user", JE.string (Discord.Id.toString targetUserId) ) ]
+                            [ ( "target_user", JE.string (idToString targetUserId) ) ]
 
                         Nothing ->
                             []
@@ -694,7 +773,7 @@ deleteChannelPermissionPayload authentication { channelId, overwriteId } =
     httpDelete
         authentication
         (JD.list decodeInviteWithMetadata)
-        [ "channels", Discord.Id.toString channelId, "permissions", Discord.Id.toString overwriteId ]
+        [ "channels", idToString channelId, "permissions", idToString overwriteId ]
         []
         (JE.object [])
 
@@ -714,7 +793,7 @@ triggerTypingIndicatorPayload authentication channelId =
         Nothing
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "typing" ]
+        [ "channels", idToString channelId, "typing" ]
         []
         (JE.object [])
 
@@ -731,7 +810,7 @@ getPinnedMessagesPayload authentication channelId =
     httpGet
         authentication
         (JD.list decodeMessage)
-        [ "channels", Discord.Id.toString channelId, "pins" ]
+        [ "channels", idToString channelId, "pins" ]
         []
 
 
@@ -750,7 +829,7 @@ addPinnedChannelMessagePayload authentication { channelId, messageId } =
     httpPut
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "pins", Discord.Id.toString messageId ]
+        [ "channels", idToString channelId, "pins", idToString messageId ]
         []
         (JE.object [])
 
@@ -767,7 +846,7 @@ deletePinnedChannelMessagePayload authentication { channelId, messageId } =
     httpDelete
         authentication
         (JD.succeed ())
-        [ "channels", Discord.Id.toString channelId, "pins", Discord.Id.toString messageId ]
+        [ "channels", idToString channelId, "pins", idToString messageId ]
         []
         (JE.object [])
 
@@ -791,7 +870,7 @@ listGuildEmojisPayload authentication guildId =
     httpGet
         authentication
         (JD.list decodeEmoji)
-        [ "guilds", Discord.Id.toString guildId, "emojis" ]
+        [ "guilds", idToString guildId, "emojis" ]
         []
 
 
@@ -807,7 +886,7 @@ getGuildEmojisPayload authentication { guildId, emojiId } =
     httpGet
         authentication
         decodeEmoji
-        [ "guilds", Discord.Id.toString guildId, "emojis", Discord.Id.toString emojiId ]
+        [ "guilds", idToString guildId, "emojis", idToString emojiId ]
         []
 
 
@@ -837,7 +916,7 @@ createGuildEmojiPayload authentication { guildId, emojiName, image, roles } =
         Nothing
         authentication
         decodeEmoji
-        [ "guilds", Discord.Id.toString guildId, "emojis" ]
+        [ "guilds", idToString guildId, "emojis" ]
         []
         (JE.object
             [ ( "name", JE.string emojiName )
@@ -876,7 +955,7 @@ modifyGuildEmojiPayload authentication { guildId, emojiId, emojiName, roles } =
         Nothing
         authentication
         decodeEmoji
-        [ "guilds", Discord.Id.toString guildId, "emojis" ]
+        [ "guilds", idToString guildId, "emojis" ]
         []
         (JE.object
             ((case emojiName of
@@ -909,7 +988,7 @@ deleteGuildEmojiPayload authentication { guildId, emojiId } =
     httpDelete
         authentication
         (JD.succeed ())
-        [ "guilds", Discord.Id.toString guildId, "emojis", Discord.Id.toString emojiId ]
+        [ "guilds", idToString guildId, "emojis", idToString emojiId ]
         []
         (JE.object [])
 
@@ -930,7 +1009,7 @@ getGuildPayload authentication guildId =
     httpGet
         authentication
         decodeGuild
-        [ "guilds", Discord.Id.toString guildId ]
+        [ "guilds", idToString guildId ]
         []
 
 
@@ -949,7 +1028,7 @@ getGuildPreviewPayload authentication guildId =
     httpGet
         authentication
         decodeGuildPreview
-        [ "guilds", Discord.Id.toString guildId, "preview" ]
+        [ "guilds", idToString guildId, "preview" ]
         []
 
 
@@ -999,7 +1078,7 @@ modifyGuildPayload authentication guildId modifications =
     httpPatch
         authentication
         decodeGuild
-        [ "guilds", Discord.Id.toString guildId ]
+        [ "guilds", idToString guildId ]
         []
         (JE.object
             (encodeModify "name" JE.string modifications.name
@@ -1007,15 +1086,15 @@ modifyGuildPayload authentication guildId modifications =
                 ++ encodeModify "verification_level" (JE.maybe JE.int) modifications.verificationLevel
                 ++ encodeModify "default_message_notifications" (JE.maybe JE.int) modifications.defaultMessageNotifications
                 ++ encodeModify "explicit_content_filter" (JE.maybe JE.int) modifications.explicitContentFilter
-                ++ encodeModify "afk_channel_id" (JE.maybe Discord.Id.encodeId) modifications.afkChannelId
+                ++ encodeModify "afk_channel_id" (JE.maybe encodeId) modifications.afkChannelId
                 ++ encodeModify "afk_timeout" encodeQuantityInt modifications.afkTimeout
                 ++ encodeModify "icon" (JE.maybe encodeDataUri) modifications.icon
-                ++ encodeModify "owner_id" Discord.Id.encodeId modifications.ownerId
+                ++ encodeModify "owner_id" encodeId modifications.ownerId
                 ++ encodeModify "splash" (JE.maybe encodeDataUri) modifications.splash
                 ++ encodeModify "banner" (JE.maybe encodeDataUri) modifications.banner
-                ++ encodeModify "system_channel_id" (JE.maybe Discord.Id.encodeId) modifications.systemChannelId
-                ++ encodeModify "rules_channel_id" (JE.maybe Discord.Id.encodeId) modifications.rulesChannelId
-                ++ encodeModify "public_updates_channel_id" (JE.maybe Discord.Id.encodeId) modifications.publicUpdatesChannelId
+                ++ encodeModify "system_channel_id" (JE.maybe encodeId) modifications.systemChannelId
+                ++ encodeModify "rules_channel_id" (JE.maybe encodeId) modifications.rulesChannelId
+                ++ encodeModify "public_updates_channel_id" (JE.maybe encodeId) modifications.publicUpdatesChannelId
                 ++ encodeModify "preferred_locale" (JE.maybe JE.string) modifications.preferredLocale
             )
         )
@@ -1030,7 +1109,7 @@ deleteGuild authentication guildId =
 
 deleteGuildPayload : Authentication -> Id GuildId -> HttpRequest ()
 deleteGuildPayload authentication guildId =
-    httpDelete authentication (JD.succeed ()) [ "guilds", Discord.Id.toString guildId ] [] (JE.object [])
+    httpDelete authentication (JD.succeed ()) [ "guilds", idToString guildId ] [] (JE.object [])
 
 
 {-| Returns a list of guild channels.
@@ -1042,7 +1121,7 @@ getGuildChannels authentication guildId =
 
 getGuildChannelsPayload : Authentication -> Id GuildId -> HttpRequest (List Channel2)
 getGuildChannelsPayload authentication guildId =
-    httpGet authentication (JD.list decodeChannel2) [ "guilds", Discord.Id.toString guildId, "channels" ] []
+    httpGet authentication (JD.list decodeChannel2) [ "guilds", idToString guildId, "channels" ] []
 
 
 {-| Create a new text channel for the guild. Requires the `MANAGE_CHANNELS` permission.
@@ -1058,14 +1137,14 @@ createGuildTextChannelPayload authentication config =
         Nothing
         authentication
         decodeChannel
-        [ "guilds", Discord.Id.toString config.guildId, "channels" ]
+        [ "guilds", idToString config.guildId, "channels" ]
         []
         (JE.object
             (( "name", JE.string config.name )
                 :: ( "type", JE.int 0 )
                 :: ( "topic", JE.string config.topic )
                 :: ( "nsfw", JE.bool config.nsfw )
-                :: encodeOptionalData "parent_id" Discord.Id.encodeId config.parentId
+                :: encodeOptionalData "parent_id" encodeId config.parentId
                 ++ encodeOptionalData "position" JE.int config.position
                 ++ encodeOptionalData "rate_limit_per_user" encodeQuantityInt config.rateLimitPerUser
             )
@@ -1085,14 +1164,14 @@ createGuildVoiceChannelPayload authentication config =
         Nothing
         authentication
         decodeChannel
-        [ "guilds", Discord.Id.toString config.guildId, "channels" ]
+        [ "guilds", idToString config.guildId, "channels" ]
         []
         (JE.object
             (( "name", JE.string config.name )
                 :: ( "type", JE.int 2 )
                 :: ( "topic", JE.string config.topic )
                 :: ( "nsfw", JE.bool config.nsfw )
-                :: encodeOptionalData "parent_id" Discord.Id.encodeId config.parentId
+                :: encodeOptionalData "parent_id" encodeId config.parentId
                 ++ encodeOptionalData "position" JE.int config.position
                 ++ encodeOptionalData "bitrate" encodeQuantityInt config.bitrate
                 ++ encodeOptionalData "user_limit" JE.int config.userLimit
@@ -1114,7 +1193,7 @@ createGuildCategoryChannelPayload authentication config =
         Nothing
         authentication
         decodeChannel
-        [ "guilds", Discord.Id.toString config.guildId, "channels" ]
+        [ "guilds", idToString config.guildId, "channels" ]
         []
         (JE.object
             (( "name", JE.string config.name )
@@ -1140,7 +1219,7 @@ getGuildMemberPayload authentication guildId userId =
     httpGet
         authentication
         decodeGuildMember
-        [ "guilds", Discord.Id.toString guildId, "members", Discord.Id.toString userId ]
+        [ "guilds", idToString guildId, "members", idToString userId ]
         []
 
 
@@ -1168,11 +1247,11 @@ listGuildMembersPayload authentication { guildId, limit, after } =
     httpGet
         authentication
         (JD.list decodeGuildMember)
-        [ "guilds", Discord.Id.toString guildId, "members" ]
+        [ "guilds", idToString guildId, "members" ]
         (Url.Builder.int "limit" limit
             :: (case after of
                     Included after_ ->
-                        [ Url.Builder.string "after" (Discord.Id.toString after_) ]
+                        [ Url.Builder.string "after" (idToString after_) ]
 
                     Missing ->
                         []
@@ -1199,7 +1278,7 @@ listActiveThreadsPayload authentication guildId =
     httpGet
         authentication
         decodeActiveThreads
-        [ "guilds", Discord.Id.toString guildId, "threads", "active" ]
+        [ "guilds", idToString guildId, "threads", "active" ]
         []
 
 
@@ -1237,7 +1316,7 @@ getPublicArchivedThreadsPayload authentication { channelId, before, limit } =
     httpGet
         authentication
         decodeArchivedThreads
-        [ "channels", Discord.Id.toString channelId, "threads", "archived", "public" ]
+        [ "channels", idToString channelId, "threads", "archived", "public" ]
         queryParams
 
 
@@ -1275,7 +1354,7 @@ getPrivateArchivedThreadsPayload authentication { channelId, before, limit } =
     httpGet
         authentication
         decodeArchivedThreads
-        [ "channels", Discord.Id.toString channelId, "threads", "archived", "private" ]
+        [ "channels", idToString channelId, "threads", "archived", "private" ]
         queryParams
 
 
@@ -1310,7 +1389,7 @@ startThreadFromMessagePayload authentication { channelId, messageId, name, autoA
         Nothing
         authentication
         decodeChannel
-        [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId, "threads" ]
+        [ "channels", idToString channelId, "messages", idToString messageId, "threads" ]
         []
         (JE.object
             ([ ( "name", JE.string name )
@@ -1440,7 +1519,7 @@ searchThreadsPayload authentication { channelId, name, slop, tag, tagSetting, ar
         tagParams : List QueryParameter
         tagParams =
             tag
-                |> Maybe.map (List.map (\t -> Url.Builder.string "tag" (Discord.Id.toString t)))
+                |> Maybe.map (List.map (\t -> Url.Builder.string "tag" (idToString t)))
                 |> Maybe.withDefault []
 
         queryParams : List QueryParameter
@@ -1507,14 +1586,14 @@ searchThreadsPayload authentication { channelId, name, slop, tag, tagSetting, ar
                         sortOrder
                     , Maybe.map (\l -> Url.Builder.int "limit" l) limit
                     , Maybe.map (\o -> Url.Builder.int "offset" o) offset
-                    , Maybe.map (\id -> Url.Builder.string "max_id" (Discord.Id.toString id)) maxId
-                    , Maybe.map (\id -> Url.Builder.string "min_id" (Discord.Id.toString id)) minId
+                    , Maybe.map (\id -> Url.Builder.string "max_id" (idToString id)) maxId
+                    , Maybe.map (\id -> Url.Builder.string "min_id" (idToString id)) minId
                     ]
     in
     httpGet
         authentication
         decodeSearchThreadsResult
-        [ "channels", Discord.Id.toString channelId, "threads", "search" ]
+        [ "channels", idToString channelId, "threads", "search" ]
         queryParams
 
 
@@ -1586,7 +1665,7 @@ getUser authentication userId =
 
 getUserPayload : Authentication -> Id UserId -> HttpRequest User
 getUserPayload authentication userId =
-    httpGet authentication decodeUser [ "users", Discord.Id.toString userId ] []
+    httpGet authentication decodeUser [ "users", idToString userId ] []
 
 
 createDmChannel : Authentication -> Id UserId -> Task HttpError Channel
@@ -1602,7 +1681,7 @@ createDmChannelPayload authentication userId =
         decodeChannel
         [ "users", "@me", "channels" ]
         []
-        (JE.object [ ( "recipient_id", Discord.Id.encodeId userId ) ])
+        (JE.object [ ( "recipient_id", encodeId userId ) ])
 
 
 {-| Modify the requester's user account settings.
@@ -1664,7 +1743,7 @@ leaveGuildPayload authentication guildId =
     httpDelete
         authentication
         (JD.succeed ())
-        [ "users", "@me", "guilds", Discord.Id.toString guildId ]
+        [ "users", "@me", "guilds", idToString guildId ]
         []
         (JE.object [])
 
@@ -1688,7 +1767,7 @@ customEmojiUrl : ImageCdnConfig (Choices Png Gif Never Never) -> Id Emoji -> Str
 customEmojiUrl { size, imageType } emojiId =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "emojis", Discord.Id.toString emojiId ++ imageExtensionPngGif imageType ]
+        [ "emojis", idToString emojiId ++ imageExtensionPngGif imageType ]
         (imageSizeQuery size)
 
 
@@ -1696,7 +1775,7 @@ guildIconUrl : ImageCdnConfig (Choices Png Jpg WebP Gif) -> Id GuildId -> ImageH
 guildIconUrl { size, imageType } guildId iconHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "icons", Discord.Id.toString guildId, rawHash iconHash ++ imageExtensionPngJpgWebpGif imageType ]
+        [ "icons", idToString guildId, rawHash iconHash ++ imageExtensionPngJpgWebpGif imageType ]
         (imageSizeQuery size)
 
 
@@ -1704,7 +1783,7 @@ guildSplashUrl : ImageCdnConfig (Choices Png Jpg WebP Never) -> Id GuildId -> Im
 guildSplashUrl { size, imageType } guildId splashHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "splashes", Discord.Id.toString guildId, rawHash splashHash ++ imageExtensionPngJpgWebp imageType ]
+        [ "splashes", idToString guildId, rawHash splashHash ++ imageExtensionPngJpgWebp imageType ]
         (imageSizeQuery size)
 
 
@@ -1712,7 +1791,7 @@ guildDiscoverySplashUrl : ImageCdnConfig (Choices Png Jpg WebP Never) -> Id Guil
 guildDiscoverySplashUrl { size, imageType } guildId discoverySplashHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "discovery-splashes", Discord.Id.toString guildId, rawHash discoverySplashHash ++ imageExtensionPngJpgWebp imageType ]
+        [ "discovery-splashes", idToString guildId, rawHash discoverySplashHash ++ imageExtensionPngJpgWebp imageType ]
         (imageSizeQuery size)
 
 
@@ -1720,7 +1799,7 @@ guildBannerUrl : ImageCdnConfig (Choices Png Jpg WebP Never) -> Id GuildId -> Im
 guildBannerUrl { size, imageType } guildId splashHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "banners", Discord.Id.toString guildId, rawHash splashHash ++ imageExtensionPngJpgWebp imageType ]
+        [ "banners", idToString guildId, rawHash splashHash ++ imageExtensionPngJpgWebp imageType ]
         (imageSizeQuery size)
 
 
@@ -1728,7 +1807,7 @@ defaultUserAvatarUrl : ImageSize -> Id UserId -> UserDiscriminator -> String
 defaultUserAvatarUrl size guildId (UserDiscriminator discriminator) =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "embed", "avatars", Discord.Id.toString guildId, String.fromInt (modBy 5 discriminator) ++ ".png" ]
+        [ "embed", "avatars", idToString guildId, String.fromInt (modBy 5 discriminator) ++ ".png" ]
         (imageSizeQuery size)
 
 
@@ -1736,7 +1815,7 @@ userAvatarUrl : ImageCdnConfig (Choices Png Jpg WebP Gif) -> Id UserId -> ImageH
 userAvatarUrl { size, imageType } guildId avatarHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "avatars", Discord.Id.toString guildId, rawHash avatarHash ++ imageExtensionPngJpgWebpGif imageType ]
+        [ "avatars", idToString guildId, rawHash avatarHash ++ imageExtensionPngJpgWebpGif imageType ]
         (imageSizeQuery size)
 
 
@@ -1744,7 +1823,7 @@ applicationIconUrl : ImageCdnConfig (Choices Png Jpg WebP Never) -> Id Applicati
 applicationIconUrl { size, imageType } applicationId applicationIconHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "app-icons", Discord.Id.toString applicationId, rawHash applicationIconHash ++ imageExtensionPngJpgWebp imageType ]
+        [ "app-icons", idToString applicationId, rawHash applicationIconHash ++ imageExtensionPngJpgWebp imageType ]
         (imageSizeQuery size)
 
 
@@ -1752,7 +1831,7 @@ applicationAssetUrl : ImageCdnConfig (Choices Png Jpg WebP Never) -> Id Applicat
 applicationAssetUrl { size, imageType } applicationId applicationAssetHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "app-assets", Discord.Id.toString applicationId, rawHash applicationAssetHash ++ imageExtensionPngJpgWebp imageType ]
+        [ "app-assets", idToString applicationId, rawHash applicationAssetHash ++ imageExtensionPngJpgWebp imageType ]
         (imageSizeQuery size)
 
 
@@ -1761,9 +1840,9 @@ achievementIconUrl { size, imageType } applicationId achievementId achievementIc
     Url.Builder.crossOrigin
         discordCdnUrl
         [ "app-assets"
-        , Discord.Id.toString applicationId
+        , idToString applicationId
         , "achievements"
-        , Discord.Id.toString achievementId
+        , idToString achievementId
         , "icons"
         , rawHash achievementIconHash ++ imageExtensionPngJpgWebp imageType
         ]
@@ -1774,7 +1853,7 @@ teamIconUrl : ImageCdnConfig (Choices Png Jpg WebP Never) -> Id TeamId -> ImageH
 teamIconUrl { size, imageType } teamId teamIconHash =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "team-icons", Discord.Id.toString teamId, rawHash teamIconHash ++ ".png" ]
+        [ "team-icons", idToString teamId, rawHash teamIconHash ++ ".png" ]
         (imageSizeQuery size)
 
 
@@ -2701,7 +2780,7 @@ decodeOverwrite =
                         |> JD.succeed
 
                 1 ->
-                    { id = RoleOrUserId_UserId (Discord.Id.toUInt64 id |> Discord.Id.fromUInt64)
+                    { id = RoleOrUserId_UserId (idToUInt64 id |> idFromUInt64)
                     , allow = allow
                     , deny = deny
                     }
@@ -2710,7 +2789,7 @@ decodeOverwrite =
                 _ ->
                     JD.fail ("Invalid overwrite object type. Expected a 0 or a 1 but got " ++ String.fromInt type_)
         )
-        (JD.field "id" Discord.Id.decodeId)
+        (JD.field "id" decodeId)
         (JD.field "type" JD.int)
         (JD.optionalNullableField "allow" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
         (JD.optionalNullableField "deny" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
@@ -3186,8 +3265,8 @@ decodeThreadMember : JD.Decoder ThreadMember
 decodeThreadMember =
     JD.map4
         ThreadMember
-        (JD.field "id" Discord.Id.decodeId)
-        (JD.field "user_id" Discord.Id.decodeId)
+        (JD.field "id" decodeId)
+        (JD.field "user_id" decodeId)
         (JD.field "join_timestamp" Iso8601.decoder)
         (JD.field "flags" JD.int)
 
@@ -3314,7 +3393,7 @@ decodeGuildMember =
     JD.succeed GuildMember
         |> JD.andMap (JD.field "user" decodeUser)
         |> JD.andMap (JD.field "nick" (JD.nullable JD.string))
-        |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "roles" (JD.list decodeId))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "premium_since" (JD.nullable Iso8601.decoder))
         |> JD.andMap (JD.field "deaf" JD.bool)
@@ -3325,7 +3404,7 @@ decodeGuildMemberNoUser : JD.Decoder GuildMemberNoUser
 decodeGuildMemberNoUser =
     JD.succeed GuildMemberNoUser
         |> JD.andMap (JD.field "nick" (JD.nullable JD.string))
-        |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "roles" (JD.list decodeId))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "premium_since" (JD.nullable Iso8601.decoder))
         |> JD.andMap (JD.field "deaf" JD.bool)
@@ -3354,20 +3433,20 @@ decodeHash =
 decodeMessage : JD.Decoder Message
 decodeMessage =
     JD.succeed Message
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (JD.field "author" decodeUser)
         |> JD.andMap (JD.field "content" JD.string)
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
         |> JD.andMap (JD.field "edited_timestamp" (JD.nullable Iso8601.decoder))
         |> JD.andMap (JD.field "tts" JD.bool)
         |> JD.andMap (JD.field "mention_everyone" JD.bool)
-        |> JD.andMap (JD.field "mention_roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "mention_roles" (JD.list decodeId))
         |> JD.andMap (JD.field "attachments" (JD.list decodeAttachment))
         |> JD.andMap (decodeOptionalData "reactions" (JD.list decodeReaction))
         |> JD.andMap (JD.field "pinned" JD.bool)
-        |> JD.andMap (decodeOptionalData "webhook_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "webhook_id" decodeId)
         |> JD.andMap (JD.field "type" decodeMessageType)
         |> JD.andMap (decodeOptionalData "flags" JD.int)
         |> JD.andMap
@@ -3592,7 +3671,7 @@ decodeMessageType =
 decodeUser : JD.Decoder User
 decodeUser =
     JD.succeed User
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "username" JD.string)
         |> JD.andMap (JD.field "discriminator" decodeDiscriminator)
         |> JD.andMap (JD.field "avatar" (JD.nullable decodeHash))
@@ -3610,7 +3689,7 @@ decodeUser =
 decodeAttachment : JD.Decoder Attachment
 decodeAttachment =
     JD.succeed Attachment
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "filename" JD.string)
         |> JD.andMap (JD.field "size" JD.int)
         |> JD.andMap (JD.field "url" JD.string)
@@ -3651,7 +3730,7 @@ decodeEmoji : JD.Decoder EmojiData
 decodeEmoji =
     JD.succeed EmojiData
         |> JD.andMap decodeEmojiType
-        |> JD.andMap (decodeOptionalData "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "roles" (JD.list decodeId))
         |> JD.andMap (decodeOptionalData "user" decodeUser)
         |> JD.andMap (decodeOptionalData "require_colons" JD.bool)
         |> JD.andMap (decodeOptionalData "managed" JD.bool)
@@ -3662,7 +3741,7 @@ decodeEmoji =
 decodeEmojiType : JD.Decoder EmojiType
 decodeEmojiType =
     JD.succeed Tuple.pair
-        |> JD.andMap (JD.field "id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "name" (JD.nullable JD.string))
         |> JD.andThen
             (\tuple ->
@@ -3681,7 +3760,7 @@ decodeEmojiType =
 decodePartialGuild : JD.Decoder PartialGuild
 decodePartialGuild =
     JD.succeed PartialGuild
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
@@ -3691,30 +3770,30 @@ decodePartialGuild =
 decodeGuild : JD.Decoder Guild
 decodeGuild =
     JD.succeed Guild
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "splash" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "discovery_splash" (JD.nullable decodeHash))
         |> JD.andMap (decodeOptionalData "owner" JD.bool)
-        |> JD.andMap (JD.field "owner_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "owner_id" decodeId)
         |> JD.andMap (JD.field "region" JD.string)
-        |> JD.andMap (JD.field "afk_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "afk_channel_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "afk_timeout" (JD.map Quantity JD.int))
         |> JD.andMap (decodeOptionalData "embed_enabled" JD.bool)
-        |> JD.andMap (decodeOptionalData "embed_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "embed_channel_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "verification_level" JD.int)
         |> JD.andMap (JD.field "default_message_notifications" JD.int)
         |> JD.andMap (JD.field "explicit_content_filter" JD.int)
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
         |> JD.andMap (JD.field "features" (JD.list JD.string))
         |> JD.andMap (JD.field "mfa_level" JD.int)
-        |> JD.andMap (JD.field "application_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "application_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "widget_enabled" JD.bool)
-        |> JD.andMap (decodeOptionalData "widget_channel_id" (JD.nullable Discord.Id.decodeId))
-        |> JD.andMap (JD.field "system_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "widget_channel_id" (JD.nullable decodeId))
+        |> JD.andMap (JD.field "system_channel_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "system_channel_flags" JD.int)
-        |> JD.andMap (JD.field "rules_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "rules_channel_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "joined_at" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "large" JD.bool)
         |> JD.andMap (decodeOptionalData "unavailable" JD.bool)
@@ -3729,7 +3808,7 @@ decodeGuild =
         |> JD.andMap (JD.field "premium_tier" JD.int)
         |> JD.andMap (decodeOptionalData "premium_subscription_count" JD.int)
         |> JD.andMap (JD.field "preferred_locale" JD.string)
-        |> JD.andMap (JD.field "public_updates_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "public_updates_channel_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "approximate_member_count" JD.int)
         |> JD.andMap (decodeOptionalData "approximate_presence_count" JD.int)
 
@@ -3896,22 +3975,22 @@ decodePermissions =
 decodeChannel : JD.Decoder Channel
 decodeChannel =
     JD.succeed Channel
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "type" decodeChannelType)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "position" JD.int)
         |> JD.andMap (decodeOptionalData "name" JD.string)
         |> JD.andMap (decodeOptionalData "topic" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "nsfw" JD.bool)
-        |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "bitrate" (JD.map Quantity JD.int))
         |> JD.andMap (decodeOptionalData "user_limit" JD.int)
         |> JD.andMap (decodeOptionalData "rate_limit_per_user" (JD.map Quantity JD.int))
         |> JD.andMap (decodeOptionalData "recipients" (JD.list decodeUser))
         |> JD.andMap (decodeOptionalData "icon" (JD.nullable JD.string))
-        |> JD.andMap (decodeOptionalData "owner_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "application_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "owner_id" decodeId)
+        |> JD.andMap (decodeOptionalData "application_id" decodeId)
+        |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "last_pin_timestamp" Iso8601.decoder)
 
 
@@ -3932,29 +4011,29 @@ decodePrivateChannel : JD.Decoder PrivateChannel
 decodePrivateChannel =
     JD.succeed PrivateChannel
         |> JD.andMap (JD.field "type" decodeChannelType)
-        |> JD.andMap (JD.field "recipient_ids" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "recipient_ids" (JD.list decodeId))
         |> JD.andMap (JD.field "recipient_flags" JD.int)
-        |> JD.andMap (JD.field "last_message_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "last_message_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "is_spam" JD.bool)
         |> JD.andMap (decodeOptionalData "is_message_request_timestamp" (JD.nullable Iso8601.decoder))
         |> JD.andMap (decodeOptionalData "is_message_request" JD.bool)
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "flags" JD.int)
 
 
 decodeChannel2 : JD.Decoder Channel2
 decodeChannel2 =
     JD.succeed Channel2
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "type" decodeChannelType)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "position" JD.int)
         |> JD.andMap (decodeOptionalData "name" JD.string)
         |> JD.andMap (decodeOptionalData "topic" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "nsfw" JD.bool)
-        |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable decodeId))
         |> JD.andMap (decodeOptionalData "bitrate" (JD.map Quantity JD.int))
-        |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "permission_overwrites" (JD.list decodeOverwrite))
 
 
@@ -4059,7 +4138,7 @@ decodeInviteWithMetadata =
 decodePartialChannel : JD.Decoder PartialChannel
 decodePartialChannel =
     JD.map3 PartialChannel
-        (JD.field "id" Discord.Id.decodeId)
+        (JD.field "id" decodeId)
         (JD.field "name" JD.string)
         (JD.field "type" decodeChannelType)
 
@@ -4067,7 +4146,7 @@ decodePartialChannel =
 decodePartialUser : JD.Decoder PartialUser
 decodePartialUser =
     JD.map4 PartialUser
-        (JD.field "id" Discord.Id.decodeId)
+        (JD.field "id" decodeId)
         (JD.field "username" JD.string)
         (JD.field "avatar" (JD.nullable decodeHash))
         (JD.field "discriminator" decodeDiscriminator)
@@ -4090,7 +4169,7 @@ decodeDiscriminator =
 decodeGuildPreview : JD.Decoder GuildPreview
 decodeGuildPreview =
     JD.succeed GuildPreview
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "splash" (JD.nullable decodeHash))
@@ -4115,7 +4194,7 @@ encodeRoles : Roles -> JE.Value
 encodeRoles roles =
     case roles of
         RoleList roles_ ->
-            JE.list Discord.Id.encodeId roles_
+            JE.list encodeId roles_
 
         AllRoles ->
             JE.null
@@ -4128,7 +4207,7 @@ urlEncodeEmoji emojiId =
             emoji
 
         CustomEmoji emoji ->
-            emoji.name ++ ":" ++ Discord.Id.toString emoji.id |> Url.percentEncode
+            emoji.name ++ ":" ++ idToString emoji.id |> Url.percentEncode
 
 
 encodeModify : String -> (a -> JE.Value) -> Modify a -> List ( String, JE.Value )
@@ -4216,16 +4295,16 @@ decodeGatewayGuildProperties =
         |> JD.andMap (JD.field "system_channel_flags" JD.int)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "max_video_channel_users" JD.int)
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "system_channel_id" (JD.nullable Discord.Id.decodeId))
-        |> JD.andMap (JD.field "afk_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (JD.field "system_channel_id" (JD.nullable decodeId))
+        |> JD.andMap (JD.field "afk_channel_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "max_members" (JD.nullable JD.int))
         |> JD.andMap (JD.field "nsfw" JD.bool)
         |> JD.andMap (JD.field "description" (JD.nullable JD.string))
         |> JD.andMap (JD.field "preferred_locale" JD.string)
-        |> JD.andMap (JD.field "rules_channel_id" (JD.nullable Discord.Id.decodeId))
-        |> JD.andMap (JD.field "owner_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "rules_channel_id" (JD.nullable decodeId))
+        |> JD.andMap (JD.field "owner_id" decodeId)
 
 
 type alias Sticker =
@@ -4258,8 +4337,8 @@ type StickerFormatType
 stickerDecoder : JD.Decoder Sticker
 stickerDecoder =
     JD.succeed Sticker
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "pack_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (decodeOptionalData "pack_id" decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "description" (JD.nullable JD.string))
         |> JD.andMap (JD.field "tags" JD.string)
@@ -4345,11 +4424,11 @@ type alias MergedMember =
 decodeMergedMember : JD.Decoder MergedMember
 decodeMergedMember =
     JD.succeed MergedMember
-        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
         |> JD.andMap (JD.field "premium_since" (JD.nullable Iso8601.decoder))
         |> JD.andMap (JD.field "pending" JD.bool)
         |> JD.andMap (JD.field "nick" (JD.nullable JD.string))
-        |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "roles" (JD.list decodeId))
         |> JD.andMap (JD.field "mute" JD.bool)
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (JD.field "flags" JD.int)
@@ -4364,7 +4443,7 @@ type alias SupplementalGuild =
 
 supplementalGuildDecoder : JD.Decoder SupplementalGuild
 supplementalGuildDecoder =
-    JD.map SupplementalGuild (JD.field "id" Discord.Id.decodeId)
+    JD.map SupplementalGuild (JD.field "id" decodeId)
 
 
 type alias ReadyData =
@@ -4584,30 +4663,30 @@ decodeDispatchEvent eventName =
         "MESSAGE_DELETE" ->
             JD.field "d"
                 (JD.succeed DispatchBot_MessageDeleteEvent
-                    |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-                    |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-                    |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "id" decodeId)
+                    |> JD.andMap (JD.field "channel_id" decodeId)
+                    |> JD.andMap (decodeOptionalData "guild_id" decodeId)
                 )
 
         "MESSAGE_DELETE_BULK" ->
             JD.field "d"
                 (JD.succeed DispatchBot_MessageDeleteBulkEvent
-                    |> JD.andMap (JD.field "id" (JD.list Discord.Id.decodeId))
-                    |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-                    |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "id" (JD.list decodeId))
+                    |> JD.andMap (JD.field "channel_id" decodeId)
+                    |> JD.andMap (decodeOptionalData "guild_id" decodeId)
                 )
 
         "GUILD_MEMBER_ADD" ->
             JD.field "d"
                 (JD.succeed DispatchBot_GuildMemberAddEvent
-                    |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "guild_id" decodeId)
                     |> JD.andMap decodeGuildMember
                 )
 
         "GUILD_MEMBER_REMOVE" ->
             JD.field "d"
                 (JD.succeed DispatchBot_GuildMemberRemoveEvent
-                    |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "guild_id" decodeId)
                     |> JD.andMap (JD.field "user" decodeUser)
                 )
 
@@ -4647,9 +4726,9 @@ type alias TypingStart =
 decodeTypingStart : JD.Decoder TypingStart
 decodeTypingStart =
     JD.succeed TypingStart
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
         |> JD.andMap (JD.field "timestamp" posixTimeDecoder)
 
 
@@ -4682,30 +4761,30 @@ decodeDispatchUserEvent eventName =
         "MESSAGE_DELETE" ->
             JD.field "d"
                 (JD.succeed DispatchUser_MessageDeleteEvent
-                    |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-                    |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-                    |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "id" decodeId)
+                    |> JD.andMap (JD.field "channel_id" decodeId)
+                    |> JD.andMap (decodeOptionalData "guild_id" decodeId)
                 )
 
         "MESSAGE_DELETE_BULK" ->
             JD.field "d"
                 (JD.succeed DispatchUser_MessageDeleteBulkEvent
-                    |> JD.andMap (JD.field "id" (JD.list Discord.Id.decodeId))
-                    |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-                    |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "id" (JD.list decodeId))
+                    |> JD.andMap (JD.field "channel_id" decodeId)
+                    |> JD.andMap (decodeOptionalData "guild_id" decodeId)
                 )
 
         "GUILD_MEMBER_ADD" ->
             JD.field "d"
                 (JD.succeed DispatchUser_GuildMemberAddEvent
-                    |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "guild_id" decodeId)
                     |> JD.andMap decodeGuildMember
                 )
 
         "GUILD_MEMBER_REMOVE" ->
             JD.field "d"
                 (JD.succeed DispatchUser_GuildMemberRemoveEvent
-                    |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "guild_id" decodeId)
                     |> JD.andMap (JD.field "user" decodeUser)
                 )
 
@@ -4760,9 +4839,9 @@ type alias MessageUpdate =
 decodeMessageUpdate : JD.Decoder MessageUpdate
 decodeMessageUpdate =
     JD.succeed MessageUpdate
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (JD.field "guild_id" decodeId)
         |> JD.andMap (JD.field "author" decodeUser)
         |> JD.andMap (JD.field "content" JD.string)
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
@@ -4782,9 +4861,9 @@ type alias UserMessageUpdate =
 decodeUserMessageUpdate : JD.Decoder UserMessageUpdate
 decodeUserMessageUpdate =
     JD.succeed UserMessageUpdate
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (JD.field "author" decodeUser)
         |> JD.andMap (JD.field "content" JD.string)
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
@@ -4955,13 +5034,13 @@ type alias ReactionAdd =
 decodeReactionAdd : JD.Decoder ReactionAdd
 decodeReactionAdd =
     JD.succeed ReactionAdd
-        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (JD.field "message_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
         |> JD.andMap (JD.field "emoji" decodeEmoji)
-        |> JD.andMap (decodeOptionalData "message_author_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "message_author_id" decodeId)
         |> JD.andMap (JD.field "burst" JD.bool)
         |> JD.andMap (decodeOptionalData "burst_colors" (JD.list JD.string))
 
@@ -4980,10 +5059,10 @@ type alias ReactionRemove =
 decodeReactionRemove : JD.Decoder ReactionRemove
 decodeReactionRemove =
     JD.succeed ReactionRemove
-        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (JD.field "message_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
         |> JD.andMap (JD.field "emoji" decodeEmoji)
         |> JD.andMap (JD.field "burst" JD.bool)
@@ -4999,9 +5078,9 @@ type alias ReactionRemoveAll =
 decodeReactionRemoveAll : JD.Decoder ReactionRemoveAll
 decodeReactionRemoveAll =
     JD.succeed ReactionRemoveAll
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (JD.field "message_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
 
 
 type alias ReactionRemoveEmoji =
@@ -5015,16 +5094,16 @@ type alias ReactionRemoveEmoji =
 decodeReactionRemoveEmoji : JD.Decoder ReactionRemoveEmoji
 decodeReactionRemoveEmoji =
     JD.succeed ReactionRemoveEmoji
-        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
+        |> JD.andMap (JD.field "message_id" decodeId)
         |> JD.andMap (JD.field "emoji" decodeEmoji)
 
 
 decodeGuildMembersChunk : JD.Decoder GuildMembersChunkData
 decodeGuildMembersChunk =
     JD.succeed GuildMembersChunkData
-        |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "guild_id" decodeId)
         |> JD.andMap (JD.field "members" (JD.list decodeGuildMember))
         |> JD.andMap (JD.field "chunk_index" JD.int)
         |> JD.andMap (JD.field "chunk_count" JD.int)
@@ -5113,8 +5192,8 @@ type alias GuildMemberUpdate =
 decodeGuildMemberUpdate : JD.Decoder GuildMemberUpdate
 decodeGuildMemberUpdate =
     JD.succeed GuildMemberUpdate
-        |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "guild_id" decodeId)
+        |> JD.andMap (JD.field "roles" (JD.list decodeId))
         |> JD.andMap (JD.field "user" decodeUser)
         |> JD.andMap (decodeOptionalData "nick" (JD.nullable JD.string))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
@@ -5411,7 +5490,7 @@ encodeRequestGuildMembers guildIds nonce2 =
     JE.object
         [ ( "op", JE.int 8 )
         , ( "d"
-          , [ ( "guild_id", JE.list Discord.Id.encodeId guildIds )
+          , [ ( "guild_id", JE.list encodeId guildIds )
             , ( "query", JE.string "" )
             , ( "limit", JE.int 1000 )
             ]
@@ -5527,8 +5606,8 @@ type alias Presence =
 decodePresence : JD.Decoder Presence
 decodePresence =
     JD.succeed Presence
-        |> JD.andMap (JD.at [ "user", "id" ] Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.at [ "user", "id" ] decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (JD.field "status" JD.string)
 
 
@@ -5797,7 +5876,7 @@ handleUserGateway authToken intents response model =
                                 Missing ->
                                     ( model
                                     , [ UserOutMsg_UserDeletedDmMessage
-                                            (Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64)
+                                            (idToUInt64 channelId |> idFromUInt64)
                                             messageId
                                       ]
                                     )
@@ -5886,7 +5965,7 @@ type alias Relationship =
 relationshipDecoder : JD.Decoder Relationship
 relationshipDecoder =
     JD.succeed Relationship
-        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (JD.field "type" relationshipTypeDecoder)
         |> JD.andMap (JD.field "nickname" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "is_spam_request" JD.bool)
@@ -5981,7 +6060,7 @@ uploadAttachmentsPayload auth channelId attachments =
         Nothing
         (userToken auth)
         decodeUploadAttachmentResponse
-        [ "channels", Discord.Id.toString channelId, "attachments" ]
+        [ "channels", idToString channelId, "attachments" ]
         []
         (JE.object [ ( "files", JE.list encodeUploadAttachment attachments ) ])
 
@@ -6029,7 +6108,7 @@ createPrivateChannelPayload auth recipients =
         decodeChannel
         [ "users", "@me", "channels" ]
         []
-        (JE.object [ ( "recipients", JE.list Discord.Id.encodeId recipients ) ])
+        (JE.object [ ( "recipients", JE.list encodeId recipients ) ])
 
 
 
@@ -6183,7 +6262,7 @@ type alias LoginResponse =
 loginResponseDecoder : JD.Decoder LoginResponse
 loginResponseDecoder =
     JD.succeed LoginResponse
-        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
         |> JD.andMap (decodeOptionalData "token" JD.string)
         |> JD.andMap (decodeOptionalData "user_settings" decodeUserSettings)
         |> JD.andMap (decodeOptionalData "required_actions" (JD.array JD.string))
