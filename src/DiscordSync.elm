@@ -1484,7 +1484,7 @@ handleTypingStarted typingStart model =
                                 ( lastTypedAt, channel2 ) =
                                     case threadRoute of
                                         Nothing ->
-                                            ( SeqDict.get typingStart.userId channel.lastTypedAt
+                                            ( SeqDict.get typingStart.userId channel.lastTypedAt |> Maybe.map .time
                                             , { channel
                                                 | lastTypedAt =
                                                     SeqDict.insert
@@ -1495,7 +1495,7 @@ handleTypingStarted typingStart model =
                                             )
 
                                         Just { threadId, thread } ->
-                                            ( SeqDict.get typingStart.userId thread.lastTypedAt
+                                            ( SeqDict.get typingStart.userId thread.lastTypedAt |> Maybe.map .time
                                             , { channel
                                                 | threads =
                                                     SeqDict.insert
@@ -1510,17 +1510,11 @@ handleTypingStarted typingStart model =
                                                         channel.threads
                                               }
                                             )
-
-                                lastTypedAt3 : Time.Posix
-                                lastTypedAt3 =
-                                    case lastTypedAt of
-                                        Just lastTypedAt2 ->
-                                            lastTypedAt2.time
-
-                                        Nothing ->
-                                            Time.millisToPosix 0
                             in
-                            if Duration.from lastTypedAt3 typingStart.timestamp |> Quantity.lessThan (Duration.seconds 2) then
+                            if
+                                Duration.from (Maybe.withDefault (Time.millisToPosix 0) lastTypedAt) typingStart.timestamp
+                                    |> Quantity.lessThan (Duration.seconds 2)
+                            then
                                 ( model, Command.none )
 
                             else
