@@ -1,5 +1,6 @@
 module DiscordMarkdownTests exposing (test)
 
+import Discord
 import Expect
 import List.Nonempty exposing (Nonempty(..))
 import RichText exposing (RichText(..))
