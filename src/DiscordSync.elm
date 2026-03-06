@@ -1316,6 +1316,54 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             ( model2, Command.none )
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_EmbeddedActivityUpdateV2 embeddedActivityUpdateV2 ->
+                            let
+                                ( model3, cmd2 ) =
+                                    case embeddedActivityUpdateV2.location.guildId of
+                                        Included guildId ->
+                                            case SeqDict.get guildId model2.discordGuilds of
+                                                Just guild ->
+                                                    let
+                                                        ( discordUsers, guild3, users ) =
+                                                            List.foldl
+                                                                (\participant ( dict, guild2, users ) ->
+                                                                    case participant.member of
+                                                                        Included member ->
+                                                                            ( addDiscordUserData
+                                                                                (discordUserToPartialUser member.user)
+                                                                                dict
+                                                                            , { guild2
+                                                                                | members =
+                                                                                    SeqDict.insert
+                                                                                        participant.userId
+                                                                                        { joinedAt = Nothing }
+                                                                                        guild2.members
+                                                                              }
+                                                                            , member.user :: users
+                                                                            )
+
+                                                                        Missing ->
+                                                                            ( dict, guild2, users )
+                                                                )
+                                                                ( model2.discordUsers, guild, [] )
+                                                                embeddedActivityUpdateV2.participants
+                                                    in
+                                                    ( { model2
+                                                        | discordUsers = discordUsers
+                                                        , discordGuilds =
+                                                            SeqDict.insert guildId guild3 model2.discordGuilds
+                                                      }
+                                                    , getUserAvatars model2.discordUsers users
+                                                    )
+
+                                                Nothing ->
+                                                    ( model2, Command.none )
+
+                                        Missing ->
+                                            ( model2, Command.none )
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =

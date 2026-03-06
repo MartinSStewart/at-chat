@@ -368,7 +368,7 @@ logContent onPressCopy log =
         FailedToParseDiscordWebsocket jsonError ->
             Ui.column
                 [ Ui.spacing 4 ]
-                [ tag errorTag "Loading Discord user avatars failed"
+                [ tag errorTag "Parsing Discord websocket failed"
                 , MyUi.errorBox (Dom.id "admin_FailedToParseDiscordWebsocket") onPressCopy jsonError
                 ]
 
