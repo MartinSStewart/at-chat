@@ -1208,6 +1208,9 @@ isPressMsg msg =
         TextEditorMsg textEditorMsg ->
             TextEditor.isPress textEditorMsg
 
+        PressedDiscordAcknowledgment _ ->
+            True
+
         PressedLinkDiscordUser ->
             True
 

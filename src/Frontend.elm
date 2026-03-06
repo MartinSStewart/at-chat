@@ -3019,6 +3019,20 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDiscordAcknowledgment checked ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | discordAcknowledged = checked })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
         PressedLinkDiscordUser ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

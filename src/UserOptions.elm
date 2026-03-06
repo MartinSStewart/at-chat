@@ -32,6 +32,7 @@ init : UserOptionsModel
 init =
     { name = Editable.init
     , showLinkDiscordSetup = False
+    , discordAcknowledged = False
     }
 
 
@@ -320,6 +321,12 @@ view isMobile time local loggedIn loaded model =
                                 (Dom.idToString discordBookmarkletId)
                                 [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
                                 (Ui.text "Bookmarklet URL")
+
+                        acknowledgmentLabel =
+                            Ui.Input.label
+                                "userOptions_discordAcknowledgment"
+                                []
+                                (Ui.text "I acknowledge that by linking my Discord account I am giving at-chat full access to that account")
                     in
                     Ui.column
                         [ Ui.spacing 16 ]
@@ -341,54 +348,66 @@ view isMobile time local loggedIn loaded model =
                                 , Ui.text " in your browser and click the bookmark"
                                 ]
                             ]
-                        , Ui.column
-                            [ Ui.spacing 2, Ui.widthMax 400 ]
-                            [ bookmarkletLabel.element
-                            , Ui.row
-                                []
-                                [ Ui.Input.text
-                                    [ Ui.clipWithEllipsis
-                                    , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
-                                    , Ui.htmlAttribute (Html.Attributes.readonly True)
-                                    , Ui.background MyUi.background1
-                                    , Ui.border 1
-                                    , Ui.borderColor MyUi.inputBorder
-                                    , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
-                                    , Ui.height Ui.fill
-                                    , Ui.Events.onFocus (TextInputGotFocus discordBookmarkletId)
-                                    ]
-                                    { onChange = \_ -> TypedDiscordLinkBookmarklet
-                                    , text = bookmarklet
-                                    , placeholder = Nothing
-                                    , label = bookmarkletLabel.id
-                                    }
-                                , MyUi.elButton
-                                    (Dom.id "userOptions_copyBookmarklet")
-                                    (PressedCopyText bookmarklet)
-                                    [ Ui.width Ui.shrink
-                                    , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
-                                    , Ui.borderColor MyUi.inputBorder
-                                    , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-                                    , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
-                                    , Ui.spacing 4
-                                    , Ui.background MyUi.buttonBackground
-                                    , Ui.Font.size 14
-                                    , Ui.height Ui.fill
-                                    , Ui.contentCenterY
-                                    ]
-                                    (case loaded.lastCopied of
-                                        Just copied ->
-                                            if copied.copiedText == bookmarklet then
-                                                Ui.text "Copied!"
+                        , Ui.Input.checkbox
+                            [ Ui.Font.size 14 ]
+                            { onChange = PressedDiscordAcknowledgment
+                            , icon = Nothing
+                            , checked = model.discordAcknowledged
+                            , label = acknowledgmentLabel.id
+                            }
+                        , acknowledgmentLabel.element
+                        , if model.discordAcknowledged then
+                            Ui.column
+                                [ Ui.spacing 2, Ui.widthMax 400 ]
+                                [ bookmarkletLabel.element
+                                , Ui.row
+                                    []
+                                    [ Ui.Input.text
+                                        [ Ui.clipWithEllipsis
+                                        , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+                                        , Ui.htmlAttribute (Html.Attributes.readonly True)
+                                        , Ui.background MyUi.background1
+                                        , Ui.border 1
+                                        , Ui.borderColor MyUi.inputBorder
+                                        , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                                        , Ui.height Ui.fill
+                                        , Ui.Events.onFocus (TextInputGotFocus discordBookmarkletId)
+                                        ]
+                                        { onChange = \_ -> TypedDiscordLinkBookmarklet
+                                        , text = bookmarklet
+                                        , placeholder = Nothing
+                                        , label = bookmarkletLabel.id
+                                        }
+                                    , MyUi.elButton
+                                        (Dom.id "userOptions_copyBookmarklet")
+                                        (PressedCopyText bookmarklet)
+                                        [ Ui.width Ui.shrink
+                                        , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+                                        , Ui.borderColor MyUi.inputBorder
+                                        , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                                        , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+                                        , Ui.spacing 4
+                                        , Ui.background MyUi.buttonBackground
+                                        , Ui.Font.size 14
+                                        , Ui.height Ui.fill
+                                        , Ui.contentCenterY
+                                        ]
+                                        (case loaded.lastCopied of
+                                            Just copied ->
+                                                if copied.copiedText == bookmarklet then
+                                                    Ui.text "Copied!"
 
-                                            else
+                                                else
+                                                    Ui.html Icons.copy
+
+                                            Nothing ->
                                                 Ui.html Icons.copy
-
-                                        Nothing ->
-                                            Ui.html Icons.copy
-                                    )
+                                        )
+                                    ]
                                 ]
-                            ]
+
+                          else
+                            Ui.none
                         , Ui.row
                             [ Ui.spacing 8 ]
                             [ Ui.html Icons.warning
