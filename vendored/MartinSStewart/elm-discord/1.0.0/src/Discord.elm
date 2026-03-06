@@ -4833,6 +4833,12 @@ decodeDispatchUserEvent eventName =
         "MESSAGE_ACK" ->
             JD.succeed DispatchUser_MessageAck
 
+        "CONVERSATION_SUMMARY_UPDATE" ->
+            JD.succeed DispatchUser_ConversationSummaryUpdate
+
+        "USER_SETTINGS_PROTO_UPDATE" ->
+            JD.succeed DispatchUser_UserSettingsProtoUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5013,6 +5019,8 @@ type OpDispatchUserEvent
     | DispatchUser_SessionsReplace
     | DispatchUser_EmbeddedActivityUpdateV2 EmbeddedActivityUpdateV2
     | DispatchUser_MessageAck
+    | DispatchUser_ConversationSummaryUpdate
+    | DispatchUser_UserSettingsProtoUpdate
 
 
 decodeEmbeddedActivityUpdateV2 : JD.Decoder EmbeddedActivityUpdateV2
@@ -6017,6 +6025,12 @@ handleUserGateway authToken intents response model =
                             ( model, [ UserOutMsg_EmbeddedActivityUpdateV2 embeddedActivityUpdateV2 ] )
 
                         DispatchUser_MessageAck ->
+                            ( model, [] )
+
+                        DispatchUser_ConversationSummaryUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_UserSettingsProtoUpdate ->
                             ( model, [] )
 
                 OpReconnect ->
