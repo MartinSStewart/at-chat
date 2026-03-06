@@ -1210,8 +1210,8 @@ pendingChangesText change =
             "Collapsed Discord guild in admin page"
 
 
-view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
-view local adminData user model =
+view : Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
+view version local adminData user model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background1
@@ -1219,7 +1219,19 @@ view local adminData user model =
         ]
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 } ]
-            [ MyUi.simpleButton (Dom.id "admin_goToHomepage") PressedHomepageLink (Ui.text "Go to homepage")
+            [ Ui.row
+                []
+                [ MyUi.simpleButton (Dom.id "admin_goToHomepage") PressedHomepageLink (Ui.text "Go to homepage")
+                , Ui.el
+                    [ Ui.alignRight, Ui.width Ui.shrink ]
+                    (case version of
+                        Just version2 ->
+                            Ui.text ("Version " ++ String.fromInt version2)
+
+                        Nothing ->
+                            Ui.text "Version unknown"
+                    )
+                ]
             , userSection user adminData model
             , guildsSection user adminData
             , discordGuildsSection user adminData

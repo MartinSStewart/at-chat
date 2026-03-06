@@ -4486,7 +4486,12 @@ view model =
                                     IsAdmin adminData ->
                                         case NonemptyDict.get local.localUser.session.userId adminData.users of
                                             Just user ->
-                                                Pages.Admin.view local adminData user loggedIn.admin
+                                                Pages.Admin.view
+                                                    loaded.versionNumber
+                                                    local
+                                                    adminData
+                                                    user
+                                                    loggedIn.admin
                                                     |> Ui.map AdminPageMsg
 
                                             Nothing ->
