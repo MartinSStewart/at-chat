@@ -4736,6 +4736,9 @@ decodeDispatchUserEvent eventName =
         "TYPING_START" ->
             JD.field "d" decodeTypingStart |> JD.map DispatchUser_TypingStart
 
+        "PRESENCE_UPDATE" ->
+            JD.field "d" decodePresence |> JD.map DispatchUser_PresenceUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -4910,6 +4913,7 @@ type OpDispatchUserEvent
     | DispatchUser_GuildMembersChunk GuildMembersChunkData -- aka response(s) to OpRequestGuildMembers
     | DispatchUser_ChannelCreateEvent Channel
     | DispatchUser_TypingStart TypingStart
+    | DispatchUser_PresenceUpdate Presence
 
 
 requestGuildMembers : (connection -> String -> cmd) -> List (Id GuildId) -> Model connection -> Result () cmd
@@ -5510,6 +5514,22 @@ type UserOutMsg connection
     | UserOutMsg_SupplementalReadyData ReadySupplementalData
     | UserOutMsg_ChannelCreated Channel
     | UserOutMsg_TypingStarted TypingStart
+    | UserOutMsg_PresenceUpdate Presence
+
+
+type alias Presence =
+    { userId : Id UserId
+    , guildId : OptionalData (Id GuildId)
+    , status : String
+    }
+
+
+decodePresence : JD.Decoder Presence
+decodePresence =
+    JD.succeed Presence
+        |> JD.andMap (JD.at [ "user", "id" ] Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "status" JD.string)
 
 
 type alias Model connection =
@@ -5830,6 +5850,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_TypingStart typingStart ->
                             ( model, [ UserOutMsg_TypingStarted typingStart ] )
+
+                        DispatchUser_PresenceUpdate _ ->
+                            ( model, [] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )

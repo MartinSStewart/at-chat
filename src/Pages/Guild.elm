@@ -1161,7 +1161,7 @@ discordMemberColumnNotMobile :
     LocalUser
     -> Discord.Id.Id Discord.Id.UserId
     -> Discord.Id.Id Discord.Id.UserId
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg
 discordMemberColumnNotMobile localUser currentDiscordUserId guildOwner guildMembers =
     let
@@ -1246,7 +1246,7 @@ discordMemberColumnMobile :
     -> LocalUser
     -> Discord.Id.Id Discord.Id.UserId
     -> Discord.Id.Id Discord.Id.UserId
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg
 discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildOwner guildMembers =
     let

@@ -1285,6 +1285,37 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleTypingStarted typingStart model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_PresenceUpdate presence ->
+                            let
+                                ( model3, cmd2 ) =
+                                    case presence.guildId of
+                                        Included guildId ->
+                                            case SeqDict.get guildId model2.discordGuilds of
+                                                Just guild ->
+                                                    ( { model2
+                                                        | discordGuilds =
+                                                            SeqDict.insert
+                                                                guildId
+                                                                { guild
+                                                                    | members =
+                                                                        SeqDict.insert
+                                                                            presence.userId
+                                                                            { joinedAt = Nothing }
+                                                                            guild.members
+                                                                }
+                                                                model2.discordGuilds
+                                                      }
+                                                    , Command.none
+                                                    )
+
+                                                Nothing ->
+                                                    ( model2, Command.none )
+
+                                        Missing ->
+                                            ( model2, Command.none )
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1582,7 +1613,7 @@ handleReadySupplementalData data model =
                                             (\mergedMembers2 members ->
                                                 SeqDict.insert
                                                     mergedMembers2.userId
-                                                    { joinedAt = mergedMembers2.joinedAt }
+                                                    { joinedAt = Just mergedMembers2.joinedAt }
                                                     members
                                             )
                                             guild.members
@@ -1950,7 +1981,7 @@ handleListGuildMembersResponse chunkData model =
                                                     maybe
 
                                                 Nothing ->
-                                                    { joinedAt = member.joinedAt }
+                                                    { joinedAt = Just member.joinedAt }
                                                         |> Just
                                         )
                                         guildMembers

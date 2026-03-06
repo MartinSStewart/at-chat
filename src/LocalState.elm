@@ -184,7 +184,7 @@ type alias DiscordBackendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordBackendChannel
-    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
     , owner : Discord.Id.Id Discord.Id.UserId
     }
 
@@ -205,7 +205,7 @@ type alias DiscordFrontendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordFrontendChannel
-    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
     , owner : Discord.Id.Id Discord.Id.UserId
     }
 
@@ -568,7 +568,7 @@ type alias AdminData_GuildChannel =
 type alias AdminData_DiscordGuild =
     { name : GuildName
     , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) AdminData_DiscordChannel
-    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Maybe Time.Posix }
     , owner : Discord.Id.Id Discord.Id.UserId
     }
 

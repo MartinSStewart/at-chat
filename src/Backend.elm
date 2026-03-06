@@ -672,7 +672,7 @@ update msg model =
                                                                                     maybe
 
                                                                                 Nothing ->
-                                                                                    Just { joinedAt = time }
+                                                                                    Just { joinedAt = Nothing }
                                                                         )
                                                                         guild.members
                                                             , owner = data.guild.properties.ownerId

@@ -1573,7 +1573,7 @@ discordGuildsSection user adminData =
                                                 )
                                                 adminData.discordUsers
                                             )
-                                            (SeqDict.insert guild.owner { joinedAt = Time.millisToPosix 0 } guild.members)
+                                            (SeqDict.insert guild.owner { joinedAt = Nothing } guild.members)
                                             |> SeqDict.keys
                                             |> List.head
                                 in
