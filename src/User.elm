@@ -3,7 +3,6 @@ module User exposing
     , BackendUser
     , DiscordFrontendCurrentUser
     , DiscordFrontendUser
-    , DiscordUserLoadingData(..)
     , EmailNotifications(..)
     , FrontendCurrentUser
     , FrontendUser
@@ -15,6 +14,7 @@ module User exposing
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , discordCurrentUserToFrontend
+    , discordFullDataUserToFrontendCurrentUser
     , init
     , linkDiscordDataCodec
     , multipleProfileImages
@@ -32,7 +32,8 @@ module User exposing
 
 import Base64
 import Codec exposing (Codec)
-import Discord
+import Discord exposing (OptionalData(..))
+import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
@@ -367,10 +368,30 @@ type alias DiscordFrontendCurrentUser =
     }
 
 
-type DiscordUserLoadingData
-    = DiscordUserLoadedSuccessfully
-    | DiscordUserLoadingData Time.Posix
-    | DiscordUserLoadingFailed Time.Posix
+discordFullDataUserToFrontendCurrentUser :
+    Bool
+    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
+    -> DiscordUserLoadingData
+    -> DiscordFrontendCurrentUser
+discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
+    { name = PersonName.fromStringLossy data.user.username
+    , icon = data.icon
+    , email =
+        case data.user.email of
+            Included maybeText ->
+                case maybeText of
+                    Just text ->
+                        EmailAddress.fromString text
+
+                    Nothing ->
+                        Nothing
+
+            Missing ->
+                Nothing
+    , needsAuthAgain = needsAuthAgain
+    , linkedAt = data.linkedAt
+    , isLoadingData = isLoadingData
+    }
 
 
 discordCurrentUserToFrontend : DiscordFrontendCurrentUser -> DiscordFrontendUser

@@ -1,6 +1,7 @@
 module UserOptions exposing (discordBookmarkletId, init, view)
 
 import Discord
+import DiscordUserData exposing (DiscordUserLoadingData(..))
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress
@@ -23,7 +24,7 @@ import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import User exposing (DiscordFrontendCurrentUser, DiscordUserLoadingData(..))
+import User exposing (DiscordFrontendCurrentUser)
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 

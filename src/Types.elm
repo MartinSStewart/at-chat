@@ -5,9 +5,6 @@ module Types exposing
     , BackendMsg(..)
     , ChannelSidebarMode(..)
     , DiscordAttachmentData
-    , DiscordBasicUserData
-    , DiscordFullUserData
-    , DiscordUserData(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -29,7 +26,6 @@ module Types exposing
     , MessageHover(..)
     , MessageHoverMobileMode(..)
     , MessageMenuExtraOptions
-    , NeedsAuthAgainData
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
@@ -50,6 +46,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import DiscordAttachmentId exposing (DiscordAttachmentId)
+import DiscordUserData exposing (DiscordUserData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
@@ -96,7 +93,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
@@ -305,35 +302,6 @@ type alias BackendModel =
 
 type alias DiscordAttachmentData =
     { fileHash : FileHash, imageMetadata : Maybe FileStatus.ImageMetadata }
-
-
-type DiscordUserData
-    = BasicData DiscordBasicUserData
-    | FullData DiscordFullUserData
-    | NeedsAuthAgain NeedsAuthAgainData
-
-
-type alias DiscordFullUserData =
-    { auth : Discord.UserAuth
-    , user : Discord.User
-    , connection : Discord.Model Websocket.Connection
-    , linkedTo : Id UserId
-    , icon : Maybe FileHash
-    , linkedAt : Time.Posix
-    , isLoadingData : DiscordUserLoadingData
-    }
-
-
-type alias NeedsAuthAgainData =
-    { user : Discord.User
-    , linkedTo : Id UserId
-    , icon : Maybe FileHash
-    , linkedAt : Time.Posix
-    }
-
-
-type alias DiscordBasicUserData =
-    { user : Discord.PartialUser, icon : Maybe FileHash }
 
 
 type alias BackendFileData =

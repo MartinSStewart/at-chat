@@ -3,7 +3,6 @@ module DiscordSync exposing
     , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
     , backendSessionIdHash
-    , discordUserToPartialUser
     , discordUserWebsocketMsg
     , getManyMessages
     , handleDiscordCreateMessage
@@ -28,6 +27,7 @@ import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
+import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -55,11 +55,12 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Quantity
 import RichText exposing (RichText)
+import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Thread exposing (BackendThread, DiscordBackendThread)
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordFullUserData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User exposing (BackendUser)
 import UserSession exposing (UserSession)
 
@@ -777,6 +778,31 @@ handleDiscordCreateMessage message attachments model =
                                 in
                                 case channel2Result of
                                     Ok channel2 ->
+                                        let
+                                            notification =
+                                                --case SeqDict.get message.author.id model.discordUsers of
+                                                --    Just user ->
+                                                --        Broadcast.notification
+                                                --            message.timestamp
+                                                --            Broadcast.adminUserId
+                                                --            user
+                                                --            (RichText.toStringWithGetter
+                                                --                username
+                                                --                model.discordUsers
+                                                --                richText
+                                                --            )
+                                                --            (DiscordDmRoute
+                                                --                { currentDiscordUserId = Broadcast.adminUserId
+                                                --                , channelId = dmChannelId
+                                                --                , viewingMessage = Nothing
+                                                --                , showMembersTab = HideMembersTab
+                                                --                }
+                                                --            )
+                                                --            model
+                                                --
+                                                --    Nothing ->
+                                                Command.none
+                                        in
                                         ( { model
                                             | discordDmChannels =
                                                 SeqDict.insert dmChannelId channel2 model.discordDmChannels
@@ -824,18 +850,6 @@ handleDiscordCreateMessage message attachments model =
                                                         |> ServerChange
                                                     )
                                                     model
-                                          --, case NonemptyDict.get message.author.id model.discordUsers of
-                                          --    Just user ->
-                                          --        Broadcast.notification
-                                          --            message.timestamp
-                                          --            Broadcast.adminUserId
-                                          --            user
-                                          --            (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
-                                          --            (DiscordDmRoute userId (NoThreadWithFriends Nothing HideMembersTab) |> Just)
-                                          --            model
-                                          --
-                                          --    Nothing ->
-                                          --        Command.none
                                         )
 
                                     Err _ ->
@@ -1045,17 +1059,16 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                     |> ServerChange
                                                 )
                                                 model
-
-                                    --, Broadcast.messageNotification
-                                    --    usersMentioned
-                                    --    message.timestamp
-                                    --    userId
-                                    --    discordGuildId
-                                    --    channelId
-                                    --    threadRouteNoReply
-                                    --    richText
-                                    --    (guild.owner :: SeqDict.keys guild.members)
-                                    --    model
+                                    , Broadcast.discordGuildMessageNotification
+                                        usersMentioned
+                                        message.timestamp
+                                        message.author.id
+                                        discordGuildId
+                                        channelId
+                                        threadRouteNoReply
+                                        richText
+                                        (guild.owner :: SeqDict.keys guild.members)
+                                        model
                                     ]
                                 )
 
@@ -1335,7 +1348,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                     case participant.member of
                                                                         Included member ->
                                                                             ( addDiscordUserData
-                                                                                (discordUserToPartialUser member.user)
+                                                                                (Discord.userToPartialUser member.user)
                                                                                 dict
                                                                             , { guild2
                                                                                 | members =
@@ -1372,7 +1385,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                             case participant.member of
                                                                 Included member ->
                                                                     ( addDiscordUserData
-                                                                        (discordUserToPartialUser member.user)
+                                                                        (Discord.userToPartialUser member.user)
                                                                         dict
                                                                     , member.user :: users
                                                                     )
@@ -1404,7 +1417,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             ( { model2
                                                 | discordUsers =
                                                     addDiscordUserData
-                                                        (discordUserToPartialUser user)
+                                                        (Discord.userToPartialUser user)
                                                         model2.discordUsers
                                                 , discordGuilds =
                                                     SeqDict.insert
@@ -1452,7 +1465,7 @@ handleGuildMemberUpdate guildId guildMember model2 =
     case SeqDict.get guildId model2.discordGuilds of
         Just guild ->
             ( { model2
-                | discordUsers = addDiscordUserData (discordUserToPartialUser guildMember.user) model2.discordUsers
+                | discordUsers = addDiscordUserData (Discord.userToPartialUser guildMember.user) model2.discordUsers
                 , discordGuilds =
                     SeqDict.insert
                         guildId
@@ -1814,7 +1827,7 @@ handleReadyData readyData model =
 
         discordUsers : List Discord.PartialUser
         discordUsers =
-            discordUserToPartialUser readyData.user :: readyData.users
+            Discord.userToPartialUser readyData.user :: readyData.users
     in
     ( { model
         | discordGuilds =
@@ -2110,22 +2123,6 @@ addDiscordUserData user discordUsers =
         discordUsers
 
 
-discordUserToPartialUser :
-    { a
-        | id : Discord.Id Discord.UserId
-        , username : String
-        , avatar : Maybe (Discord.ImageHash Discord.AvatarHash)
-        , discriminator : Discord.UserDiscriminator
-    }
-    -> Discord.PartialUser
-discordUserToPartialUser user =
-    { id = user.id
-    , username = user.username
-    , avatar = user.avatar
-    , discriminator = user.discriminator
-    }
-
-
 handleListGuildMembersResponse :
     Discord.GuildMembersChunkData
     -> BackendModel
@@ -2134,7 +2131,7 @@ handleListGuildMembersResponse chunkData model =
     ( { model
         | discordUsers =
             List.foldl
-                (\member discordUsers -> addDiscordUserData (discordUserToPartialUser member.user) discordUsers)
+                (\member discordUsers -> addDiscordUserData (Discord.userToPartialUser member.user) discordUsers)
                 model.discordUsers
                 chunkData.members
         , discordGuilds =

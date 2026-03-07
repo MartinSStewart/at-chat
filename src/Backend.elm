@@ -14,6 +14,7 @@ import Discord exposing (OptionalData(..))
 import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
+import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (DiscordDmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -54,9 +55,9 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), InitialLoadRequest(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, InitialLoadRequest(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, DiscordUserLoadingData(..), LastDmViewed(..))
+import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import WireHelper
@@ -545,7 +546,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUser.id
-                                (BackendExtra.discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
+                                (User.discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -578,7 +579,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUserId
-                                (BackendExtra.discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
+                                (User.discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
                                 |> ServerChange
                             )
                             model
@@ -1190,7 +1191,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                 Just message ->
                     case message of
                         UserTextMessage a ->
-                            Broadcast.discordRichTextToString a.content model.discordUsers
+                            RichText.toStringWithGetter DiscordUserData.username model.discordUsers a.content
 
                         UserJoinedMessage _ userId _ ->
                             case SeqDict.get userId model.discordUsers of
@@ -3551,7 +3552,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Just (FullData discordUser) ->
                                     helper
                                         discordUser.linkedTo
-                                        { user = DiscordSync.discordUserToPartialUser discordUser.user
+                                        { user = Discord.userToPartialUser discordUser.user
                                         , icon = discordUser.icon
                                         }
                                         discordUser.connection.websocketHandle
@@ -3559,7 +3560,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Just (NeedsAuthAgain discordUser) ->
                                     helper
                                         discordUser.linkedTo
-                                        { user = DiscordSync.discordUserToPartialUser discordUser.user
+                                        { user = Discord.userToPartialUser discordUser.user
                                         , icon = discordUser.icon
                                         }
                                         Nothing

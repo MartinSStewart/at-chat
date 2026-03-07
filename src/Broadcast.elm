@@ -2,8 +2,8 @@ module Broadcast exposing
     ( PushNotification
     , adminUserId
     , broadcastDm
-    , discordMessageNotification
-    , discordRichTextToString
+    , discordDmNotification
+    , discordGuildMessageNotification
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
@@ -29,6 +29,7 @@ module Broadcast exposing
 
 import Codec exposing (Codec)
 import Discord
+import DiscordUserData exposing (DiscordUserData(..))
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -48,7 +49,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), Sho
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Url
 import User exposing (BackendUser)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SubscribeData, UserSession)
@@ -446,29 +447,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
         |> Command.batch
 
 
-discordRichTextToString : Nonempty (RichText userId) -> SeqDict userId DiscordUserData -> String
-discordRichTextToString content discordUsers =
-    RichText.toString
-        (SeqDict.map
-            (\_ user ->
-                { name =
-                    case user of
-                        BasicData data ->
-                            PersonName.fromStringLossy data.user.username
-
-                        FullData data ->
-                            PersonName.fromStringLossy data.user.username
-
-                        NeedsAuthAgain data ->
-                            PersonName.fromStringLossy data.user.username
-                }
-            )
-            discordUsers
-        )
-        content
-
-
-discordMessageNotification :
+discordGuildMessageNotification :
     SeqSet (Discord.Id Discord.UserId)
     -> Time.Posix
     -> Discord.Id Discord.UserId
@@ -479,7 +458,7 @@ discordMessageNotification :
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-discordMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
+discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
         alwaysNotify : SeqSet (Discord.Id Discord.UserId)
         alwaysNotify =
@@ -539,7 +518,7 @@ discordMessageNotification usersMentioned time sender guildId channelId threadRo
                                         time
                                         discordUser.linkedTo
                                         user2
-                                        (discordRichTextToString content model.discordUsers)
+                                        (RichText.toStringWithGetter DiscordUserData.username model.discordUsers content)
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
                                             , guildId = guildId
@@ -607,6 +586,18 @@ notification time userToNotify sender text navigateTo model =
         []
         model.sessions
         |> Command.batch
+
+
+discordDmNotification :
+    Time.Posix
+    -> Id UserId
+    -> BackendUser
+    -> String
+    -> Maybe Route
+    -> BackendModel
+    -> Command restriction toMsg BackendMsg
+discordDmNotification time userToNotify sender text navigateTo model =
+    Debug.todo ""
 
 
 toDmChannel :

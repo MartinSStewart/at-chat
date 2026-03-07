@@ -3,6 +3,7 @@ module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, i
 import AiChat
 import Array exposing (Array)
 import Discord
+import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Editable
@@ -45,7 +46,7 @@ import Types exposing (ChannelSidebarMode(..), FrontendMsg(..), LoadedFrontend, 
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
-import User exposing (DiscordUserLoadingData(..), FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
+import User exposing (FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 

@@ -17,6 +17,7 @@ module RichText exposing
     , textInputView
     , toDiscord
     , toString
+    , toStringWithGetter
     , view
     )
 
@@ -124,6 +125,63 @@ removeAttachedFile fileId list =
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
+
+
+toStringWithGetter : (a -> String) -> SeqDict userId a -> Nonempty (RichText userId) -> String
+toStringWithGetter userToString users nonempty =
+    List.Nonempty.map
+        (\richText ->
+            case richText of
+                NormalText char rest ->
+                    String.cons char rest
+
+                UserMention userId ->
+                    case SeqDict.get userId users of
+                        Just user ->
+                            "@" ++ userToString user
+
+                        Nothing ->
+                            "@<missing>"
+
+                Bold a ->
+                    "*" ++ toStringWithGetter userToString users a ++ "*"
+
+                Italic a ->
+                    "_" ++ toStringWithGetter userToString users a ++ "_"
+
+                Underline a ->
+                    "__" ++ toStringWithGetter userToString users a ++ "__"
+
+                Strikethrough a ->
+                    "~~" ++ toStringWithGetter userToString users a ++ "~~"
+
+                Spoiler a ->
+                    "||" ++ toStringWithGetter userToString users a ++ "||"
+
+                Hyperlink protocol rest ->
+                    hyperlinkToString protocol rest
+
+                InlineCode char rest ->
+                    "`" ++ String.cons char rest ++ "`"
+
+                CodeBlock language string ->
+                    "```"
+                        ++ (case language of
+                                Language unknown ->
+                                    String.Nonempty.toString unknown ++ "\n"
+
+                                NoLanguage ->
+                                    ""
+                           )
+                        ++ string
+                        ++ "```"
+
+                AttachedFile fileId ->
+                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
+        )
+        nonempty
+        |> List.Nonempty.toList
+        |> String.concat
 
 
 toString : SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String

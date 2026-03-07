@@ -3,7 +3,6 @@ module BackendExtra exposing
     , addLogWithCmd
     , adminData
     , discordDmChannelToFrontend
-    , discordFullDataUserToFrontendCurrentUser
     , discordGuildToFrontendForUser
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
@@ -24,6 +23,7 @@ Most of the stuff in there doesn't neatly fit into it's own module so instead I'
 import Array
 import Broadcast
 import Discord exposing (OptionalData(..))
+import DiscordUserData exposing (DiscordUserData(..), DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -52,8 +52,8 @@ import Quantity
 import SecretId
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString(..))
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordUserData(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
 import VisibleMessages
@@ -593,7 +593,7 @@ getLinkedDiscordUsersAndOtherUsers userId model =
                         ( otherDiscordUsers2
                         , SeqDict.insert
                             discordUserId
-                            (discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
+                            (User.discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
                             linkedDiscordUsers2
                         )
 
@@ -618,7 +618,7 @@ getLinkedDiscordUsersAndOtherUsers userId model =
                         ( otherDiscordUsers2
                         , SeqDict.insert
                             discordUserId
-                            (discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
+                            (User.discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
                             linkedDiscordUsers2
                         )
 
@@ -632,32 +632,6 @@ getLinkedDiscordUsersAndOtherUsers userId model =
         )
         ( SeqDict.empty, SeqDict.empty )
         model.discordUsers
-
-
-discordFullDataUserToFrontendCurrentUser :
-    Bool
-    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
-    -> DiscordUserLoadingData
-    -> DiscordFrontendCurrentUser
-discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
-    { name = PersonName.fromStringLossy data.user.username
-    , icon = data.icon
-    , email =
-        case data.user.email of
-            Included maybeText ->
-                case maybeText of
-                    Just text ->
-                        EmailAddress.fromString text
-
-                    Nothing ->
-                        Nothing
-
-            Missing ->
-                Nothing
-    , needsAuthAgain = needsAuthAgain
-    , linkedAt = data.linkedAt
-    , isLoadingData = isLoadingData
-    }
 
 
 adminData : BackendModel -> Int -> InitAdminData
