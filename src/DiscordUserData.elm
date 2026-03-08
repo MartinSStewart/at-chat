@@ -4,6 +4,7 @@ module DiscordUserData exposing
     , DiscordUserData(..)
     , DiscordUserLoadingData(..)
     , NeedsAuthAgainData
+    , icon
     , username
     )
 
@@ -60,3 +61,16 @@ username discordUser =
 
         NeedsAuthAgain data ->
             data.user.username
+
+
+icon : DiscordUserData -> Maybe FileHash
+icon discordUser =
+    case discordUser of
+        BasicData data ->
+            data.icon
+
+        FullData data ->
+            data.icon
+
+        NeedsAuthAgain data ->
+            data.icon

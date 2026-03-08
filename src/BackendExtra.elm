@@ -22,7 +22,7 @@ Most of the stuff in there doesn't neatly fit into it's own module so instead I'
 
 import Array
 import Broadcast
-import Discord exposing (OptionalData(..))
+import Discord
 import DiscordUserData exposing (DiscordUserData(..), DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel)
 import Duration

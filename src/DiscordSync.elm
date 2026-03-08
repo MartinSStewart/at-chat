@@ -55,7 +55,6 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Quantity
 import RichText exposing (RichText)
-import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -779,29 +778,22 @@ handleDiscordCreateMessage message attachments model =
                                 case channel2Result of
                                     Ok channel2 ->
                                         let
+                                            notification : Command BackendOnly toMsg BackendMsg
                                             notification =
-                                                --case SeqDict.get message.author.id model.discordUsers of
-                                                --    Just user ->
-                                                --        Broadcast.notification
-                                                --            message.timestamp
-                                                --            Broadcast.adminUserId
-                                                --            user
-                                                --            (RichText.toStringWithGetter
-                                                --                username
-                                                --                model.discordUsers
-                                                --                richText
-                                                --            )
-                                                --            (DiscordDmRoute
-                                                --                { currentDiscordUserId = Broadcast.adminUserId
-                                                --                , channelId = dmChannelId
-                                                --                , viewingMessage = Nothing
-                                                --                , showMembersTab = HideMembersTab
-                                                --                }
-                                                --            )
-                                                --            model
-                                                --
-                                                --    Nothing ->
-                                                Command.none
+                                                Broadcast.discordDmNotification
+                                                    message.timestamp
+                                                    dmChannelId
+                                                    message.author.id
+                                                    message.author.username
+                                                    (case SeqDict.get message.author.id model.discordUsers of
+                                                        Just discordUser ->
+                                                            DiscordUserData.icon discordUser
+
+                                                        Nothing ->
+                                                            Nothing
+                                                    )
+                                                    (RichText.toStringWithGetter DiscordUserData.username model.discordUsers richText)
+                                                    model
                                         in
                                         ( { model
                                             | discordDmChannels =
@@ -836,20 +828,24 @@ handleDiscordCreateMessage message attachments model =
                                                             |> ServerChange
                                                         )
                                                         model
+                                                    , notification
                                                     ]
 
                                             Nothing ->
-                                                Broadcast.toDiscordDmChannel
-                                                    dmChannelId
-                                                    (Server_Discord_SendMessage
-                                                        message.timestamp
-                                                        guildOrDmId
-                                                        richText
-                                                        (NoThreadWithMaybeMessage replyTo)
-                                                        attachments
-                                                        |> ServerChange
-                                                    )
-                                                    model
+                                                Command.batch
+                                                    [ Broadcast.toDiscordDmChannel
+                                                        dmChannelId
+                                                        (Server_Discord_SendMessage
+                                                            message.timestamp
+                                                            guildOrDmId
+                                                            richText
+                                                            (NoThreadWithMaybeMessage replyTo)
+                                                            attachments
+                                                            |> ServerChange
+                                                        )
+                                                        model
+                                                    , notification
+                                                    ]
                                         )
 
                                     Err _ ->

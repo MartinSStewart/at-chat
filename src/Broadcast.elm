@@ -36,7 +36,7 @@ import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Env
-import FileStatus exposing (FileData, FileId)
+import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
@@ -130,8 +130,8 @@ discordGuildConnections guildId model =
 
 
 discordDmConnections : Discord.Id Discord.PrivateChannelId -> BackendModel -> List ClientId
-discordDmConnections guildId model =
-    case SeqDict.get guildId model.discordDmChannels of
+discordDmConnections channelId model =
+    case SeqDict.get channelId model.discordDmChannels of
         Just channel ->
             List.concatMap
                 (\member ->
@@ -434,7 +434,8 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                             notification
                                 time
                                 userId2
-                                user2
+                                (PersonName.toString user2.name)
+                                user2.icon
                                 plainText
                                 (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends) |> Just)
                                 model
@@ -517,7 +518,8 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     notification
                                         time
                                         discordUser.linkedTo
-                                        user2
+                                        (PersonName.toString user2.name)
+                                        user2.icon
                                         (RichText.toStringWithGetter DiscordUserData.username model.discordUsers content)
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
@@ -548,12 +550,13 @@ userGetAllSessions userId model =
 notification :
     Time.Posix
     -> Id UserId
-    -> BackendUser
+    -> String
+    -> Maybe FileHash
     -> String
     -> Maybe Route
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-notification time userToNotify sender text navigateTo model =
+notification time userToNotify senderName senderIcon text navigateTo model =
     SeqDict.foldl
         (\sessionId session cmds ->
             if session.userId == userToNotify then
@@ -563,9 +566,9 @@ notification time userToNotify sender text navigateTo model =
                             sessionId
                             session.userId
                             time
-                            (PersonName.toString sender.name)
+                            senderName
                             text
-                            (case sender.icon of
+                            (case senderIcon of
                                 Just icon ->
                                     FileStatus.fileUrl FileStatus.pngContent icon
 
@@ -590,14 +593,58 @@ notification time userToNotify sender text navigateTo model =
 
 discordDmNotification :
     Time.Posix
-    -> Id UserId
-    -> BackendUser
+    -> Discord.Id Discord.PrivateChannelId
+    -> Discord.Id Discord.UserId
     -> String
-    -> Maybe Route
+    -> Maybe FileHash
+    -> String
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-discordDmNotification time userToNotify sender text navigateTo model =
-    Debug.todo ""
+discordDmNotification time channelId senderId senderName senderIcon text model =
+    let
+        usersToNotify : SeqDict (Id UserId) (Discord.Id Discord.UserId)
+        usersToNotify =
+            case SeqDict.get channelId model.discordDmChannels of
+                Just channel ->
+                    List.filterMap
+                        (\member ->
+                            if member == senderId then
+                                Nothing
+
+                            else
+                                case SeqDict.get member model.discordUsers of
+                                    Just (FullData discordUser) ->
+                                        Just ( discordUser.linkedTo, member )
+
+                                    _ ->
+                                        Nothing
+                        )
+                        (NonemptySet.toList channel.members)
+                        |> SeqDict.fromList
+
+                Nothing ->
+                    SeqDict.empty
+    in
+    List.map
+        (\( userId, discordUserId ) ->
+            notification
+                time
+                userId
+                senderName
+                senderIcon
+                text
+                (Route.DiscordDmRoute
+                    { currentDiscordUserId = discordUserId
+                    , channelId = channelId
+                    , viewingMessage = Nothing
+                    , showMembersTab = HideMembersTab
+                    }
+                    |> Just
+                )
+                model
+        )
+        (SeqDict.toList usersToNotify)
+        |> Command.batch
 
 
 toDmChannel :
@@ -793,7 +840,8 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                     notification
                         time
                         otherUserId
-                        otherUser
+                        (PersonName.toString otherUser.name)
+                        otherUser.icon
                         (RichText.toString (NonemptyDict.toSeqDict model.users) text)
                         (DmRoute
                             otherUserId
