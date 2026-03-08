@@ -6,6 +6,7 @@ module Backend exposing
 
 import AiChat
 import Array exposing (Array)
+import Array.Extra
 import BackendExtra
 import Broadcast
 import Bytes.Decode
@@ -142,7 +143,6 @@ init =
       , secretCounter = 0
       , pendingLogins = SeqDict.empty
       , logs = Array.empty
-      , hiddenLogs = Set.empty
       , emailNotificationsEnabled = True
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
@@ -4102,19 +4102,8 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
-        Pages.Admin.ToggleLogHidden logIndex ->
-            let
-                model2 =
-                    { model
-                        | hiddenLogs =
-                            if Set.member logIndex model.hiddenLogs then
-                                Set.remove logIndex model.hiddenLogs
-
-                            else
-                                Set.insert logIndex model.hiddenLogs
-                    }
-            in
-            ( model2
+        Pages.Admin.HideLog logIndex ->
+            ( { model | logs = Array.Extra.update logIndex (\log -> { log | isHidden = True }) model.logs }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
@@ -4364,14 +4353,8 @@ updateFromFrontendAdmin :
 updateFromFrontendAdmin clientId toBackend model =
     case toBackend of
         Pages.Admin.LogPaginationToBackend a ->
-            let
-                logsWithHidden =
-                    Array.indexedMap
-                        (\i log -> { time = log.time, log = log.log, isHidden = Set.member i model.hiddenLogs })
-                        model.logs
-            in
             ( model
-            , Pagination.updateFromFrontend clientId a logsWithHidden
+            , Pagination.updateFromFrontend clientId a model.logs
                 |> Command.map
                     (\toMsg -> Pages.Admin.LogPaginationToFrontend toMsg |> AdminToFrontend)
                     identity

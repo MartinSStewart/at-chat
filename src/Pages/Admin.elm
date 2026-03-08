@@ -115,7 +115,7 @@ type Msg
     | PressedImportBackend
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
-    | PressedToggleLogHidden Int
+    | PressedHideLog Int
 
 
 type ToBackend
@@ -213,7 +213,7 @@ type AdminChange
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
-    | ToggleLogHidden Int
+    | HideLog Int
 
 
 type alias EditedBackendUser =
@@ -457,7 +457,7 @@ updateAdmin changedBy change adminData local =
                 , localUser = { localUser | user = collapseDiscordGuild guildId localUser.user }
             }
 
-        ToggleLogHidden _ ->
+        HideLog _ ->
             local
 
 
@@ -522,10 +522,10 @@ update navigationKey time adminData localState msg model =
             , NoOutMsg
             )
 
-        PressedToggleLogHidden logIndex ->
+        PressedHideLog logIndex ->
             ( model
             , Command.none
-            , ToggleLogHidden logIndex |> AdminChange
+            , HideLog logIndex |> AdminChange
             )
 
         PressedCollapseSection section2 ->
@@ -1220,7 +1220,7 @@ pendingChangesText change =
         CollapseDiscordGuild _ ->
             "Collapsed Discord guild in admin page"
 
-        ToggleLogHidden logIndex ->
+        HideLog logIndex ->
             "Toggled hidden for log " ++ String.fromInt logIndex
 
 
@@ -2316,7 +2316,7 @@ logSection timezone user model =
                                     (Just logIndex == model.highlightLog)
                                     { time = log.time, log = log.log }
                                 , Ui.el
-                                    [ Ui.Input.button (PressedToggleLogHidden logIndex)
+                                    [ Ui.Input.button (PressedHideLog logIndex)
                                     , Ui.alignTop
                                     , Ui.Font.size 12
                                     , Ui.Font.color MyUi.font3

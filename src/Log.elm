@@ -99,10 +99,10 @@ shouldNotifyAdmin log =
 addLog :
     Time.Posix
     -> Log
-    -> { a | logs : Array { time : Time.Posix, log : Log } }
-    -> { a | logs : Array { time : Time.Posix, log : Log } }
+    -> { a | logs : Array { time : Time.Posix, log : Log, isHidden : Bool } }
+    -> { a | logs : Array { time : Time.Posix, log : Log, isHidden : Bool } }
 addLog time log model =
-    { model | logs = Array.push { time = time, log = log } model.logs }
+    { model | logs = Array.push { time = time, log = log, isHidden = False } model.logs }
 
 
 monthToString : Month -> String

@@ -78,7 +78,7 @@ addLog time log model =
     let
         model2 : BackendModel
         model2 =
-            { model | logs = Array.push { time = time, log = log } model.logs }
+            { model | logs = Array.push { time = time, log = log, isHidden = False } model.logs }
     in
     case
         ( Log.shouldNotifyAdmin log
