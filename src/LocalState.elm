@@ -410,7 +410,7 @@ type AdminStatus
 
 
 type alias LogWithTime =
-    { time : Time.Posix, log : Log }
+    { time : Time.Posix, log : Log, isHidden : Bool }
 
 
 type alias AdminData =

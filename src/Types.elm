@@ -86,6 +86,7 @@ import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
+import Set exposing (Set)
 import Slack
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
@@ -270,6 +271,7 @@ type alias BackendModel =
     , secretCounter : Int
     , pendingLogins : SeqDict SessionId LoginTokenData
     , logs : Array { time : Time.Posix, log : Log }
+    , hiddenLogs : Set Int
     , emailNotificationsEnabled : Bool
     , lastErrorLogEmail : Time.Posix
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
