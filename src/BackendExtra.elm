@@ -11,6 +11,8 @@ module BackendExtra exposing
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
+    , sendDm
+    , sendGuildMessage
     , sendLoginEmail
     , shouldRateLimit
     , validateAttachedFiles
@@ -24,7 +26,7 @@ import Array
 import Broadcast
 import Discord
 import DiscordUserData exposing (DiscordUserData(..), DiscordUserLoadingData(..))
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -36,22 +38,26 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
+import LocalState exposing (BackendChannel, BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
-import NonemptyDict
+import Message exposing (Message(..))
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import PersonName
 import Postmark
 import Quantity
+import RichText exposing (RichText)
 import SecretId
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
+import Thread exposing (BackendThread)
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
 import UserAgent exposing (UserAgent)
@@ -718,3 +724,263 @@ adminData model lastLogPageViewed =
             )
             model.loadingDiscordChannels
     }
+
+
+sendGuildMessage :
+    BackendModel
+    -> Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Id GuildId
+    -> Id ChannelId
+    -> ThreadRouteWithMaybeMessage
+    -> Nonempty (RichText (Id UserId))
+    -> SeqDict (Id FileId) FileData
+    -> UserSession
+    -> BackendUser
+    -> BackendGuild
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            let
+                channel2 : BackendChannel
+                channel2 =
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                            LocalState.createThreadMessageBackend
+                                threadId
+                                (UserTextMessage
+                                    { createdAt = time
+                                    , createdBy = session.userId
+                                    , content = text
+                                    , reactions = SeqDict.empty
+                                    , editedAt = Nothing
+                                    , repliedTo = maybeReplyTo
+                                    , attachedFiles = attachedFiles
+                                    }
+                                )
+                                channel
+
+                        NoThreadWithMaybeMessage maybeReplyTo ->
+                            LocalState.createChannelMessageBackend
+                                (UserTextMessage
+                                    { createdAt = time
+                                    , createdBy = session.userId
+                                    , content = text
+                                    , reactions = SeqDict.empty
+                                    , editedAt = Nothing
+                                    , repliedTo = maybeReplyTo
+                                    , attachedFiles = attachedFiles
+                                    }
+                                )
+                                channel
+
+                guildOrDmId : GuildOrDmId
+                guildOrDmId =
+                    GuildOrDmId_Guild guildId channelId
+
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+
+                usersMentioned : SeqSet (Id UserId)
+                usersMentioned =
+                    LocalState.usersMentionedOrRepliedToBackend
+                        threadRouteWithMaybeReplyTo
+                        text
+                        (guild.owner :: SeqDict.keys guild.members)
+                        channel2
+
+                users2 : NonemptyDict (Id UserId) BackendUser
+                users2 =
+                    SeqSet.foldl
+                        (\userId2 users ->
+                            let
+                                isViewing =
+                                    List.any
+                                        (\( _, userSession ) ->
+                                            userSession.currentlyViewing == Just ( GuildOrDmId guildOrDmId, threadRouteNoReply )
+                                        )
+                                        (Broadcast.userGetAllSessions userId2 model)
+                            in
+                            if isViewing then
+                                users
+
+                            else
+                                NonemptyDict.updateIfExists
+                                    userId2
+                                    (User.addDirectMention guildId channelId threadRouteNoReply)
+                                    users
+                        )
+                        model.users
+                        usersMentioned
+            in
+            ( { model
+                | guilds =
+                    SeqDict.insert
+                        guildId
+                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                        model.guilds
+                , users =
+                    NonemptyDict.insert
+                        session.userId
+                        (case threadRouteWithMaybeReplyTo of
+                            ViewThreadWithMaybeMessage threadMessageIndex _ ->
+                                { user
+                                    | lastViewedThreads =
+                                        SeqDict.insert
+                                            ( GuildOrDmId guildOrDmId, threadMessageIndex )
+                                            (SeqDict.get threadMessageIndex channel2.threads
+                                                |> Maybe.withDefault Thread.backendInit
+                                                |> DmChannel.latestThreadMessageId
+                                            )
+                                            user.lastViewedThreads
+                                }
+
+                            NoThreadWithMaybeMessage _ ->
+                                { user
+                                    | lastViewed =
+                                        SeqDict.insert
+                                            (GuildOrDmId guildOrDmId)
+                                            (DmChannel.latestMessageId channel2)
+                                            user.lastViewed
+                                }
+                        )
+                        users2
+              }
+            , Command.batch
+                [ LocalChangeResponse
+                    changeId
+                    (Local_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
+                    |> Lamdera.sendToFrontend clientId
+                , Broadcast.toGuildExcludingOne
+                    clientId
+                    guildId
+                    (Server_SendMessage session.userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
+                        |> ServerChange
+                    )
+                    model
+                , Broadcast.messageNotification
+                    usersMentioned
+                    time
+                    session.userId
+                    guildId
+                    channelId
+                    threadRouteNoReply
+                    text
+                    (guild.owner :: SeqDict.keys guild.members)
+                    model
+                ]
+            )
+
+        Nothing ->
+            ( model
+            , invalidChangeResponse changeId clientId
+            )
+
+
+sendDm :
+    BackendModel
+    -> Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Id UserId
+    -> ThreadRouteWithMaybeMessage
+    -> Nonempty (RichText (Id UserId))
+    -> SeqDict (Id FileId) FileData
+    -> UserSession
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user =
+    let
+        dmChannelId : DmChannelId
+        dmChannelId =
+            DmChannel.channelIdFromUserIds session.userId otherUserId
+
+        dmChannel : DmChannel
+        dmChannel =
+            SeqDict.get dmChannelId model.dmChannels
+                |> Maybe.withDefault DmChannel.backendInit
+    in
+    case threadRouteWithReplyTo of
+        ViewThreadWithMaybeMessage threadMessageIndex _ ->
+            let
+                thread : BackendThread
+                thread =
+                    SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.withDefault Thread.backendInit
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        session.userId
+                        { user
+                            | lastViewedThreads =
+                                SeqDict.insert
+                                    ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                                    (DmChannel.latestThreadMessageId thread)
+                                    user.lastViewedThreads
+                        }
+                        model.users
+              }
+            , if session.userId == otherUserId then
+                Command.none
+
+              else
+                Broadcast.broadcastDm
+                    changeId
+                    time
+                    clientId
+                    session.userId
+                    otherUserId
+                    text
+                    threadRouteWithReplyTo
+                    attachedFiles
+                    model
+            )
+
+        NoThreadWithMaybeMessage repliedTo ->
+            let
+                messageIndex : Id ChannelMessageId
+                messageIndex =
+                    DmChannel.latestMessageId dmChannel2
+
+                dmChannel2 : DmChannel
+                dmChannel2 =
+                    LocalState.createChannelMessageBackend
+                        (UserTextMessage
+                            { createdAt = time
+                            , createdBy = session.userId
+                            , content = text
+                            , reactions = SeqDict.empty
+                            , editedAt = Nothing
+                            , repliedTo = repliedTo
+                            , attachedFiles = attachedFiles
+                            }
+                        )
+                        dmChannel
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        session.userId
+                        { user
+                            | lastViewed =
+                                SeqDict.insert
+                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                    messageIndex
+                                    user.lastViewed
+                        }
+                        model.users
+              }
+            , Command.batch
+                [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
+                ]
+            )

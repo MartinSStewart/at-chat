@@ -591,6 +591,20 @@ notification time userToNotify senderName senderIcon text navigateTo model =
         |> Command.batch
 
 
+isViewingDiscordDm : Discord.Id Discord.PrivateChannelId -> Id UserId -> BackendModel -> Bool
+isViewingDiscordDm channelId userId2 model =
+    List.any
+        (\( _, userSession ) ->
+            case userSession.currentlyViewing of
+                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
+                    data.channelId == channelId
+
+                _ ->
+                    False
+        )
+        (userGetAllSessions userId2 model)
+
+
 discordDmNotification :
     Time.Posix
     -> Discord.Id Discord.PrivateChannelId
@@ -614,7 +628,11 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
                             else
                                 case SeqDict.get member model.discordUsers of
                                     Just (FullData discordUser) ->
-                                        Just ( discordUser.linkedTo, member )
+                                        if isViewingDiscordDm channelId discordUser.linkedTo model then
+                                            Nothing
+
+                                        else
+                                            Just ( discordUser.linkedTo, member )
 
                                     _ ->
                                         Nothing

@@ -1515,7 +1515,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 guildId
-                                (DiscordSync.sendGuildMessage
+                                (BackendExtra.sendGuildMessage
                                     model
                                     time
                                     clientId
@@ -1531,7 +1531,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model
                                 sessionId
-                                (DiscordSync.sendDirectMessage
+                                (BackendExtra.sendDm
                                     model
                                     time
                                     clientId
