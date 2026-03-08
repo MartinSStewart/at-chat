@@ -4860,8 +4860,34 @@ decodeDispatchUserEvent eventName =
         "CONTENT_INVENTORY_INBOX_STALE" ->
             JD.field "d" decodeContentInventoryInboxStale |> JD.map DispatchUser_ContentInventoryInboxStale
 
+        "VOICE_STATE_UPDATE" ->
+            JD.field "d" decodeVoiceStateUpdate |> JD.map DispatchUser_VoiceStateUpdate
+
+        "VOICE_CHANNEL_START_TIME_UPDATE" ->
+            JD.succeed DispatchUser_VoiceChannelStartTimeUpdate
+
+        "VOICE_CHANNEL_STATUS_UPDATE" ->
+            JD.succeed DispatchUser_VoiceChannelStatusUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
+
+
+type alias VoiceStateUpdate =
+    { guildId : OptionalData (Id GuildId)
+    , channelId : Id ChannelId
+    , userId : Id UserId
+    , member : OptionalData GuildMember
+    }
+
+
+decodeVoiceStateUpdate : JD.Decoder VoiceStateUpdate
+decodeVoiceStateUpdate =
+    JD.succeed VoiceStateUpdate
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
+        |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
 
 
 type alias MessageUpdate =
@@ -4872,10 +4898,6 @@ type alias MessageUpdate =
     , content : String
     , timestamp : Time.Posix
     }
-
-
-
--- {"t":"MESSAGE_UPDATE","s":5,"op":0,"d":{"type":0,"tts":false,"timestamp":"2025-11-27T14:20:41.137000+00:00","position":0,"pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1443607467312550011","flags":0,"embeds":[],"edited_timestamp":"2025-11-28T18:15:25.356110+00:00","content":"Ne","components":[],"channel_type":1,"channel_id":"185574444641550336","author":{"username":"at0232","public_flags":0,"primary_guild":null,"id":"161098476632014848","global_name":"AT","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"3d7b1aa7b5149fe06971b6dedf682d82"},"attachments":[]}}
 
 
 decodeMessageUpdate : JD.Decoder MessageUpdate
@@ -5043,6 +5065,9 @@ type OpDispatchUserEvent
     | DispatchUser_ConversationSummaryUpdate
     | DispatchUser_UserSettingsProtoUpdate
     | DispatchUser_ContentInventoryInboxStale ContentInventoryInboxStale
+    | DispatchUser_VoiceStateUpdate VoiceStateUpdate
+    | DispatchUser_VoiceChannelStartTimeUpdate
+    | DispatchUser_VoiceChannelStatusUpdate
 
 
 type alias ContentInventoryInboxStale =
@@ -5065,7 +5090,7 @@ decodeEmbeddedActivityUpdateV2 =
 decodeParticipant : JD.Decoder Participant
 decodeParticipant =
     JD.succeed Participant
-        |> JD.andMap (JD.field "userId" decodeId)
+        |> JD.andMap (JD.field "user_id" decodeId)
         |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
 
 
@@ -5709,6 +5734,7 @@ type UserOutMsg connection
     | UserOutMsg_GuildMemberAddEvent (Id GuildId) GuildMember
     | UserOutMsg_GuildMemberRemoveEvent (Id GuildId) User
     | UserOutMsg_GuildMemberUpdateEvent GuildMemberUpdate
+    | UserOutMsg_VoiceStateUpdate VoiceStateUpdate
 
 
 type alias Presence =
@@ -6066,6 +6092,15 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_ContentInventoryInboxStale _ ->
+                            ( model, [] )
+
+                        DispatchUser_VoiceStateUpdate voiceStateUpdate ->
+                            ( model, [ UserOutMsg_VoiceStateUpdate voiceStateUpdate ] )
+
+                        DispatchUser_VoiceChannelStartTimeUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_VoiceChannelStatusUpdate ->
                             ( model, [] )
 
                 OpReconnect ->

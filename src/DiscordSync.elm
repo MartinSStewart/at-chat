@@ -1439,6 +1439,18 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleGuildMemberUpdate guildMemberUpdate.guildId guildMemberUpdate model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_VoiceStateUpdate voiceStateUpdate ->
+                            let
+                                ( model3, cmd2 ) =
+                                    case ( voiceStateUpdate.guildId, voiceStateUpdate.member ) of
+                                        ( Included guildId, Included member ) ->
+                                            handleGuildMemberUpdate guildId member model2
+
+                                        _ ->
+                                            ( model2, Command.none )
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
