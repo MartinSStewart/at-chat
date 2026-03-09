@@ -4869,6 +4869,12 @@ decodeDispatchUserEvent eventName =
         "VOICE_CHANNEL_STATUS_UPDATE" ->
             JD.succeed DispatchUser_VoiceChannelStatusUpdate
 
+        "GUILD_AUDIT_LOG_ENTRY_CREATE" ->
+            JD.succeed DispatchUser_GuildAuditLogEntryCreate
+
+        "THREAD_MEMBER_UPDATE" ->
+            JD.succeed DispatchUser_ThreadMemberUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5068,6 +5074,8 @@ type OpDispatchUserEvent
     | DispatchUser_VoiceStateUpdate VoiceStateUpdate
     | DispatchUser_VoiceChannelStartTimeUpdate
     | DispatchUser_VoiceChannelStatusUpdate
+    | DispatchUser_GuildAuditLogEntryCreate
+    | DispatchUser_ThreadMemberUpdate
 
 
 type alias ContentInventoryInboxStale =
@@ -6101,6 +6109,12 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_VoiceChannelStatusUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_GuildAuditLogEntryCreate ->
+                            ( model, [] )
+
+                        DispatchUser_ThreadMemberUpdate ->
                             ( model, [] )
 
                 OpReconnect ->

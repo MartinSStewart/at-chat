@@ -36,7 +36,7 @@ type Log
     | FailedToSendDiscordGuildMessage (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
     | FailedToSendDiscordDmMessage (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) Discord.HttpError
     | FailedToGetDiscordUserAvatars Discord.HttpError
-    | FailedToParseDiscordWebsocket String
+    | FailedToParseDiscordWebsocket (Maybe String) String
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -383,10 +383,18 @@ logContent onPressCopy log =
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
-        FailedToParseDiscordWebsocket jsonError ->
+        FailedToParseDiscordWebsocket maybeName jsonError ->
             Ui.column
                 [ Ui.spacing 4 ]
-                [ tag errorTag "Parsing Discord websocket failed"
+                [ tag
+                    errorTag
+                    (case maybeName of
+                        Just name ->
+                            "Parsing Discord websocket failed (" ++ name ++ ")"
+
+                        Nothing ->
+                            "Parsing Discord websocket failed"
+                    )
                 , MyUi.errorBox (Dom.id "admin_FailedToParseDiscordWebsocket") onPressCopy jsonError
                 ]
 
