@@ -3667,6 +3667,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
                         )
 
+                LinkDiscordAcknowledgementIsChecked isChecked ->
+                    asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | linkDiscordAcknowledgementIsChecked = isChecked }
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model

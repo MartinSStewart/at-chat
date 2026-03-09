@@ -194,7 +194,6 @@ type alias LoggedIn2 =
 type alias UserOptionsModel =
     { name : Editable.Model
     , showLinkDiscordSetup : Bool
-    , discordAcknowledged : Bool
     }
 
 
@@ -718,3 +717,4 @@ type LocalChange
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
+    | LinkDiscordAcknowledgementIsChecked Bool

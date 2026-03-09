@@ -151,6 +151,9 @@ pendingChangesText localChange =
         Local_StartReloadingDiscordUser _ _ ->
             "Reload Discord user"
 
+        LinkDiscordAcknowledgementIsChecked _ ->
+            "Checked link Discord account acknowledgement"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -2045,6 +2048,21 @@ changeUpdate localMsg local =
 
                 Local_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
+
+                LinkDiscordAcknowledgementIsChecked isChecked ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user : FrontendCurrentUser
+                        user =
+                            localUser.user
+                    in
+                    { local
+                        | localUser =
+                            { localUser | user = { user | linkDiscordAcknowledgementIsChecked = isChecked } }
+                    }
 
         ServerChange serverChange ->
             case serverChange of

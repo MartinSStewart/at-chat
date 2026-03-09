@@ -76,6 +76,7 @@ type alias BackendUser =
     , lastPushNotification : Maybe Time.Posix
     , expandedGuilds : SeqSet (Id GuildId)
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
+    , linkDiscordAcknowledgementIsChecked : Bool
     }
 
 
@@ -147,6 +148,7 @@ init createdAt name email userIsAdmin =
     , lastPushNotification = Nothing
     , expandedGuilds = SeqSet.empty
     , expandedDiscordGuilds = SeqSet.empty
+    , linkDiscordAcknowledgementIsChecked = False
     }
 
 
@@ -426,6 +428,7 @@ backendToFrontendCurrent user =
     , lastPushNotification = user.lastPushNotification
     , expandedGuilds = user.expandedGuilds
     , expandedDiscordGuilds = user.expandedDiscordGuilds
+    , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
     }
 
 

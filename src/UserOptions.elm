@@ -33,7 +33,6 @@ init : UserOptionsModel
 init =
     { name = Editable.init
     , showLinkDiscordSetup = False
-    , discordAcknowledged = False
     }
 
 
@@ -325,14 +324,14 @@ view isMobile time local loggedIn loaded model =
                     in
                     Ui.column
                         [ Ui.spacing 16 ]
-                        [ discordAcknowledgement model.discordAcknowledged
-                        , if model.discordAcknowledged then
+                        [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
+                        , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
                             Ui.column
                                 [ Ui.spacing 16 ]
                                 [ Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
                                 , Ui.column
                                     [ Ui.spacing 4 ]
-                                    [ Ui.text "To link your Discord account:\n"
+                                    [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Discord account:\n")
                                     , Ui.text "1. Copy the bookmarklet URL below\n"
                                     , Ui.text "2. Create a new bookmark in your browser\n"
                                     , Ui.text "3. Paste the URL as the bookmark address\n"

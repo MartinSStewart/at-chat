@@ -2999,14 +2999,11 @@ updateLoaded msg model =
         PressedDiscordAcknowledgment checked ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Maybe.map
-                                (\userOptions -> { userOptions | discordAcknowledged = checked })
-                                loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Just (LinkDiscordAcknowledgementIsChecked checked))
+                        loggedIn
+                        Command.none
                 )
                 model
 
