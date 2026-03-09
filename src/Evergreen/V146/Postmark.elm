@@ -1,0 +1,21 @@
+module Evergreen.V146.Postmark exposing (..)
+
+import Evergreen.V146.EmailAddress
+
+
+type alias PostmarkSendResponse =
+    { errorCode : Int
+    , message : String
+    , to : List Evergreen.V146.EmailAddress.EmailAddress
+    }
+
+
+type SendEmailError
+    = UnknownError
+        { statusCode : Int
+        , body : String
+        }
+    | PostmarkError PostmarkSendResponse
+    | NetworkError
+    | Timeout
+    | BadUrl String
