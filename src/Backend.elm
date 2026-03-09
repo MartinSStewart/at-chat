@@ -141,16 +141,17 @@ init =
       , connections = SeqDict.empty
       , secretCounter = 0
       , pendingLogins = SeqDict.empty
-      , logs =
-            List.range 0 100
-                |> List.map
-                    (\index ->
-                        { time = Time.millisToPosix (index * 1000000)
-                        , log = Log.FailedToParseDiscordWebsocket (String.fromInt index)
-                        , isHidden = False
-                        }
-                    )
-                |> Array.fromList
+      , logs = Array.empty
+
+      --List.range 0 100
+      --    |> List.map
+      --        (\index ->
+      --            { time = Time.millisToPosix (index * 1000000)
+      --            , log = Log.FailedToParseDiscordWebsocket Nothing (String.fromInt index)
+      --            , isHidden = False
+      --            }
+      --        )
+      --    |> Array.fromList
       , emailNotificationsEnabled = True
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
@@ -4092,9 +4093,8 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             case Pages.Admin.applyChangesToBackendUsers userId changes model.users of
                 Ok newUsers ->
                     let
-                        model2 : BackendModel
-                        model2 =
-                            Log.addLog time (Log.ChangedUsers userId) model
+                        ( model2, cmd ) =
+                            BackendExtra.addLog time (Log.ChangedUsers userId) model
                     in
                     ( { model2
                         | users = newUsers
@@ -4109,6 +4109,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                        , cmd
                         ]
                     )
 

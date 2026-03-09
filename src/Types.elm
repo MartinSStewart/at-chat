@@ -682,6 +682,7 @@ type ServerChange
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Server_LoadingDiscordChannelChanged (Discord.Id Discord.UserId) (Maybe (LoadingDiscordChannel Int))
     | Server_LoadAdminData InitAdminData
+    | Server_NewLog Time.Posix Log
 
 
 type LocalChange

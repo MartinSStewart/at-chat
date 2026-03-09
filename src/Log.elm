@@ -1,4 +1,4 @@
-module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, timeToString, view)
+module Log exposing (Log(..), httpErrorToString, shouldNotifyAdmin, timeToString, view)
 
 import Array exposing (Array)
 import Discord
@@ -93,17 +93,8 @@ shouldNotifyAdmin log =
         FailedToGetDiscordUserAvatars _ ->
             Nothing
 
-        FailedToParseDiscordWebsocket _ ->
+        FailedToParseDiscordWebsocket _ _ ->
             Nothing
-
-
-addLog :
-    Time.Posix
-    -> Log
-    -> { a | logs : Array { time : Time.Posix, log : Log, isHidden : Bool } }
-    -> { a | logs : Array { time : Time.Posix, log : Log, isHidden : Bool } }
-addLog time log model =
-    { model | logs = Array.push { time = time, log = log, isHidden = False } model.logs }
 
 
 monthToString : Month -> String

@@ -2833,6 +2833,26 @@ changeUpdate localMsg local =
                 Server_LoadAdminData adminData ->
                     { local | adminData = initAdminData adminData |> IsAdmin }
 
+                Server_NewLog time log ->
+                    { local
+                        | adminData =
+                            case local.adminData of
+                                IsAdmin adminData ->
+                                    IsAdmin
+                                        { adminData
+                                            | logs =
+                                                Pagination.addItem
+                                                    { time = time, log = log, isHidden = False }
+                                                    adminData.logs
+                                        }
+
+                                IsAdminButDataNotLoaded ->
+                                    local.adminData
+
+                                IsNotAdmin ->
+                                    local.adminData
+                    }
+
 
 initAdminData : InitAdminData -> AdminData
 initAdminData adminData =

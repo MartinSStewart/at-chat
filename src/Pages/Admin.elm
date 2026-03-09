@@ -2317,7 +2317,7 @@ logSection isMobile2 timezone user adminData model =
 
         pageCount : Int
         pageCount =
-            adminData.logs.totalPages
+            Pagination.pageCount adminData.logs
     in
     section
         0

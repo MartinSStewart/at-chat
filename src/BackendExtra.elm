@@ -94,24 +94,27 @@ addLog time log model =
     of
         ( Just text, False ) ->
             ( { model2 | lastErrorLogEmail = time }
-            , case EmailAddress.fromString Env.adminEmail of
-                Just emailAddress ->
-                    Postmark.sendEmailTask
-                        Env.postmarkServerToken
-                        { from = { name = "", email = Env.noReplyEmailAddress }
-                        , to = Nonempty { name = "", email = emailAddress } []
-                        , subject = NonemptyString 'A' "n error was logged that needs attention"
-                        , body = "The following error was logged: " ++ text ++ ". Note that any additional errors logged for the next 30 minutes will be ignored to avoid spamming emails." |> Postmark.BodyText
-                        , messageStream = "outbound"
-                        }
-                        |> Task.attempt (SentLogErrorEmail time emailAddress)
+            , Command.batch
+                [ case EmailAddress.fromString Env.adminEmail of
+                    Just emailAddress ->
+                        Postmark.sendEmailTask
+                            Env.postmarkServerToken
+                            { from = { name = "", email = Env.noReplyEmailAddress }
+                            , to = Nonempty { name = "", email = emailAddress } []
+                            , subject = NonemptyString 'A' "n error was logged that needs attention"
+                            , body = "The following error was logged: " ++ text ++ ". Note that any additional errors logged for the next 30 minutes will be ignored to avoid spamming emails." |> Postmark.BodyText
+                            , messageStream = "outbound"
+                            }
+                            |> Task.attempt (SentLogErrorEmail time emailAddress)
 
-                Nothing ->
-                    Command.none
+                    Nothing ->
+                        Command.none
+                , Broadcast.toAdmins model2 (Server_NewLog time log |> ServerChange)
+                ]
             )
 
         _ ->
-            ( model2, Command.none )
+            ( model2, Broadcast.toAdmins model2 (Server_NewLog time log |> ServerChange) )
 
 
 getLoginCode : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Result () Int )

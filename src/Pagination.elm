@@ -3,10 +3,12 @@ module Pagination exposing
     , PageId(..)
     , PageStatus(..)
     , Pagination
+    , addItem
     , currentPage
     , init
     , itemToPageId
     , offsetToItemId
+    , pageCount
     , pageSize
     , setPage
     , updateItem
@@ -57,20 +59,44 @@ type alias Pagination a =
     { pages : SeqDict (Id PageId) (PageStatus a)
     , currentPage : Id PageId
     , previousPage : Id PageId
-    , totalPages : Int
+    , totalItems : Int
     }
 
 
 init : Id PageId -> Array a -> Pagination a
 init pageId array =
     { currentPage = pageId
-    , totalPages = ((pageSize - 1) + Array.length array) // pageSize
+    , totalItems = Array.length array --
     , previousPage = pageId
     , pages =
         SeqDict.singleton
             pageId
             (PageLoaded (Array.slice (Id.toInt pageId * pageSize) ((Id.toInt pageId + 1) * pageSize) array))
     }
+
+
+addItem : a -> Pagination a -> Pagination a
+addItem item model =
+    { model
+        | totalItems = model.totalItems + 1
+        , pages =
+            SeqDict.updateIfExists
+                ((pageSize + model.totalItems) // pageSize |> Id.fromInt)
+                (\page ->
+                    case page of
+                        PageLoaded array ->
+                            Array.push item array |> PageLoaded
+
+                        PageLoading ->
+                            page
+                )
+                model.pages
+    }
+
+
+pageCount : Pagination a -> Int
+pageCount model =
+    ((pageSize - 1) + model.totalItems) // pageSize
 
 
 updateItem : Id ItemId -> (a -> a) -> Pagination a -> Pagination a
