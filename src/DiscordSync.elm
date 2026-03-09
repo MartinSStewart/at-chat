@@ -993,7 +993,21 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                     | discordGuilds =
                                         SeqDict.insert
                                             discordGuildId
-                                            { guild | channels = SeqDict.insert channelId channel3 guild.channels }
+                                            { guild
+                                                | channels = SeqDict.insert channelId channel3 guild.channels
+                                                , members =
+                                                    SeqDict.update
+                                                        message.author.id
+                                                        (\maybe ->
+                                                            case maybe of
+                                                                Just _ ->
+                                                                    maybe
+
+                                                                Nothing ->
+                                                                    Just { joinedAt = Nothing }
+                                                        )
+                                                        guild.members
+                                            }
                                             model.discordGuilds
                                     , discordUsers =
                                         addDiscordUserData
