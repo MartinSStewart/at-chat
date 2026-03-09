@@ -1,8 +1,6 @@
 module Pagination exposing
     ( PageStatus(..)
     , Pagination
-    , ToBackend(..)
-    , ToFrontend(..)
     , currentPage
     , currentPageIndex
     , init
@@ -12,8 +10,6 @@ module Pagination exposing
 
 import Array exposing (Array)
 import Dict exposing (Dict)
-import Effect.Command as Command exposing (BackendOnly, Command, FrontendOnly)
-import Effect.Lamdera as Lamdera exposing (ClientId)
 
 
 {-| OpaqueVariants
@@ -21,18 +17,6 @@ import Effect.Lamdera as Lamdera exposing (ClientId)
 type PageStatus a
     = PageLoading
     | PageLoaded (Array a)
-
-
-{-| OpaqueVariants
--}
-type ToBackend
-    = PageRequest Int
-
-
-{-| OpaqueVariants
--}
-type ToFrontend a
-    = PageResponse { pageIndex : Int, totalPages : Int, pageData : Array a }
 
 
 type alias Pagination a =

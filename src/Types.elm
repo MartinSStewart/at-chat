@@ -86,7 +86,6 @@ import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
-import Set exposing (Set)
 import Slack
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
