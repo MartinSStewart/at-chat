@@ -77,6 +77,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
+import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
@@ -480,7 +481,7 @@ type alias NewGuildForm =
 
 type InitialLoadRequest
     = InitialLoadRequested_Channel AnyGuildOrDmId ThreadRoute
-    | InitialLoadRequested_Admin
+    | InitialLoadRequested_Admin (Maybe (Id PageId))
     | InitialLoadRequested_None
 
 
@@ -500,7 +501,7 @@ type ToBackend
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
-    | AdminDataRequest
+    | AdminDataRequest (Maybe (Id PageId))
 
 
 type BackendMsg

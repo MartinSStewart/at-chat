@@ -256,7 +256,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                             InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
                                                 Just ( anyGuildOrDmId, threadRoute )
 
-                                            InitialLoadRequested_Admin ->
+                                            InitialLoadRequested_Admin _ ->
                                                 Nothing
                                         )
                                         userAgent
@@ -402,8 +402,8 @@ getLoginData sessionId session user requestMessagesFor model =
     , adminData =
         if user.isAdmin then
             case requestMessagesFor of
-                InitialLoadRequested_Admin ->
-                    IsAdminLoginData (adminData model user.lastLogPageViewed)
+                InitialLoadRequested_Admin logPage ->
+                    IsAdminLoginData (adminData model (Maybe.withDefault user.lastLogPageViewed logPage))
 
                 InitialLoadRequested_Channel _ _ ->
                     IsAdminButNoData

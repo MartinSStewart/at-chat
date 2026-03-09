@@ -32,6 +32,7 @@ import MessageView
 import MyUi
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
+import Pagination
 import Ports
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -510,13 +511,24 @@ routeRequest previousRoute newRoute model =
                         admin : Pages.Admin.Model
                         admin =
                             loggedIn.admin
+
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
                     in
                     ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }
                     , Command.batch
                         [ viewCmd
                         , case (Local.model loggedIn.localState).adminData of
                             IsAdminButDataNotLoaded ->
-                                Lamdera.sendToBackend AdminDataRequest
+                                (case highlightLog of
+                                    Just highlightLog2 ->
+                                        Pagination.itemToPageId highlightLog2 |> .pageId |> Just |> AdminDataRequest
+
+                                    Nothing ->
+                                        AdminDataRequest Nothing
+                                )
+                                    |> Lamdera.sendToBackend
 
                             IsAdmin _ ->
                                 Command.none

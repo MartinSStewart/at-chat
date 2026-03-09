@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), LocalState)
+import LocalState exposing (AdminStatus(..), LocalState, LocalUser)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -48,6 +48,7 @@ import NonemptySet
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
+import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
@@ -257,7 +258,7 @@ initLoadedFrontend loading time userAgent loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper time loading.timezone userAgent loginData loading |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper loading.timezone userAgent loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -313,47 +314,44 @@ initLoadedFrontend loading time userAgent loginResult =
 
 
 loadedInitHelper :
-    Time.Posix
-    -> Time.Zone
+    Time.Zone
     -> UserAgent
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
-loadedInitHelper time timezone userAgent loginData loading =
+loadedInitHelper timezone userAgent loginData loading =
     let
         localState : LocalState
         localState =
             loginDataToLocalState userAgent timezone loginData
 
-        ( adminModel, adminChange ) =
-            case loginData.adminData of
-                IsAdminLoginData _ ->
-                    Pages.Admin.initForAdmin
-                        (case loading.route of
-                            AdminRoute params ->
-                                params
-
-                            _ ->
-                                { highlightLog = Nothing }
-                        )
-
-                IsAdminButNoData ->
-                    Pages.Admin.initForAdmin
-                        (case loading.route of
-                            AdminRoute params ->
-                                params
-
-                            _ ->
-                                { highlightLog = Nothing }
-                        )
-
-                IsNotAdminLoginData ->
-                    ( Pages.Admin.initForUser, Nothing )
-
         loggedIn : LoggedIn2
         loggedIn =
             { localState = Local.init localState
-            , admin = adminModel
+            , admin =
+                case loginData.adminData of
+                    IsAdminLoginData _ ->
+                        Pages.Admin.initForAdmin
+                            (case loading.route of
+                                AdminRoute params ->
+                                    params
+
+                                _ ->
+                                    { highlightLog = Nothing }
+                            )
+
+                    IsAdminButNoData ->
+                        Pages.Admin.initForAdmin
+                            (case loading.route of
+                                AdminRoute params ->
+                                    params
+
+                                _ ->
+                                    { highlightLog = Nothing }
+                            )
+
+                    IsNotAdminLoginData ->
+                        Pages.Admin.initForUser
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
@@ -382,24 +380,22 @@ loadedInitHelper time timezone userAgent loginData loading =
             , textEditor = TextEditor.init
             , profilePictureEditor = ImageEditor.init
             }
-
-        cmds : Command FrontendOnly ToBackend FrontendMsg
-        cmds =
-            case loading.route of
-                AdminRoute params ->
-                    case params.highlightLog of
-                        Just _ ->
-                            Dom.getElement Pages.Admin.logSectionId
-                                |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
-                                |> Task.attempt (\_ -> ScrolledToLogSection)
-
-                        Nothing ->
-                            Command.none
-
-                _ ->
-                    Command.none
     in
-    FrontendExtra.handleLocalChange time (Maybe.map Local_Admin adminChange) loggedIn cmds
+    ( loggedIn
+    , case loading.route of
+        AdminRoute params ->
+            case params.highlightLog of
+                Just _ ->
+                    Dom.getElement Pages.Admin.logSectionId
+                        |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
+                        |> Task.attempt (\_ -> ScrolledToLogSection)
+
+                Nothing ->
+                    Command.none
+
+        _ ->
+            Command.none
+    )
 
 
 loginDataToLocalState : UserAgent -> Time.Zone -> LoginData -> LocalState
@@ -3774,7 +3770,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.time model.timezone model.userAgent loginData model
+                                    loadedInitHelper model.timezone model.userAgent loginData model
 
                                 ( model2, cmdB ) =
                                     FrontendExtra.routeRequest
@@ -4611,8 +4607,15 @@ routeToInitialDataRequest route =
                 )
                 NoThread
 
-        AdminRoute _ ->
+        AdminRoute { highlightLog } ->
             InitialLoadRequested_Admin
+                (case highlightLog of
+                    Just highlightLog2 ->
+                        Just (Pagination.itemToPageId highlightLog2).pageId
+
+                    Nothing ->
+                        Nothing
+                )
 
         _ ->
             InitialLoadRequested_None

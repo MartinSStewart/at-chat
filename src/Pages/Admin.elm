@@ -256,32 +256,25 @@ initForUser =
     }
 
 
-initForAdmin : { highlightLog : Maybe (Id Pagination.ItemId) } -> ( Model, Maybe AdminChange )
+initForAdmin : { highlightLog : Maybe (Id Pagination.ItemId) } -> Model
 initForAdmin { highlightLog } =
-    ( { highlightLog = highlightLog
-      , copiedLogLink = Nothing
-      , userTable =
-            { table = Table.init 1
-            , changedUsers = SeqDict.empty
-            , editingCell = Nothing
-            , newUsers = Array.empty
-            , deletedUsers = SeqSet.empty
-            }
-      , submitError = Nothing
-      , slackClientSecret = Editable.init
-      , publicVapidKey = Editable.init
-      , privateVapidKey = Editable.init
-      , openRouterKey = Editable.init
-      , importBackendStatus = NotImportingBackend
-      , showHiddenLogs = False
-      }
-    , case highlightLog of
-        Just index ->
-            LogPageChanged (Pagination.itemToPageId index).pageId EmptyPlaceholder |> Just
-
-        Nothing ->
-            Nothing
-    )
+    { highlightLog = highlightLog
+    , copiedLogLink = Nothing
+    , userTable =
+        { table = Table.init 1
+        , changedUsers = SeqDict.empty
+        , editingCell = Nothing
+        , newUsers = Array.empty
+        , deletedUsers = SeqSet.empty
+        }
+    , submitError = Nothing
+    , slackClientSecret = Editable.init
+    , publicVapidKey = Editable.init
+    , privateVapidKey = Editable.init
+    , openRouterKey = Editable.init
+    , importBackendStatus = NotImportingBackend
+    , showHiddenLogs = False
+    }
 
 
 updateAdmin : Id UserId -> AdminChange -> AdminData -> LocalState -> LocalState

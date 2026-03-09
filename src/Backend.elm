@@ -1296,7 +1296,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
                                             Just ( anyGuildOrDmId, threadRoute )
 
-                                        InitialLoadRequested_Admin ->
+                                        InitialLoadRequested_Admin _ ->
                                             Nothing
                                     )
                                     userAgent
@@ -1350,7 +1350,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
                                                         Just ( anyGuildOrDmId, threadRoute )
 
-                                                    InitialLoadRequested_Admin ->
+                                                    InitialLoadRequested_Admin _ ->
                                                         Nothing
                                                 )
                                                 userAgent
@@ -3716,13 +3716,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
-        AdminDataRequest ->
+        AdminDataRequest logPage ->
             asAdmin
                 model
                 sessionId
                 (\_ user ->
                     ( model
-                    , BackendExtra.adminData model user.lastLogPageViewed
+                    , BackendExtra.adminData model (Maybe.withDefault user.lastLogPageViewed logPage)
                         |> Server_LoadAdminData
                         |> ServerChange
                         |> ChangeBroadcast
