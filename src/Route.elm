@@ -299,7 +299,9 @@ decode url =
         [ "link-discord" ] ->
             case Dict.get linkDiscordQueryParam url2.queryParameters of
                 Just [ data ] ->
-                    Codec.decodeString User.linkDiscordDataCodec data |> Result.mapError (\_ -> LinkDiscordInvalidData) |> LinkDiscord
+                    Codec.decodeString User.linkDiscordDataCodec data
+                        |> Result.mapError (\_ -> LinkDiscordInvalidData)
+                        |> LinkDiscord
 
                 _ ->
                     LinkDiscord (Err LinkDiscordExpired)

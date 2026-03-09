@@ -24,6 +24,7 @@ import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
 import Route
+import SafeJson exposing (SafeJson(..))
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -32,6 +33,7 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 import Unsafe
 import Url exposing (Url)
+import User
 import VisibleMessages
 
 
@@ -39,6 +41,9 @@ setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel T
 setup =
     T.viewerWith tests
         |> T.addBytesFiles (Dict.values fileRequests)
+        |> T.addBytesFile "/tests/data/discord-op2.txt"
+        |> T.addBytesFile "/tests/data/discord-op0-ready.txt"
+        |> T.addBytesFile "/tests/data/discord-op0-ready-supplemental.txt"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -58,6 +63,11 @@ fileRequests =
     [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
     , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
     ]
+        |> Dict.fromList
+
+
+discordWebsocketRequests =
+    []
         |> Dict.fromList
 
 
@@ -594,8 +604,8 @@ safariIphone =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 13_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1"
 
 
-tests : Dict String Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests fileData =
+tests : Dict String Bytes -> Bytes -> Bytes -> Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
@@ -690,6 +700,53 @@ tests fileData =
                 domain
     in
     [ T.start
+        "Link Discord account"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            ("/link-discord/?data="
+                ++ Codec.encodeToString
+                    0
+                    User.linkDiscordDataCodec
+                    { token = "fake-token"
+                    , userAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0"
+                    , xSuperProperties =
+                        JsonObject
+                            (Dict.fromList
+                                [ ( "browser", JsonString "Firefox" )
+                                , ( "browser_user_agent", JsonString "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0" )
+                                , ( "browser_version", JsonString "143.0" )
+                                , ( "client_app_state", JsonString "unfocused" )
+                                , ( "client_build_number", JsonNumber 453248 )
+                                , ( "client_event_source", JsonNull )
+                                , ( "client_heartbeat_session_id", JsonString "1a49edbe-0c97-4445-996f-5cc93d84bbae" )
+                                , ( "client_launch_id", JsonString "1b1343e7-e590-4b53-9d1b-b929fdd42419" )
+                                , ( "device", JsonString "" )
+                                , ( "has_client_mods", JsonBool False )
+                                , ( "launch_signature", JsonString "1c0ef792-b757-44e8-ba1f-332929609d08" )
+                                , ( "os", JsonString "Linux" )
+                                , ( "os_version", JsonString "" )
+                                , ( "referrer", JsonString "https://www.google.com/" )
+                                , ( "referrer_current", JsonString "" )
+                                , ( "referring_domain", JsonString "www.google.com" )
+                                , ( "referring_domain_current", JsonString "" )
+                                , ( "release_channel", JsonString "stable" )
+                                , ( "search_engine", JsonString "google" )
+                                , ( "system_locale", JsonString "en-US" )
+                                ]
+                            )
+                    }
+            )
+            desktopWindow
+            (\adminA ->
+                [ adminA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , handleLoginFromLoginPage adminEmail adminA
+                ]
+            )
+        ]
+    , T.start
         "Connect multiple devices"
         startTime
         normalConfig
