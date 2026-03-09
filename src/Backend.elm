@@ -4126,6 +4126,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.UnhideLog logIndex ->
+            ( { model | logs = Array.Extra.update (Id.toInt logIndex) (\log -> { log | isHidden = False }) model.logs }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
         Pages.Admin.SetEmailNotificationsEnabled isEnabled ->
             let
                 model2 =

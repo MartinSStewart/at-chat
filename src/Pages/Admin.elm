@@ -117,6 +117,8 @@ type Msg
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
     | PressedHideLog (Id Pagination.ItemId)
+    | PressedUnhideLog (Id Pagination.ItemId)
+    | PressedShowHiddenLogs Bool
 
 
 type ToBackend
@@ -141,6 +143,7 @@ type alias Model =
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
+    , showHiddenLogs : Bool
     }
 
 
@@ -212,6 +215,7 @@ type AdminChange
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
     | HideLog (Id Pagination.ItemId)
+    | UnhideLog (Id Pagination.ItemId)
 
 
 type alias EditedBackendUser =
@@ -248,6 +252,7 @@ initForUser =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , importBackendStatus = NotImportingBackend
+    , showHiddenLogs = False
     }
 
 
@@ -268,6 +273,7 @@ initForAdmin { highlightLog } =
       , privateVapidKey = Editable.init
       , openRouterKey = Editable.init
       , importBackendStatus = NotImportingBackend
+      , showHiddenLogs = False
       }
     , case highlightLog of
         Just index ->
@@ -467,6 +473,16 @@ updateAdmin changedBy change adminData local =
                         }
             }
 
+        UnhideLog pageIndex ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | logs =
+                                Pagination.updateItem pageIndex (\log -> { log | isHidden = False }) adminData.logs
+                        }
+            }
+
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser
 expandGuild guildId user =
@@ -526,6 +542,18 @@ update navigationKey time adminData localState msg model =
             ( model
             , Command.none
             , HideLog logIndex |> AdminChange
+            )
+
+        PressedUnhideLog logIndex ->
+            ( model
+            , Command.none
+            , UnhideLog logIndex |> AdminChange
+            )
+
+        PressedShowHiddenLogs show ->
+            ( { model | showHiddenLogs = show }
+            , Command.none
+            , NoOutMsg
             )
 
         PressedCollapseSection section2 ->
@@ -1218,7 +1246,10 @@ pendingChangesText change =
             "Collapsed Discord guild in admin page"
 
         HideLog logIndex ->
-            "Toggled hidden for log " ++ Id.toString logIndex
+            "Hid log " ++ Id.toString logIndex
+
+        UnhideLog logIndex ->
+            "Unhid log " ++ Id.toString logIndex
 
 
 view : Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
@@ -2291,11 +2322,38 @@ logSection timezone user adminData model =
     section
         user.expandedSections
         LogSection
-        [ Pagination.viewPage
+        [ Ui.el
+            [ Ui.paddingXY 0 4
+            , Ui.width Ui.shrink
+            , Ui.Input.button (PressedShowHiddenLogs (not model.showHiddenLogs))
+            , Ui.Font.size 14
+            ]
+            (Ui.text
+                (if model.showHiddenLogs then
+                    "Hide hidden logs"
+
+                 else
+                    "Show hidden logs"
+                )
+            )
+        , Pagination.viewPage
             logSectionId
             (\logId log ->
-                if log.isHidden then
+                if log.isHidden && not model.showHiddenLogs then
                     Ui.none
+
+                else if log.isHidden then
+                    Ui.el
+                        [ Ui.opacity 0.5 ]
+                        (Log.view
+                            timezone
+                            (PressedCopyLogLink logId)
+                            PressedCopyText
+                            (PressedUnhideLog logId)
+                            (Just logId == model.copiedLogLink)
+                            (Just logId == model.highlightLog)
+                            { time = log.time, log = log.log }
+                        )
 
                 else
                     Log.view
