@@ -1058,6 +1058,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                     |> ServerChange
                                                 )
                                                 model
+                                    , getUserAvatars model.discordUsers [ message.author ]
                                     , Broadcast.discordGuildMessageNotification
                                         usersMentioned
                                         message.timestamp
