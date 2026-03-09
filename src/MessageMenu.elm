@@ -470,7 +470,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                     (MessageMenu_PressedReply threadRoute)
                     |> Just
             , case ( threadRoute, guildOrDmId ) of
-                ( _, DiscordGuildOrDmId _ ) ->
+                ( _, DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ) ->
                     Nothing
 
                 ( NoThreadWithMessage messageId, _ ) ->

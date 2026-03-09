@@ -793,6 +793,10 @@ handleDiscordCreateMessage message attachments model =
                                         ( { model
                                             | discordDmChannels =
                                                 SeqDict.insert dmChannelId channel2 model.discordDmChannels
+                                            , discordUsers =
+                                                addDiscordUserData
+                                                    (Discord.userToPartialUser message.author)
+                                                    model.discordUsers
                                           }
                                         , case
                                             SeqDict.get
@@ -991,6 +995,10 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                             discordGuildId
                                             { guild | channels = SeqDict.insert channelId channel3 guild.channels }
                                             model.discordGuilds
+                                    , discordUsers =
+                                        addDiscordUserData
+                                            (Discord.userToPartialUser message.author)
+                                            model.discordUsers
                                     , users =
                                         SeqSet.foldl
                                             (\discordUserId2 users ->
