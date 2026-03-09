@@ -4424,6 +4424,7 @@ view model =
                                         case NonemptyDict.get local.localUser.session.userId adminData.users of
                                             Just user ->
                                                 Pages.Admin.view
+                                                    (MyUi.isMobile loaded)
                                                     loaded.versionNumber
                                                     local
                                                     adminData

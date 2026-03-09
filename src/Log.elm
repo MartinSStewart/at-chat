@@ -12,6 +12,7 @@ import MyUi
 import Postmark
 import Time exposing (Month(..))
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Font
 import Ui.Input
 import Ui.Prose
@@ -162,42 +163,51 @@ timeToString timezone includeYear time =
            )
 
 
-view : Time.Zone -> msg -> (String -> msg) -> msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
-view timezone onPressCopyLink onPressCopy onPressedHide isCopied isHighlighted { time, log } =
+view : Bool -> Bool -> Time.Zone -> msg -> (String -> msg) -> msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
+view isMobile2 isHidden timezone onPressCopyLink onPressCopy onPressedHide isCopied isHighlighted { time, log } =
     Ui.el
-        [ Ui.attrIf isHighlighted (Ui.background (Ui.rgb 255 246 207))
-        , Ui.paddingXY 0 4
+        [ Ui.attrIf isHighlighted (Ui.background MyUi.mentionColor)
+        , Ui.paddingXY 8 4
         , Ui.widthMin 350
-        , Ui.column
-            [ Ui.spacing 4
+        , Ui.attrIf isHidden (Ui.opacity 0.5)
+        , Ui.row
+            [ Ui.Font.color MyUi.font3
             , Ui.width Ui.shrink
-            , Ui.alignTop
+            , Ui.spacing 4
+            , Ui.contentCenterY
             , Ui.Font.size 14
             , Ui.alignRight
+            , Ui.paddingXY 8 4
             ]
-            [ Ui.row
-                [ Ui.Font.color MyUi.font3
-                , Ui.width Ui.shrink
-                , Ui.spacing 4
-                , Ui.Input.button onPressCopyLink
-                , Ui.id "Log_copyLink"
-                ]
-                [ Ui.el [ Ui.move (Ui.up 1) ] Icons.link
-                , timeToString timezone False time |> Ui.text
-                , Ui.el
-                    [ Ui.Input.button onPressedHide
-                    , Ui.alignTop
-                    , Ui.Font.size 12
-                    , Ui.Font.color MyUi.font3
-                    , Ui.width Ui.shrink
-                    ]
-                    (Ui.html Icons.openEye)
-                ]
-            , if isCopied then
+            [ if isCopied then
                 Ui.text "Link copied!"
 
               else
                 Ui.none
+            , Ui.el
+                [ Ui.move (Ui.up 1)
+                , Ui.Input.button onPressCopyLink
+                , Ui.id "Log_copyLink"
+                , MyUi.hover isMobile2 [ Ui.Anim.fontColor MyUi.font1 ]
+                ]
+                Icons.link
+            , timeToString timezone False time |> Ui.text
+            , Ui.el
+                [ Ui.Input.button onPressedHide
+                , Ui.alignTop
+                , Ui.Font.size 12
+                , Ui.Font.color MyUi.font3
+                , Ui.width Ui.shrink
+                , MyUi.hover isMobile2 [ Ui.Anim.fontColor MyUi.font1 ]
+                ]
+                (Ui.html
+                    (if isHidden then
+                        Icons.closedEye
+
+                     else
+                        Icons.openEye
+                    )
+                )
             ]
             |> Ui.inFront
         ]

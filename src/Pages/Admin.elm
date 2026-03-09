@@ -1252,8 +1252,8 @@ pendingChangesText change =
             "Unhid log " ++ Id.toString logIndex
 
 
-view : Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
-view version local adminData user model =
+view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
+view isMobile2 version local adminData user model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background1
@@ -1279,7 +1279,7 @@ view version local adminData user model =
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
-            , logSection local.localUser.timezone user adminData model
+            , logSection isMobile2 local.localUser.timezone user adminData model
             , apiKeysSection local user adminData model
             , exportSection user model
             ]
@@ -1289,6 +1289,7 @@ view version local adminData user model =
 exportSection : BackendUser -> Model -> Element Msg
 exportSection user model =
     section
+        8
         user.expandedSections
         ExportSection
         [ MyUi.simpleButton
@@ -1324,6 +1325,7 @@ exportSection user model =
 apiKeysSection : LocalState -> BackendUser -> AdminData -> Model -> Element Msg
 apiKeysSection local user adminData2 model =
     section
+        8
         user.expandedSections
         ApiKeysSection
         [ Editable.view
@@ -1411,6 +1413,7 @@ userSection user adminData model =
                 (Ui.text "New sign ups enabled")
     in
     section
+        8
         user.expandedSections
         UsersSection
         [ Ui.row
@@ -1490,6 +1493,7 @@ userSection user adminData model =
 guildsSection : BackendUser -> AdminData -> Element Msg
 guildsSection user adminData =
     section
+        8
         user.expandedSections
         GuildsSection
         [ if SeqDict.isEmpty adminData.guilds then
@@ -1563,6 +1567,7 @@ guildsSection user adminData =
 discordGuildsSection : BackendUser -> AdminData -> Element Msg
 discordGuildsSection user adminData =
     section
+        8
         user.expandedSections
         DiscordGuildsSection
         [ if SeqDict.isEmpty adminData.discordGuilds then
@@ -1754,6 +1759,7 @@ channelRowHeight =
 discordDmChannelsSection : BackendUser -> AdminData -> Element Msg
 discordDmChannelsSection user adminData =
     section
+        8
         user.expandedSections
         DiscordDmChannelsSection
         [ if SeqDict.isEmpty adminData.discordDmChannels then
@@ -1832,6 +1838,7 @@ discordDmChannelsSection user adminData =
 discordUsersSection : BackendUser -> AdminData -> Element Msg
 discordUsersSection user adminData =
     section
+        8
         user.expandedSections
         DiscordUsersSection
         [ if SeqDict.isEmpty adminData.discordUsers then
@@ -2308,8 +2315,8 @@ resetButton htmlId onPress =
         Icons.reset
 
 
-logSection : Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-logSection timezone user adminData model =
+logSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+logSection isMobile2 timezone user adminData model =
     let
         pageIndex : Int
         pageIndex =
@@ -2320,14 +2327,12 @@ logSection timezone user adminData model =
             adminData.logs.totalPages
     in
     section
+        0
         user.expandedSections
         LogSection
-        [ Ui.el
-            [ Ui.paddingXY 0 4
-            , Ui.width Ui.shrink
-            , Ui.Input.button (PressedShowHiddenLogs (not model.showHiddenLogs))
-            , Ui.Font.size 14
-            ]
+        [ MyUi.simpleButton
+            (Dom.id "admin_toggleHiddenLogs")
+            (PressedShowHiddenLogs (not model.showHiddenLogs))
             (Ui.text
                 (if model.showHiddenLogs then
                     "Hide hidden logs"
@@ -2336,27 +2341,17 @@ logSection timezone user adminData model =
                     "Show hidden logs"
                 )
             )
+            |> Ui.el [ Ui.paddingXY 8 0 ]
         , Pagination.viewPage
             logSectionId
             (\logId log ->
                 if log.isHidden && not model.showHiddenLogs then
                     Ui.none
 
-                else if log.isHidden then
-                    Ui.el
-                        [ Ui.opacity 0.5 ]
-                        (Log.view
-                            timezone
-                            (PressedCopyLogLink logId)
-                            PressedCopyText
-                            (PressedUnhideLog logId)
-                            (Just logId == model.copiedLogLink)
-                            (Just logId == model.highlightLog)
-                            { time = log.time, log = log.log }
-                        )
-
                 else
                     Log.view
+                        isMobile2
+                        log.isHidden
                         timezone
                         (PressedCopyLogLink logId)
                         PressedCopyText
@@ -2407,8 +2402,8 @@ maxVisiblePages =
     20
 
 
-section : SeqSet AdminUiSection -> AdminUiSection -> List (Element Msg) -> Element Msg
-section expandedSections section2 content =
+section : Int -> SeqSet AdminUiSection -> AdminUiSection -> List (Element Msg) -> Element Msg
+section paddingX expandedSections section2 content =
     let
         title : Element msg
         title =
@@ -2425,36 +2420,37 @@ section expandedSections section2 content =
                         Ui.noAttr
                     ]
     in
-    MyUi.column
-        [ Ui.background MyUi.background3
-        , Ui.rounded 8
-        , Ui.padding 8
-        ]
-        (if SeqSet.member section2 expandedSections then
-            Ui.el
-                [ Ui.Events.onDoubleClick (DoublePressedCollapseSection section2) ]
-                (Ui.row
-                    [ Ui.Input.button (PressedCollapseSection section2)
-                    , Ui.spacing 4
-                    , Dom.idToString (collapseSectionButtonId section2) |> Ui.id
-                    ]
-                    [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.collapseContainer
-                    , title
-                    ]
-                )
-                :: content
-
-         else
+    if SeqSet.member section2 expandedSections then
+        Ui.column
+            [ Ui.Events.onDoubleClick (DoublePressedCollapseSection section2)
+            , Ui.background MyUi.background3
+            , Ui.rounded 8
+            , Ui.paddingBottom 8
+            ]
             [ Ui.row
-                [ Ui.Input.button (PressedExpandSection section2)
+                [ Ui.Input.button (PressedCollapseSection section2)
                 , Ui.spacing 4
-                , Dom.idToString (expandSectionButtonId section2) |> Ui.id
+                , Dom.idToString (collapseSectionButtonId section2) |> Ui.id
+                , Ui.padding 8
                 ]
-                [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.expandContainer
+                [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.collapseContainer
                 , title
                 ]
+            , Ui.column [ Ui.paddingXY paddingX 0, Ui.spacing 8 ] content
             ]
-        )
+
+    else
+        Ui.row
+            [ Ui.Input.button (PressedExpandSection section2)
+            , Ui.spacing 4
+            , Dom.idToString (expandSectionButtonId section2) |> Ui.id
+            , Ui.padding 8
+            , Ui.background MyUi.background3
+            , Ui.rounded 8
+            ]
+            [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.expandContainer
+            , title
+            ]
 
 
 expandSectionButtonId : AdminUiSection -> HtmlId
