@@ -1571,11 +1571,11 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView
+            discordGuildSettingsView routeData.guildId
 
 
-discordGuildSettingsView : Element FrontendMsg
-discordGuildSettingsView =
+discordGuildSettingsView : Discord.Id Discord.GuildId -> Element FrontendMsg
+discordGuildSettingsView guildId =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1585,6 +1585,22 @@ discordGuildSettingsView =
             , Ui.padding 16
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MyUi.radioColumn
+                    (Dom.id "guild_notificationLevel")
+                    (PressedGuildNotificationLevel guildId)
+                    (if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
+                        Just NotifyOnEveryMessage
+
+                     else
+                        Just NotifyOnMention
+                    )
+                    "Guild notifications"
+                    [ ( NotifyOnMention, "Only when mentioned" )
+                    , ( NotifyOnEveryMessage, "On every message" )
+                    ]
+                )
             ]
         )
 
