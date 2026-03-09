@@ -136,6 +136,14 @@ pendingChangesText localChange =
                 NotifyOnMention ->
                     "Disabled notifications for all messages"
 
+        Local_SetDiscordGuildNotificationLevel id notificationLevel ->
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    "Enabled notifications for all messages"
+
+                NotifyOnMention ->
+                    "Disabled notifications for all messages"
+
         Local_SetNotificationMode _ ->
             "Set notification mode"
 
@@ -1251,6 +1259,9 @@ isPressMsg msg =
         GotVersionNumber _ ->
             False
 
+        PressedDiscordGuildNotificationLevel id notificationLevel ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
@@ -2002,11 +2013,19 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser
-                                | user =
-                                    User.setGuildNotificationLevel
-                                        guildId
-                                        notificationLevel
-                                        localUser.user
+                                | user = User.setGuildNotificationLevel guildId notificationLevel localUser.user
+                            }
+                    }
+
+                Local_SetDiscordGuildNotificationLevel guildId notificationLevel ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user = User.setDiscordGuildNotificationLevel guildId notificationLevel localUser.user
                             }
                     }
 
@@ -2652,7 +2671,21 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | user = User.setGuildNotificationLevel guildId notificationLevel localUser.user }
+                            { localUser
+                                | user = User.setGuildNotificationLevel guildId notificationLevel localUser.user
+                            }
+                    }
+
+                Server_SetDiscordGuildNotificationLevel guildId notificationLevel ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user = User.setDiscordGuildNotificationLevel guildId notificationLevel localUser.user
+                            }
                     }
 
                 Server_PushNotificationFailed error ->

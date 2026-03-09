@@ -21,6 +21,7 @@ module User exposing
     , profileImage
     , profileImageSize
     , sectionToString
+    , setDiscordGuildNotificationLevel
     , setGuildNotificationLevel
     , setIcon
     , setLastChannelViewed
@@ -216,6 +217,23 @@ setGuildNotificationLevel guildId notificationLevel user =
 
                 NotifyOnMention ->
                     SeqSet.remove guildId user.notifyOnAllMessages
+    }
+
+
+setDiscordGuildNotificationLevel :
+    Discord.Id Discord.GuildId
+    -> NotificationLevel
+    -> { a | discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId) }
+    -> { a | discordNotifyOnAllMessages : SeqSet (Discord.Id Discord.GuildId) }
+setDiscordGuildNotificationLevel guildId notificationLevel user =
+    { user
+        | discordNotifyOnAllMessages =
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    SeqSet.insert guildId user.discordNotifyOnAllMessages
+
+                NotifyOnMention ->
+                    SeqSet.remove guildId user.discordNotifyOnAllMessages
     }
 
 

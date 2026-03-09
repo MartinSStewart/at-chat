@@ -2922,6 +2922,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDiscordGuildNotificationLevel guildId notificationLevel ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_SetDiscordGuildNotificationLevel guildId notificationLevel |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         GotScrollbarWidth width ->
             ( { model | scrollbarWidth = width }, Command.none )
 

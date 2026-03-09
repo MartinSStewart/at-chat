@@ -442,6 +442,7 @@ type FrontendMsg
     | GotRegisterPushSubscription (Result String SubscribeData)
     | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
+    | PressedDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel
     | GotScrollbarWidth Int
     | PressedCloseImageInfo
     | PressedMemberListBack
@@ -661,6 +662,7 @@ type ServerChange
     | Server_SetUserIcon (Id UserId) FileHash
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
+    | Server_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
@@ -712,6 +714,7 @@ type LocalChange
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id Discord.UserId))))
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id Discord.UserId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
+    | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData
     | Local_TextEditor TextEditor.LocalChange

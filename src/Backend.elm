@@ -3493,6 +3493,31 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetDiscordGuildNotificationLevel guildId notificationLevel ->
+                    asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        (User.setDiscordGuildNotificationLevel guildId notificationLevel user)
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toUser
+                                    (Just clientId)
+                                    Nothing
+                                    session.userId
+                                    (Server_SetDiscordGuildNotificationLevel guildId notificationLevel |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_SetNotificationMode notificationMode ->
                     asUser
                         model
