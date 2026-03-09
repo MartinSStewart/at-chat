@@ -136,7 +136,7 @@ pendingChangesText localChange =
                 NotifyOnMention ->
                     "Disabled notifications for all messages"
 
-        Local_SetDiscordGuildNotificationLevel id notificationLevel ->
+        Local_SetDiscordGuildNotificationLevel _ notificationLevel ->
             case notificationLevel of
                 NotifyOnEveryMessage ->
                     "Enabled notifications for all messages"
@@ -522,10 +522,6 @@ routeRequest previousRoute newRoute model =
                         admin : Pages.Admin.Model
                         admin =
                             loggedIn.admin
-
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
                     in
                     ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }
                     , Command.batch
@@ -1259,7 +1255,7 @@ isPressMsg msg =
         GotVersionNumber _ ->
             False
 
-        PressedDiscordGuildNotificationLevel id notificationLevel ->
+        PressedDiscordGuildNotificationLevel _ _ ->
             True
 
 

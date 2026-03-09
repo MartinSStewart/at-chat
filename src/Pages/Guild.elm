@@ -5650,7 +5650,6 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             isMobile
                             hasNotifications
                             channelNameHover
-                            directMentions
                             channelRoute
                             localUser
                             guildId
@@ -5685,10 +5684,10 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             NoNotification ->
                                 2
 
-                            NewMessage oneOrGreater ->
+                            NewMessage _ ->
                                 1
 
-                            NewMessageForUser oneOrGreater ->
+                            NewMessageForUser _ ->
                                 0
                     )
                 |> List.map Tuple.second
@@ -5778,7 +5777,6 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                             isMobile
                             hasNotifications
                             channelNameHover
-                            directMentions
                             routeData
                             localUser
                             channelId
@@ -5811,10 +5809,10 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                             NoNotification ->
                                 2
 
-                            NewMessage oneOrGreater ->
+                            NewMessage _ ->
                                 1
 
-                            NewMessageForUser oneOrGreater ->
+                            NewMessageForUser _ ->
                                 0
                     )
                 |> List.map Tuple.second
@@ -6049,14 +6047,13 @@ channelColumnRow :
     Bool
     -> ChannelNotificationType
     -> GuildChannelNameHover
-    -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> ChannelRoute
     -> LocalUser
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg
-channelColumnRow isMobile hasNotification channelNameHover directMentions channelRoute localUser guildId channelId channel =
+channelColumnRow isMobile hasNotification channelNameHover channelRoute localUser guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -6149,13 +6146,12 @@ discordChannelColumnRow :
     Bool
     -> ChannelNotificationType
     -> GuildChannelNameHover
-    -> Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     -> DiscordGuildRouteData
     -> LocalUser
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> Element FrontendMsg
-discordChannelColumnRow isMobile hasNotifications channelNameHover directMentions routeData localUser channelId channel =
+discordChannelColumnRow isMobile hasNotifications channelNameHover routeData localUser channelId channel =
     let
         isSelected : Bool
         isSelected =

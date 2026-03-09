@@ -76,7 +76,7 @@ import UserSession exposing (ToBeFilledInByBackend(..))
 
 type Msg
     = PressedLogPage (Id PageId)
-    | PressedCopyLogLink (Id Pagination.ItemId)
+    | PressedCopyLogLink (Id ItemId)
     | PressedCollapseSection AdminUiSection
     | DoublePressedCollapseSection AdminUiSection
     | PressedExpandSection AdminUiSection
@@ -116,8 +116,8 @@ type Msg
     | PressedImportBackend
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
-    | PressedHideLog (Id Pagination.ItemId)
-    | PressedUnhideLog (Id Pagination.ItemId)
+    | PressedHideLog (Id ItemId)
+    | PressedUnhideLog (Id ItemId)
     | PressedShowHiddenLogs Bool
 
 
@@ -134,8 +134,8 @@ type ToFrontend
 
 
 type alias Model =
-    { highlightLog : Maybe (Id Pagination.ItemId)
-    , copiedLogLink : Maybe (Id Pagination.ItemId)
+    { highlightLog : Maybe (Id ItemId)
+    , copiedLogLink : Maybe (Id ItemId)
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
     , slackClientSecret : Editable.Model
@@ -214,8 +214,8 @@ type AdminChange
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
-    | HideLog (Id Pagination.ItemId)
-    | UnhideLog (Id Pagination.ItemId)
+    | HideLog (Id ItemId)
+    | UnhideLog (Id ItemId)
 
 
 type alias EditedBackendUser =
@@ -256,7 +256,7 @@ initForUser =
     }
 
 
-initForAdmin : { highlightLog : Maybe (Id Pagination.ItemId) } -> Model
+initForAdmin : { highlightLog : Maybe (Id ItemId) } -> Model
 initForAdmin { highlightLog } =
     { highlightLog = highlightLog
     , copiedLogLink = Nothing
@@ -532,34 +532,19 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedHideLog logIndex ->
-            ( model
-            , Command.none
-            , HideLog logIndex |> AdminChange
-            )
+            ( model, Command.none, HideLog logIndex |> AdminChange )
 
         PressedUnhideLog logIndex ->
-            ( model
-            , Command.none
-            , UnhideLog logIndex |> AdminChange
-            )
+            ( model, Command.none, UnhideLog logIndex |> AdminChange )
 
         PressedShowHiddenLogs show ->
-            ( { model | showHiddenLogs = show }
-            , Command.none
-            , NoOutMsg
-            )
+            ( { model | showHiddenLogs = show }, Command.none, NoOutMsg )
 
         PressedCollapseSection section2 ->
-            ( model
-            , Command.none
-            , CollapseSection section2 |> AdminChange
-            )
+            ( model, Command.none, CollapseSection section2 |> AdminChange )
 
         PressedExpandSection section2 ->
-            ( model
-            , Command.none
-            , ExpandSection section2 |> AdminChange
-            )
+            ( model, Command.none, ExpandSection section2 |> AdminChange )
 
         PressedEditCell userTableId column ->
             updateUserTable
@@ -2346,9 +2331,11 @@ logSection isMobile2 timezone user adminData model =
                         isMobile2
                         log.isHidden
                         timezone
-                        (PressedCopyLogLink logId)
-                        PressedCopyText
-                        (PressedHideLog logId)
+                        { onPressCopyLink = PressedCopyLogLink logId
+                        , onPressCopy = PressedCopyText
+                        , onPressHide = PressedHideLog logId
+                        , onPressUnhide = PressedUnhideLog logId
+                        }
                         (Just logId == model.copiedLogLink)
                         (Just logId == model.highlightLog)
                         { time = log.time, log = log.log }

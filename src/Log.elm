@@ -1,6 +1,5 @@
-module Log exposing (Log(..), httpErrorToString, shouldNotifyAdmin, timeToString, view)
+module Log exposing (Log(..), MsgConfig, httpErrorToString, shouldNotifyAdmin, timeToString, view)
 
-import Array exposing (Array)
 import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
@@ -154,8 +153,16 @@ timeToString timezone includeYear time =
            )
 
 
-view : Bool -> Bool -> Time.Zone -> msg -> (String -> msg) -> msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
-view isMobile2 isHidden timezone onPressCopyLink onPressCopy onPressedHide isCopied isHighlighted { time, log } =
+type alias MsgConfig msg =
+    { onPressCopyLink : msg
+    , onPressCopy : String -> msg
+    , onPressHide : msg
+    , onPressUnhide : msg
+    }
+
+
+view : Bool -> Bool -> Time.Zone -> MsgConfig msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
+view isMobile2 isHidden timezone msgConfig isCopied isHighlighted { time, log } =
     Ui.el
         [ Ui.attrIf isHighlighted (Ui.background MyUi.mentionColor)
         , Ui.paddingXY 8 4
@@ -177,14 +184,20 @@ view isMobile2 isHidden timezone onPressCopyLink onPressCopy onPressedHide isCop
                 Ui.none
             , Ui.el
                 [ Ui.move (Ui.up 1)
-                , Ui.Input.button onPressCopyLink
+                , Ui.Input.button msgConfig.onPressCopyLink
                 , Ui.id "Log_copyLink"
                 , MyUi.hover isMobile2 [ Ui.Anim.fontColor MyUi.font1 ]
                 ]
                 Icons.link
             , timeToString timezone False time |> Ui.text
             , Ui.el
-                [ Ui.Input.button onPressedHide
+                [ Ui.Input.button
+                    (if isHidden then
+                        msgConfig.onPressUnhide
+
+                     else
+                        msgConfig.onPressHide
+                    )
                 , Ui.alignTop
                 , Ui.Font.size 12
                 , Ui.Font.color MyUi.font3
@@ -202,7 +215,7 @@ view isMobile2 isHidden timezone onPressCopyLink onPressCopy onPressedHide isCop
             ]
             |> Ui.inFront
         ]
-        (logContent onPressCopy log)
+        (logContent msgConfig.onPressCopy log)
 
 
 logContent : (String -> msg) -> Log -> Element msg

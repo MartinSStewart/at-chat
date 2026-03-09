@@ -4,10 +4,8 @@ module Pagination exposing
     , PageStatus(..)
     , Pagination
     , addItem
-    , currentPage
     , init
     , itemToPageId
-    , offsetToItemId
     , pageCount
     , pageSize
     , setPage
@@ -17,7 +15,6 @@ module Pagination exposing
 
 import Array exposing (Array)
 import Array.Extra
-import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Icons
 import Id exposing (Id)
@@ -145,19 +142,6 @@ setPage pageId filledInByBackend model =
                         , currentPage = pageId
                         , previousPage = model.currentPage
                     }
-
-
-currentPage : Id PageId -> Pagination a -> Maybe (Array a)
-currentPage pageId model =
-    case SeqDict.get pageId model.pages of
-        Just PageLoading ->
-            Nothing
-
-        Just (PageLoaded page) ->
-            Just page
-
-        Nothing ->
-            Nothing
 
 
 viewPage : HtmlId -> (Id ItemId -> a -> Element msg) -> Pagination a -> Element msg
