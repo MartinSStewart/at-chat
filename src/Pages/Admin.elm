@@ -2298,24 +2298,14 @@ logSection timezone user adminData model =
                     Ui.none
 
                 else
-                    Ui.row
-                        [ Ui.spacing 4 ]
-                        [ Log.view
-                            timezone
-                            (PressedCopyLogLink logId)
-                            PressedCopyText
-                            (Just logId == model.copiedLogLink)
-                            (Just logId == model.highlightLog)
-                            { time = log.time, log = log.log }
-                        , Ui.el
-                            [ Ui.Input.button (PressedHideLog logId)
-                            , Ui.alignTop
-                            , Ui.Font.size 12
-                            , Ui.Font.color MyUi.font3
-                            , Ui.width Ui.shrink
-                            ]
-                            (Ui.text "hide")
-                        ]
+                    Log.view
+                        timezone
+                        (PressedCopyLogLink logId)
+                        PressedCopyText
+                        (PressedHideLog logId)
+                        (Just logId == model.copiedLogLink)
+                        (Just logId == model.highlightLog)
+                        { time = log.time, log = log.log }
             )
             adminData.logs
         , (if pageCount <= 1 then

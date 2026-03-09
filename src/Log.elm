@@ -162,19 +162,18 @@ timeToString timezone includeYear time =
            )
 
 
-view : Time.Zone -> msg -> (String -> msg) -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
-view timezone onPressCopyLink onPressCopy isCopied isHighlighted { time, log } =
-    Ui.row
-        [ Ui.spacingWith { horizontal = 16, vertical = 2 }
-        , Ui.attrIf isHighlighted (Ui.background (Ui.rgb 255 246 207))
+view : Time.Zone -> msg -> (String -> msg) -> msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
+view timezone onPressCopyLink onPressCopy onPressedHide isCopied isHighlighted { time, log } =
+    Ui.el
+        [ Ui.attrIf isHighlighted (Ui.background (Ui.rgb 255 246 207))
         , Ui.paddingXY 0 4
-        , Ui.wrap
-        ]
-        [ Ui.column
+        , Ui.widthMin 350
+        , Ui.column
             [ Ui.spacing 4
             , Ui.width Ui.shrink
             , Ui.alignTop
             , Ui.Font.size 14
+            , Ui.alignRight
             ]
             [ Ui.row
                 [ Ui.Font.color MyUi.font3
@@ -185,6 +184,14 @@ view timezone onPressCopyLink onPressCopy isCopied isHighlighted { time, log } =
                 ]
                 [ Ui.el [ Ui.move (Ui.up 1) ] Icons.link
                 , timeToString timezone False time |> Ui.text
+                , Ui.el
+                    [ Ui.Input.button onPressedHide
+                    , Ui.alignTop
+                    , Ui.Font.size 12
+                    , Ui.Font.color MyUi.font3
+                    , Ui.width Ui.shrink
+                    ]
+                    (Ui.html Icons.openEye)
                 ]
             , if isCopied then
                 Ui.text "Link copied!"
@@ -192,8 +199,9 @@ view timezone onPressCopyLink onPressCopy isCopied isHighlighted { time, log } =
               else
                 Ui.none
             ]
-        , logContent onPressCopy log |> Ui.el [ Ui.widthMin 350 ]
+            |> Ui.inFront
         ]
+        (logContent onPressCopy log)
 
 
 logContent : (String -> msg) -> Log -> Element msg
