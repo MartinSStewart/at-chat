@@ -1231,7 +1231,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 (GotTimeForFailedToParseDiscordWebsocket
                                     (case discordMsg of
                                         Discord.GotWebsocketData text ->
-                                            Json.Decode.decodeString (Json.Decode.field "d" Json.Decode.string) text
+                                            Json.Decode.decodeString (Json.Decode.field "t" Json.Decode.string) text
                                                 |> Result.toMaybe
 
                                         Discord.WebsocketClosed _ ->

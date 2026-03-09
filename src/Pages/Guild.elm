@@ -5564,6 +5564,33 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
         directMentions : Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
         directMentions =
             SeqDict.get guildId localUser.user.directMentions
+
+        newChannelButton : Element FrontendMsg
+        newChannelButton =
+            if localUser.session.userId == guild.owner then
+                let
+                    isSelected =
+                        channelRoute == NewChannelRoute
+                in
+                rowLinkButton
+                    (Dom.id "guild_newChannel")
+                    (GuildRoute guildId NewChannelRoute)
+                    [ Ui.paddingXY 4 8
+                    , Ui.Font.color MyUi.font3
+                    , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                    , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                    , if isSelected then
+                        Ui.Font.color MyUi.font1
+
+                      else
+                        Ui.Font.color MyUi.font3
+                    ]
+                    [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
+                    , Ui.text " Add new channel"
+                    ]
+
+            else
+                Ui.none
     in
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
@@ -5587,12 +5614,25 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
             , Ui.attrIf isMobile (Ui.height Ui.fill)
             , bounceScroll isMobile
             ]
-            (List.map
+            ((List.map
                 (\( channelId, channel ) ->
-                    Ui.column
+                    let
+                        hasNotifications : ChannelNotificationType
+                        hasNotifications =
+                            channelOrThreadHasNotifications
+                                directMentions
+                                (SeqSet.member guildId localUser.user.notifyOnAllMessages)
+                                channelId
+                                NoThread
+                                (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
+                                channel
+                    in
+                    ( hasNotifications
+                    , Ui.column
                         []
                         [ channelColumnRow
                             isMobile
+                            hasNotifications
                             channelNameHover
                             directMentions
                             channelRoute
@@ -5620,33 +5660,24 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                                     channel.threads
                             )
                         ]
+                    )
                 )
                 (SeqDict.toList guild.channels)
-                ++ [ if localUser.session.userId == guild.owner then
-                        let
-                            isSelected =
-                                channelRoute == NewChannelRoute
-                        in
-                        rowLinkButton
-                            (Dom.id "guild_newChannel")
-                            (GuildRoute guildId NewChannelRoute)
-                            [ Ui.paddingXY 4 8
-                            , Ui.Font.color MyUi.font3
-                            , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-                            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-                            , if isSelected then
-                                Ui.Font.color MyUi.font1
+                |> List.sortBy
+                    (\( hasNotifications, _ ) ->
+                        case hasNotifications of
+                            NoNotification ->
+                                2
 
-                              else
-                                Ui.Font.color MyUi.font3
-                            ]
-                            [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
-                            , Ui.text " Add new channel"
-                            ]
+                            NewMessage oneOrGreater ->
+                                1
 
-                     else
-                        Ui.none
-                   ]
+                            NewMessageForUser oneOrGreater ->
+                                0
+                    )
+                |> List.map Tuple.second
+             )
+                ++ [ newChannelButton ]
             )
         )
 
@@ -5713,10 +5744,23 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
             ]
             (List.map
                 (\( channelId, channel ) ->
-                    Ui.column
+                    let
+                        hasNotifications : ChannelNotificationType
+                        hasNotifications =
+                            channelOrThreadHasNotifications
+                                directMentions
+                                (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
+                                channelId
+                                NoThread
+                                (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
+                                channel
+                    in
+                    ( hasNotifications
+                    , Ui.column
                         []
                         [ discordChannelColumnRow
                             isMobile
+                            hasNotifications
                             channelNameHover
                             directMentions
                             routeData
@@ -5742,33 +5786,22 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                                     channel.threads
                             )
                         ]
+                    )
                 )
                 (SeqDict.toList guild.channels)
-             --++ [ if localUser.session.userId == guild.owner then
-             --        let
-             --            isSelected =
-             --                channelRoute == DiscordChannel_NewChannelRoute
-             --        in
-             --        rowLinkButton
-             --            (Dom.id "guild_newChannel")
-             --            (DiscordGuildRoute guildId DiscordChannel_NewChannelRoute)
-             --            [ Ui.paddingXY 4 8
-             --            , Ui.Font.color MyUi.font3
-             --            , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-             --            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-             --            , if isSelected then
-             --                Ui.Font.color MyUi.font1
-             --
-             --              else
-             --                Ui.Font.color MyUi.font3
-             --            ]
-             --            [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
-             --            , Ui.text " Add new channel"
-             --            ]
-             --
-             --     else
-             --        Ui.none
-             --   ]
+                |> List.sortBy
+                    (\( hasNotifications, _ ) ->
+                        case hasNotifications of
+                            NoNotification ->
+                                2
+
+                            NewMessage oneOrGreater ->
+                                1
+
+                            NewMessageForUser oneOrGreater ->
+                                0
+                    )
+                |> List.map Tuple.second
             )
         )
 
@@ -5998,6 +6031,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
 
 channelColumnRow :
     Bool
+    -> ChannelNotificationType
     -> GuildChannelNameHover
     -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> ChannelRoute
@@ -6006,7 +6040,7 @@ channelColumnRow :
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg
-channelColumnRow isMobile channelNameHover directMentions channelRoute localUser guildId channelId channel =
+channelColumnRow isMobile hasNotification channelNameHover directMentions channelRoute localUser guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -6059,13 +6093,7 @@ channelColumnRow isMobile channelNameHover directMentions channelRoute localUser
                     NoNotification
 
                    else
-                    channelOrThreadHasNotifications
-                        directMentions
-                        (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                        channelId
-                        NoThread
-                        (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
-                        channel
+                    hasNotification
                   )
                     |> GuildIcon.notificationView localUser.userAgent 0 -3 MyUi.background2
                 , Ui.width (Ui.px 20)
@@ -6103,6 +6131,7 @@ channelColumnRow isMobile channelNameHover directMentions channelRoute localUser
 
 discordChannelColumnRow :
     Bool
+    -> ChannelNotificationType
     -> GuildChannelNameHover
     -> Maybe (NonemptyDict ( Discord.Id Discord.ChannelId, ThreadRoute ) OneOrGreater)
     -> DiscordGuildRouteData
@@ -6110,7 +6139,7 @@ discordChannelColumnRow :
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> Element FrontendMsg
-discordChannelColumnRow isMobile channelNameHover directMentions routeData localUser channelId channel =
+discordChannelColumnRow isMobile hasNotifications channelNameHover directMentions routeData localUser channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -6168,13 +6197,7 @@ discordChannelColumnRow isMobile channelNameHover directMentions routeData local
                     NoNotification
 
                    else
-                    channelOrThreadHasNotifications
-                        directMentions
-                        (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
-                        channelId
-                        NoThread
-                        (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
-                        channel
+                    hasNotifications
                   )
                     |> GuildIcon.notificationView localUser.userAgent 0 -3 MyUi.background2
                 , Ui.width (Ui.px 20)
