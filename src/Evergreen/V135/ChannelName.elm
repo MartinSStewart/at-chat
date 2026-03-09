@@ -1,7 +1,0 @@
-module Evergreen.V135.ChannelName exposing (..)
-
-import String.Nonempty
-
-
-type ChannelName
-    = ChannelName String.Nonempty.NonemptyString
