@@ -44,6 +44,7 @@ import NonemptyDict
 import NonemptySet
 import OneToOne
 import Pages.Admin
+import Pagination
 import Quantity
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
@@ -140,7 +141,16 @@ init =
       , connections = SeqDict.empty
       , secretCounter = 0
       , pendingLogins = SeqDict.empty
-      , logs = Array.empty
+      , logs =
+            List.range 0 100
+                |> List.map
+                    (\index ->
+                        { time = Time.millisToPosix (index * 1000000)
+                        , log = Log.FailedToParseDiscordWebsocket (String.fromInt index)
+                        , isHidden = False
+                        }
+                    )
+                |> Array.fromList
       , emailNotificationsEnabled = True
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
@@ -4093,15 +4103,26 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
-        Pages.Admin.LogPageChanged logPageIndex ->
+        Pages.Admin.LogPageChanged pageId _ ->
+            let
+                pageIndex =
+                    Id.toInt pageId
+            in
             ( { model
-                | users = NonemptyDict.insert userId { user | lastLogPageViewed = logPageIndex } model.users
+                | users = NonemptyDict.insert userId { user | lastLogPageViewed = pageId } model.users
               }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            , Pages.Admin.LogPageChanged
+                pageId
+                (FilledInByBackend
+                    (Array.slice (pageIndex * Pagination.pageSize) ((pageIndex + 1) * Pagination.pageSize) model.logs)
+                )
+                |> Local_Admin
+                |> LocalChangeResponse changeId
+                |> Lamdera.sendToFrontend clientId
             )
 
         Pages.Admin.HideLog logIndex ->
-            ( { model | logs = Array.Extra.update logIndex (\log -> { log | isHidden = True }) model.logs }
+            ( { model | logs = Array.Extra.update (Id.toInt logIndex) (\log -> { log | isHidden = True }) model.logs }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

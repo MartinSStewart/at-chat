@@ -53,7 +53,7 @@ import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import Pagination exposing (Pagination)
+import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
 import Route
@@ -71,11 +71,12 @@ import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
 import User exposing (AdminUiSection(..), BackendUser)
+import UserSession exposing (ToBeFilledInByBackend(..))
 
 
 type Msg
-    = PressedLogPage Int
-    | PressedCopyLogLink Int
+    = PressedLogPage (Id PageId)
+    | PressedCopyLogLink (Id Pagination.ItemId)
     | PressedCollapseSection AdminUiSection
     | DoublePressedCollapseSection AdminUiSection
     | PressedExpandSection AdminUiSection
@@ -115,7 +116,7 @@ type Msg
     | PressedImportBackend
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
-    | PressedHideLog Int
+    | PressedHideLog (Id Pagination.ItemId)
 
 
 type ToBackend
@@ -131,8 +132,8 @@ type ToFrontend
 
 
 type alias Model =
-    { highlightLog : Maybe Int
-    , copiedLogLink : Maybe Int
+    { highlightLog : Maybe (Id Pagination.ItemId)
+    , copiedLogLink : Maybe (Id Pagination.ItemId)
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
     , slackClientSecret : Editable.Model
@@ -194,7 +195,7 @@ type AdminChange
         }
     | ExpandSection AdminUiSection
     | CollapseSection AdminUiSection
-    | LogPageChanged Int
+    | LogPageChanged (Id PageId) (ToBeFilledInByBackend (Array LogWithTime))
     | SetEmailNotificationsEnabled Bool
     | SetSignupsEnabled Bool
     | SetPrivateVapidKey PrivateVapidKey
@@ -210,7 +211,7 @@ type AdminChange
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
-    | HideLog Int
+    | HideLog (Id Pagination.ItemId)
 
 
 type alias EditedBackendUser =
@@ -250,7 +251,7 @@ initForUser =
     }
 
 
-initForAdmin : { highlightLog : Maybe Int } -> ( Model, Maybe AdminChange )
+initForAdmin : { highlightLog : Maybe (Id Pagination.ItemId) } -> ( Model, Maybe AdminChange )
 initForAdmin { highlightLog } =
     ( { highlightLog = highlightLog
       , copiedLogLink = Nothing
@@ -270,7 +271,7 @@ initForAdmin { highlightLog } =
       }
     , case highlightLog of
         Just index ->
-            LogPageChanged (index // Pagination.pageSize) |> Just
+            LogPageChanged (Pagination.itemToPageId index).pageId EmptyPlaceholder |> Just
 
         Nothing ->
             Nothing
@@ -319,13 +320,17 @@ updateAdmin changedBy change adminData local =
                         }
             }
 
-        LogPageChanged logPageIndex ->
+        LogPageChanged pageIndex filledInByBackend ->
             { local
                 | adminData =
                     IsAdmin
                         { adminData
                             | users =
-                                NonemptyDict.updateIfExists changedBy (\user -> { user | lastLogPageViewed = logPageIndex }) adminData.users
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | lastLogPageViewed = pageIndex })
+                                    adminData.users
+                            , logs = Pagination.setPage pageIndex filledInByBackend adminData.logs
                         }
             }
 
@@ -453,7 +458,14 @@ updateAdmin changedBy change adminData local =
             }
 
         HideLog pageIndex ->
-            { local | adminData = IsAdmin { adminData | logs = Pagination.setPage pageIndex adminData.logs } }
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | logs =
+                                Pagination.updateItem pageIndex (\log -> { log | isHidden = True }) adminData.logs
+                        }
+            }
 
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser
@@ -494,7 +506,7 @@ update :
 update navigationKey time adminData localState msg model =
     case msg of
         PressedLogPage index ->
-            ( model, Command.none, LogPageChanged index |> AdminChange )
+            ( model, Command.none, LogPageChanged index EmptyPlaceholder |> AdminChange )
 
         PressedCopyLogLink logIndex ->
             let
@@ -940,7 +952,7 @@ update navigationKey time adminData localState msg model =
                     ( model, Command.none, NoOutMsg )
 
                 _ ->
-                    ( model, Effect.File.Select.file [ "application/octet-stream" ] ImportBackendFileSelected, NoOutMsg )
+                    ( model, Effect.File.Select.file [] ImportBackendFileSelected, NoOutMsg )
 
         ImportBackendFileSelected file ->
             ( model
@@ -1149,8 +1161,8 @@ pendingChangesText change =
         CollapseSection _ ->
             "Collapsed section in admin page"
 
-        LogPageChanged int ->
-            "Switched to log page " ++ String.fromInt int
+        LogPageChanged pageId _ ->
+            "Switched to log page " ++ Id.toString pageId
 
         SetEmailNotificationsEnabled isEnabled ->
             if isEnabled then
@@ -1206,7 +1218,7 @@ pendingChangesText change =
             "Collapsed Discord guild in admin page"
 
         HideLog logIndex ->
-            "Toggled hidden for log " ++ String.fromInt logIndex
+            "Toggled hidden for log " ++ Id.toString logIndex
 
 
 view : Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
@@ -2267,83 +2279,74 @@ resetButton htmlId onPress =
 
 logSection : Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
 logSection timezone user adminData model =
-    case Pagination.currentPage adminData.logs of
-        Just logs ->
-            let
-                pageIndex =
-                    Pagination.currentPageIndex adminData.logs
+    let
+        pageIndex : Int
+        pageIndex =
+            Id.toInt adminData.logs.currentPage
 
-                pageCount : Int
-                pageCount =
-                    adminData.logs.totalPages
-            in
-            section
-                user.expandedSections
-                LogSection
-                [ List.indexedMap
-                    (\index log ->
-                        let
-                            logIndex : Int
-                            logIndex =
-                                Pagination.pageSize * pageIndex + index
-                        in
-                        if log.isHidden then
-                            Ui.none
+        pageCount : Int
+        pageCount =
+            adminData.logs.totalPages
+    in
+    section
+        user.expandedSections
+        LogSection
+        [ Pagination.viewPage
+            logSectionId
+            (\logId log ->
+                if log.isHidden then
+                    Ui.none
 
-                        else
-                            Ui.row
-                                [ Ui.spacing 4 ]
-                                [ Log.view
-                                    timezone
-                                    (PressedCopyLogLink logIndex)
-                                    PressedCopyText
-                                    (Just logIndex == model.copiedLogLink)
-                                    (Just logIndex == model.highlightLog)
-                                    { time = log.time, log = log.log }
-                                , Ui.el
-                                    [ Ui.Input.button (PressedHideLog logIndex)
-                                    , Ui.alignTop
-                                    , Ui.Font.size 12
-                                    , Ui.Font.color MyUi.font3
-                                    , Ui.width Ui.shrink
-                                    ]
-                                    (Ui.text "hide")
-                                ]
-                    )
-                    (Array.toList logs)
-                    |> Ui.column [ Ui.id (Dom.idToString logSectionId) ]
-                , (if pageCount <= 1 then
-                    []
+                else
+                    Ui.row
+                        [ Ui.spacing 4 ]
+                        [ Log.view
+                            timezone
+                            (PressedCopyLogLink logId)
+                            PressedCopyText
+                            (Just logId == model.copiedLogLink)
+                            (Just logId == model.highlightLog)
+                            { time = log.time, log = log.log }
+                        , Ui.el
+                            [ Ui.Input.button (PressedHideLog logId)
+                            , Ui.alignTop
+                            , Ui.Font.size 12
+                            , Ui.Font.color MyUi.font3
+                            , Ui.width Ui.shrink
+                            ]
+                            (Ui.text "hide")
+                        ]
+            )
+            adminData.logs
+        , (if pageCount <= 1 then
+            []
 
-                   else if pageCount <= maxVisiblePages then
-                    [ List.range 0 (pageCount - 1) ]
+           else if pageCount <= maxVisiblePages then
+            [ List.range 0 (pageCount - 1) ]
 
-                   else if pageIndex - logPageRange <= 2 then
-                    [ List.range 0 (2 + logPageRange * 2)
-                    , List.range (pageCount - 3) (pageCount - 1)
-                    ]
+           else if pageIndex - logPageRange <= 2 then
+            [ List.range 0 (2 + logPageRange * 2)
+            , List.range (pageCount - 3) (pageCount - 1)
+            ]
 
-                   else if pageIndex + logPageRange >= pageCount - 2 then
-                    [ List.range 0 2
-                    , List.range (pageCount - 3 - logPageRange * 2) (pageCount - 1)
-                    ]
+           else if pageIndex + logPageRange >= pageCount - 2 then
+            [ List.range 0 2
+            , List.range (pageCount - 3 - logPageRange * 2) (pageCount - 1)
+            ]
 
-                   else
-                    [ List.range 0 2
-                    , List.range (pageIndex - logPageRange) (pageIndex + logPageRange)
-                    , List.range (pageCount - 3) (pageCount - 1)
-                    ]
-                  )
-                    |> List.map (List.map (\index -> ( index, String.fromInt (index + 1) )))
-                    |> MyUi.radioRowWithSeparators
-                        [ Ui.width Ui.shrink, Ui.centerX ]
-                        pageIndex
-                        PressedLogPage
-                        (Ui.el [ Ui.paddingXY 2 0 ] (Ui.text "..."))
-                ]
-
-        Nothing ->
-            section user.expandedSections LogSection [ Ui.row [ Ui.spacing 8 ] [ Ui.text "Loading", Icons.spinner ] ]
+           else
+            [ List.range 0 2
+            , List.range (pageIndex - logPageRange) (pageIndex + logPageRange)
+            , List.range (pageCount - 3) (pageCount - 1)
+            ]
+          )
+            |> List.map (List.map (\index -> ( index, String.fromInt (index + 1) )))
+            |> MyUi.radioRowWithSeparators
+                [ Ui.width Ui.shrink, Ui.centerX ]
+                pageIndex
+                (\index -> Id.fromInt index |> PressedLogPage)
+                (Ui.el [ Ui.paddingXY 2 0 ] (Ui.text "..."))
+        ]
 
 
 logPageRange : number

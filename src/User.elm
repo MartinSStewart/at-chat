@@ -42,6 +42,7 @@ import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
+import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
@@ -57,7 +58,7 @@ type alias BackendUser =
     , isAdmin : Bool
     , email : EmailAddress
     , recentLoginEmails : List Time.Posix
-    , lastLogPageViewed : Int
+    , lastLogPageViewed : Id PageId
     , expandedSections : SeqSet AdminUiSection
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
@@ -128,7 +129,7 @@ init createdAt name email userIsAdmin =
     , isAdmin = userIsAdmin
     , email = email
     , recentLoginEmails = []
-    , lastLogPageViewed = 0
+    , lastLogPageViewed = Id.fromInt 0
     , expandedSections = SeqSet.empty
     , createdAt = createdAt
     , emailNotifications = CheckEvery5Minutes

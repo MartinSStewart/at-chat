@@ -20,6 +20,7 @@ import Codec
 import Dict
 import Discord
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
+import Pagination
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
@@ -30,7 +31,7 @@ import User
 
 type Route
     = HomePageRoute
-    | AdminRoute { highlightLog : Maybe Int }
+    | AdminRoute { highlightLog : Maybe (Id Pagination.ItemId) }
     | GuildRoute (Id GuildId) ChannelRoute
     | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute (Id UserId) ThreadRouteWithFriends
@@ -113,7 +114,7 @@ decode url =
                 { highlightLog =
                     case Dict.get "highlight-log" url2.queryParameters of
                         Just [ a ] ->
-                            String.toInt a
+                            String.toInt a |> Maybe.map Id.fromInt
 
                         _ ->
                             Nothing
@@ -329,7 +330,7 @@ encode route =
                     ( [ "admin" ]
                     , case params.highlightLog of
                         Just a ->
-                            [ Url.Builder.int "highlight-log" a ]
+                            [ Url.Builder.int "highlight-log" (Id.toInt a) ]
 
                         Nothing ->
                             []

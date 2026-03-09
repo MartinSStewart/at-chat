@@ -1,15 +1,27 @@
 module Pagination exposing
-    ( PageStatus(..)
+    ( ItemId(..)
+    , PageId(..)
+    , PageStatus(..)
     , Pagination
     , currentPage
-    , currentPageIndex
     , init
+    , itemToPageId
+    , offsetToItemId
     , pageSize
     , setPage
+    , updateItem
+    , viewPage
     )
 
 import Array exposing (Array)
+import Array.Extra
 import Dict exposing (Dict)
+import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Icons
+import Id exposing (Id)
+import SeqDict exposing (SeqDict)
+import Ui exposing (Element)
+import UserSession exposing (ToBeFilledInByBackend(..))
 
 
 {-| OpaqueVariants
@@ -19,43 +31,99 @@ type PageStatus a
     | PageLoaded (Array a)
 
 
+{-| OpaqueVariants
+-}
+type PageId
+    = PageId Never
+
+
+{-| OpaqueVariants
+-}
+type ItemId
+    = ItemId Never
+
+
+itemToPageId : Id ItemId -> { pageId : Id PageId, offset : Int }
+itemToPageId itemId =
+    let
+        itemId2 : Int
+        itemId2 =
+            Id.toInt itemId
+    in
+    { pageId = itemId2 // pageSize |> Id.fromInt, offset = modBy pageSize itemId2 }
+
+
 type alias Pagination a =
-    { pages : Dict Int (PageStatus a)
-    , currentPage : Int
+    { pages : SeqDict (Id PageId) (PageStatus a)
+    , currentPage : Id PageId
+    , previousPage : Id PageId
     , totalPages : Int
     }
 
 
-init : Int -> Array a -> Pagination a
-init pageIndex array =
-    { currentPage = pageIndex
+init : Id PageId -> Array a -> Pagination a
+init pageId array =
+    { currentPage = pageId
     , totalPages = ((pageSize - 1) + Array.length array) // pageSize
+    , previousPage = pageId
     , pages =
-        Dict.singleton
-            pageIndex
-            (PageLoaded (Array.slice (pageIndex * pageSize) ((pageIndex + 1) * pageSize) array))
+        SeqDict.singleton
+            pageId
+            (PageLoaded (Array.slice (Id.toInt pageId * pageSize) ((Id.toInt pageId + 1) * pageSize) array))
     }
 
 
-setPage : Int -> Pagination a -> Pagination a
-setPage pageIndex model =
-    case Dict.get pageIndex model.pages of
-        Just PageLoading ->
-            { model | currentPage = pageIndex }
+updateItem : Id ItemId -> (a -> a) -> Pagination a -> Pagination a
+updateItem itemIndex updateFunc model =
+    let
+        { pageId, offset } =
+            itemToPageId itemIndex
+    in
+    { model
+        | pages =
+            SeqDict.updateIfExists
+                pageId
+                (\page ->
+                    case page of
+                        PageLoaded page2 ->
+                            Array.Extra.update offset updateFunc page2 |> PageLoaded
 
-        Just (PageLoaded _) ->
-            { model | currentPage = pageIndex }
+                        PageLoading ->
+                            page
+                )
+                model.pages
+    }
 
-        Nothing ->
+
+setPage : Id PageId -> ToBeFilledInByBackend (Array a) -> Pagination a -> Pagination a
+setPage pageId filledInByBackend model =
+    case filledInByBackend of
+        FilledInByBackend data ->
             { model
-                | pages = Dict.insert pageIndex PageLoading model.pages
-                , currentPage = pageIndex
+                | pages = SeqDict.insert pageId (PageLoaded data) model.pages
+                , currentPage = pageId
+                , previousPage = model.currentPage
             }
 
+        EmptyPlaceholder ->
+            case SeqDict.get pageId model.pages of
+                Just PageLoading ->
+                    { model | currentPage = pageId, previousPage = model.currentPage }
 
-currentPage : Pagination a -> Maybe (Array a)
-currentPage model =
-    case Dict.get model.currentPage model.pages of
+                Just (PageLoaded _) ->
+                    { model | currentPage = pageId, previousPage = model.currentPage }
+
+                Nothing ->
+                    { model
+                        | pages = SeqDict.insert pageId PageLoading model.pages
+                        , currentPage = pageId
+                        , previousPage = model.currentPage
+                    }
+
+
+currentPage : Id PageId -> Pagination a -> Maybe (Array a)
+currentPage pageId model =
+    case SeqDict.get pageId model.pages of
         Just PageLoading ->
             Nothing
 
@@ -66,9 +134,35 @@ currentPage model =
             Nothing
 
 
-currentPageIndex : Pagination a -> Int
-currentPageIndex model =
-    model.currentPage
+viewPage : HtmlId -> (Id ItemId -> a -> Element msg) -> Pagination a -> Element msg
+viewPage htmlId itemView model =
+    case SeqDict.get model.currentPage model.pages of
+        Just (PageLoaded page) ->
+            List.indexedMap
+                (\index log -> itemView (offsetToItemId index model) log)
+                (Array.toList page)
+                |> Ui.column [ Ui.id (Dom.idToString htmlId) ]
+                |> Ui.el []
+
+        _ ->
+            case SeqDict.get model.previousPage model.pages of
+                Just (PageLoaded page) ->
+                    List.indexedMap
+                        (\index log -> itemView (offsetToItemId index model) log)
+                        (Array.toList page)
+                        |> Ui.column
+                            [ Ui.id (Dom.idToString htmlId)
+                            , Ui.opacity 0
+                            ]
+                        |> Ui.el [ Ui.inFront (Ui.row [ Ui.spacing 8 ] [ Ui.text "Loading", Icons.spinner ]) ]
+
+                _ ->
+                    Ui.row [ Ui.spacing 8 ] [ Ui.text "Loading", Icons.spinner ]
+
+
+offsetToItemId : Int -> Pagination a -> Id ItemId
+offsetToItemId index model =
+    pageSize * Id.toInt model.currentPage + index |> Id.fromInt
 
 
 pageSize : number

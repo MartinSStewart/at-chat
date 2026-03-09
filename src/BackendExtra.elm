@@ -49,7 +49,7 @@ import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin exposing (InitAdminData)
-import Pagination
+import Pagination exposing (PageId)
 import PersonName
 import Postmark
 import Quantity
@@ -641,7 +641,7 @@ getLinkedDiscordUsersAndOtherUsers userId model =
         model.discordUsers
 
 
-adminData : BackendModel -> Int -> InitAdminData
+adminData : BackendModel -> Id PageId -> InitAdminData
 adminData model lastLogPageViewed =
     { users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
