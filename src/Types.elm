@@ -194,6 +194,7 @@ type alias LoggedIn2 =
 type alias UserOptionsModel =
     { name : Editable.Model
     , showLinkDiscordSetup : Bool
+    , discordAcknowledged : Bool
     }
 
 
@@ -450,6 +451,7 @@ type FrontendMsg
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
+    | PressedDiscordAcknowledgment Bool
     | PressedLinkDiscordUser
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)
