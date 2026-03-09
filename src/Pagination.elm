@@ -10,6 +10,7 @@ module Pagination exposing
     , pageSize
     , setPage
     , updateItem
+    , updatePage
     , viewPage
     )
 
@@ -163,6 +164,24 @@ viewPage htmlId itemView model =
 offsetToItemId : Int -> Pagination a -> Id ItemId
 offsetToItemId index model =
     pageSize * Id.toInt model.currentPage + index |> Id.fromInt
+
+
+updatePage : Id PageId -> (a -> a) -> Pagination a -> Pagination a
+updatePage pageId updateFunc model =
+    { model
+        | pages =
+            SeqDict.updateIfExists
+                pageId
+                (\page ->
+                    case page of
+                        PageLoaded page2 ->
+                            Array.map updateFunc page2 |> PageLoaded
+
+                        PageLoading ->
+                            page
+                )
+                model.pages
+    }
 
 
 pageSize : number

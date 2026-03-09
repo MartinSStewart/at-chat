@@ -119,6 +119,7 @@ type Msg
     | PressedHideLog (Id Pagination.ItemId)
     | PressedUnhideLog (Id Pagination.ItemId)
     | PressedShowHiddenLogs Bool
+    | PressedHidePageLogs
 
 
 type ToBackend
@@ -216,6 +217,7 @@ type AdminChange
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
     | HideLog (Id Pagination.ItemId)
     | UnhideLog (Id Pagination.ItemId)
+    | HidePageLogs (Id Pagination.PageId)
 
 
 type alias EditedBackendUser =
@@ -476,6 +478,16 @@ updateAdmin changedBy change adminData local =
                         }
             }
 
+        HidePageLogs pageId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | logs =
+                                Pagination.updatePage pageId (\log -> { log | isHidden = True }) adminData.logs
+                        }
+            }
+
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser
 expandGuild guildId user =
@@ -547,6 +559,12 @@ update navigationKey time adminData localState msg model =
             ( { model | showHiddenLogs = show }
             , Command.none
             , NoOutMsg
+            )
+
+        PressedHidePageLogs ->
+            ( model
+            , Command.none
+            , HidePageLogs adminData.logs.currentPage |> AdminChange
             )
 
         PressedCollapseSection section2 ->
@@ -1243,6 +1261,9 @@ pendingChangesText change =
 
         UnhideLog logIndex ->
             "Unhid log " ++ Id.toString logIndex
+
+        HidePageLogs pageId ->
+            "Hid all logs on page " ++ Id.toString pageId
 
 
 view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
@@ -2323,18 +2344,24 @@ logSection isMobile2 timezone user adminData model =
         0
         user.expandedSections
         LogSection
-        [ MyUi.simpleButton
-            (Dom.id "admin_toggleHiddenLogs")
-            (PressedShowHiddenLogs (not model.showHiddenLogs))
-            (Ui.text
-                (if model.showHiddenLogs then
-                    "Hide hidden logs"
+        [ Ui.row
+            [ Ui.spacing 8, Ui.paddingXY 8 0 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_toggleHiddenLogs")
+                (PressedShowHiddenLogs (not model.showHiddenLogs))
+                (Ui.text
+                    (if model.showHiddenLogs then
+                        "Hide hidden logs"
 
-                 else
-                    "Show hidden logs"
+                     else
+                        "Show hidden logs"
+                    )
                 )
-            )
-            |> Ui.el [ Ui.paddingXY 8 0 ]
+            , MyUi.simpleButton
+                (Dom.id "admin_hidePageLogs")
+                PressedHidePageLogs
+                (Ui.text "Hide page")
+            ]
         , Pagination.viewPage
             logSectionId
             (\logId log ->

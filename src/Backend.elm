@@ -4131,6 +4131,25 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.HidePageLogs pageId ->
+            let
+                start =
+                    Id.toInt pageId * Pagination.pageSize
+
+                end =
+                    start + Pagination.pageSize
+
+                hideRange index log =
+                    if index >= start && index < end then
+                        { log | isHidden = True }
+
+                    else
+                        log
+            in
+            ( { model | logs = Array.indexedMap hideRange model.logs }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
         Pages.Admin.SetEmailNotificationsEnabled isEnabled ->
             let
                 model2 =
