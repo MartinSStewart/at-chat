@@ -119,6 +119,7 @@ import Message exposing (Message(..), MessageNoReply(..), MessageState(..), Mess
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
+import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
@@ -429,6 +430,7 @@ type alias AdminData =
     , guilds : SeqDict (Id GuildId) AdminData_Guild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
+    , logs : Pagination LogWithTime
     }
 
 

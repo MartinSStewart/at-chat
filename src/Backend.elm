@@ -4352,14 +4352,6 @@ updateFromFrontendAdmin :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 updateFromFrontendAdmin clientId toBackend model =
     case toBackend of
-        Pages.Admin.LogPaginationToBackend a ->
-            ( model
-            , Pagination.updateFromFrontend clientId a model.logs
-                |> Command.map
-                    (\toMsg -> Pages.Admin.LogPaginationToFrontend toMsg |> AdminToFrontend)
-                    identity
-            )
-
         Pages.Admin.ExportBackendRequest ->
             ( model
             , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (WireHelper.encodeBackendModel model))

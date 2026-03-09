@@ -45,7 +45,7 @@ import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import Pages.Admin exposing (AdminChange)
+import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -313,35 +313,6 @@ initLoadedFrontend loading time userAgent loginResult =
     )
 
 
-initAdminModel :
-    LocalState
-    -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
-    -> ( Pages.Admin.Model, Maybe AdminChange, Command FrontendOnly ToBackend FrontendMsg )
-initAdminModel localState loading =
-    let
-        ( logPagination, paginationCmd ) =
-            Pagination.init localState.localUser.user.lastLogPageViewed
-    in
-    Pages.Admin.initForAdmin
-        logPagination
-        (case loading.route of
-            AdminRoute params ->
-                params
-
-            _ ->
-                { highlightLog = Nothing }
-        )
-        |> (\( a, b ) ->
-                ( a
-                , b
-                , Command.map
-                    (\toMsg -> Pages.Admin.LogPaginationToBackend toMsg |> AdminToBackend)
-                    identity
-                    paginationCmd
-                )
-           )
-
-
 loadedInitHelper :
     Time.Posix
     -> Time.Zone
@@ -355,16 +326,30 @@ loadedInitHelper time timezone userAgent loginData loading =
         localState =
             loginDataToLocalState userAgent timezone loginData
 
-        ( adminModel, adminChange, adminCmd ) =
+        ( adminModel, adminChange ) =
             case loginData.adminData of
                 IsAdminLoginData _ ->
-                    initAdminModel localState loading
+                    Pages.Admin.initForAdmin
+                        (case loading.route of
+                            AdminRoute params ->
+                                params
+
+                            _ ->
+                                { highlightLog = Nothing }
+                        )
 
                 IsAdminButNoData ->
-                    initAdminModel localState loading
+                    Pages.Admin.initForAdmin
+                        (case loading.route of
+                            AdminRoute params ->
+                                params
+
+                            _ ->
+                                { highlightLog = Nothing }
+                        )
 
                 IsNotAdminLoginData ->
-                    ( Pages.Admin.initForUser, Nothing, Command.none )
+                    ( Pages.Admin.initForUser, Nothing )
 
         loggedIn : LoggedIn2
         loggedIn =
@@ -401,22 +386,19 @@ loadedInitHelper time timezone userAgent loginData loading =
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
         cmds =
-            Command.batch
-                [ case loading.route of
-                    AdminRoute params ->
-                        case params.highlightLog of
-                            Just _ ->
-                                Dom.getElement Pages.Admin.logSectionId
-                                    |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
-                                    |> Task.attempt (\_ -> ScrolledToLogSection)
+            case loading.route of
+                AdminRoute params ->
+                    case params.highlightLog of
+                        Just _ ->
+                            Dom.getElement Pages.Admin.logSectionId
+                                |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
+                                |> Task.attempt (\_ -> ScrolledToLogSection)
 
-                            Nothing ->
-                                Command.none
+                        Nothing ->
+                            Command.none
 
-                    _ ->
-                        Command.none
-                , adminCmd
-                ]
+                _ ->
+                    Command.none
     in
     FrontendExtra.handleLocalChange time (Maybe.map Local_Admin adminChange) loggedIn cmds
 

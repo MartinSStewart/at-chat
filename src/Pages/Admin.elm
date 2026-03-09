@@ -119,15 +119,13 @@ type Msg
 
 
 type ToBackend
-    = LogPaginationToBackend Pagination.ToBackend
-    | ExportBackendRequest
+    = ExportBackendRequest
     | ExportSubsetBackendRequest
     | ImportBackendRequest Bytes
 
 
 type ToFrontend
-    = LogPaginationToFrontend (Pagination.ToFrontend LogWithTime)
-    | ExportBackendResponse Bytes
+    = ExportBackendResponse Bytes
     | ExportSubsetBackendResponse Bytes
     | ImportBackendResponse (Result () ())
 
@@ -137,7 +135,6 @@ type alias Model =
     , copiedLogLink : Maybe Int
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
-    , logs : Pagination LogWithTime
     , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
@@ -172,8 +169,7 @@ type alias EditingCell =
 
 
 type alias InitAdminData =
-    { lastLogPageViewed : Int
-    , users : NonemptyDict (Id UserId) BackendUser
+    { users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
@@ -185,6 +181,7 @@ type alias InitAdminData =
     , guilds : SeqDict (Id GuildId) AdminData_Guild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
+    , logs : Pagination LogWithTime
     }
 
 
@@ -245,7 +242,6 @@ initForUser =
         , deletedUsers = SeqSet.empty
         }
     , submitError = Nothing
-    , logs = Pagination.init 0 |> Tuple.first
     , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
@@ -254,8 +250,8 @@ initForUser =
     }
 
 
-initForAdmin : Pagination LogWithTime -> { highlightLog : Maybe Int } -> ( Model, Maybe AdminChange )
-initForAdmin logs { highlightLog } =
+initForAdmin : { highlightLog : Maybe Int } -> ( Model, Maybe AdminChange )
+initForAdmin { highlightLog } =
     ( { highlightLog = highlightLog
       , copiedLogLink = Nothing
       , userTable =
@@ -266,7 +262,6 @@ initForAdmin logs { highlightLog } =
             , deletedUsers = SeqSet.empty
             }
       , submitError = Nothing
-      , logs = logs
       , slackClientSecret = Editable.init
       , publicVapidKey = Editable.init
       , privateVapidKey = Editable.init
@@ -457,8 +452,8 @@ updateAdmin changedBy change adminData local =
                 , localUser = { localUser | user = collapseDiscordGuild guildId localUser.user }
             }
 
-        HideLog _ ->
-            local
+        HideLog pageIndex ->
+            { local | adminData = IsAdmin { adminData | logs = Pagination.setPage pageIndex adminData.logs } }
 
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser
@@ -499,14 +494,7 @@ update :
 update navigationKey time adminData localState msg model =
     case msg of
         PressedLogPage index ->
-            let
-                ( logs, cmd ) =
-                    Pagination.setPage index model.logs
-            in
-            ( { model | logs = logs }
-            , Command.map LogPaginationToBackend identity cmd
-            , LogPageChanged index |> AdminChange
-            )
+            ( model, Command.none, LogPageChanged index |> AdminChange )
 
         PressedCopyLogLink logIndex ->
             let
@@ -1109,9 +1097,6 @@ updateUserTable updateFunc model =
 updateFromBackend : ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 updateFromBackend toFrontend model =
     case toFrontend of
-        LogPaginationToFrontend data ->
-            ( { model | logs = Pagination.updateFromBackend data model.logs }, Command.none )
-
         ExportBackendResponse bytes ->
             ( model, Effect.File.Download.bytes "backend-export.bin" "application/octet-stream" bytes )
 
@@ -1251,7 +1236,7 @@ view version local adminData user model =
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
-            , logSection local.localUser.timezone user model
+            , logSection local.localUser.timezone user adminData model
             , apiKeysSection local user adminData model
             , exportSection user model
             ]
@@ -2280,17 +2265,17 @@ resetButton htmlId onPress =
         Icons.reset
 
 
-logSection : Time.Zone -> BackendUser -> Model -> Element Msg
-logSection timezone user model =
-    case Pagination.currentPage model.logs of
+logSection : Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+logSection timezone user adminData model =
+    case Pagination.currentPage adminData.logs of
         Just logs ->
             let
                 pageIndex =
-                    Pagination.currentPageIndex model.logs
+                    Pagination.currentPageIndex adminData.logs
 
                 pageCount : Int
                 pageCount =
-                    Maybe.withDefault 1 (Pagination.totalPages model.logs)
+                    adminData.logs.totalPages
             in
             section
                 user.expandedSections

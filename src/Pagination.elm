@@ -8,9 +8,6 @@ module Pagination exposing
     , init
     , pageSize
     , setPage
-    , totalPages
-    , updateFromBackend
-    , updateFromFrontend
     )
 
 import Array exposing (Array)
@@ -41,31 +38,35 @@ type ToFrontend a
 type alias Pagination a =
     { pages : Dict Int (PageStatus a)
     , currentPage : Int
-    , totalPages : Maybe Int
+    , totalPages : Int
     }
 
 
-init : Int -> ( Pagination a, Command FrontendOnly ToBackend msg )
-init pageIndex =
-    setPage pageIndex { pages = Dict.empty, currentPage = 0, totalPages = Nothing }
+init : Int -> Array a -> Pagination a
+init pageIndex array =
+    { currentPage = pageIndex
+    , totalPages = ((pageSize - 1) + Array.length array) // pageSize
+    , pages =
+        Dict.singleton
+            pageIndex
+            (PageLoaded (Array.slice (pageIndex * pageSize) ((pageIndex + 1) * pageSize) array))
+    }
 
 
-setPage : Int -> Pagination a -> ( Pagination a, Command FrontendOnly ToBackend msg )
+setPage : Int -> Pagination a -> Pagination a
 setPage pageIndex model =
     case Dict.get pageIndex model.pages of
         Just PageLoading ->
-            ( { model | currentPage = pageIndex }, Command.none )
+            { model | currentPage = pageIndex }
 
         Just (PageLoaded _) ->
-            ( { model | currentPage = pageIndex }, Lamdera.sendToBackend (PageRequest pageIndex) )
+            { model | currentPage = pageIndex }
 
         Nothing ->
-            ( { model
+            { model
                 | pages = Dict.insert pageIndex PageLoading model.pages
                 , currentPage = pageIndex
-              }
-            , Lamdera.sendToBackend (PageRequest pageIndex)
-            )
+            }
 
 
 currentPage : Pagination a -> Maybe (Array a)
@@ -89,30 +90,3 @@ currentPageIndex model =
 pageSize : number
 pageSize =
     20
-
-
-totalPages : Pagination a -> Maybe Int
-totalPages model =
-    model.totalPages
-
-
-updateFromFrontend : ClientId -> ToBackend -> Array a -> Command BackendOnly (ToFrontend a) msg
-updateFromFrontend clientId toBackend array =
-    case toBackend of
-        PageRequest pageIndex ->
-            PageResponse
-                { pageIndex = pageIndex
-                , totalPages = ((pageSize - 1) + Array.length array) // pageSize
-                , pageData = Array.slice (pageIndex * pageSize) ((pageIndex + 1) * pageSize) array
-                }
-                |> Lamdera.sendToFrontend clientId
-
-
-updateFromBackend : ToFrontend a -> Pagination a -> Pagination a
-updateFromBackend toFrontend model =
-    case toFrontend of
-        PageResponse data ->
-            { model
-                | pages = Dict.insert data.pageIndex (PageLoaded data.pageData) model.pages
-                , totalPages = Just data.totalPages
-            }

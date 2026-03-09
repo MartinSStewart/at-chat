@@ -49,6 +49,7 @@ import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin exposing (InitAdminData)
+import Pagination
 import PersonName
 import Postmark
 import Quantity
@@ -642,8 +643,7 @@ getLinkedDiscordUsersAndOtherUsers userId model =
 
 adminData : BackendModel -> Int -> InitAdminData
 adminData model lastLogPageViewed =
-    { lastLogPageViewed = lastLogPageViewed
-    , users = model.users
+    { users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , signupsEnabled = model.signupsEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
@@ -723,6 +723,7 @@ adminData model lastLogPageViewed =
                     channel
             )
             model.loadingDiscordChannels
+    , logs = Pagination.init lastLogPageViewed model.logs
     }
 
 

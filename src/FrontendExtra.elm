@@ -2836,6 +2836,7 @@ initAdminData adminData =
     , guilds = adminData.guilds
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
+    , logs = adminData.logs
     }
 
 
