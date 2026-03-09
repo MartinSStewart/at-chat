@@ -98,6 +98,18 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                                         LocalState.removeReactionEmoji emoji reaction.userId threadRoute channel
                                                     )
                                                     guild.channels
+                                            , members =
+                                                SeqDict.update
+                                                    reaction.userId
+                                                    (\maybe ->
+                                                        case maybe of
+                                                            Just _ ->
+                                                                maybe
+
+                                                            Nothing ->
+                                                                Just { joinedAt = Nothing }
+                                                    )
+                                                    guild.members
                                         }
                                         model.discordGuilds
                               }
