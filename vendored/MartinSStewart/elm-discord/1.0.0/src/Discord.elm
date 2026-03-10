@@ -4878,6 +4878,9 @@ decodeDispatchUserEvent eventName =
         "GENERIC_PUSH_NOTIFICATION_SENT" ->
             JD.succeed DispatchUser_GenericPushNotificationSent
 
+        "REACTION_NOTIFICATION_SENT" ->
+            JD.succeed DispatchUser_ReactionNotificationSent
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5080,6 +5083,7 @@ type OpDispatchUserEvent
     | DispatchUser_GuildAuditLogEntryCreate
     | DispatchUser_ThreadMemberUpdate
     | DispatchUser_GenericPushNotificationSent
+    | DispatchUser_ReactionNotificationSent
 
 
 type alias ContentInventoryInboxStale =
@@ -6120,6 +6124,9 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_GenericPushNotificationSent ->
+                            ( model, [] )
+
+                        DispatchUser_ReactionNotificationSent ->
                             ( model, [] )
 
                 OpReconnect ->
