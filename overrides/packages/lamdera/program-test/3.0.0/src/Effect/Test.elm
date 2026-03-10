@@ -432,7 +432,7 @@ type alias WebsocketState =
 {-| -}
 type alias Data frontendModel backendModel =
     { httpRequests : List HttpRequest
-    , websockets : SeqDict ( RequestedBy, Websocket.Connection ) WebsocketState
+    , websockets : SeqDict ( RequestedBy, Effect.Websocket.Connection ) WebsocketState
     , portRequests : List PortToJs
     , fileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : FileUpload }
     , multipleFileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : MultipleFilesUpload }
@@ -451,11 +451,14 @@ stateToData state =
         List.foldl
             (\( clientId, frontend ) list ->
                 List.map
-                    (\( key, value ) -> ( ( RequestedByFrontend clientId, key ), value ))
+                    (\( key, value ) -> ( ( RequestedByFrontend clientId, Effect.Websocket.internalToConnection key ), value ))
                     (SeqDict.toList frontend.websockets)
                     ++ list
             )
-            (List.map (\( key, value ) -> ( ( RequestedByBackend, key ), value )) (SeqDict.toList state.websockets))
+            (List.map
+                (\( key, value ) -> ( ( RequestedByBackend, Effect.Websocket.internalToConnection key ), value ))
+                (SeqDict.toList state.websockets)
+            )
             (SeqDict.toList state.frontends)
             |> SeqDict.fromList
     , portRequests = state.portRequests
@@ -1241,14 +1244,19 @@ websocketSendString delay connection data =
             wait (Duration.milliseconds delay) instructions
                 |> NextStep
                     (\state ->
-                        case SeqDict.get connection state.websockets of
+                        let
+                            connection2 : Websocket.Connection
+                            connection2 =
+                                Effect.Websocket.connectionToInternal connection
+                        in
+                        case SeqDict.get connection2 state.websockets of
                             Just websocket ->
                                 List.foldl
                                     (\msg state2 ->
                                         handleBackendUpdate (currentTime state2) (msg data) state2
                                     )
                                     (addEvent
-                                        (WebsocketSendStringEvent Nothing connection data)
+                                        (WebsocketSendStringEvent Nothing connection2 data)
                                         (case websocket.closedAt of
                                             Just _ ->
                                                 Just WebsocketClosed
@@ -1259,7 +1267,7 @@ websocketSendString delay connection data =
                                         { state
                                             | websockets =
                                                 SeqDict.insert
-                                                    connection
+                                                    connection2
                                                     { websocket
                                                         | dataSent =
                                                             Array.push
@@ -1273,30 +1281,35 @@ websocketSendString delay connection data =
 
                             Nothing ->
                                 addEvent
-                                    (WebsocketSendStringEvent Nothing connection data)
+                                    (WebsocketSendStringEvent Nothing connection2 data)
                                     (Just WebsocketMissing)
                                     state
                     )
         )
 
 
-frontendWebsocketSendString : ClientId -> DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+frontendWebsocketSendString : ClientId -> DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 frontendWebsocketSendString clientId delay connection data =
     Action
         (\instructions ->
             wait (Duration.milliseconds delay) instructions
                 |> NextStep
                     (\state ->
+                        let
+                            connection2 : Websocket.Connection
+                            connection2 =
+                                Effect.Websocket.connectionToInternal connection
+                        in
                         case SeqDict.get clientId state.frontends of
                             Just frontend ->
-                                case SeqDict.get connection frontend.websockets of
+                                case SeqDict.get connection2 frontend.websockets of
                                     Just websocket ->
                                         List.foldl
                                             (\msg state2 ->
                                                 handleFrontendUpdate clientId (currentTime state2) (msg data) state2
                                             )
                                             (addEvent
-                                                (WebsocketSendStringEvent (Just clientId) connection data)
+                                                (WebsocketSendStringEvent (Just clientId) connection2 data)
                                                 (case websocket.closedAt of
                                                     Just _ ->
                                                         Just WebsocketClosed
@@ -1311,7 +1324,7 @@ frontendWebsocketSendString clientId delay connection data =
                                                             { frontend
                                                                 | websockets =
                                                                     SeqDict.insert
-                                                                        connection
+                                                                        connection2
                                                                         { websocket
                                                                             | dataSent =
                                                                                 Array.push
@@ -1327,13 +1340,13 @@ frontendWebsocketSendString clientId delay connection data =
 
                                     Nothing ->
                                         addEvent
-                                            (WebsocketSendStringEvent (Just clientId) connection data)
+                                            (WebsocketSendStringEvent (Just clientId) connection2 data)
                                             (Just WebsocketMissing)
                                             state
 
                             Nothing ->
                                 addEvent
-                                    (WebsocketSendStringEvent (Just clientId) connection data)
+                                    (WebsocketSendStringEvent (Just clientId) connection2 data)
                                     (ClientIdNotFound clientId |> Just)
                                     state
                     )

@@ -611,61 +611,76 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
                     response
 
                 Nothing ->
-                    if currentRequest.url == "/_i" then
-                        StringHttpResponse
-                            { url = currentRequest.url
-                            , statusCode = 200
-                            , statusText = "OK"
-                            , headers = Dict.empty
-                            }
-                            """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
+                    case currentRequest.url of
+                        "/_i" ->
+                            StringHttpResponse
+                                { url = currentRequest.url
+                                , statusCode = 200
+                                , statusText = "OK"
+                                , headers = Dict.empty
+                                }
+                                """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
-                    else if currentRequest.url == "http://localhost:3000/file/vapid" then
-                        StringHttpResponse
-                            { url = currentRequest.url
-                            , statusCode = 200
-                            , statusText = "OK"
-                            , headers = Dict.empty
-                            }
-                            "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
+                        "http://localhost:3000/file/custom-request" ->
+                            case List.Extra.find (\( key, _ ) -> key == "url") currentRequest.headers of
+                                Just ( _, url ) ->
+                                    0
 
-                    else if currentRequest.url == "http://localhost:3000/file/push-notification" then
-                        StringHttpResponse
-                            { url = currentRequest.url
-                            , statusCode = 200
-                            , statusText = "OK"
-                            , headers = Dict.empty
-                            }
-                            ""
+                                Nothing ->
+                                    StringHttpResponse
+                                        { url = currentRequest.url
+                                        , statusCode = 500
+                                        , statusText = "Bad request"
+                                        , headers = Dict.empty
+                                        }
+                                        ""
 
-                    else if currentRequest.url == "https://api.postmarkapp.com/email" then
-                        case currentRequest.body of
-                            T.JsonBody json ->
-                                case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of
-                                    Ok email ->
-                                        StringHttpResponse
-                                            { url = currentRequest.url
-                                            , statusCode = 200
-                                            , statusText = "OK"
-                                            , headers = Dict.empty
-                                            }
-                                            ("""{"To":\""""
-                                                ++ email
-                                                ++ """","SubmittedAt":"2023-09-30T14:26:56.6614723Z","MessageID":"edd386b7-63f1-471f-a4ba-2b216188fb6c","ErrorCode":0,"Message":"OK"}"""
-                                            )
+                        "http://localhost:3000/file/vapid" ->
+                            StringHttpResponse
+                                { url = currentRequest.url
+                                , statusCode = 200
+                                , statusText = "OK"
+                                , headers = Dict.empty
+                                }
+                                "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
 
-                                    Err err ->
-                                        let
-                                            _ =
-                                                Debug.log "Parse postmark request error" err
-                                        in
-                                        UnhandledHttpRequest
+                        "http://localhost:3000/file/push-notification" ->
+                            StringHttpResponse
+                                { url = currentRequest.url
+                                , statusCode = 200
+                                , statusText = "OK"
+                                , headers = Dict.empty
+                                }
+                                ""
 
-                            _ ->
-                                UnhandledHttpRequest
+                        "https://api.postmarkapp.com/email" ->
+                            case currentRequest.body of
+                                T.JsonBody json ->
+                                    case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of
+                                        Ok email ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 200
+                                                , statusText = "OK"
+                                                , headers = Dict.empty
+                                                }
+                                                ("""{"To":\""""
+                                                    ++ email
+                                                    ++ """","SubmittedAt":"2023-09-30T14:26:56.6614723Z","MessageID":"edd386b7-63f1-471f-a4ba-2b216188fb6c","ErrorCode":0,"Message":"OK"}"""
+                                                )
 
-                    else
-                        UnhandledHttpRequest
+                                        Err err ->
+                                            let
+                                                _ =
+                                                    Debug.log "Parse postmark request error" err
+                                            in
+                                            UnhandledHttpRequest
+
+                                _ ->
+                                    UnhandledHttpRequest
+
+                        _ ->
+                            UnhandledHttpRequest
 
         handleFileRequest : { data : T.Data frontendModel backendModel, mimeTypes : List String } -> FileUpload
         handleFileRequest _ =

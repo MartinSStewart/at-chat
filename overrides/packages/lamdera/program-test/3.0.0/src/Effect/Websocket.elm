@@ -1,4 +1,7 @@
-module Effect.Websocket exposing (Connection, SendError(..), close, createHandle, listen, sendString, CloseEventCode(..))
+module Effect.Websocket exposing
+    ( Connection, SendError(..), close, createHandle, listen, sendString, CloseEventCode(..)
+    , connectionToInternal, internalToConnection
+    )
 
 {-|
 
@@ -15,8 +18,22 @@ import Websocket
 
 {-| A websocket connection
 -}
-type alias Connection =
-    Websocket.Connection
+type Connection
+    = Connection String String
+
+
+{-| Internal function, please ignore
+-}
+connectionToInternal : Connection -> Websocket.Connection
+connectionToInternal (Connection id url) =
+    Websocket.Connection id url
+
+
+{-| Internal function, please ignore
+-}
+internalToConnection : Websocket.Connection -> Connection
+internalToConnection (Websocket.Connection id url) =
+    Connection id url
 
 
 {-| Create a websocket handle that you can then open by calling `listen` or `sendString`.
@@ -24,7 +41,12 @@ Make sure to call `close` when you are finished with it.
 -}
 createHandle : (Connection -> msg) -> String -> Command restriction toMsg msg
 createHandle gotConnection url =
-    Effect.Internal.WebsocketCreateHandle url Effect.Internal.Succeed |> Effect.Task.perform gotConnection
+    Effect.Internal.WebsocketCreateHandle
+        url
+        (\(Websocket.Connection id url2) ->
+            Connection id url2 |> Effect.Internal.Succeed
+        )
+        |> Effect.Task.perform gotConnection
 
 
 {-| Errors that might happen when sending data.
@@ -57,9 +79,9 @@ type CloseEventCode
 {-| Send a string
 -}
 sendString : Connection -> String -> Task restriction SendError ()
-sendString connection data =
+sendString (Connection id url) data =
     Effect.Internal.WebsocketSendString
-        connection
+        (Websocket.Connection id url)
         data
         (\result ->
             case result of
@@ -74,17 +96,17 @@ sendString connection data =
 {-| Close the websocket connection. This won't trigger any close notifications in `listen`.
 -}
 close : Connection -> Task restriction x ()
-close connection =
-    Effect.Internal.WebsocketClose connection Effect.Internal.Succeed
+close (Connection id url) =
+    Effect.Internal.WebsocketClose (Websocket.Connection id url) Effect.Internal.Succeed
 
 
 {-| Listen for incoming messages through a websocket connection.
 You'll also get notified if the connection closes unexpectedly (or in other words, you won't get notified if you're the one closing it with `close`).
 -}
 listen : Connection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Subscription restriction msg
-listen connection onData onUnexpectedClose =
+listen (Connection id url) onData onUnexpectedClose =
     Effect.Internal.WebsocketListen
-        connection
+        (Websocket.Connection id url)
         onData
         (\closeData ->
             onUnexpectedClose
