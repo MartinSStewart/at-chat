@@ -4875,13 +4875,16 @@ decodeDispatchUserEvent eventName =
         "THREAD_MEMBER_UPDATE" ->
             JD.succeed DispatchUser_ThreadMemberUpdate
 
+        "GENERIC_PUSH_NOTIFICATION_SENT" ->
+            JD.succeed DispatchUser_GenericPushNotificationSent
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
 
 type alias VoiceStateUpdate =
-    { guildId : OptionalData (Id GuildId)
-    , channelId : Id ChannelId
+    { guildId : OptionalData (Maybe (Id GuildId))
+    , channelId : Maybe (Id ChannelId)
     , userId : Id UserId
     , member : OptionalData GuildMember
     }
@@ -4890,8 +4893,8 @@ type alias VoiceStateUpdate =
 decodeVoiceStateUpdate : JD.Decoder VoiceStateUpdate
 decodeVoiceStateUpdate =
     JD.succeed VoiceStateUpdate
-        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
-        |> JD.andMap (JD.field "channel_id" decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" (JD.nullable decodeId))
+        |> JD.andMap (JD.field "channel_id" (JD.nullable decodeId))
         |> JD.andMap (JD.field "user_id" decodeId)
         |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
 
@@ -5076,6 +5079,7 @@ type OpDispatchUserEvent
     | DispatchUser_VoiceChannelStatusUpdate
     | DispatchUser_GuildAuditLogEntryCreate
     | DispatchUser_ThreadMemberUpdate
+    | DispatchUser_GenericPushNotificationSent
 
 
 type alias ContentInventoryInboxStale =
@@ -6018,9 +6022,7 @@ handleUserGateway authToken intents response model =
                         DispatchUser_MessageDeleteEvent messageId channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
-                                    ( model
-                                    , [ UserOutMsg_UserDeletedGuildMessage guildId channelId messageId ]
-                                    )
+                                    ( model, [ UserOutMsg_UserDeletedGuildMessage guildId channelId messageId ] )
 
                                 Missing ->
                                     ( model
@@ -6115,6 +6117,9 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_ThreadMemberUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_GenericPushNotificationSent ->
                             ( model, [] )
 
                 OpReconnect ->

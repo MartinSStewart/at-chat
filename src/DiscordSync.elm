@@ -1480,7 +1480,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             let
                                 ( model3, cmd2 ) =
                                     case ( voiceStateUpdate.guildId, voiceStateUpdate.member ) of
-                                        ( Included guildId, Included member ) ->
+                                        ( Included (Just guildId), Included member ) ->
                                             handleGuildMemberUpdate guildId member model2
 
                                         _ ->
