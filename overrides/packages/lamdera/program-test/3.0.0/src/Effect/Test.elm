@@ -6,6 +6,7 @@ module Effect.Test exposing
     , startHeadless, HeadlessMsg
     , Button(..), WheelOptions(..), DeltaMode(..), CurrentTimeline, EventFrontend, EventType, FileLoadError, FileLoadErrorType, MouseEvent, OverlayPosition, TestError, Touch, TouchEvent, Latency
     , configForApplication, configForDocument, configForElement, configForSandbox
+    , websocketSendString
     )
 
 {-|
@@ -430,7 +431,7 @@ type alias WebsocketState =
 {-| -}
 type alias Data frontendModel backendModel =
     { httpRequests : List HttpRequest
-    , websockets : SeqDict ( Maybe ClientId, Websocket.Connection ) WebsocketState
+    , websockets : SeqDict ( RequestedBy, Websocket.Connection ) WebsocketState
     , portRequests : List PortToJs
     , fileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : FileUpload }
     , multipleFileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : MultipleFilesUpload }
@@ -445,7 +446,17 @@ type alias Data frontendModel backendModel =
 stateToData : State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Data frontendModel backendModel
 stateToData state =
     { httpRequests = state.httpRequests
-    , websockets = state.websockets
+    , websockets =
+        List.foldl
+            (\( clientId, frontend ) list ->
+                List.map
+                    (\( key, value ) -> ( ( RequestedByFrontend clientId, key ), value ))
+                    (SeqDict.toList frontend.websockets)
+                    ++ list
+            )
+            (List.map (\( key, value ) -> ( ( RequestedByBackend, key ), value )) (SeqDict.toList state.websockets))
+            (SeqDict.toList state.frontends)
+            |> SeqDict.fromList
     , portRequests = state.portRequests
     , fileUploads = state.fileUploads
     , multipleFileUploads = state.multipleFileUploads
@@ -1220,8 +1231,56 @@ type alias FrontendActions toBackend frontendMsg frontendModel toFrontend backen
     }
 
 
-websocketSendString : ClientId -> DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-websocketSendString clientId delay connection data =
+{-| Send data to a websocket listener on the backend.
+-}
+websocketSendString : DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+websocketSendString delay connection data =
+    Action
+        (\instructions ->
+            wait (Duration.milliseconds delay) instructions
+                |> NextStep
+                    (\state ->
+                        case SeqDict.get connection state.websockets of
+                            Just websocket ->
+                                List.foldl
+                                    (\msg state2 ->
+                                        handleBackendUpdate (currentTime state2) state2.backendApp (msg data) state2
+                                    )
+                                    (addEvent
+                                        (WebsocketSendStringEvent Nothing connection data)
+                                        (case websocket.closedAt of
+                                            Just _ ->
+                                                Just WebsocketClosed
+
+                                            Nothing ->
+                                                Nothing
+                                        )
+                                        { state
+                                            | websockets =
+                                                SeqDict.insert
+                                                    connection
+                                                    { websocket
+                                                        | dataSent =
+                                                            Array.push
+                                                                { sentAt = currentTime state, data = data }
+                                                                websocket.dataSent
+                                                    }
+                                                    state.websockets
+                                        }
+                                    )
+                                    (getWebsocketOnData (state.backendApp.subscriptions state.model))
+
+                            Nothing ->
+                                addEvent
+                                    (WebsocketSendStringEvent Nothing connection data)
+                                    (Just WebsocketMissing)
+                                    state
+                    )
+        )
+
+
+frontendWebsocketSendString : ClientId -> DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+frontendWebsocketSendString clientId delay connection data =
     Action
         (\instructions ->
             wait (Duration.milliseconds delay) instructions
@@ -1231,33 +1290,39 @@ websocketSendString clientId delay connection data =
                             Just frontend ->
                                 case SeqDict.get connection frontend.websockets of
                                     Just websocket ->
-                                        addEvent
-                                            (WebsocketSendStringEvent (Just clientId) connection data)
-                                            (case websocket.closedAt of
-                                                Just _ ->
-                                                    Just WebsocketClosed
-
-                                                Nothing ->
-                                                    Nothing
+                                        List.foldl
+                                            (\msg state2 ->
+                                                handleFrontendUpdate clientId (currentTime state2) state2.frontendApp (msg data) state2
                                             )
-                                            { state
-                                                | frontends =
-                                                    SeqDict.insert
-                                                        clientId
-                                                        { frontend
-                                                            | websockets =
-                                                                SeqDict.insert
-                                                                    connection
-                                                                    { websocket
-                                                                        | dataSent =
-                                                                            Array.push
-                                                                                { sentAt = currentTime state, data = data }
-                                                                                websocket.dataSent
-                                                                    }
-                                                                    frontend.websockets
-                                                        }
-                                                        state.frontends
-                                            }
+                                            (addEvent
+                                                (WebsocketSendStringEvent (Just clientId) connection data)
+                                                (case websocket.closedAt of
+                                                    Just _ ->
+                                                        Just WebsocketClosed
+
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                { state
+                                                    | frontends =
+                                                        SeqDict.insert
+                                                            clientId
+                                                            { frontend
+                                                                | websockets =
+                                                                    SeqDict.insert
+                                                                        connection
+                                                                        { websocket
+                                                                            | dataSent =
+                                                                                Array.push
+                                                                                    { sentAt = currentTime state, data = data }
+                                                                                    websocket.dataSent
+                                                                        }
+                                                                        frontend.websockets
+                                                            }
+                                                            state.frontends
+                                                }
+                                            )
+                                            (getWebsocketOnData (state.frontendApp.subscriptions frontend.model))
 
                                     Nothing ->
                                         addEvent
@@ -1556,6 +1621,34 @@ getClientConnectSubs backendSub =
             []
 
 
+{-| -}
+getWebsocketOnData : Effect.Internal.Subscription r msg -> List (String -> msg)
+getWebsocketOnData sub =
+    case sub of
+        Effect.Internal.SubBatch batch ->
+            List.foldl (\sub2 list -> getWebsocketOnData sub2 ++ list) [] batch
+
+        Effect.Internal.WebsocketListen connection onData onClose ->
+            [ onData ]
+
+        _ ->
+            []
+
+
+{-| -}
+getWebsocketOnClose : Effect.Internal.Subscription r msg -> List ({ code : Websocket.CloseEventCode, reason : String } -> msg)
+getWebsocketOnClose sub =
+    case sub of
+        Effect.Internal.SubBatch batch ->
+            List.foldl (\sub2 list -> getWebsocketOnClose sub2 ++ list) [] batch
+
+        Effect.Internal.WebsocketListen connection onData onClose ->
+            [ onClose ]
+
+        _ ->
+            []
+
+
 {-| Add a frontend client to the end to end test
 
     import Effect.Test
@@ -1716,7 +1809,7 @@ connectFrontend delay sessionId url windowSize andThenFunc =
                                     , navigateForward = navigateForwardAction clientId
                                     , navigateBack = navigateBackAction clientId
                                     , setNetworkLatency = setNetworkLatency clientId
-                                    , websocketSendString = websocketSendString clientId
+                                    , websocketSendString = frontendWebsocketSendString clientId
                                     }
                         in
                         getClientConnectSubs (state2.backendApp.subscriptions state2.model)
