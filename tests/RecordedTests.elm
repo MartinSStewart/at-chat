@@ -41,9 +41,9 @@ setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel T
 setup =
     T.viewerWith tests
         |> T.addBytesFiles (Dict.values fileRequests)
-        |> T.addBytesFile "/tests/data/discord-op2.txt"
-        |> T.addBytesFile "/tests/data/discord-op0-ready.txt"
-        |> T.addBytesFile "/tests/data/discord-op0-ready-supplemental.txt"
+        |> T.addStringFile "/tests/data/discord-op2.txt"
+        |> T.addStringFile "/tests/data/discord-op0-ready.txt"
+        |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.txt"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -63,11 +63,6 @@ fileRequests =
     [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
     , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
     ]
-        |> Dict.fromList
-
-
-discordWebsocketRequests =
-    []
         |> Dict.fromList
 
 
@@ -604,7 +599,7 @@ safariIphone =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 13_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1"
 
 
-tests : Dict String Bytes -> Bytes -> Bytes -> Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests : Dict String Bytes -> String -> String -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse

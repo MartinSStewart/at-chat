@@ -407,6 +407,7 @@ type alias State toBackend frontendMsg frontendModel toFrontend backendMsg backe
     , timers : SeqDict Duration { startTime : Time.Posix }
     , testErrors : List TestError
     , httpRequests : List HttpRequest
+    , websockets : SeqDict Websocket.Connection WebsocketState
     , fileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : FileUpload }
     , multipleFileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : MultipleFilesUpload }
     , handleHttpRequest : { data : Data frontendModel backendModel, currentRequest : HttpRequest } -> HttpResponse
@@ -422,9 +423,14 @@ type alias State toBackend frontendMsg frontendModel toFrontend backendMsg backe
     }
 
 
+type alias WebsocketState =
+    { createdAt : Time.Posix, closedAt : Maybe Time.Posix, dataSent : Array { data : String, sentAt : Time.Posix } }
+
+
 {-| -}
 type alias Data frontendModel backendModel =
     { httpRequests : List HttpRequest
+    , websockets : SeqDict ( Maybe ClientId, Websocket.Connection ) WebsocketState
     , portRequests : List PortToJs
     , fileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : FileUpload }
     , multipleFileUploads : List { uploadedAt : Time.Posix, uploadedBy : ClientId, upload : MultipleFilesUpload }
@@ -439,6 +445,7 @@ type alias Data frontendModel backendModel =
 stateToData : State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Data frontendModel backendModel
 stateToData state =
     { httpRequests = state.httpRequests
+    , websockets = state.websockets
     , portRequests = state.portRequests
     , fileUploads = state.fileUploads
     , multipleFileUploads = state.multipleFileUploads
@@ -564,6 +571,8 @@ type TestError
     | HttpResponseCantConvertTextureToString HttpRequest
     | HttpRequestNotHandled HttpRequest
     | PortEventNotHandled String
+    | WebsocketClosed
+    | WebsocketMissing
 
 
 {-| -}
@@ -795,6 +804,12 @@ testErrorToString error =
         PortEventNotHandled portName ->
             "Data was sent to the frontend through a port named \"" ++ portName ++ "\" but there was no subscription for it"
 
+        WebsocketClosed ->
+            "websocketSendString was called on a websocket that is already closed."
+
+        WebsocketMissing ->
+            "websocketSendString was called on a websocket that doesn't exist."
+
 
 {-| -}
 toTest : EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Test
@@ -939,6 +954,7 @@ type alias FrontendState toBackend frontendMsg frontendModel toFrontend =
     , windowSize : { width : Int, height : Int }
     , toBackendLatency : Duration
     , toFrontendLatency : Duration
+    , websockets : SeqDict Websocket.Connection WebsocketState
     }
 
 
@@ -1200,7 +1216,62 @@ type alias FrontendActions toBackend frontendMsg frontendModel toFrontend backen
     , navigateBack : DelayInMs -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , navigateForward : DelayInMs -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , setNetworkLatency : DelayInMs -> Latency -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    , websocketSendString : DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     }
+
+
+websocketSendString : ClientId -> DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+websocketSendString clientId delay connection data =
+    Action
+        (\instructions ->
+            wait (Duration.milliseconds delay) instructions
+                |> NextStep
+                    (\state ->
+                        case SeqDict.get clientId state.frontends of
+                            Just frontend ->
+                                case SeqDict.get connection frontend.websockets of
+                                    Just websocket ->
+                                        addEvent
+                                            (WebsocketSendStringEvent (Just clientId) connection data)
+                                            (case websocket.closedAt of
+                                                Just _ ->
+                                                    Just WebsocketClosed
+
+                                                Nothing ->
+                                                    Nothing
+                                            )
+                                            { state
+                                                | frontends =
+                                                    SeqDict.insert
+                                                        clientId
+                                                        { frontend
+                                                            | websockets =
+                                                                SeqDict.insert
+                                                                    connection
+                                                                    { websocket
+                                                                        | dataSent =
+                                                                            Array.push
+                                                                                { sentAt = currentTime state, data = data }
+                                                                                websocket.dataSent
+                                                                    }
+                                                                    frontend.websockets
+                                                        }
+                                                        state.frontends
+                                            }
+
+                                    Nothing ->
+                                        addEvent
+                                            (WebsocketSendStringEvent (Just clientId) connection data)
+                                            (Just WebsocketMissing)
+                                            state
+
+                            Nothing ->
+                                addEvent
+                                    (WebsocketSendStringEvent (Just clientId) connection data)
+                                    (ClientIdNotFound clientId |> Just)
+                                    state
+                    )
+        )
 
 
 setNetworkLatency : ClientId -> DelayInMs -> Latency -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
@@ -1342,6 +1413,7 @@ start testName startTime2 config actions =
             , timers = getTimers (config.backendApp.subscriptions backend) |> SeqDict.map (\_ _ -> { startTime = startTime2 })
             , testErrors = []
             , httpRequests = []
+            , websockets = SeqDict.empty
             , fileUploads = []
             , multipleFileUploads = []
             , handleHttpRequest = config.handleHttpRequest
@@ -1585,6 +1657,7 @@ connectFrontend delay sessionId url windowSize andThenFunc =
                                             , windowSize = windowSize
                                             , toBackendLatency = Quantity.zero
                                             , toFrontendLatency = Quantity.zero
+                                            , websockets = SeqDict.empty
                                             }
                                             state.frontends
                                     , counter = state.counter + 1
@@ -1643,6 +1716,7 @@ connectFrontend delay sessionId url windowSize andThenFunc =
                                     , navigateForward = navigateForwardAction clientId
                                     , navigateBack = navigateBackAction clientId
                                     , setNetworkLatency = setNetworkLatency clientId
+                                    , websocketSendString = websocketSendString clientId
                                     }
                         in
                         getClientConnectSubs (state2.backendApp.subscriptions state2.model)
@@ -1698,6 +1772,7 @@ type EventType toBackend frontendMsg frontendModel toFrontend backendMsg backend
     | SetLatency ClientId Latency
     | CollapsableGroupStart String
     | CollapsableGroupEnd String
+    | WebsocketSendStringEvent (Maybe ClientId) Websocket.Connection String
 
 
 {-| -}
@@ -4286,13 +4361,60 @@ runTask maybeClientId state task =
             function () |> runTask maybeClientId state
 
         WebsocketCreateHandle url function ->
-            function (Websocket.Connection "" url) |> runTask maybeClientId state
+            let
+                websocketId : String
+                websocketId =
+                    SeqDict.size state.websockets |> String.fromInt
 
-        WebsocketSendString _ _ function ->
-            function (Ok ()) |> runTask maybeClientId state
+                connection : Websocket.Connection
+                connection =
+                    Websocket.Connection websocketId url
+            in
+            function connection
+                |> runTask maybeClientId
+                    { state
+                        | websockets =
+                            SeqDict.insert
+                                connection
+                                { createdAt = currentTime state, closedAt = Nothing, dataSent = Array.empty }
+                                state.websockets
+                    }
 
-        WebsocketClose _ function ->
-            function () |> runTask maybeClientId state
+        WebsocketSendString connection text2 function ->
+            let
+                connectionIsOpen : Bool
+                connectionIsOpen =
+                    case SeqDict.get connection state.websockets of
+                        Just connectionState ->
+                            connectionState.closedAt == Nothing
+
+                        Nothing ->
+                            False
+            in
+            function
+                (if connectionIsOpen then
+                    Ok ()
+
+                 else
+                    Err Websocket.ConnectionClosed
+                )
+                |> runTask maybeClientId state
+
+        WebsocketClose connection function ->
+            function ()
+                |> runTask maybeClientId
+                    { state
+                        | websockets =
+                            SeqDict.updateIfExists
+                                connection
+                                (\connectionState ->
+                                    { connectionState
+                                        | closedAt =
+                                            Maybe.withDefault (currentTime state) connectionState.closedAt |> Just
+                                    }
+                                )
+                                state.websockets
+                    }
 
 
 handleHttpResponseWithTestError :
@@ -5521,6 +5643,14 @@ eventTypeToTimelineType eventType =
         CollapsableGroupEnd _ ->
             BackendTimeline
 
+        WebsocketSendStringEvent maybeClientId _ _ ->
+            case maybeClientId of
+                Just clientId ->
+                    FrontendTimeline clientId
+
+                Nothing ->
+                    BackendTimeline
+
 
 {-| -}
 isSkippable : EventType toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Bool
@@ -5578,6 +5708,9 @@ isSkippable eventType =
             True
 
         CollapsableGroupEnd _ ->
+            True
+
+        WebsocketSendStringEvent maybeClientId connection string ->
             True
 
 
@@ -5864,6 +5997,9 @@ checkCachedElmValueHelper event state =
                     Nothing
 
                 CollapsableGroupEnd _ ->
+                    Nothing
+
+                WebsocketSendStringEvent maybeClientId connection string ->
                     Nothing
     }
 
@@ -6484,6 +6620,9 @@ currentStepText stepIndex currentStep testView_ =
 
                 CollapsableGroupEnd name ->
                     "Collapsable group end: " ++ name
+
+                WebsocketSendStringEvent maybeClientId (Websocket.Connection _ url) string ->
+                    "Websocket sent data from " ++ url
     in
     Html.div
         [ Html.Attributes.style "padding" "4px", Html.Attributes.title fullMsg ]
@@ -6691,6 +6830,9 @@ eventToArrows timelines collapsedRanges2 adjustedColumnIndex event rowIndex =
             []
 
         CollapsableGroupEnd _ ->
+            []
+
+        WebsocketSendStringEvent maybeClientId connection string ->
             []
 
 
@@ -7428,6 +7570,9 @@ eventIcon timelines testView2 event collapsedRanges2 adjustedColumIndex columnIn
                 ]
                 []
             ]
+
+        WebsocketSendStringEvent maybeClientId connection string ->
+            [ circleHelper "e2e-big-circle" ]
     )
         ++ (if noErrors then
                 []
