@@ -1,5 +1,6 @@
 module RecordedTests exposing (main, setup)
 
+import Array exposing (Array)
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
@@ -9,7 +10,8 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera as Lamdera exposing (SessionId)
-import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
+import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
+import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
@@ -738,6 +740,35 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
             (\adminA ->
                 [ adminA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                 , handleLoginFromLoginPage adminEmail adminA
+                , T.andThen
+                    100
+                    (\data ->
+                        let
+                            maybeConnection : List ( Websocket.Connection, Array { sentAt : Time.Posix, data : String } )
+                            maybeConnection =
+                                SeqDict.toList data.websockets
+                                    |> List.filterMap
+                                        (\( ( requestedBy, connection ), websocketState ) ->
+                                            if
+                                                (requestedBy == RequestedByFrontend adminA.clientId)
+                                                    && (websocketState.closedAt == Nothing)
+                                            then
+                                                Just ( connection, websocketState.dataSent )
+
+                                            else
+                                                Nothing
+                                        )
+                        in
+                        case maybeConnection of
+                            [ ( connection, _ ) ] ->
+                                [ T.websocketSendString 100 connection discordOp2 ]
+
+                            [] ->
+                                [ T.checkState 100 (\_ -> Err "Didn't find any websocket connection") ]
+
+                            _ ->
+                                [ T.checkState 100 (\_ -> Err "Found multiple websocket connections. I don't know which one to use.") ]
+                    )
                 ]
             )
         ]

@@ -74,6 +74,7 @@ import Effect.Snapshot exposing (Snapshot)
 import Effect.Subscription exposing (Subscription)
 import Effect.TreeView exposing (CollapsedField(..), PathNode)
 import Effect.WebGL.Texture
+import Effect.Websocket
 import Expect exposing (Expectation)
 import Html exposing (Html)
 import Html.Attributes
@@ -1227,13 +1228,13 @@ type alias FrontendActions toBackend frontendMsg frontendModel toFrontend backen
     , navigateBack : DelayInMs -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , navigateForward : DelayInMs -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     , setNetworkLatency : DelayInMs -> Latency -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    , websocketSendString : DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    , websocketSendString : DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     }
 
 
 {-| Send data to a websocket listener on the backend.
 -}
-websocketSendString : DelayInMs -> Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+websocketSendString : DelayInMs -> Effect.Websocket.Connection -> String -> Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 websocketSendString delay connection data =
     Action
         (\instructions ->
@@ -1244,7 +1245,7 @@ websocketSendString delay connection data =
                             Just websocket ->
                                 List.foldl
                                     (\msg state2 ->
-                                        handleBackendUpdate (currentTime state2) state2.backendApp (msg data) state2
+                                        handleBackendUpdate (currentTime state2) (msg data) state2
                                     )
                                     (addEvent
                                         (WebsocketSendStringEvent Nothing connection data)
@@ -1292,7 +1293,7 @@ frontendWebsocketSendString clientId delay connection data =
                                     Just websocket ->
                                         List.foldl
                                             (\msg state2 ->
-                                                handleFrontendUpdate clientId (currentTime state2) state2.frontendApp (msg data) state2
+                                                handleFrontendUpdate clientId (currentTime state2) (msg data) state2
                                             )
                                             (addEvent
                                                 (WebsocketSendStringEvent (Just clientId) connection data)
@@ -1578,7 +1579,6 @@ backendUpdate delayInMs backendMsg =
                     (\state ->
                         handleBackendUpdate
                             (currentTime state)
-                            state.backendApp
                             backendMsg
                             (addEvent (TestEvent Nothing ("Trigger BackendMsg: " ++ Debug.toString backendMsg)) Nothing state)
                     )
@@ -1815,7 +1815,7 @@ connectFrontend delay sessionId url windowSize andThenFunc =
                         getClientConnectSubs (state2.backendApp.subscriptions state2.model)
                             |> List.foldl
                                 (\msg state3 ->
-                                    handleBackendUpdate (currentTime state3) state3.backendApp (msg sessionId clientId) state3
+                                    handleBackendUpdate (currentTime state3) (msg sessionId clientId) state3
                                 )
                                 state2
                             |> Start
@@ -1976,18 +1976,17 @@ handleFrontendUpdate clientId time msg state =
 {-| -}
 handleBackendUpdate :
     Time.Posix
-    -> BackendApp toBackend toFrontend backendMsg backendModel
     -> backendMsg
     -> State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-handleBackendUpdate time app msg state =
+handleBackendUpdate time msg state =
     let
         ( newModel, cmd ) =
-            app.update msg state.model
+            state.backendApp.update msg state.model
 
         subscriptions : Subscription BackendOnly backendMsg
         subscriptions =
-            app.subscriptions newModel
+            state.backendApp.subscriptions newModel
 
         newTimers : SeqDict Duration { msg : Nonempty (Time.Posix -> backendMsg) }
         newTimers =
@@ -3116,7 +3115,7 @@ disconnectFrontend clientId instructions =
                                 getClientDisconnectSubs (state.backendApp.subscriptions state.model)
                                     |> List.foldl
                                         (\msg state3 ->
-                                            handleBackendUpdate (currentTime state3) state3.backendApp (msg frontend.sessionId clientId) state3
+                                            handleBackendUpdate (currentTime state3) (msg frontend.sessionId clientId) state3
                                         )
                                         state
                         in
@@ -3293,7 +3292,7 @@ simulateStep timeLeft state =
                                 getTriggersTimerMsgs state.backendApp.subscriptions state nextTimerEnd.endTime
                         in
                         List.foldl
-                            (handleBackendUpdate nextTimerEnd.endTime state.backendApp)
+                            (handleBackendUpdate nextTimerEnd.endTime)
                             { state | timers = List.foldl SeqDict.remove state.timers completedDurations }
                             triggeredMsgs
 
@@ -4101,7 +4100,7 @@ runBackendEffects stepIndex effect state =
                 ( state2, msg ) =
                     runTask Nothing state task
             in
-            handleBackendUpdate (currentTime state2) state2.backendApp msg state2
+            handleBackendUpdate (currentTime state2) msg state2
 
         FlattenedCommand_SendToBackend _ ->
             state
