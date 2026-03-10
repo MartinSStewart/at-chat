@@ -217,7 +217,7 @@ init url key =
     let
         route : Route
         route =
-            Route.decode (Debug.log "url" url)
+            Route.decode url
     in
     ( Loading
         { navigationKey = key

@@ -622,18 +622,27 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
                                 """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
                         "http://localhost:3000/file/custom-request" ->
-                            case List.Extra.find (\( key, _ ) -> key == "url") currentRequest.headers of
-                                Just ( _, url ) ->
-                                    0
+                            case currentRequest.body of
+                                T.JsonBody json ->
+                                    case Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) json of
+                                        Ok "https://discord.com/api/v9/users/@me" ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 200
+                                                , statusText = "OK"
+                                                , headers = Dict.empty
+                                                }
+                                                """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
 
-                                Nothing ->
-                                    StringHttpResponse
-                                        { url = currentRequest.url
-                                        , statusCode = 500
-                                        , statusText = "Bad request"
-                                        , headers = Dict.empty
-                                        }
-                                        ""
+                                        error ->
+                                            let
+                                                _ =
+                                                    Debug.log "UnhandledHttpRequest" error
+                                            in
+                                            UnhandledHttpRequest
+
+                                _ ->
+                                    UnhandledHttpRequest
 
                         "http://localhost:3000/file/vapid" ->
                             StringHttpResponse
@@ -761,7 +770,7 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
                         let
                             maybeConnection : List ( Websocket.Connection, Array { sentAt : Time.Posix, data : String } )
                             maybeConnection =
-                                SeqDict.toList data.websockets
+                                SeqDict.toList (Debug.log "websockets" data.websockets)
                                     |> List.filterMap
                                         (\( ( requestedBy, connection ), websocketState ) ->
                                             if

@@ -4467,48 +4467,108 @@ runTask maybeClientId state task =
 
         WebsocketCreateHandle url function ->
             let
-                websocketId : String
-                websocketId =
-                    SeqDict.size state.websockets |> String.fromInt
+                helper : { a | websockets : SeqDict Websocket.Connection WebsocketState } -> ( Task restriction x x, { a | websockets : SeqDict Websocket.Connection WebsocketState } )
+                helper a =
+                    let
+                        websocketId : String
+                        websocketId =
+                            SeqDict.size a.websockets |> String.fromInt
 
-                connection : Websocket.Connection
-                connection =
-                    Websocket.Connection websocketId url
-            in
-            function connection
-                |> runTask maybeClientId
-                    { state
+                        connection : Websocket.Connection
+                        connection =
+                            Websocket.Connection websocketId url
+                    in
+                    ( function connection
+                    , { a
                         | websockets =
                             SeqDict.insert
                                 connection
                                 { createdAt = currentTime state, closedAt = Nothing, dataSent = Array.empty }
-                                state.websockets
-                    }
+                                a.websockets
+                                |> Debug.log "createHandle"
+                      }
+                    )
+            in
+            case maybeClientId of
+                Just clientId ->
+                    case SeqDict.get clientId state.frontends of
+                        Just frontend ->
+                            let
+                                ( task2, frontend2 ) =
+                                    helper frontend
+                            in
+                            runTask
+                                maybeClientId
+                                { state | frontends = SeqDict.insert clientId frontend2 state.frontends }
+                                task2
+
+                        Nothing ->
+                            function (Websocket.Connection "" url) |> runTask maybeClientId state
+
+                Nothing ->
+                    let
+                        ( task2, state2 ) =
+                            helper state
+                    in
+                    runTask maybeClientId state2 task2
 
         WebsocketSendString connection text2 function ->
             let
-                connectionIsOpen : Bool
-                connectionIsOpen =
-                    case SeqDict.get connection state.websockets of
-                        Just connectionState ->
-                            connectionState.closedAt == Nothing
+                helper : { a | websockets : SeqDict Websocket.Connection WebsocketState } -> ( Task restriction x x, { a | websockets : SeqDict Websocket.Connection WebsocketState } )
+                helper a =
+                    case SeqDict.get connection a.websockets of
+                        Just websocketState ->
+                            case websocketState.closedAt of
+                                Just _ ->
+                                    ( function (Err Websocket.ConnectionClosed), a )
+
+                                Nothing ->
+                                    ( function (Ok ())
+                                    , { a
+                                        | websockets =
+                                            SeqDict.insert
+                                                connection
+                                                { websocketState
+                                                    | dataSent =
+                                                        Array.push
+                                                            { sentAt = currentTime state, data = text2 }
+                                                            websocketState.dataSent
+                                                }
+                                                a.websockets
+                                      }
+                                    )
 
                         Nothing ->
-                            False
+                            ( function (Err Websocket.ConnectionClosed), a )
             in
-            function
-                (if connectionIsOpen then
-                    Ok ()
+            case maybeClientId of
+                Just clientId ->
+                    case SeqDict.get clientId state.frontends of
+                        Just frontend ->
+                            let
+                                ( task2, frontend2 ) =
+                                    helper frontend
+                            in
+                            runTask
+                                maybeClientId
+                                { state | frontends = SeqDict.insert clientId frontend2 state.frontends }
+                                task2
 
-                 else
-                    Err Websocket.ConnectionClosed
-                )
-                |> runTask maybeClientId state
+                        Nothing ->
+                            function (Err Websocket.ConnectionClosed) |> runTask maybeClientId state
+
+                Nothing ->
+                    let
+                        ( task2, state2 ) =
+                            helper state
+                    in
+                    runTask maybeClientId state2 task2
 
         WebsocketClose connection function ->
-            function ()
-                |> runTask maybeClientId
-                    { state
+            let
+                helper : { a | websockets : SeqDict Websocket.Connection WebsocketState } -> { a | websockets : SeqDict Websocket.Connection WebsocketState }
+                helper a =
+                    { a
                         | websockets =
                             SeqDict.updateIfExists
                                 connection
@@ -4518,8 +4578,23 @@ runTask maybeClientId state task =
                                             Maybe.withDefault (currentTime state) connectionState.closedAt |> Just
                                     }
                                 )
-                                state.websockets
+                                a.websockets
                     }
+            in
+            case maybeClientId of
+                Just clientId ->
+                    case SeqDict.get clientId state.frontends of
+                        Just frontend ->
+                            runTask
+                                maybeClientId
+                                { state | frontends = SeqDict.insert clientId (helper frontend) state.frontends }
+                                (function ())
+
+                        Nothing ->
+                            function () |> runTask maybeClientId state
+
+                Nothing ->
+                    runTask maybeClientId (helper state) (function ())
 
 
 handleHttpResponseWithTestError :
