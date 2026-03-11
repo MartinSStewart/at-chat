@@ -3798,7 +3798,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (\_ user ->
                     ( model
-                    , BackendExtra.adminData model (Maybe.withDefault user.lastLogPageViewed logPage)
+                    , BackendExtra.adminData model user (Maybe.withDefault user.lastLogPageViewed logPage)
                         |> Server_LoadAdminData
                         |> ServerChange
                         |> ChangeBroadcast
@@ -4484,6 +4484,14 @@ updateFromFrontendAdmin clientId toBackend model =
                     ( model
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
+
+        Pages.Admin.GetDiscordUsersRequest ->
+            ( model
+            , BackendExtra.discordUsersForAdmin model
+                |> Pages.Admin.GetDiscordUsersResponse
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend clientId
+            )
 
 
 asUser :

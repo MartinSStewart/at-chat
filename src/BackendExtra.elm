@@ -4,6 +4,7 @@ module BackendExtra exposing
     , adminData
     , discordDmChannelToFrontend
     , discordGuildToFrontendForUser
+    , discordUsersForAdmin
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
     , getLoginData
@@ -60,7 +61,7 @@ import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (BackendThread)
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
+import User exposing (AdminUiSection(..), BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
 import VisibleMessages
@@ -406,7 +407,7 @@ getLoginData sessionId session user requestMessagesFor model =
         if user.isAdmin then
             case requestMessagesFor of
                 InitialLoadRequested_Admin logPage ->
-                    IsAdminLoginData (adminData model (Maybe.withDefault user.lastLogPageViewed logPage))
+                    IsAdminLoginData (adminData model user (Maybe.withDefault user.lastLogPageViewed logPage))
 
                 InitialLoadRequested_Channel _ _ ->
                     IsAdminButNoData
@@ -644,8 +645,31 @@ getLinkedDiscordUsersAndOtherUsers userId model =
         model.discordUsers
 
 
-adminData : BackendModel -> Id PageId -> InitAdminData
-adminData model lastLogPageViewed =
+discordUsersForAdmin : BackendModel -> SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+discordUsersForAdmin model =
+    SeqDict.map
+        (\_ discordUser ->
+            case discordUser of
+                FullData data ->
+                    FullData_ForAdmin
+                        { user = data.user
+                        , linkedTo = data.linkedTo
+                        , icon = data.icon
+                        , linkedAt = data.linkedAt
+                        , isLoadingData = data.isLoadingData
+                        }
+
+                BasicData data ->
+                    BasicData_ForAdmin data
+
+                NeedsAuthAgain data ->
+                    NeedsAuthAgain_ForAdmin data
+        )
+        model.discordUsers
+
+
+adminData : BackendModel -> BackendUser -> Id PageId -> InitAdminData
+adminData model user lastLogPageViewed =
     { users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , signupsEnabled = model.signupsEnabled
@@ -663,25 +687,11 @@ adminData model lastLogPageViewed =
             )
             model.discordDmChannels
     , discordUsers =
-        SeqDict.map
-            (\_ discordUser ->
-                case discordUser of
-                    FullData data ->
-                        FullData_ForAdmin
-                            { user = data.user
-                            , linkedTo = data.linkedTo
-                            , icon = data.icon
-                            , linkedAt = data.linkedAt
-                            , isLoadingData = data.isLoadingData
-                            }
+        if SeqSet.member DiscordUsersSection user.expandedSections then
+            Just (discordUsersForAdmin model)
 
-                    BasicData data ->
-                        BasicData_ForAdmin data
-
-                    NeedsAuthAgain data ->
-                        NeedsAuthAgain_ForAdmin data
-            )
-            model.discordUsers
+        else
+            Nothing
     , discordGuilds =
         SeqDict.map
             (\_ guild ->

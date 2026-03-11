@@ -35,7 +35,7 @@ import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import Local exposing (Local)
+import Local exposing (Local(..))
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
@@ -3866,13 +3866,42 @@ updateLoadedFromBackend msg model =
         AdminToFrontend adminToFrontend ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
-                    let
-                        ( newAdmin, cmd ) =
-                            Pages.Admin.updateFromBackend adminToFrontend loggedIn.admin
-                    in
-                    ( { model | loginStatus = LoggedIn { loggedIn | admin = newAdmin } }
-                    , Command.map AdminToBackend AdminPageMsg cmd
-                    )
+                    case adminToFrontend of
+                        Pages.Admin.GetDiscordUsersResponse discordUsers ->
+                            case loggedIn.localState of
+                                Local.Local record ->
+                                    let
+                                        updateDiscordUsers local =
+                                            case local.adminData of
+                                                IsAdmin adminData ->
+                                                    { local | adminData = IsAdmin { adminData | discordUsers = Just discordUsers } }
+
+                                                _ ->
+                                                    local
+                                    in
+                                    ( { model
+                                        | loginStatus =
+                                            LoggedIn
+                                                { loggedIn
+                                                    | localState =
+                                                        Local.Local
+                                                            { record
+                                                                | localModel = updateDiscordUsers record.localModel
+                                                                , serverModel = updateDiscordUsers record.serverModel
+                                                            }
+                                                }
+                                      }
+                                    , Command.none
+                                    )
+
+                        _ ->
+                            let
+                                ( newAdmin, cmd ) =
+                                    Pages.Admin.updateFromBackend adminToFrontend loggedIn.admin
+                            in
+                            ( { model | loginStatus = LoggedIn { loggedIn | admin = newAdmin } }
+                            , Command.map AdminToBackend AdminPageMsg cmd
+                            )
 
                 NotLoggedIn _ ->
                     ( model, Command.none )

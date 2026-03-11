@@ -425,7 +425,7 @@ type alias AdminData =
         SeqDict
             (Discord.Id Discord.PrivateChannelId)
             AdminData_DiscordDmChannel
-    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+    , discordUsers : Maybe (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)

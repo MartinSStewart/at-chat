@@ -125,12 +125,14 @@ type ToBackend
     = ExportBackendRequest
     | ExportSubsetBackendRequest
     | ImportBackendRequest Bytes
+    | GetDiscordUsersRequest
 
 
 type ToFrontend
     = ExportBackendResponse Bytes
     | ExportSubsetBackendResponse Bytes
     | ImportBackendResponse (Result () ())
+    | GetDiscordUsersResponse (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
 
 
 type alias Model =
@@ -180,7 +182,7 @@ type alias InitAdminData =
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
-    , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
+    , discordUsers : Maybe (SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin)
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
@@ -544,7 +546,19 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, CollapseSection section2 |> AdminChange )
 
         PressedExpandSection section2 ->
-            ( model, Command.none, ExpandSection section2 |> AdminChange )
+            ( model
+            , case section2 of
+                DiscordUsersSection ->
+                    if adminData.discordUsers == Nothing then
+                        Lamdera.sendToBackend GetDiscordUsersRequest
+
+                    else
+                        Command.none
+
+                _ ->
+                    Command.none
+            , ExpandSection section2 |> AdminChange
+            )
 
         PressedEditCell userTableId column ->
             updateUserTable
@@ -1129,6 +1143,9 @@ updateFromBackend toFrontend model =
                 Err () ->
                     ( { model | importBackendStatus = ImportBackendFailed }, Command.none )
 
+        GetDiscordUsersResponse _ ->
+            ( model, Command.none )
+
 
 logSectionId : HtmlId
 logSectionId =
@@ -1582,7 +1599,7 @@ discordGuildsSection user adminData =
                                 , Ui.row
                                     [ Ui.spacing 8 ]
                                     [ Ui.text "Owner:"
-                                    , case SeqDict.get guild.owner adminData.discordUsers of
+                                    , case Maybe.andThen (SeqDict.get guild.owner) adminData.discordUsers of
                                         Just discordUser ->
                                             discordUserLabel discordUser
 
@@ -1607,7 +1624,7 @@ discordGuildsSection user adminData =
                                                         _ ->
                                                             False
                                                 )
-                                                adminData.discordUsers
+                                                (Maybe.withDefault SeqDict.empty adminData.discordUsers)
                                             )
                                             (SeqDict.insert guild.owner { joinedAt = Nothing } guild.members)
                                             |> SeqDict.keys
@@ -1765,7 +1782,7 @@ discordDmChannelsSection user adminData =
                                                 _ ->
                                                     False
                                         )
-                                        adminData.discordUsers
+                                        (Maybe.withDefault SeqDict.empty adminData.discordUsers)
                                         |> SeqDict.keys
                                         |> SeqSet.fromList
                                     )
@@ -1793,7 +1810,7 @@ discordDmChannelsSection user adminData =
                                 , NonemptySet.toList channel.members
                                     |> List.map
                                         (\discordUserId ->
-                                            case SeqDict.get discordUserId adminData.discordUsers of
+                                            case Maybe.andThen (SeqDict.get discordUserId) adminData.discordUsers of
                                                 Just discordUser ->
                                                     discordUserLabel discordUser
 
@@ -1819,34 +1836,39 @@ discordUsersSection user adminData =
         8
         user.expandedSections
         DiscordUsersSection
-        [ if SeqDict.isEmpty adminData.discordUsers then
-            Ui.text "No Discord user"
+        [ case adminData.discordUsers of
+            Nothing ->
+                Ui.text "Loading..."
 
-          else
-            Ui.column
-                [ Ui.spacing 4 ]
-                (List.map
-                    (\( discordUserId, discordUser ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
-                            , discordUserLabel discordUser
-                            , Ui.el
-                                [ Ui.width (Ui.px 200) ]
-                                (case discordUser of
-                                    FullData_ForAdmin data ->
-                                        linkedToView adminData data.linkedTo
+            Just discordUsers ->
+                if SeqDict.isEmpty discordUsers then
+                    Ui.text "No Discord user"
 
-                                    BasicData_ForAdmin _ ->
-                                        Ui.none
+                else
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        (List.map
+                            (\( discordUserId, discordUser ) ->
+                                Ui.row
+                                    [ Ui.spacing 8, Ui.Font.size 14 ]
+                                    [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
+                                    , discordUserLabel discordUser
+                                    , Ui.el
+                                        [ Ui.width (Ui.px 200) ]
+                                        (case discordUser of
+                                            FullData_ForAdmin data ->
+                                                linkedToView adminData data.linkedTo
 
-                                    NeedsAuthAgain_ForAdmin data ->
-                                        linkedToView adminData data.linkedTo
-                                )
-                            ]
-                    )
-                    (SeqDict.toList adminData.discordUsers)
-                )
+                                            BasicData_ForAdmin _ ->
+                                                Ui.none
+
+                                            NeedsAuthAgain_ForAdmin data ->
+                                                linkedToView adminData data.linkedTo
+                                        )
+                                    ]
+                            )
+                            (SeqDict.toList discordUsers)
+                        )
         ]
 
 
