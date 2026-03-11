@@ -885,69 +885,68 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ T.start
-        "Link Discord account with login"
-        startTime
-        normalConfig
-        [ linkDiscordAndLogin
-            (PersonName.toString Backend.adminUser.name)
-            adminEmail
-            False
-            discordOp0Ready
-            discordOp0ReadySupplemental
-        ]
-    , T.start
-        "Link Discord account with login to non-existent at-chat account"
-        startTime
-        normalConfig
-        [ linkDiscordAndLogin "Steve" userEmail True discordOp0Ready discordOp0ReadySupplemental
-        ]
-    , T.start
-        "Link Discord account already logged in"
-        startTime
-        normalConfig
-        [ T.connectFrontend
-            100
-            sessionId0
-            "/"
-            desktopWindow
-            (\userA ->
-                [ handleLogin firefoxDesktop adminEmail userA
-                ]
-            )
-        , T.connectFrontend
-            100
-            sessionId0
-            ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
-            desktopWindow
-            (\adminA ->
-                [ adminA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                , andThenWebsocket
-                    (\connection _ ->
-                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
-                    )
-                , andThenWebsocket
-                    (\connection websocketState ->
-                        case Array.toList websocketState.dataSent |> List.filter isOp2 of
-                            [ _ ] ->
-                                [ T.websocketSendString 100 connection discordOp0Ready
-                                , T.websocketSendString 100 connection discordOp0ReadySupplemental
-                                ]
+    [ T.testGroup "Discord"
+        [ T.start
+            "Link Discord account with login"
+            startTime
+            normalConfig
+            [ linkDiscordAndLogin
+                (PersonName.toString Backend.adminUser.name)
+                adminEmail
+                False
+                discordOp0Ready
+                discordOp0ReadySupplemental
+            ]
+        , T.start
+            "Link Discord account with login to non-existent at-chat account"
+            startTime
+            normalConfig
+            [ linkDiscordAndLogin "Steve" userEmail True discordOp0Ready discordOp0ReadySupplemental
+            ]
+        , T.start
+            "Link Discord account already logged in"
+            startTime
+            normalConfig
+            [ T.connectFrontend
+                100
+                sessionId0
+                "/"
+                desktopWindow
+                (\userA -> [ handleLogin firefoxDesktop adminEmail userA ])
+            , T.connectFrontend
+                100
+                sessionId0
+                ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
+                desktopWindow
+                (\adminA ->
+                    [ adminA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                    , andThenWebsocket
+                        (\connection _ ->
+                            [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                        )
+                    , andThenWebsocket
+                        (\connection websocketState ->
+                            case Array.toList websocketState.dataSent |> List.filter isOp2 of
+                                [ _ ] ->
+                                    [ T.websocketSendString 100 connection discordOp0Ready
+                                    , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                    ]
 
-                            _ ->
-                                [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
-                    )
-                , adminA.checkView
-                    100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
-                        , Test.Html.Selector.exactText "at0232"
-                        , Test.Html.Selector.exactText "kess"
-                        , Test.Html.Selector.exactText "purplelite"
-                        ]
-                    )
-                ]
-            )
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
+                        )
+                    , adminA.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
+                            , Test.Html.Selector.exactText "at0232"
+                            , Test.Html.Selector.exactText "kess"
+                            , Test.Html.Selector.exactText "purplelite"
+                            ]
+                        )
+                    ]
+                )
+            ]
         ]
     , T.start
         "Connect multiple devices"

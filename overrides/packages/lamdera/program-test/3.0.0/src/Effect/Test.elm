@@ -1,5 +1,5 @@
 module Effect.Test exposing
-    ( start, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse(..), RequestedBy(..), PortToJs, FileData, FileUpload(..), MultipleFilesUpload(..), uploadBytesFile, uploadStringFile, Data, FileContents(..)
+    ( start, testGroup, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse(..), RequestedBy(..), PortToJs, FileData, FileUpload(..), MultipleFilesUpload(..), uploadBytesFile, uploadStringFile, Data, FileContents(..)
     , FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
     , checkState, checkBackend, toTest, toSnapshots
     , fakeNavigationKey, viewer, Msg, Model, viewerWith, ViewerWith, startViewer, addStringFile, addStringFiles, addBytesFile, addBytesFiles, addTexture, addTextureWithOptions, addTextures, addTexturesWithOptions
@@ -14,7 +14,7 @@ module Effect.Test exposing
 
 ## Setting up end to end tests
 
-@docs start, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse, RequestedBy, PortToJs, FileData, FileUpload, MultipleFilesUpload, uploadBytesFile, uploadStringFile, Data, FileContents
+@docs start, testGroup, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse, RequestedBy, PortToJs, FileData, FileUpload, MultipleFilesUpload, uploadBytesFile, uploadStringFile, Data, FileContents
 
 
 ## Control the tests
@@ -599,16 +599,29 @@ type HttpPart
 
 {-| -}
 type EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    = NextStep (State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
-    | AndThen (State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+    = EndToEndTest (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+    | EndToEndTestGroup String (List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
+
+
+{-| Group together multiple end to end tests so they are easier to find.
+-}
+testGroup : String -> List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+testGroup =
+    EndToEndTestGroup
+
+
+{-| -}
+type EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    = NextStep (State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+    | AndThen (State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
     | Start (State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
 
 
 {-| -}
 type Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     = Action
-        (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-         -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+        (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+         -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
         )
 
 
@@ -827,7 +840,7 @@ testErrorToString error =
 
 
 {-| -}
-toTest : EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Test
+toTest : EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Test
 toTest instructions =
     let
         state =
@@ -923,7 +936,7 @@ gatherWith testFn list =
 This can be used with Effect.Snapshot.uploadSnapshots to perform visual regression testing.
 -}
 toSnapshots :
-    EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> List (Snapshot frontendMsg)
 toSnapshots instructions =
     let
@@ -944,7 +957,7 @@ toSnapshots instructions =
 
 {-| -}
 instructionsToState :
-    EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 instructionsToState inProgress =
     case inProgress of
@@ -1506,7 +1519,7 @@ start testName startTime2 config actions =
             }
                 |> addEvent (BackendInitEvent cmd) Nothing
     in
-    foldList (List.map (\(Action a) -> a) actions) (Start state)
+    foldList (List.map (\(Action a) -> a) actions) (Start state) |> EndToEndTest
 
 
 {-| -}
@@ -3114,8 +3127,8 @@ userEvent delay userInputType clientId htmlId event =
 {-| -}
 disconnectFrontend :
     ClientId
-    -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 disconnectFrontend clientId instructions =
     wait (Duration.milliseconds 100) instructions
         |> AndThen
@@ -3355,8 +3368,8 @@ If you need to simulate a large passage of time and are finding that it's taking
 -}
 wait :
     Duration
-    -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 wait duration =
     NextStep (simulateStep duration)
 
@@ -4783,7 +4796,7 @@ updateTimelineViewData test =
 
 
 viewTest :
-    EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> Int
     -> Int
     -> Int
@@ -4952,7 +4965,7 @@ update config msg (Model model) =
                     ( Model model, Cmd.none )
 
                 Just (Ok tests) ->
-                    case getAt index tests of
+                    case getAt index (flattenEndToEndTestGroup tests) of
                         Just test ->
                             let
                                 ( model2, cmds ) =
@@ -5036,7 +5049,7 @@ update config msg (Model model) =
                                             else
                                                 Nothing
                                         )
-                                        tests
+                                        (flattenEndToEndTestGroup tests)
                                         |> List.filterMap identity
                                         |> List.head
 
@@ -5343,6 +5356,22 @@ update config msg (Model model) =
         |> checkCachedElmValue
 
 
+flattenEndToEndTestGroup :
+    List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+    -> List (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+flattenEndToEndTestGroup tests =
+    List.concatMap
+        (\testGroup2 ->
+            case testGroup2 of
+                EndToEndTest test ->
+                    [ test ]
+
+                EndToEndTestGroup _ tests2 ->
+                    flattenEndToEndTestGroup tests2
+        )
+        tests
+
+
 runTests :
     List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
     -> Model toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
@@ -5351,7 +5380,7 @@ runTests :
         , Cmd (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
         )
 runTests tests (Model model) =
-    case getAt (List.length model.testResults) tests of
+    case getAt (List.length model.testResults) (flattenEndToEndTestGroup tests) of
         Just test ->
             ( Model
                 { model
@@ -5677,7 +5706,7 @@ checkCachedElmValue ( Model model, cmdA ) =
                 (\currentTest ->
                     ( case ( currentTest.showModel, model.tests ) of
                         ( True, Just (Ok tests) ) ->
-                            case getAt currentTest.index tests of
+                            case getAt currentTest.index (flattenEndToEndTestGroup tests) of
                                 Just test ->
                                     let
                                         state : State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
@@ -6231,7 +6260,7 @@ view (Model model) =
             Just (Ok tests) ->
                 case model.currentTest of
                     Just testView_ ->
-                        case getAt testView_.index tests of
+                        case getAt testView_.index (flattenEndToEndTestGroup tests) of
                             Just instructions ->
                                 testView (Tuple.first model.windowSize) instructions testView_
 
@@ -6310,58 +6339,102 @@ overview :
     -> List (Result TestError ())
     -> Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
 overview tests testResults_ =
-    let
-        overviewBody =
-            case tests of
-                [] ->
-                    [ Html.div
-                        [ defaultFontColor
-                        , Html.Attributes.style "padding" "4px"
-                        ]
-                        [ Html.text "You don't have any tests written yet!" ]
+    case tests of
+        [] ->
+            overviewContainer
+                [ Html.div
+                    [ defaultFontColor
+                    , Html.Attributes.style "padding" "4px"
                     ]
+                    [ Html.text "You don't have any tests written yet!" ]
+                ]
 
-                _ ->
-                    List.foldl
-                        (\test { index, testResults, elements } ->
-                            { index = index + 1
-                            , testResults = List.drop 1 testResults
-                            , elements =
-                                Html.div
-                                    [ Html.Attributes.style "padding-bottom" "4px" ]
-                                    [ button (PressedViewTest index) (getTestName test)
-                                    , case testResults of
-                                        (Ok ()) :: _ ->
-                                            Html.span
-                                                [ Html.Attributes.style "color" "rgb(0, 200, 0)"
-                                                , Html.Attributes.style "padding" "4px"
-                                                ]
-                                                [ Html.text "Passed" ]
+        _ ->
+            overviewHelper 0 testResults_ tests |> .elements |> List.reverse |> overviewContainer
 
-                                        (Err head) :: _ ->
-                                            let
-                                                error =
-                                                    testErrorToString head
-                                            in
-                                            Html.b
-                                                [ Html.Attributes.style "color" errorColor
-                                                , Html.Attributes.style "padding" "4px"
-                                                , Html.Attributes.style "white-space" "pre-wrap"
-                                                ]
-                                                [ Html.text error ]
 
-                                        [] ->
-                                            Html.text ""
+overviewHelper :
+    Int
+    -> List (Result TestError ())
+    -> List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+    ->
+        { index : Int
+        , testResults : List (Result TestError ())
+        , elements : List (Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
+        }
+overviewHelper initialIndex testResults_ tests =
+    List.foldl
+        (\testGroup2 { index, testResults, elements } ->
+            case testGroup2 of
+                EndToEndTest test2 ->
+                    { index = index + 1
+                    , testResults = List.drop 1 testResults
+                    , elements = testResultRow index test2 testResults :: elements
+                    }
+
+                EndToEndTestGroup name testGroups ->
+                    let
+                        data =
+                            overviewHelper index testResults_ testGroups
+                    in
+                    { index = data.index
+                    , testResults = data.testResults
+                    , elements =
+                        Html.div
+                            [ Html.Attributes.style "padding" "8px" ]
+                            [ Html.div
+                                [ Html.Attributes.style "border" "1px rgb(100,100,100) solid"
+                                , Html.Attributes.style "border-radius" "4px"
+                                , Html.Attributes.style "padding" "8px"
+                                ]
+                                (Html.div
+                                    [ Html.Attributes.style "color" "rgb(255,255,255)"
+                                    , Html.Attributes.style "padding-bottom" "4px"
+                                    , Html.Attributes.style "font-weight" "700"
                                     ]
-                                    :: elements
-                            }
-                        )
-                        { index = 0, testResults = testResults_, elements = [] }
-                        tests
-                        |> .elements
-                        |> List.reverse
-    in
-    overviewContainer overviewBody
+                                    [ Html.text name ]
+                                    :: List.reverse data.elements
+                                )
+                            ]
+                            :: elements
+                    }
+        )
+        { index = initialIndex, testResults = testResults_, elements = [] }
+        tests
+
+
+testResultRow :
+    Int
+    -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> List (Result TestError ())
+    -> Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+testResultRow index test testResults =
+    Html.div
+        [ Html.Attributes.style "padding-bottom" "4px" ]
+        [ button (PressedViewTest index) (getTestName test)
+        , case testResults of
+            (Ok ()) :: _ ->
+                Html.span
+                    [ Html.Attributes.style "color" "rgb(0, 200, 0)"
+                    , Html.Attributes.style "padding" "4px"
+                    ]
+                    [ Html.text "Passed" ]
+
+            (Err head) :: _ ->
+                let
+                    error =
+                        testErrorToString head
+                in
+                Html.b
+                    [ Html.Attributes.style "color" errorColor
+                    , Html.Attributes.style "padding" "4px"
+                    , Html.Attributes.style "white-space" "pre-wrap"
+                    ]
+                    [ Html.text error ]
+
+            [] ->
+                Html.text ""
+        ]
 
 
 overviewContainer : List (Html msg) -> Html msg
@@ -6473,7 +6546,7 @@ defaultFontColor =
 
 {-| -}
 getState :
-    EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 getState instructions =
     case instructions of
@@ -6488,7 +6561,7 @@ getState instructions =
 
 
 {-| -}
-getTestName : EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> String
+getTestName : EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> String
 getTestName instructions =
     case instructions of
         NextStep _ instructions_ ->
@@ -8170,7 +8243,7 @@ visibleStepIndex testView_ =
 {-| -}
 testView :
     Int
-    -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> TestView toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> List (Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
 testView windowWidth instructions testView_ =
@@ -8713,7 +8786,7 @@ startViewer viewerWith2 =
 {-| Msg type for a headless end to end test runner.
 -}
 type HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    = HeadlessMsg (Result FileLoadError (List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)))
+    = HeadlessMsg (Result FileLoadError (List (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)))
 
 
 {-| Create a headless test runner.
@@ -8732,7 +8805,7 @@ type HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backe
 -}
 startHeadless :
     (Json.Encode.Value -> Cmd (HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
-    -> ViewerWith (List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
+    -> ViewerWith (List (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
     -> Program () () (HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
 startHeadless outputResults viewerWith2 =
     Platform.worker
