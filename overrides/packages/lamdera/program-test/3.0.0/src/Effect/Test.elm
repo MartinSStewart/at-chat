@@ -6,7 +6,7 @@ module Effect.Test exposing
     , startHeadless, HeadlessMsg
     , Button(..), WheelOptions(..), DeltaMode(..), CurrentTimeline, EventFrontend, EventType, FileLoadError, FileLoadErrorType, MouseEvent, OverlayPosition, TestError, Touch, TouchEvent, Latency
     , configForApplication, configForDocument, configForElement, configForSandbox
-    , websocketSendString
+    , WebsocketState, websocketSendString
     )
 
 {-|
@@ -4485,7 +4485,6 @@ runTask maybeClientId state task =
                                 connection
                                 { createdAt = currentTime state, closedAt = Nothing, dataSent = Array.empty }
                                 a.websockets
-                                |> Debug.log "createHandle"
                       }
                     )
             in

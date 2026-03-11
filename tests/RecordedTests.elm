@@ -5,7 +5,9 @@ import Backend
 import Broadcast
 import Bytes exposing (Bytes)
 import Codec
+import Coord
 import Dict exposing (Dict)
+import Discord
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility(..))
@@ -14,6 +16,7 @@ import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpRe
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Env
+import FileStatus exposing (FileHash(..))
 import Frontend
 import Html.Attributes
 import Id exposing (ChannelMessageId, Id)
@@ -43,9 +46,9 @@ setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel T
 setup =
     T.viewerWith tests
         |> T.addBytesFiles (Dict.values fileRequests)
-        |> T.addStringFile "/tests/data/discord-op2.txt"
         |> T.addStringFile "/tests/data/discord-op0-ready.txt"
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.txt"
+        |> T.addBytesFile "/tests/data/at-user-icon.png"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -601,8 +604,131 @@ safariIphone =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 13_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1"
 
 
-tests : Dict String Bytes -> String -> String -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
+andThenWebsocket :
+    (Websocket.Connection
+     -> T.WebsocketState
+     -> List (T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
+    )
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+andThenWebsocket andThenFunc =
+    T.andThen
+        120
+        (\data ->
+            let
+                maybeConnection : List ( Websocket.Connection, T.WebsocketState )
+                maybeConnection =
+                    SeqDict.toList data.websockets
+                        |> List.filterMap
+                            (\( ( requestedBy, connection ), websocketState ) ->
+                                if (requestedBy == RequestedByBackend) && (websocketState.closedAt == Nothing) then
+                                    Just ( connection, websocketState )
+
+                                else
+                                    Nothing
+                            )
+            in
+            case maybeConnection of
+                [ ( connection, websocketState ) ] ->
+                    andThenFunc connection websocketState
+
+                [] ->
+                    [ T.checkState 0 (\_ -> Err "Didn't find any websocket connection") ]
+
+                _ ->
+                    [ T.checkState 0 (\_ -> Err "Found multiple websocket connections. I don't know which one to use.") ]
+        )
+
+
+isOp2 : { data : String, sentAt : Time.Posix } -> Bool
+isOp2 data =
+    case Json.Decode.decodeString (Json.Decode.field "op" Json.Decode.int) data.data of
+        Ok 2 ->
+            True
+
+        _ ->
+            False
+
+
+discordUserAuth : Discord.UserAuth
+discordUserAuth =
+    { token = "fake-token"
+    , userAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0"
+    , xSuperProperties =
+        JsonObject
+            (Dict.fromList
+                [ ( "browser", JsonString "Firefox" )
+                , ( "browser_user_agent", JsonString "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0" )
+                , ( "browser_version", JsonString "143.0" )
+                , ( "client_app_state", JsonString "unfocused" )
+                , ( "client_build_number", JsonNumber 453248 )
+                , ( "client_event_source", JsonNull )
+                , ( "client_heartbeat_session_id", JsonString "1a49edbe-0c97-4445-996f-5cc93d84bbae" )
+                , ( "client_launch_id", JsonString "1b1343e7-e590-4b53-9d1b-b929fdd42419" )
+                , ( "device", JsonString "" )
+                , ( "has_client_mods", JsonBool False )
+                , ( "launch_signature", JsonString "1c0ef792-b757-44e8-ba1f-332929609d08" )
+                , ( "os", JsonString "Linux" )
+                , ( "os_version", JsonString "" )
+                , ( "referrer", JsonString "https://www.google.com/" )
+                , ( "referrer_current", JsonString "" )
+                , ( "referring_domain", JsonString "www.google.com" )
+                , ( "referring_domain_current", JsonString "" )
+                , ( "release_channel", JsonString "stable" )
+                , ( "search_engine", JsonString "google" )
+                , ( "system_locale", JsonString "en-US" )
+                ]
+            )
+    }
+
+
+linkDiscordAndLogin : String -> EmailAddress -> Bool -> String -> String -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+linkDiscordAndLogin name emailAddress isNewAccount discordOp0Ready discordOp0ReadySupplemental =
+    T.connectFrontend
+        100
+        sessionId0
+        ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
+        desktopWindow
+        (\userA ->
+            [ userA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+            , handleLoginFromLoginPage emailAddress userA
+            , if isNewAccount then
+                T.group
+                    [ userA.input 100 (Dom.id "loginForm_name") name
+                    , userA.click 100 (Dom.id "loginForm_submit")
+                    ]
+
+              else
+                T.group []
+            , andThenWebsocket
+                (\connection _ ->
+                    [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                )
+            , andThenWebsocket
+                (\connection websocketState ->
+                    case Array.toList websocketState.dataSent |> List.filter isOp2 of
+                        [ _ ] ->
+                            [ T.websocketSendString 100 connection discordOp0Ready
+                            , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                            ]
+
+                        _ ->
+                            [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
+                )
+            , userA.checkView
+                100
+                (Test.Html.Query.has
+                    [ Test.Html.Selector.exactText name
+                    , Test.Html.Selector.exactText "at0232"
+                    , Test.Html.Selector.exactText "kess"
+                    , Test.Html.Selector.exactText "purplelite"
+                    ]
+                )
+            ]
+        )
+
+
+tests : Dict String Bytes -> String -> String -> Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
@@ -653,6 +779,35 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
                                 }
                                 "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
 
+                        "http://localhost:3000/file/upload" ->
+                            StringHttpResponse
+                                { url = currentRequest.url
+                                , statusCode = 200
+                                , statusText = "OK"
+                                , headers = Dict.empty
+                                }
+                                (Codec.encodeToString
+                                    0
+                                    FileStatus.uploadResponseCodec
+                                    { fileHash = FileStatus.fileHash "123123123"
+                                    , imageSize =
+                                        { imageSize = Coord.xy 128 128
+                                        , orientation = Nothing
+                                        , gpsLocation = Nothing
+                                        , cameraOwner = Nothing
+                                        , exposureTime = Nothing
+                                        , fNumber = Nothing
+                                        , focalLength = Nothing
+                                        , isoSpeedRating = Nothing
+                                        , make = Nothing
+                                        , model = Nothing
+                                        , software = Nothing
+                                        , userComment = Nothing
+                                        }
+                                            |> Just
+                                    }
+                                )
+
                         "http://localhost:3000/file/push-notification" ->
                             StringHttpResponse
                                 { url = currentRequest.url
@@ -689,7 +844,17 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
                                     UnhandledHttpRequest
 
                         _ ->
-                            UnhandledHttpRequest
+                            if String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url then
+                                BytesHttpResponse
+                                    { url = currentRequest.url
+                                    , statusCode = 200
+                                    , statusText = "OK"
+                                    , headers = Dict.empty
+                                    }
+                                    atUserIcon
+
+                            else
+                                UnhandledHttpRequest
 
         handleFileRequest : { data : T.Data frontendModel backendModel, mimeTypes : List String } -> FileUpload
         handleFileRequest _ =
@@ -721,77 +886,65 @@ tests fileData discordOp2 discordOp0Ready discordOp0ReadySupplemental =
                 domain
     in
     [ T.start
-        "Link Discord account"
+        "Link Discord account with login"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+        ]
+    , T.start
+        "Link Discord account with login to non-existent at-chat account"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin "Steve" userEmail True discordOp0Ready discordOp0ReadySupplemental
+        ]
+    , T.start
+        "Link Discord account already logged in"
         startTime
         normalConfig
         [ T.connectFrontend
             100
             sessionId0
-            ("/link-discord/?data="
-                ++ Codec.encodeToString
-                    0
-                    User.linkDiscordDataCodec
-                    { token = "fake-token"
-                    , userAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0"
-                    , xSuperProperties =
-                        JsonObject
-                            (Dict.fromList
-                                [ ( "browser", JsonString "Firefox" )
-                                , ( "browser_user_agent", JsonString "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0" )
-                                , ( "browser_version", JsonString "143.0" )
-                                , ( "client_app_state", JsonString "unfocused" )
-                                , ( "client_build_number", JsonNumber 453248 )
-                                , ( "client_event_source", JsonNull )
-                                , ( "client_heartbeat_session_id", JsonString "1a49edbe-0c97-4445-996f-5cc93d84bbae" )
-                                , ( "client_launch_id", JsonString "1b1343e7-e590-4b53-9d1b-b929fdd42419" )
-                                , ( "device", JsonString "" )
-                                , ( "has_client_mods", JsonBool False )
-                                , ( "launch_signature", JsonString "1c0ef792-b757-44e8-ba1f-332929609d08" )
-                                , ( "os", JsonString "Linux" )
-                                , ( "os_version", JsonString "" )
-                                , ( "referrer", JsonString "https://www.google.com/" )
-                                , ( "referrer_current", JsonString "" )
-                                , ( "referring_domain", JsonString "www.google.com" )
-                                , ( "referring_domain_current", JsonString "" )
-                                , ( "release_channel", JsonString "stable" )
-                                , ( "search_engine", JsonString "google" )
-                                , ( "system_locale", JsonString "en-US" )
-                                ]
-                            )
-                    }
+            "/"
+            desktopWindow
+            (\userA ->
+                [ handleLogin firefoxDesktop adminEmail userA
+                ]
             )
+        , T.connectFrontend
+            100
+            sessionId0
+            ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
             desktopWindow
             (\adminA ->
                 [ adminA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                , handleLoginFromLoginPage adminEmail adminA
-                , T.andThen
-                    100
-                    (\data ->
-                        let
-                            maybeConnection : List ( Websocket.Connection, Array { sentAt : Time.Posix, data : String } )
-                            maybeConnection =
-                                SeqDict.toList (Debug.log "websockets" data.websockets)
-                                    |> List.filterMap
-                                        (\( ( requestedBy, connection ), websocketState ) ->
-                                            if
-                                                (requestedBy == RequestedByFrontend adminA.clientId)
-                                                    && (websocketState.closedAt == Nothing)
-                                            then
-                                                Just ( connection, websocketState.dataSent )
-
-                                            else
-                                                Nothing
-                                        )
-                        in
-                        case maybeConnection of
-                            [ ( connection, _ ) ] ->
-                                [ T.websocketSendString 100 connection discordOp2 ]
-
-                            [] ->
-                                [ T.checkState 100 (\_ -> Err "Didn't find any websocket connection") ]
+                , andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                    )
+                , andThenWebsocket
+                    (\connection websocketState ->
+                        case Array.toList websocketState.dataSent |> List.filter isOp2 of
+                            [ _ ] ->
+                                [ T.websocketSendString 100 connection discordOp0Ready
+                                , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                ]
 
                             _ ->
-                                [ T.checkState 100 (\_ -> Err "Found multiple websocket connections. I don't know which one to use.") ]
+                                [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
+                    )
+                , adminA.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
+                        , Test.Html.Selector.exactText "at0232"
+                        , Test.Html.Selector.exactText "kess"
+                        , Test.Html.Selector.exactText "purplelite"
+                        ]
                     )
                 ]
             )
