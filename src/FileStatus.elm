@@ -28,6 +28,7 @@ module FileStatus exposing
     , uploadAvatar
     , uploadBytes
     , uploadFile
+    , uploadResponseCodec
     , uploadTrackerId
     , uploadUrl
     , webpContent

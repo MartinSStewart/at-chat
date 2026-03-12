@@ -1251,7 +1251,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let
                                 _ =
-                                    Debug.log "gateway error" error
+                                    Debug.log "gateway error" (Json.Decode.errorToString error)
                             in
                             ( model2
                             , Task.perform
