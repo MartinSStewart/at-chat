@@ -5,10 +5,12 @@ module DiscordSync exposing
     , backendSessionIdHash
     , discordUserWebsocketMsg
     , getManyMessages
+    , getManyMessagesBefore
     , handleDiscordCreateMessage
     , handleDiscordEditMessage
     , http
     , messagesAndLinks
+    , messagesAndLinksWithOffset
     , reloadChannelMaxMessages
     , sendMessage
     , uploadAttachmentsForMessages
@@ -674,6 +676,42 @@ messagesAndLinks messages discordAttachments =
                 , attachedFiles = attachments
                 }
             , ( message.id, Id.fromInt index )
+            )
+        )
+        messages
+        |> (\list ->
+                ( List.map Tuple.first list |> Array.fromList
+                , List.map Tuple.second list |> OneToOne.fromList
+                )
+           )
+
+
+messagesAndLinksWithOffset :
+    Int
+    -> List Discord.Message
+    -> SeqDict DiscordAttachmentId DiscordAttachmentData
+    ->
+        ( Array (Message messageId (Discord.Id Discord.UserId))
+        , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
+        )
+messagesAndLinksWithOffset offset messages discordAttachments =
+    List.indexedMap
+        (\index message ->
+            let
+                attachments : SeqDict (Id FileId) FileData
+                attachments =
+                    messageToFileData message discordAttachments
+            in
+            ( UserTextMessage
+                { createdAt = message.timestamp
+                , createdBy = message.author.id
+                , content = RichText.fromDiscord message.content attachments
+                , reactions = SeqDict.empty
+                , editedAt = Nothing
+                , repliedTo = Nothing
+                , attachedFiles = attachments
+                }
+            , ( message.id, Id.fromInt (index + offset) )
             )
         )
         messages
@@ -2066,6 +2104,13 @@ getDiscordGuildData model gatewayGuild =
 getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id Discord.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)
 getManyMessages authentication { channelId, limit } =
     Discord.getMessagesPayload authentication { channelId = channelId, limit = min limit 100, relativeTo = Discord.MostRecent }
+        |> http
+        |> Task.andThen (\messages -> getManyMessagesHelper authentication channelId (limit - 100) Array.empty (Array.fromList messages))
+
+
+getManyMessagesBefore : Discord.Authentication -> { a | channelId : Discord.Id Discord.ChannelId, limit : Int, before : Discord.Id Discord.MessageId } -> Task BackendOnly Discord.HttpError (List Discord.Message)
+getManyMessagesBefore authentication { channelId, limit, before } =
+    Discord.getMessagesPayload authentication { channelId = channelId, limit = min limit 100, relativeTo = Discord.Before before }
         |> http
         |> Task.andThen (\messages -> getManyMessagesHelper authentication channelId (limit - 100) Array.empty (Array.fromList messages))
 

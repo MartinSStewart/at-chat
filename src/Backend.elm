@@ -42,7 +42,7 @@ import LoginForm
 import Message exposing (Message(..))
 import NonemptyDict
 import NonemptySet
-import OneToOne
+import OneToOne exposing (OneToOne)
 import Pages.Admin
 import Pagination
 import Quantity
@@ -1061,6 +1061,114 @@ update msg model =
                                 |> ServerChange
                                 |> Broadcast.toAdmins model
                             ]
+                        )
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        GotMoreDiscordDmChannelMessages time userIdToLoadWith channelId result ->
+            case SeqDict.get userIdToLoadWith model.loadingDiscordChannels of
+                Just (LoadingDiscordDmChannel startTime loadingChannelId LoadingDiscordChannelMessages) ->
+                    if channelId == loadingChannelId then
+                        let
+                            loading : LoadingDiscordChannel (List Discord.Message)
+                            loading =
+                                (case result of
+                                    Ok messages ->
+                                        LoadingDiscordChannelAttachments time messages
+
+                                    Err error ->
+                                        LoadingDiscordChannelMessagesFailed error
+                                )
+                                    |> LoadingDiscordDmChannel startTime loadingChannelId
+                        in
+                        ( { model
+                            | loadingDiscordChannels =
+                                SeqDict.insert userIdToLoadWith loading model.loadingDiscordChannels
+                          }
+                        , Command.batch
+                            [ case result of
+                                Ok messages ->
+                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                        |> Task.perform (LoadedMoreDiscordDmChannel userIdToLoadWith channelId)
+
+                                Err _ ->
+                                    Command.none
+                            , LocalState.loadingDiscordChannelMap
+                                (List.foldl (\message count -> count + List.length message.attachments) 0)
+                                loading
+                                |> Just
+                                |> Server_LoadingDiscordChannelChanged userIdToLoadWith
+                                |> ServerChange
+                                |> Broadcast.toAdmins model
+                            ]
+                        )
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        LoadedMoreDiscordDmChannel userIdToLoadWith channelId attachments ->
+            case ( SeqDict.get channelId model.discordDmChannels, SeqDict.get userIdToLoadWith model.loadingDiscordChannels ) of
+                ( Just channel, Just (LoadingDiscordDmChannel _ channelIdB (LoadingDiscordChannelAttachments _ messages)) ) ->
+                    if channelId == channelIdB then
+                        let
+                            attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
+                            attachments2 =
+                                DiscordSync.addUploadResponsesToDiscordAttachments
+                                    attachments
+                                    model.discordAttachments
+
+                            reversedMessages : List Discord.Message
+                            reversedMessages =
+                                List.reverse messages
+
+                            newMessageCount : Int
+                            newMessageCount =
+                                List.length reversedMessages
+
+                            ( newMessages, newLinks ) =
+                                DiscordSync.messagesAndLinks reversedMessages attachments2
+
+                            shiftedExistingLinks : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
+                            shiftedExistingLinks =
+                                OneToOne.toList channel.linkedMessageIds
+                                    |> List.map (\( discordId, channelMsgId ) -> ( discordId, Id.fromInt (Id.toInt channelMsgId + newMessageCount) ))
+                                    |> OneToOne.fromList
+
+                            combinedLinks : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
+                            combinedLinks =
+                                OneToOne.toList shiftedExistingLinks
+                                    ++ OneToOne.toList newLinks
+                                    |> OneToOne.fromList
+
+                            model2 : BackendModel
+                            model2 =
+                                { model
+                                    | discordDmChannels =
+                                        SeqDict.insert
+                                            channelId
+                                            { channel
+                                                | messages = Array.append newMessages channel.messages
+                                                , linkedMessageIds = combinedLinks
+                                            }
+                                            model.discordDmChannels
+                                    , discordAttachments = attachments2
+                                    , loadingDiscordChannels =
+                                        SeqDict.remove
+                                            userIdToLoadWith
+                                            model.loadingDiscordChannels
+                                }
+                        in
+                        ( model2
+                        , Server_LoadingDiscordChannelChanged userIdToLoadWith Nothing
+                            |> ServerChange
+                            |> Broadcast.toAdmins model2
                         )
 
                     else
@@ -4396,6 +4504,52 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         --    |> Task.attempt (ReloadedDiscordDmChannel time userIdToLoadWith channelId)
                         ]
                     )
+
+                _ ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Pages.Admin.StartLoadingMoreDiscordDmChannelMessages _ userIdToLoadWith channelId ->
+            case
+                ( SeqDict.get userIdToLoadWith model.discordUsers
+                , SeqDict.get channelId model.discordDmChannels
+                )
+            of
+                ( Just (FullData discordUser), Just channel ) ->
+                    if
+                        LocalState.isDiscordDmChannelReloading channelId model.loadingDiscordChannels
+                            /= Nothing
+                            || LocalState.userIsLoadingDiscordChannel userIdToLoadWith model.loadingDiscordChannels
+                    then
+                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                    else
+                        case OneToOne.first (Id.fromInt 0) channel.linkedMessageIds of
+                            Just oldestDiscordMessageId ->
+                                ( { model
+                                    | loadingDiscordChannels =
+                                        SeqDict.insert
+                                            userIdToLoadWith
+                                            (LoadingDiscordDmChannel time channelId LoadingDiscordChannelMessages)
+                                            model.loadingDiscordChannels
+                                  }
+                                , Command.batch
+                                    [ Pages.Admin.StartLoadingMoreDiscordDmChannelMessages time userIdToLoadWith channelId
+                                        |> Local_Admin
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
+                                    , DiscordSync.getManyMessagesBefore
+                                        (Discord.userToken discordUser.auth)
+                                        { channelId = Discord.idToUInt64 channelId |> Discord.idFromUInt64
+                                        , limit = DiscordSync.reloadChannelMaxMessages
+                                        , before = Discord.idToUInt64 oldestDiscordMessageId |> Discord.idFromUInt64
+                                        }
+                                        |> Task.attempt (GotMoreDiscordDmChannelMessages time userIdToLoadWith channelId)
+                                    ]
+                                )
+
+                            Nothing ->
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )

@@ -109,6 +109,7 @@ type Msg
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | PressedReloadDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | PressedLoadMoreDiscordDmChannelMessages (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | PressedCopyText String
     | TypedInReadOnlyTextInput
     | PressedExportBackend
@@ -210,6 +211,7 @@ type AdminChange
     | DeleteGuild (Id GuildId)
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
+    | StartLoadingMoreDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ExpandGuild (Id GuildId)
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id Discord.GuildId)
@@ -383,6 +385,23 @@ updateAdmin changedBy change adminData local =
                 }
 
         StartReloadingDiscordDmChannel time userId channelId ->
+            if LocalState.userIsLoadingDiscordChannel userId adminData.loadingDiscordChannels then
+                local
+
+            else
+                { local
+                    | adminData =
+                        IsAdmin
+                            { adminData
+                                | loadingDiscordChannels =
+                                    SeqDict.insert
+                                        userId
+                                        (LoadingDiscordDmChannel time channelId LoadingDiscordChannelMessages)
+                                        adminData.loadingDiscordChannels
+                            }
+                }
+
+        StartLoadingMoreDiscordDmChannelMessages time userId channelId ->
             if LocalState.userIsLoadingDiscordChannel userId adminData.loadingDiscordChannels then
                 local
 
@@ -940,6 +959,9 @@ update navigationKey time adminData localState msg model =
         PressedReloadDiscordDmChannel currentUserId channelId ->
             ( model, Command.none, StartReloadingDiscordDmChannel time currentUserId channelId |> AdminChange )
 
+        PressedLoadMoreDiscordDmChannelMessages currentUserId channelId ->
+            ( model, Command.none, StartLoadingMoreDiscordDmChannelMessages time currentUserId channelId |> AdminChange )
+
         PressedCopyText string ->
             ( model, Command.none, CopyToClipboard string )
 
@@ -1210,6 +1232,9 @@ pendingChangesText change =
 
         StartReloadingDiscordDmChannel _ _ _ ->
             "Reset Discord DM channel"
+
+        StartLoadingMoreDiscordDmChannelMessages _ _ _ ->
+            "Load more Discord DM channel messages"
 
         ExpandGuild _ ->
             "Expanded guild in admin page"
@@ -1803,6 +1828,21 @@ discordDmChannelsSection user adminData =
                                     |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
                                 ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                            , case userThatCanReload of
+                                Just userId ->
+                                    Ui.el
+                                        [ Ui.Input.button (PressedLoadMoreDiscordDmChannelMessages userId channelId)
+                                        , Ui.id (Dom.idToString (Dom.id ("admin_loadMoreDiscordDmChannel_" ++ Discord.idToString channelId)))
+                                        , Ui.padding 3
+                                        , Ui.background (Ui.rgb 50 100 255)
+                                        , Ui.Font.color MyUi.white
+                                        , Ui.rounded 4
+                                        , Ui.width Ui.shrink
+                                        ]
+                                        (Ui.text "Load more")
+
+                                Nothing ->
+                                    Ui.none
                             , firstMessageView channel
                             , loadingChannelErrorView (Discord.idToString channelId) isReloading
                             , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
