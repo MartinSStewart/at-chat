@@ -70,7 +70,7 @@ import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGu
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
-import Message exposing (Message)
+import Message exposing (EmbedData, Message)
 import MessageInput exposing (MentionUserDropdown)
 import MessageView
 import NonemptyDict exposing (NonemptyDict)
@@ -570,6 +570,8 @@ type BackendMsg
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
+    | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
+    | GotDmMessageEmbed DmChannelId ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
 
 
 type LoginResult

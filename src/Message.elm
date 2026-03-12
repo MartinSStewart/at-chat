@@ -1,30 +1,128 @@
 module Message exposing
-    ( Message(..)
+    ( Embed(..)
+    , EmbedData
+    , Message(..)
     , MessageNoReply(..)
     , MessageState(..)
     , MessageStateNoReply(..)
     , UserTextMessageData
     , UserTextMessageDataNoReply
+    , addEmbed
     , addReactionEmoji
     , createdAt
     , removeReactionEmoji
+    , userTextMessage
     )
 
+import Array exposing (Array)
+import Array.Extra
+import Dict
+import Effect.Command as Command exposing (Command)
+import Effect.Http as Http
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id)
+import Json.Decode
+import Json.Encode
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Time
+import Url exposing (Url)
 
 
 type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict Emoji (NonemptySet userId))
     | DeletedMessage Time.Posix
+
+
+maxEmbeds : number
+maxEmbeds =
+    10
+
+
+userTextMessage :
+    Time.Posix
+    -> userId
+    -> Nonempty (RichText userId)
+    -> Maybe (Id messageId)
+    -> SeqDict (Id FileId) FileData
+    -> ( Message messageId userId, Command r toMsg ( Int, Result Http.Error EmbedData ) )
+userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
+    let
+        hyperlinks : List String
+        hyperlinks =
+            RichText.hyperlinks content |> List.take maxEmbeds
+    in
+    ( { createdAt = createdAt2
+      , createdBy = createdBy
+      , content = content
+      , reactions = SeqDict.empty
+      , editedAt = Nothing
+      , repliedTo = repliedTo
+      , attachedFiles = attachedFiles
+      , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+      }
+        |> UserTextMessage
+    , List.indexedMap
+        (\index hyperlink ->
+            Http.post
+                { url = FileStatus.domain ++ "/file/embed"
+                , body = Json.Encode.object [ ( "url", Json.Encode.string hyperlink ) ] |> Http.jsonBody
+                , expect = Http.expectJson (Tuple.pair index) decodeEmbedData
+                }
+        )
+        hyperlinks
+        |> Command.batch
+    )
+
+
+addEmbed : ( Int, Result e EmbedData ) -> Message messageId userId -> Message messageId userId
+addEmbed ( embedIndex, result ) message =
+    case message of
+        UserTextMessage message2 ->
+            UserTextMessage
+                { message2
+                    | embeds =
+                        Array.set
+                            embedIndex
+                            (case result of
+                                Ok embed ->
+                                    EmbedLoaded embed
+
+                                Err _ ->
+                                    EmbedFailedToLoad
+                            )
+                            message2.embeds
+                }
+
+        UserJoinedMessage posix userId seqDict ->
+            message
+
+        DeletedMessage posix ->
+            message
+
+
+updateArray : Id messageId -> (a -> a) -> Array a -> Array a
+updateArray id message array =
+    Array.Extra.update (Id.toInt id) message array
+
+
+decodeEmbedData : Json.Decode.Decoder EmbedData
+decodeEmbedData =
+    Json.Decode.andThen
+        (\dict ->
+            case Dict.get "og:title" dict of
+                Just title ->
+                    Json.Decode.succeed { title = title, image = Nothing, content = "" }
+
+                Nothing ->
+                    Json.Decode.fail "Invalid embed data"
+        )
+        (Json.Decode.dict Json.Decode.string)
 
 
 type MessageState messageId userId
@@ -40,6 +138,20 @@ type alias UserTextMessageData messageId userId =
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
+    , embeds : Array Embed
+    }
+
+
+type Embed
+    = EmbedLoading
+    | EmbedLoaded EmbedData
+    | EmbedFailedToLoad
+
+
+type alias EmbedData =
+    { title : String
+    , image : Maybe Url
+    , content : String
     }
 
 

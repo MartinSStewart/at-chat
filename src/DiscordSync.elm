@@ -672,6 +672,7 @@ messagesAndLinks messages discordAttachments =
                 , editedAt = Nothing
                 , repliedTo = Nothing
                 , attachedFiles = attachments
+                , embeds = Array.empty
                 }
             , ( message.id, Id.fromInt index )
             )
@@ -774,6 +775,7 @@ handleDiscordCreateMessage message attachments model =
                                                 , editedAt = Nothing
                                                 , repliedTo = replyTo
                                                 , attachedFiles = attachments
+                                                , embeds = Array.empty
                                                 }
                                             )
                                             channel
@@ -980,6 +982,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                 , editedAt = Nothing
                                                 , repliedTo = maybeReplyTo
                                                 , attachedFiles = attachments
+                                                , embeds = Array.empty
                                                 }
                                             )
                                             channel
@@ -995,6 +998,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                 , editedAt = Nothing
                                                 , repliedTo = maybeReplyTo
                                                 , attachedFiles = attachments
+                                                , embeds = Array.empty
                                                 }
                                             )
                                             channel

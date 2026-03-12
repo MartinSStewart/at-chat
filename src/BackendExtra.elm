@@ -38,7 +38,7 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
@@ -748,37 +748,47 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
-                channel2 : BackendChannel
-                channel2 =
+                ( channel2, embedCmds ) =
                     case threadRouteWithMaybeReplyTo of
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                            LocalState.createThreadMessageBackend
-                                threadId
-                                (UserTextMessage
-                                    { createdAt = time
-                                    , createdBy = session.userId
-                                    , content = text
-                                    , reactions = SeqDict.empty
-                                    , editedAt = Nothing
-                                    , repliedTo = maybeReplyTo
-                                    , attachedFiles = attachedFiles
-                                    }
-                                )
-                                channel
+                            let
+                                ( message2, cmds ) =
+                                    Message.userTextMessage
+                                        time
+                                        session.userId
+                                        text
+                                        maybeReplyTo
+                                        attachedFiles
+
+                                ( messageId, channel3 ) =
+                                    LocalState.createThreadMessageBackend threadId message2 channel
+                            in
+                            ( channel3
+                            , Command.map
+                                identity
+                                (GotGuildMessageEmbed guildId channelId (ViewThreadWithMessage threadId messageId))
+                                cmds
+                            )
 
                         NoThreadWithMaybeMessage maybeReplyTo ->
-                            LocalState.createChannelMessageBackend
-                                (UserTextMessage
-                                    { createdAt = time
-                                    , createdBy = session.userId
-                                    , content = text
-                                    , reactions = SeqDict.empty
-                                    , editedAt = Nothing
-                                    , repliedTo = maybeReplyTo
-                                    , attachedFiles = attachedFiles
-                                    }
-                                )
-                                channel
+                            let
+                                ( message2, cmds ) =
+                                    Message.userTextMessage
+                                        time
+                                        session.userId
+                                        text
+                                        maybeReplyTo
+                                        attachedFiles
+
+                                ( messageId, channel3 ) =
+                                    LocalState.createChannelMessageBackend message2 channel
+                            in
+                            ( channel3
+                            , Command.map
+                                identity
+                                (GotGuildMessageEmbed guildId channelId (NoThreadWithMessage messageId))
+                                cmds
+                            )
 
                 guildOrDmId : GuildOrDmId
                 guildOrDmId =
@@ -880,6 +890,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     text
                     (guild.owner :: SeqDict.keys guild.members)
                     model
+                , embedCmds
                 ]
             )
 
@@ -913,62 +924,54 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 |> Maybe.withDefault DmChannel.backendInit
     in
     case threadRouteWithReplyTo of
-        ViewThreadWithMaybeMessage threadMessageIndex _ ->
+        ViewThreadWithMaybeMessage threadId repliedTo ->
             let
-                thread : BackendThread
-                thread =
-                    SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.withDefault Thread.backendInit
+                ( message, embedCmds ) =
+                    Message.userTextMessage time session.userId text repliedTo attachedFiles
+
+                ( messageId, dmChannel2 ) =
+                    LocalState.createThreadMessageBackend threadId message dmChannel
             in
             ( { model
-                | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
+                | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
                 , users =
                     NonemptyDict.insert
                         session.userId
                         { user
                             | lastViewedThreads =
                                 SeqDict.insert
-                                    ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                                    (DmChannel.latestThreadMessageId thread)
+                                    ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadId )
+                                    messageId
                                     user.lastViewedThreads
                         }
                         model.users
               }
-            , if session.userId == otherUserId then
-                Command.none
+            , Command.batch
+                [ if session.userId == otherUserId then
+                    Command.none
 
-              else
-                Broadcast.broadcastDm
-                    changeId
-                    time
-                    clientId
-                    session.userId
-                    otherUserId
-                    text
-                    threadRouteWithReplyTo
-                    attachedFiles
-                    model
+                  else
+                    Broadcast.broadcastDm
+                        changeId
+                        time
+                        clientId
+                        session.userId
+                        otherUserId
+                        text
+                        threadRouteWithReplyTo
+                        attachedFiles
+                        model
+                , Command.map identity (GotDmMessageEmbed dmChannelId (ViewThreadWithMessage threadId messageId)) embedCmds
+                ]
             )
 
         NoThreadWithMaybeMessage repliedTo ->
             let
-                messageIndex : Id ChannelMessageId
-                messageIndex =
-                    DmChannel.latestMessageId dmChannel2
+                ( message, embedCmds ) =
+                    Message.userTextMessage time session.userId text repliedTo attachedFiles
 
-                dmChannel2 : DmChannel
-                dmChannel2 =
-                    LocalState.createChannelMessageBackend
-                        (UserTextMessage
-                            { createdAt = time
-                            , createdBy = session.userId
-                            , content = text
-                            , reactions = SeqDict.empty
-                            , editedAt = Nothing
-                            , repliedTo = repliedTo
-                            , attachedFiles = attachedFiles
-                            }
-                        )
-                        dmChannel
+                ( messageId, dmChannel2 ) =
+                    LocalState.createChannelMessageBackend message dmChannel
             in
             ( { model
                 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
@@ -977,14 +980,12 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         session.userId
                         { user
                             | lastViewed =
-                                SeqDict.insert
-                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                                    messageIndex
-                                    user.lastViewed
+                                SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm otherUserId)) messageId user.lastViewed
                         }
                         model.users
               }
             , Command.batch
                 [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
+                , Command.map identity (GotDmMessageEmbed dmChannelId (NoThreadWithMessage messageId)) embedCmds
                 ]
             )

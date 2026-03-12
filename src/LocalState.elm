@@ -26,8 +26,9 @@ module LocalState exposing
     , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
+    , addEmbed
     , addInvite
-    , addMember
+    , addMemberBackend
     , addMemberFrontend
     , addReactionEmoji
     , addReactionEmojiFrontend
@@ -115,7 +116,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
-import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
+import Message exposing (EmbedData, Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -667,20 +668,29 @@ getDiscordUser userId localUser =
 createThreadMessageBackend :
     Id ChannelMessageId
     -> Message ThreadMessageId (Id UserId)
-    -> BackendChannel
-    -> BackendChannel
+    ->
+        { d
+            | messages : Array (Message messageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
+        }
+    ->
+        ( Id ThreadMessageId
+        , { d
+            | messages : Array (Message messageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
+          }
+        )
 createThreadMessageBackend threadId message channel =
-    { channel
-        | threads =
-            SeqDict.update
-                threadId
-                (\maybe ->
-                    Maybe.withDefault Thread.backendInit maybe
-                        |> createMessageBackend message
-                        |> Just
-                )
-                channel.threads
-    }
+    let
+        thread =
+            SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.backendInit
+
+        ( messageId, thread2 ) =
+            createMessageBackend message thread
+    in
+    ( messageId, { channel | threads = SeqDict.insert threadId thread2 channel.threads } )
 
 
 createChannelMessageBackend :
@@ -691,10 +701,12 @@ createChannelMessageBackend :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
         }
     ->
-        { d
+        ( Id ChannelMessageId
+        , { d
             | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-        }
+          }
+        )
 createChannelMessageBackend message channel =
     createMessageBackend message channel
 
@@ -707,12 +719,15 @@ createMessageBackend :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
     ->
-        { d
+        ( Id messageId
+        , { d
             | messages : Array (Message messageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
-        }
+          }
+        )
 createMessageBackend message channel =
-    { channel
+    ( Array.length channel.messages |> Id.fromInt
+    , { channel
         | messages = Array.push message channel.messages
         , lastTypedAt =
             case message of
@@ -724,7 +739,8 @@ createMessageBackend message channel =
 
                 DeletedMessage _ ->
                     channel.lastTypedAt
-    }
+      }
+    )
 
 
 type DiscordMessageAlreadyExists
@@ -1276,8 +1292,8 @@ addInvite inviteId userId time guild =
     { guild | invites = SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites }
 
 
-addMember : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
-addMember time userId guild =
+addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
+addMemberBackend time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
         Err ()
 
@@ -1287,7 +1303,10 @@ addMember time userId guild =
             , channels =
                 SeqDict.updateIfExists
                     (announcementChannel guild)
-                    (createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty))
+                    (\channel ->
+                        createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty) channel
+                            |> Tuple.second
+                    )
                     guild.channels
         }
             |> Ok
@@ -1986,6 +2005,15 @@ getDiscordGuildAndChannel guildId channelId local =
 
         Nothing ->
             Nothing
+
+
+addEmbed :
+    Id messageId
+    -> ( Int, Result e EmbedData )
+    -> { a | messages : Array (Message messageId userId) }
+    -> { a | messages : Array (Message messageId userId) }
+addEmbed messageId embed channel =
+    { channel | messages = updateArray messageId (Message.addEmbed embed) channel.messages }
 
 
 usersMentionedOrRepliedToBackend :

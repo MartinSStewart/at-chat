@@ -20,6 +20,7 @@ module DmChannel exposing
     )
 
 import Array exposing (Array)
+import Array.Extra
 import Discord
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))

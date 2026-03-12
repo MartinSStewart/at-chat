@@ -17,12 +17,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
 use std::str::FromStr;
+use std::time::Duration;
 use web_push::SubscriptionInfo;
+use webpage::{HTML, Webpage, WebpageOptions};
 mod content_types;
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
+        .route("/file/embed", post(post_embed).options(options_endpoint))
         .route(
             "/file/upload",
             post(upload_endpoint).options(options_endpoint),
@@ -65,6 +68,15 @@ fn filepath(hash: &str) -> String {
 
 fn thumbnail_filepath(hash: &str) -> String {
     format!("./var/lib/atchat/{hash}_thumbnail")
+}
+
+async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
+    let info = Webpage::from_url(&url, WebpageOptions::default()).expect("Could not read from URL");
+
+    response_with_headers(
+        StatusCode::OK,
+        serde_json::to_string(&info.html.meta).unwrap(),
+    )
 }
 
 async fn vapid_endpoint(_request: Request) -> Response<String> {
@@ -387,7 +399,7 @@ fn image_metadata(
                                     Some(orientation2) => match orientation2 {
                                         gufo_common::orientation::Orientation::Rotation90 | gufo_common::orientation::Orientation::Rotation270 | gufo_common::orientation::Orientation::MirroredRotation90 | gufo_common::orientation::Orientation::MirroredRotation270 => (height, width),
                                         gufo_common::orientation::Orientation::Id | gufo_common::orientation::Orientation::Rotation180 | gufo_common::orientation::Orientation::Mirrored | gufo_common::orientation::Orientation::MirroredRotation180 => (width, height),
-                                        },
+                                    },
                                     None => (width, height),
                                 };
 
@@ -793,6 +805,11 @@ pub struct PushNotification {
     pub icon: String,
     pub navigate: String,
     pub data: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EmbedRequest {
+    pub url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

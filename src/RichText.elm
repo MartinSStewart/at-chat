@@ -10,6 +10,7 @@ module RichText exposing
     , fromNonemptyString
     , fromSlack
     , hyperlinkToString
+    , hyperlinks
     , mentionsUser
     , preview
     , rangeSize
@@ -44,7 +45,7 @@ import SeqSet exposing (SeqSet)
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
-import Url exposing (Protocol(..))
+import Url exposing (Protocol(..), Url)
 
 
 type RichText userId
@@ -125,6 +126,47 @@ removeAttachedFile fileId list =
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
+
+
+hyperlinks : Nonempty (RichText userId) -> List String
+hyperlinks nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink protocol rest ->
+                    [ hyperlinkToString protocol rest ]
+
+                UserMention userId ->
+                    []
+
+                NormalText char string ->
+                    []
+
+                Bold nonempty2 ->
+                    hyperlinks nonempty2
+
+                Italic nonempty2 ->
+                    hyperlinks nonempty2
+
+                Underline nonempty2 ->
+                    hyperlinks nonempty2
+
+                Strikethrough nonempty2 ->
+                    hyperlinks nonempty2
+
+                Spoiler nonempty2 ->
+                    hyperlinks nonempty2
+
+                InlineCode char string ->
+                    []
+
+                CodeBlock language string ->
+                    []
+
+                AttachedFile id ->
+                    []
+        )
+        (List.Nonempty.toList nonempty)
 
 
 toStringWithGetter : (a -> String) -> SeqDict userId a -> Nonempty (RichText userId) -> String

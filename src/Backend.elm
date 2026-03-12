@@ -39,7 +39,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log
 import LoginForm
-import Message exposing (Message(..))
+import Message exposing (Embed(..), Message(..))
 import NonemptyDict
 import NonemptySet
 import OneToOne
@@ -1071,6 +1071,32 @@ update msg model =
 
         GotTimeForFailedToParseDiscordWebsocket name jsonError time ->
             BackendExtra.addLog time (Log.FailedToParseDiscordWebsocket name jsonError) model
+
+        GotGuildMessageEmbed guildId channelId threadRouteWithMessage result ->
+            case SeqDict.get guildId model.guilds of
+                Just guild ->
+                    case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                case threadRouteWithMessage of
+                                                    NoThreadWithMessage messageId ->
+                                                        LocalState.addEmbed messageId
+                                        }
+                            }
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        GotDmMessageEmbed dmChannelId threadRouteWithMessage result ->
+            Debug.todo ""
 
 
 attachmentsUploadedHelper :
@@ -3961,7 +3987,7 @@ joinGuildByInvite :
 joinGuildByInvite inviteLinkId time sessionId clientId guildId model session user =
     case SeqDict.get guildId model.guilds of
         Just guild ->
-            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMember time session.userId guild ) of
+            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMemberBackend time session.userId guild ) of
                 ( Just _, Ok guild2 ) ->
                     let
                         modelWithoutUser : BackendModel
