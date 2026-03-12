@@ -4881,6 +4881,18 @@ decodeDispatchUserEvent eventName =
         "REACTION_NOTIFICATION_SENT" ->
             JD.succeed DispatchUser_ReactionNotificationSent
 
+        "THREAD_MEMBERS_UPDATE" ->
+            JD.succeed DispatchUser_ThreadMembersUpdate
+
+        "CALL_CREATE" ->
+            JD.succeed DispatchUser_CallCreate
+
+        "CALL_UPDATE" ->
+            JD.succeed DispatchUser_CallUpdate
+
+        "CALL_DELETE" ->
+            JD.succeed DispatchUser_CallDelete
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5084,6 +5096,10 @@ type OpDispatchUserEvent
     | DispatchUser_ThreadMemberUpdate
     | DispatchUser_GenericPushNotificationSent
     | DispatchUser_ReactionNotificationSent
+    | DispatchUser_ThreadMembersUpdate
+    | DispatchUser_CallCreate
+    | DispatchUser_CallUpdate
+    | DispatchUser_CallDelete
 
 
 type alias ContentInventoryInboxStale =
@@ -6127,6 +6143,18 @@ handleUserGateway authToken intents response model =
                             ( model, [] )
 
                         DispatchUser_ReactionNotificationSent ->
+                            ( model, [] )
+
+                        DispatchUser_ThreadMembersUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_CallCreate ->
+                            ( model, [] )
+
+                        DispatchUser_CallUpdate ->
+                            ( model, [] )
+
+                        DispatchUser_CallDelete ->
                             ( model, [] )
 
                 OpReconnect ->
