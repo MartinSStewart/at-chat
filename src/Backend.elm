@@ -1077,17 +1077,42 @@ update msg model =
                 Just guild ->
                     case SeqDict.get channelId guild.channels of
                         Just channel ->
-                            { model
+                            ( { model
                                 | guilds =
                                     SeqDict.insert
                                         guildId
                                         { guild
                                             | channels =
-                                                case threadRouteWithMessage of
-                                                    NoThreadWithMessage messageId ->
-                                                        LocalState.addEmbed messageId
+                                                SeqDict.insert
+                                                    channelId
+                                                    (case threadRouteWithMessage of
+                                                        NoThreadWithMessage messageId ->
+                                                            LocalState.addEmbedBackend messageId result channel
+
+                                                        ViewThreadWithMessage threadId messageId ->
+                                                            { channel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadId
+                                                                        (LocalState.addEmbedBackend messageId result)
+                                                                        channel.threads
+                                                            }
+                                                    )
+                                                    guild.channels
                                         }
-                            }
+                                        model.guilds
+                              }
+                            , Broadcast.toGuild
+                                guildId
+                                (Server_GotGuildMessageEmbed
+                                    guildId
+                                    channelId
+                                    threadRouteWithMessage
+                                    (Tuple.mapSecond (Result.mapError (\_ -> ())) result)
+                                    |> ServerChange
+                                )
+                                model
+                            )
 
                         Nothing ->
                             ( model, Command.none )
@@ -1095,8 +1120,46 @@ update msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        GotDmMessageEmbed dmChannelId threadRouteWithMessage result ->
-            Debug.todo ""
+        GotDmMessageEmbed channelId threadRouteWithMessage result ->
+            case SeqDict.get channelId model.dmChannels of
+                Just channel ->
+                    let
+                        ( userIdA, userIdB ) =
+                            DmChannel.userIdsFromChannelId channelId
+                    in
+                    ( { model
+                        | dmChannels =
+                            SeqDict.insert
+                                channelId
+                                (case threadRouteWithMessage of
+                                    NoThreadWithMessage messageId ->
+                                        LocalState.addEmbedBackend messageId result channel
+
+                                    ViewThreadWithMessage threadId messageId ->
+                                        { channel
+                                            | threads =
+                                                SeqDict.updateIfExists
+                                                    threadId
+                                                    (LocalState.addEmbedBackend messageId result)
+                                                    channel.threads
+                                        }
+                                )
+                                model.dmChannels
+                      }
+                    , Broadcast.toDmChannel
+                        userIdA
+                        userIdB
+                        (\otherUserId ->
+                            Server_GotDmMessageEmbed
+                                otherUserId
+                                threadRouteWithMessage
+                                (Tuple.mapSecond (Result.mapError (\_ -> ())) result)
+                        )
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 attachmentsUploadedHelper :
@@ -2106,7 +2169,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                        , Broadcast.toDmChannel
+                                        , Broadcast.toDmChannelExcludingOne
                                             clientId
                                             userId
                                             otherUserId
@@ -2293,7 +2356,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                        , Broadcast.toDmChannel
+                                        , Broadcast.toDmChannelExcludingOne
                                             clientId
                                             userId
                                             otherUserId
@@ -2490,7 +2553,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             attachedFiles2
                                                             |> LocalChangeResponse changeId
                                                             |> Lamdera.sendToFrontend clientId
-                                                        , Broadcast.toDmChannel
+                                                        , Broadcast.toDmChannelExcludingOne
                                                             clientId
                                                             userId
                                                             otherUserId
@@ -2903,7 +2966,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         [ Lamdera.sendToFrontend
                                                             clientId
                                                             (LocalChangeResponse changeId localMsg)
-                                                        , Broadcast.toDmChannel
+                                                        , Broadcast.toDmChannelExcludingOne
                                                             clientId
                                                             userId
                                                             otherUserId

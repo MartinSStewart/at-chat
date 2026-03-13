@@ -688,6 +688,8 @@ type ServerChange
     | Server_LoadingDiscordChannelChanged (Discord.Id Discord.UserId) (Maybe (LoadingDiscordChannel Int))
     | Server_LoadAdminData InitAdminData
     | Server_NewLog Time.Posix Log
+    | Server_GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result () EmbedData )
+    | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Int, Result () EmbedData )
 
 
 type LocalChange

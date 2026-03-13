@@ -17,6 +17,7 @@ module DmChannel exposing
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
+    , userIdsFromChannelId
     )
 
 import Array exposing (Array)
@@ -169,6 +170,11 @@ setArray id message array =
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
 channelIdFromUserIds (Id userIdA) (Id userIdB) =
     DmChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
+
+
+userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )
+userIdsFromChannelId (DmChannelId userIdA userIdB) =
+    ( userIdA, userIdB )
 
 
 otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)

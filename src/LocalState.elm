@@ -26,7 +26,8 @@ module LocalState exposing
     , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
-    , addEmbed
+    , addEmbedBackend
+    , addEmbedFrontend
     , addInvite
     , addMemberBackend
     , addMemberFrontend
@@ -2007,13 +2008,34 @@ getDiscordGuildAndChannel guildId channelId local =
             Nothing
 
 
-addEmbed :
+addEmbedBackend :
     Id messageId
     -> ( Int, Result e EmbedData )
     -> { a | messages : Array (Message messageId userId) }
     -> { a | messages : Array (Message messageId userId) }
-addEmbed messageId embed channel =
+addEmbedBackend messageId embed channel =
     { channel | messages = updateArray messageId (Message.addEmbed embed) channel.messages }
+
+
+addEmbedFrontend :
+    Id messageId
+    -> ( Int, Result e EmbedData )
+    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : Array (MessageState messageId userId) }
+addEmbedFrontend messageId embed channel =
+    { channel
+        | messages =
+            updateArray messageId
+                (\message ->
+                    case message of
+                        MessageLoaded message2 ->
+                            Message.addEmbed embed message2 |> MessageLoaded
+
+                        MessageUnloaded ->
+                            message
+                )
+                channel.messages
+    }
 
 
 usersMentionedOrRepliedToBackend :

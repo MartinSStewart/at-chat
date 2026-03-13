@@ -16,6 +16,7 @@ module Broadcast exposing
     , toDiscordGuild
     , toDiscordGuildExcludingOne
     , toDmChannel
+    , toDmChannelExcludingOne
     , toEveryone
     , toEveryoneWhoCanSeeUser
     , toEveryoneWhoCanSeeUserIncludingUser
@@ -665,14 +666,14 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
         |> Command.batch
 
 
-toDmChannel :
+toDmChannelExcludingOne :
     ClientId
     -> Id UserId
     -> Id UserId
     -> (Id UserId -> ServerChange)
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-toDmChannel clientId userId otherUserId serverMsg model =
+toDmChannelExcludingOne clientId userId otherUserId serverMsg model =
     if userId == otherUserId then
         toUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
 
@@ -680,6 +681,23 @@ toDmChannel clientId userId otherUserId serverMsg model =
         Command.batch
             [ toUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
             , toUser (Just clientId) Nothing otherUserId (serverMsg userId |> ServerChange) model
+            ]
+
+
+toDmChannel :
+    Id UserId
+    -> Id UserId
+    -> (Id UserId -> ServerChange)
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+toDmChannel userId otherUserId serverMsg model =
+    if userId == otherUserId then
+        toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
+
+    else
+        Command.batch
+            [ toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
+            , toUser Nothing Nothing otherUserId (serverMsg userId |> ServerChange) model
             ]
 
 
@@ -835,7 +853,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
             changeId
             (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles)
             |> Lamdera.sendToFrontend clientId
-        , toDmChannel
+        , toDmChannelExcludingOne
             clientId
             userId
             otherUserId
