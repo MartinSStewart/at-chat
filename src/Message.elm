@@ -111,9 +111,7 @@ decodeEmbedData =
                 Just title ->
                     Json.Decode.succeed
                         { title = Just title
-                        , image =
-                            Dict.get "og:image" dict
-                                |> Maybe.andThen Url.fromString
+                        , image = Dict.get "og:image" dict
                         , content = Dict.get "og:description" dict |> Maybe.withDefault ""
                         , createdAt = Nothing
                         , favicon = Nothing

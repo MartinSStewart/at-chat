@@ -4,17 +4,23 @@ module UiViewer exposing (main)
 Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 -}
 
+import Array
 import BackendExtra
 import Discord
+import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
 import Html exposing (Html)
 import Html.Attributes
 import Id
+import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
 import Postmark
-import String.Nonempty exposing (NonemptyString)
+import RichText exposing (Embed(..), RichText(..))
+import SeqDict
+import SeqSet
+import String.Nonempty exposing (NonemptyString(..))
 import Time
 import Ui
 import Ui.Font
@@ -36,6 +42,11 @@ main =
                 [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Log entries")
                 , logExamples
+                ]
+            , Ui.column
+                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Rich text")
+                , richTextExamples
                 ]
             ]
         )
@@ -78,7 +89,18 @@ logExamples =
 
         logEntry : Log -> Ui.Element ()
         logEntry log =
-            Log.view Time.utc () (\_ -> ()) False False { time = exampleTime, log = log }
+            Log.view
+                False
+                False
+                Time.utc
+                { onPressCopyLink = ()
+                , onPressCopy = \_ -> ()
+                , onPressHide = ()
+                , onPressUnhide = ()
+                }
+                False
+                False
+                { time = exampleTime, log = log }
     in
     Ui.column
         [ Ui.spacing 24 ]
@@ -109,5 +131,56 @@ logExamples =
                 (Discord.NotFound404 Discord.UnknownMessage10008)
             )
         , logEntry
-            (Log.FailedToParseDiscordWebsocket "Expecting STRING but instead got blah blah blah at blah in json[0].field")
+            (Log.FailedToParseDiscordWebsocket Nothing "Expecting STRING but instead got blah blah blah at blah in json[0].field")
+        ]
+
+
+richTextExamples : Ui.Element ()
+richTextExamples =
+    let
+        message : NonemptyString -> List Embed -> Ui.Element ()
+        message text embeds =
+            RichText.view
+                (Dom.id "richText")
+                800
+                (\_ -> ())
+                SeqSet.empty
+                SeqDict.empty
+                SeqDict.empty
+                (Array.fromList embeds)
+                (RichText.fromNonemptyString SeqDict.empty text)
+                |> Html.div []
+                |> Ui.html
+
+        url : String
+        url =
+            "https://cool-link.com/verycool/path/subpath/more/?blah=123#title-page"
+    in
+    Ui.column
+        [ Ui.spacing 24 ]
+        [ message (NonemptyString 'C' ("heck out this cool link! " ++ url)) [ EmbedLoading ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ url))
+            [ EmbedLoaded
+                { title = Nothing
+                , image = Nothing
+                , content = "Content of this embedded link"
+                , createdAt = Nothing
+                , favicon = Nothing
+                }
+            ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ url))
+            [ EmbedLoaded
+                { title = Just "Title of this embed"
+                , image = Just "/android-chrome-512x512.png"
+                , content = "Content of this embedded link"
+                , createdAt = Just (Time.millisToPosix 0)
+                , favicon = Just "/favicon-32x32.png"
+                }
+            ]
+        , message
+            (NonemptyString 'C' "heck out this cool link! https://cool-link.com/verycool")
+            [ EmbedFailedToLoad
+            ]
         ]
