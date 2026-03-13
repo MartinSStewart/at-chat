@@ -1309,6 +1309,10 @@ smallHyperlink maybeFavicon url =
         , Html.span
             [ Html.Attributes.style "font-size" "14px"
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+            , Html.Attributes.style "overflow" "hidden"
+            , Html.Attributes.style "text-overflow" "ellipsis"
+            , Html.Attributes.style "white-space" "nowrap"
+            , Html.Attributes.style "min-width" "0"
             ]
             (case Url.fromString url of
                 Just parsedUrl ->
