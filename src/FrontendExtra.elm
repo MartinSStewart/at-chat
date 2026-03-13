@@ -47,6 +47,7 @@ import TwoFactorAuthentication
 import Types exposing (ChannelSidebarMode(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
+import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
@@ -295,7 +296,7 @@ layout model attributes child =
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg
-externalLinkWarning domainWhitelist isMobile2 url =
+externalLinkWarning domainWhitelist isMobile url =
     let
         urlText =
             Url.toString url
@@ -303,74 +304,91 @@ externalLinkWarning domainWhitelist isMobile2 url =
         label =
             Ui.Input.label
                 "frontend_addDomainToWhitelist"
-                [ MyUi.htmlStyle "cursor" "pointer", Ui.paddingLeft 8 ]
+                [ MyUi.htmlStyle "cursor" "pointer", Ui.paddingLeft 12 ]
                 (Ui.Prose.paragraph
                     [ Ui.paddingXY 0 4 ]
                     [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text "Don't ask again about links to ")
-                    , Ui.text url.host
+                    , Ui.el [ Ui.Font.noWrap ] (Ui.text url.host)
                     ]
                 )
     in
-    if isMobile2 then
-        Debug.todo ""
-
-    else
-        Ui.el
-            [ Ui.background (Ui.rgba 0 0 0 0.5), Ui.height Ui.fill ]
-            (Ui.column
-                [ Ui.centerX
-                , Ui.centerY
-                , Ui.rounded 16
-                , Ui.paddingXY 24 16
-                , Ui.background MyUi.background3
-                , Ui.widthMax 600
-                , Ui.width Ui.shrink
-                , Ui.spacing 16
-                , Ui.borderColor (Ui.rgb 0 0 0)
-                , Ui.border 1
+    Ui.el
+        [ Ui.behindContent
+            (Ui.el
+                [ Ui.background (Ui.rgba 0 0 0 0.5)
+                , Ui.height Ui.fill
+                , Ui.Events.onClick PressedCloseExternalLinkWarning
                 ]
-                [ Ui.column
-                    [ Ui.spacing 4 ]
-                    [ Ui.row
-                        [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY ]
-                        [ Ui.html (Icons.warning 36), Ui.text "Heads up, you are leaving this page and going to:" ]
-                    , Ui.el [ MyUi.htmlStyle "word-break" "break-all" ] (Ui.text urlText)
-                    ]
-                , Ui.row
-                    []
-                    [ Ui.Input.checkbox
-                        [ Ui.Font.size 14 ]
-                        { onChange = PressedAddDomainToWhitelist
-                        , icon = Nothing
-                        , checked = SeqSet.member (RichText.urlToDomain url) domainWhitelist
-                        , label = label.id
-                        }
-                    , label.element
-                    ]
-                , Ui.row
-                    []
-                    [ MyUi.secondaryButton
-                        (Dom.id "frontend_cancelLeaveExternal")
-                        PressedCloseExternalLinkWarning
-                        "Back"
-                    , Ui.el
-                        [ Ui.linkNewTab urlText
-                        , Ui.borderColor MyUi.buttonBorder
-                        , Ui.border 1
-                        , Ui.background MyUi.buttonBackground
-                        , Ui.rounded 4
-                        , Ui.width Ui.shrink
-                        , Ui.paddingXY 16 8
-                        , MyUi.focusEffect
-                        , Ui.Font.weight 500
-                        , Ui.Font.color MyUi.white
-                        , MyUi.htmlStyle "text-decoration" "none"
-                        , Ui.alignRight
-                        ]
-                        (Ui.text "Continue to site")
-                    ]
-                ]
+                Ui.none
             )
+        , Ui.height Ui.fill
+        ]
+        (Ui.column
+            [ Ui.centerX
+            , if isMobile then
+                Ui.alignBottom
+
+              else
+                Ui.centerY
+            , Ui.attrIf (not isMobile) (Ui.rounded 16)
+            , if isMobile then
+                Ui.paddingXY 16 16
+
+              else
+                Ui.paddingXY 32 24
+            , Ui.background MyUi.background3
+            , if isMobile then
+                Ui.width Ui.fill
+
+              else
+                Ui.widthMax 600
+            , Ui.width Ui.shrink
+            , Ui.spacing 24
+            , Ui.borderColor MyUi.border1
+            , Ui.border 1
+            ]
+            [ Ui.column
+                [ Ui.spacing 8 ]
+                [ Ui.row
+                    [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY ]
+                    [ Ui.html (Icons.warning 36), Ui.text "Heads up, you are leaving this page and going to:" ]
+                , Ui.el [ MyUi.htmlStyle "word-break" "break-all" ] (Ui.text urlText)
+                ]
+            , Ui.row
+                []
+                [ Ui.Input.checkbox
+                    [ Ui.Font.size 14 ]
+                    { onChange = PressedAddDomainToWhitelist
+                    , icon = Nothing
+                    , checked = SeqSet.member (RichText.urlToDomain url) domainWhitelist
+                    , label = label.id
+                    }
+                , label.element
+                ]
+            , Ui.row
+                []
+                [ MyUi.secondaryButton
+                    (Dom.id "frontend_cancelLeaveExternal")
+                    PressedCloseExternalLinkWarning
+                    "Back"
+                , Ui.el
+                    [ Ui.linkNewTab urlText
+                    , Ui.borderColor MyUi.buttonBorder
+                    , Ui.border 1
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.rounded 4
+                    , Ui.width Ui.shrink
+                    , Ui.paddingXY 16 8
+                    , MyUi.focusEffect
+                    , Ui.Font.weight 500
+                    , Ui.Font.color MyUi.white
+                    , MyUi.htmlStyle "text-decoration" "none"
+                    , Ui.alignRight
+                    ]
+                    (Ui.text "Continue to site")
+                ]
+            ]
+        )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
