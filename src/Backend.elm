@@ -39,7 +39,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log
 import LoginForm
-import Message exposing (Embed(..), Message(..))
+import Message exposing (Message(..))
 import NonemptyDict
 import NonemptySet
 import OneToOne

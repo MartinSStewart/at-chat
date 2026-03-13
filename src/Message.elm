@@ -1,7 +1,5 @@
 module Message exposing
-    ( Embed(..)
-    , EmbedData
-    , Message(..)
+    ( Message(..)
     , MessageNoReply(..)
     , MessageState(..)
     , MessageStateNoReply(..)
@@ -15,7 +13,6 @@ module Message exposing
     )
 
 import Array exposing (Array)
-import Array.Extra
 import Dict
 import Effect.Command as Command exposing (Command)
 import Effect.Http as Http
@@ -26,11 +23,10 @@ import Json.Decode
 import Json.Encode
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
-import RichText exposing (RichText)
+import RichText exposing (Embed(..), EmbedData, RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Time
-import Url exposing (Url)
 
 
 type Message messageId userId
@@ -106,11 +102,6 @@ addEmbed ( embedIndex, result ) message =
             message
 
 
-updateArray : Id messageId -> (a -> a) -> Array a -> Array a
-updateArray id message array =
-    Array.Extra.update (Id.toInt id) message array
-
-
 decodeEmbedData : Json.Decode.Decoder EmbedData
 decodeEmbedData =
     Json.Decode.andThen
@@ -139,19 +130,6 @@ type alias UserTextMessageData messageId userId =
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     , embeds : Array Embed
-    }
-
-
-type Embed
-    = EmbedLoading
-    | EmbedLoaded EmbedData
-    | EmbedFailedToLoad
-
-
-type alias EmbedData =
-    { title : String
-    , image : Maybe Url
-    , content : String
     }
 
 

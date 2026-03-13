@@ -1,5 +1,7 @@
 module RichText exposing
-    ( Language(..)
+    ( Embed(..)
+    , EmbedData
+    , Language(..)
     , Range
     , RichText(..)
     , RichTextState
@@ -27,6 +29,7 @@ import Coord
 import Discord
 import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Time as Time
 import FileName
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
@@ -65,6 +68,21 @@ type RichText userId
 type Language
     = Language NonemptyString
     | NoLanguage
+
+
+type Embed
+    = EmbedLoading
+    | EmbedLoaded EmbedData
+    | EmbedFailedToLoad
+
+
+type alias EmbedData =
+    { title : Maybe String
+    , image : Maybe Url
+    , content : String
+    , createdAt : Maybe Time.Posix
+    , favicon : Maybe Url
+    }
 
 
 normalTextFromString : String -> Maybe (RichText userId)
@@ -838,9 +856,10 @@ view :
     -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
+    -> Array Embed
     -> Nonempty (RichText userId)
     -> List (Html msg)
-view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty =
+view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles embeds nonempty =
     viewHelper
         (Just containerWidth)
         (Just ( htmlIdPrefix, pressedSpoiler ))
@@ -849,6 +868,8 @@ view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedF
         revealedSpoilers
         users
         attachedFiles
+        embeds
+        0
         nonempty
         |> Tuple.second
 
@@ -868,6 +889,8 @@ preview revealedSpoilers users attachedFiles nonempty =
         revealedSpoilers
         users
         attachedFiles
+        Array.empty
+        0
         nonempty
         |> Tuple.second
 
@@ -893,9 +916,11 @@ viewHelper :
     -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
+    -> Array Embed
+    -> Int
     -> Nonempty (RichText userId)
     -> ( Int, List (Html msg) )
-viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
+viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -918,6 +943,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -933,6 +960,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -948,6 +977,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -963,6 +994,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -987,6 +1020,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex2 + 1
@@ -1036,16 +1071,18 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                     [ Html.text text ]
 
                              else
-                                Html.a
-                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                                    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                                    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
-                                    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                                    , Html.Attributes.href text
-                                    , Html.Attributes.target "_blank"
-                                    , Html.Attributes.rel "noreferrer"
-                                    ]
-                                    [ Html.text text ]
+                                case Array.get embedIndex embeds of
+                                    Just EmbedLoading ->
+                                        embedLoadingView
+
+                                    Just (EmbedLoaded embed) ->
+                                        embedView embed
+
+                                    Just EmbedFailedToLoad ->
+                                        hyperlinkView state text
+
+                                    Nothing ->
+                                        hyperlinkView state text
                            ]
                     )
 
@@ -1155,6 +1192,30 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+embedView : EmbedData -> Html msg
+embedView embed =
+    Debug.todo ""
+
+
+embedLoadingView : Html msg
+embedLoadingView =
+    Debug.todo ""
+
+
+hyperlinkView : RichTextState -> String -> Html msg
+hyperlinkView state text =
+    Html.a
+        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+        , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+        , Html.Attributes.href text
+        , Html.Attributes.target "_blank"
+        , Html.Attributes.rel "noreferrer"
+        ]
+        [ Html.text text ]
 
 
 fileDownloadView : FileData -> Html msg

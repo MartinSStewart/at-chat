@@ -70,7 +70,7 @@ import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGu
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
-import Message exposing (EmbedData, Message)
+import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown)
 import MessageView
 import NonemptyDict exposing (NonemptyDict)
@@ -82,7 +82,7 @@ import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
-import RichText exposing (RichText)
+import RichText exposing (EmbedData, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)

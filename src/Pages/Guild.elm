@@ -4961,6 +4961,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     )
                     allUsers
                     message2.attachedFiles
+                    message2.embeds
                     message2.content
                     ++ (if isBeingEdited then
                             [ Html.span
