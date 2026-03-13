@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, isPressMsg, layout, logout, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -18,6 +18,7 @@ import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
+import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
@@ -34,11 +35,11 @@ import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
 import Ports
-import RichText exposing (RichText)
+import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
@@ -47,6 +48,9 @@ import Types exposing (ChannelSidebarMode(..), FrontendMsg(..), LoadedFrontend, 
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
+import Ui.Input
+import Ui.Prose
+import Url exposing (Url)
 import User exposing (FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -159,8 +163,11 @@ pendingChangesText localChange =
         Local_StartReloadingDiscordUser _ _ ->
             "Reload Discord user"
 
-        LinkDiscordAcknowledgementIsChecked _ ->
+        Local_LinkDiscordAcknowledgementIsChecked _ ->
             "Checked link Discord account acknowledgement"
+
+        Local_SetDomainWhitelist bool domain ->
+            "Whitelist domain"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -285,6 +292,85 @@ layout model attributes child =
                )
         )
         child
+
+
+externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg
+externalLinkWarning domainWhitelist isMobile2 url =
+    let
+        urlText =
+            Url.toString url
+
+        label =
+            Ui.Input.label
+                "frontend_addDomainToWhitelist"
+                [ MyUi.htmlStyle "cursor" "pointer", Ui.paddingLeft 8 ]
+                (Ui.Prose.paragraph
+                    [ Ui.paddingXY 0 4 ]
+                    [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text "Don't ask again about links to ")
+                    , Ui.text url.host
+                    ]
+                )
+    in
+    if isMobile2 then
+        Debug.todo ""
+
+    else
+        Ui.el
+            [ Ui.background (Ui.rgba 0 0 0 0.5), Ui.height Ui.fill ]
+            (Ui.column
+                [ Ui.centerX
+                , Ui.centerY
+                , Ui.rounded 16
+                , Ui.paddingXY 24 16
+                , Ui.background MyUi.background3
+                , Ui.widthMax 600
+                , Ui.width Ui.shrink
+                , Ui.spacing 16
+                , Ui.borderColor (Ui.rgb 0 0 0)
+                , Ui.border 1
+                ]
+                [ Ui.column
+                    [ Ui.spacing 4 ]
+                    [ Ui.row
+                        [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY ]
+                        [ Ui.html (Icons.warning 36), Ui.text "Heads up, you are leaving this page and going to:" ]
+                    , Ui.el [ MyUi.htmlStyle "word-break" "break-all" ] (Ui.text urlText)
+                    ]
+                , Ui.row
+                    []
+                    [ Ui.Input.checkbox
+                        [ Ui.Font.size 14 ]
+                        { onChange = PressedAddDomainToWhitelist
+                        , icon = Nothing
+                        , checked = SeqSet.member (RichText.urlToDomain url) domainWhitelist
+                        , label = label.id
+                        }
+                    , label.element
+                    ]
+                , Ui.row
+                    []
+                    [ MyUi.secondaryButton
+                        (Dom.id "frontend_cancelLeaveExternal")
+                        PressedCloseExternalLinkWarning
+                        "Back"
+                    , Ui.el
+                        [ Ui.linkNewTab urlText
+                        , Ui.borderColor MyUi.buttonBorder
+                        , Ui.border 1
+                        , Ui.background MyUi.buttonBackground
+                        , Ui.rounded 4
+                        , Ui.width Ui.shrink
+                        , Ui.paddingXY 16 8
+                        , MyUi.focusEffect
+                        , Ui.Font.weight 500
+                        , Ui.Font.color MyUi.white
+                        , MyUi.htmlStyle "text-decoration" "none"
+                        , Ui.alignRight
+                        ]
+                        (Ui.text "Continue to site")
+                    ]
+                ]
+            )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -1258,6 +1344,12 @@ isPressMsg msg =
         PressedDiscordGuildNotificationLevel _ _ ->
             True
 
+        PressedCloseExternalLinkWarning ->
+            True
+
+        PressedAddDomainToWhitelist bool ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
@@ -2002,7 +2094,7 @@ changeUpdate localMsg local =
                 Local_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
 
-                LinkDiscordAcknowledgementIsChecked isChecked ->
+                Local_LinkDiscordAcknowledgementIsChecked isChecked ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -2015,6 +2107,16 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | user = { user | linkDiscordAcknowledgementIsChecked = isChecked } }
+                    }
+
+                Local_SetDomainWhitelist enable domain ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user }
                     }
 
         ServerChange serverChange ->

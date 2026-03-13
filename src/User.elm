@@ -22,6 +22,7 @@ module User exposing
     , profileImageSize
     , sectionToString
     , setDiscordGuildNotificationLevel
+    , setDomainWhitelist
     , setGuildNotificationLevel
     , setIcon
     , setLastChannelViewed
@@ -81,6 +82,18 @@ type alias BackendUser =
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
+    }
+
+
+setDomainWhitelist : Bool -> Domain -> { a | domainWhitelist : SeqSet Domain } -> { a | domainWhitelist : SeqSet Domain }
+setDomainWhitelist enable domain user =
+    { user
+        | domainWhitelist =
+            if enable then
+                SeqSet.insert domain user.domainWhitelist
+
+            else
+                SeqSet.remove domain user.domainWhitelist
     }
 
 

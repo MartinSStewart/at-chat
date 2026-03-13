@@ -3781,7 +3781,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
                         )
 
-                LinkDiscordAcknowledgementIsChecked isChecked ->
+                Local_LinkDiscordAcknowledgementIsChecked isChecked ->
                     asUser
                         model
                         sessionId
@@ -3791,6 +3791,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     NonemptyDict.insert
                                         session.userId
                                         { user | linkDiscordAcknowledgementIsChecked = isChecked }
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
+                Local_SetDomainWhitelist enable domain ->
+                    asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        (User.setDomainWhitelist enable domain user)
                                         model.users
                               }
                             , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)

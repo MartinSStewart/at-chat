@@ -4954,7 +4954,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 (RichText.view
                     (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageIndex))
                     containerWidth
-                    MessageView_PressedLink
+                    MessageView_PressedNonWhitelistLink
                     domainWhitelist
                     MessageView_PressedSpoiler
                     (case SeqDict.get messageIndex revealedSpoilers of

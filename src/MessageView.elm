@@ -19,7 +19,7 @@ import Url exposing (Url)
 
 type MessageViewMsg
     = MessageView_PressedSpoiler Int
-    | MessageView_PressedLink Url
+    | MessageView_PressedNonWhitelistLink Url
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
@@ -41,7 +41,7 @@ isPressMsg msg =
         MessageView_PressedSpoiler _ ->
             True
 
-        MessageView_PressedLink _ ->
+        MessageView_PressedNonWhitelistLink _ ->
             True
 
         MessageView_MouseEnteredMessage ->

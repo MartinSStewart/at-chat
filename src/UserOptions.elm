@@ -465,7 +465,7 @@ discordAcknowledgement discordAcknowledged =
             [ Ui.spacing 8 ]
             [ Ui.row
                 [ Ui.spacing 8, Ui.Font.bold, Ui.Font.color MyUi.font3 ]
-                [ Ui.html Icons.warning, Ui.text "Before you link your Discord account, please note:" ]
+                [ Ui.html (Icons.warning 24), Ui.text "Before you link your Discord account, please note:" ]
             , numberPoint
                 1
                 (Ui.text "Using your Discord account via a 3rd party client breaks their terms of service. Discord can temporarily lock or even permanently ban your account for it. In practice this doesn't seem to happen as long as you don't act like a spam bot but the risk is still present.")

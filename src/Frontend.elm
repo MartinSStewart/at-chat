@@ -381,6 +381,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , channelScrollPosition = ScrolledToBottom
             , textEditor = TextEditor.init
             , profilePictureEditor = ImageEditor.init
+            , externalLinkWarning = Nothing
             }
     in
     ( loggedIn
@@ -2856,18 +2857,15 @@ updateLoaded msg model =
                         _ ->
                             ( model, Command.none )
 
-                MessageView.MessageView_PressedLink url ->
-                    Debug.todo ""
+                MessageView.MessageView_PressedNonWhitelistLink url ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | externalLinkWarning = Just url }
+                            , Command.none
+                            )
+                        )
+                        model
 
-                --if Route.decode url then
-                --    if MyUi.isMobile model then
-                --        routeRequest (Just model.route) route model
-                --
-                --    else
-                --        ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
-                --
-                --else
-                --    model
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
 
@@ -3029,7 +3027,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Just (LinkDiscordAcknowledgementIsChecked checked))
+                        (Just (Local_LinkDiscordAcknowledgementIsChecked checked))
                         loggedIn
                         Command.none
                 )
@@ -3120,6 +3118,27 @@ updateLoaded msg model =
               }
             , Command.none
             )
+
+        PressedCloseExternalLinkWarning ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | externalLinkWarning = Nothing }, Command.none ))
+                model
+
+        PressedAddDomainToWhitelist isChecked ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.externalLinkWarning of
+                        Just url ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Just (Local_SetDomainWhitelist isChecked (RichText.urlToDomain url)))
+                                loggedIn
+                                Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4367,6 +4386,16 @@ view model =
                                                 loggedIn
                                                 loaded
                                                 userOptions
+                                                |> Ui.inFront
+
+                                        Nothing ->
+                                            Ui.noAttr
+                                    , case loggedIn.externalLinkWarning of
+                                        Just url ->
+                                            FrontendExtra.externalLinkWarning
+                                                local.localUser.user.domainWhitelist
+                                                isMobile
+                                                url
                                                 |> Ui.inFront
 
                                         Nothing ->
