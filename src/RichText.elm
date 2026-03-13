@@ -1194,8 +1194,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
         (List.Nonempty.toList nonempty)
 
 
-embedView : String -> EmbedData -> Html msg
-embedView url embed =
+embedContainer : List (Html msg) -> Html msg
+embedContainer contents =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "max-width" "432px"
@@ -1215,97 +1215,141 @@ embedView url embed =
             , Html.Attributes.style "min-width" "0"
             , Html.Attributes.style "flex" "1"
             ]
-            (List.filterMap
-                identity
-                [ case embed.title of
-                    Just title ->
-                        Html.a
-                            [ Html.Attributes.href url
-                            , Html.Attributes.target "_blank"
-                            , Html.Attributes.rel "noreferrer"
-                            , Html.Attributes.style "font-size" "14px"
-                            , Html.Attributes.style "font-weight" "600"
-                            , Html.Attributes.style "color" "rgb(100,160,255)"
-                            , Html.Attributes.style "display" "block"
-                            , Html.Attributes.style "margin-bottom" "4px"
-                            , Html.Attributes.style "text-decoration" "none"
-                            , Html.Attributes.style "overflow" "hidden"
-                            , Html.Attributes.style "text-overflow" "ellipsis"
-                            , Html.Attributes.style "white-space" "nowrap"
-                            ]
-                            [ Html.text title ]
-                            |> Just
+            contents
+        ]
 
-                    Nothing ->
-                        Nothing
-                , if String.isEmpty embed.content then
-                    Nothing
 
-                  else
-                    Html.div
-                        [ Html.Attributes.style "font-size" "13px"
-                        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+embedView : String -> EmbedData -> Html msg
+embedView url embed =
+    embedContainer
+        (List.filterMap
+            identity
+            [ case embed.title of
+                Just title ->
+                    Html.a
+                        [ Html.Attributes.href url
+                        , Html.Attributes.target "_blank"
+                        , Html.Attributes.rel "noreferrer"
+                        , Html.Attributes.style "font-size" "14px"
+                        , Html.Attributes.style "font-weight" "600"
+                        , Html.Attributes.style "color" "rgb(100,160,255)"
+                        , Html.Attributes.style "display" "block"
+                        , Html.Attributes.style "margin-bottom" "4px"
+                        , Html.Attributes.style "text-decoration" "none"
                         , Html.Attributes.style "overflow" "hidden"
-                        , Html.Attributes.style "display" "-webkit-box"
-                        , Html.Attributes.style "-webkit-line-clamp" "3"
-                        , Html.Attributes.style "-webkit-box-orient" "vertical"
-                        , Html.Attributes.style "white-space" "pre-wrap"
+                        , Html.Attributes.style "text-overflow" "ellipsis"
+                        , Html.Attributes.style "white-space" "nowrap"
                         ]
-                        [ Html.text (String.left 300 embed.content) ]
+                        [ Html.text title ]
                         |> Just
-                , case embed.image of
-                    Just image ->
-                        Html.img
-                            [ Html.Attributes.src image
-                            , Html.Attributes.style "max-width" "100%"
-                            , Html.Attributes.style "max-height" "300px"
-                            , Html.Attributes.style "border-radius" "4px"
-                            , Html.Attributes.style "margin-top" "8px"
-                            , Html.Attributes.style "display" "block"
-                            ]
-                            []
-                            |> Just
 
-                    Nothing ->
-                        Nothing
-                , case embed.createdAt of
-                    Just createdAt ->
-                        Html.div
-                            [ Html.Attributes.style "font-size" "11px"
-                            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
-                            , Html.Attributes.style "margin-top" "6px"
-                            ]
-                            [ Html.text (formatPosix createdAt) ]
-                            |> Just
+                Nothing ->
+                    Nothing
+            , if String.isEmpty embed.content then
+                Nothing
 
-                    Nothing ->
-                        Nothing
-                , smallHyperlink embed.favicon url |> Just
-                ]
-            )
+              else
+                Html.div
+                    [ Html.Attributes.style "font-size" "13px"
+                    , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+                    , Html.Attributes.style "overflow" "hidden"
+                    , Html.Attributes.style "display" "-webkit-box"
+                    , Html.Attributes.style "-webkit-line-clamp" "3"
+                    , Html.Attributes.style "-webkit-box-orient" "vertical"
+                    , Html.Attributes.style "white-space" "pre-wrap"
+                    ]
+                    [ Html.text (String.left 300 embed.content) ]
+                    |> Just
+            , case embed.image of
+                Just image ->
+                    Html.img
+                        [ Html.Attributes.src image
+                        , Html.Attributes.style "max-width" "100%"
+                        , Html.Attributes.style "max-height" "300px"
+                        , Html.Attributes.style "border-radius" "4px"
+                        , Html.Attributes.style "margin-top" "8px"
+                        , Html.Attributes.style "display" "block"
+                        ]
+                        []
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , case embed.createdAt of
+                Just createdAt ->
+                    Html.div
+                        [ Html.Attributes.style "font-size" "11px"
+                        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                        , Html.Attributes.style "margin-top" "6px"
+                        ]
+                        [ Html.text (formatPosix createdAt) ]
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , smallHyperlink embed.favicon url |> Just
+            ]
+        )
+
+
+embedLoadingView : String -> Html msg
+embedLoadingView url =
+    embedContainer
+        [ Html.div
+            [ Html.Attributes.style "width" "60%"
+            , Html.Attributes.style "height" "14px"
+            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "margin-bottom" "8px"
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "width" "90%"
+            , Html.Attributes.style "height" "12px"
+            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "margin-bottom" "6px"
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "width" "75%"
+            , Html.Attributes.style "height" "12px"
+            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+            , Html.Attributes.style "border-radius" "4px"
+            ]
+            []
+        , smallHyperlink Nothing url
         ]
 
 
 smallHyperlink : Maybe String -> String -> Html msg
 smallHyperlink maybeFavicon url =
-    Html.div
+    Html.a
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "align-items" "center"
         , Html.Attributes.style "gap" "6px"
         , Html.Attributes.style "margin-top" "4px"
+        , Html.Attributes.href url
+        , Html.Attributes.style "text-decoration" "none"
         ]
         [ case maybeFavicon of
             Just favicon ->
                 Html.img
-                    [ Html.Attributes.src favicon
-                    , Html.Attributes.style "width" "16px"
+                    [ Html.Attributes.style "width" "16px"
                     , Html.Attributes.style "height" "16px"
                     , Html.Attributes.style "border-radius" "2px"
+                    , Html.Attributes.src favicon
                     ]
                     []
 
             Nothing ->
-                Html.text ""
+                Html.div
+                    [ Html.Attributes.style "width" "16px"
+                    , Html.Attributes.style "height" "16px"
+                    , Html.Attributes.style "border-radius" "2px"
+                    , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+                    ]
+                    []
         , Html.span
             [ Html.Attributes.style "font-size" "14px"
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
@@ -1341,54 +1385,6 @@ urlAddPrefixed prefix maybeSegment starter =
 
         Just segment ->
             starter ++ prefix ++ segment
-
-
-embedLoadingView : String -> Html msg
-embedLoadingView url =
-    Html.div
-        [ Html.Attributes.style "display" "flex"
-        , Html.Attributes.style "max-width" "432px"
-        , Html.Attributes.style "margin-top" "4px"
-        , Html.Attributes.style "border-radius" "4px"
-        , Html.Attributes.style "overflow" "hidden"
-        ]
-        [ Html.div
-            [ Html.Attributes.style "width" "4px"
-            , Html.Attributes.style "flex-shrink" "0"
-            , Html.Attributes.style "background-color" "rgb(80,120,200)"
-            ]
-            []
-        , Html.div
-            [ Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
-            , Html.Attributes.style "padding" "8px 12px"
-            , Html.Attributes.style "flex" "1"
-            ]
-            [ Html.div
-                [ Html.Attributes.style "width" "60%"
-                , Html.Attributes.style "height" "14px"
-                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
-                , Html.Attributes.style "border-radius" "4px"
-                , Html.Attributes.style "margin-bottom" "8px"
-                ]
-                []
-            , Html.div
-                [ Html.Attributes.style "width" "90%"
-                , Html.Attributes.style "height" "12px"
-                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
-                , Html.Attributes.style "border-radius" "4px"
-                , Html.Attributes.style "margin-bottom" "6px"
-                ]
-                []
-            , Html.div
-                [ Html.Attributes.style "width" "75%"
-                , Html.Attributes.style "height" "12px"
-                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
-                , Html.Attributes.style "border-radius" "4px"
-                ]
-                []
-            , smallHyperlink Nothing url
-            ]
-        ]
 
 
 formatPosix : Time.Posix -> String

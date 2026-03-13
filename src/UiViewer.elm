@@ -180,7 +180,7 @@ richTextExamples =
                 }
             ]
         , message
-            (NonemptyString 'C' "heck out this cool link! https://cool-link.com/verycool")
+            (NonemptyString 'C' ("heck out this cool link! " ++ url))
             [ EmbedFailedToLoad
             ]
         ]
