@@ -53,7 +53,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
-import RichText
+import RichText exposing (Domain)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -4380,7 +4380,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Ui.none
                 , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
-                        previewThreadLastMessage local.localUser.timezone domainWhitelist allUsers messageId thread
+                        previewThreadLastMessage local.localUser.timezone allUsers messageId thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
@@ -4781,6 +4781,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     isBeingEdited
                     isMobile
                     maybeRepliedTo
+                    localUser.user.domainWhitelist
                     revealedSpoilers
                     allUsers
                     localUser.timezone
@@ -4863,6 +4864,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     isBeingEdited
                     isMobile
                     maybeRepliedTo
+                    localUser.user.domainWhitelist
                     revealedSpoilers
                     allUsers
                     localUser.timezone
@@ -4902,13 +4904,14 @@ userTextMessageContent :
     -> Bool
     -> Bool
     -> Maybe ( Id messageId, Message messageId userId )
+    -> SeqSet Domain
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Time.Zone
     -> Id messageId
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo revealedSpoilers allUsers timezone messageIndex message2 =
+userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo domainWhitelist revealedSpoilers allUsers timezone messageIndex message2 =
     Ui.row
         []
         [ Ui.el
@@ -5054,7 +5057,6 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
                 isMobile
                 repliedToIndex
                 (userTextMessagePreview
-                    domainWhitelist
                     allUsers
                     (case SeqDict.get repliedToIndex revealedSpoilers of
                         Just set ->
@@ -5083,12 +5085,11 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
 
 
 userTextMessagePreview :
-    SeqSet String
-    -> SeqDict userId { a | name : PersonName }
+    SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessagePreview domainWhitelist allUsers revealedSpoilers message =
+userTextMessagePreview allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -5099,7 +5100,13 @@ userTextMessagePreview domainWhitelist allUsers revealedSpoilers message =
             , Html.Attributes.style "padding" "0 6px 0 2px"
             ]
             [ Html.text (User.toString message.createdBy allUsers) ]
-            :: RichText.preview MessageView_PressedLink domainWhitelist revealedSpoilers allUsers message.attachedFiles message.content
+            :: RichText.preview
+                (\_ -> MessageView_NoOp)
+                SeqSet.empty
+                revealedSpoilers
+                allUsers
+                message.attachedFiles
+                message.content
         )
         |> Ui.html
 
@@ -5262,7 +5269,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone domainWhitelist allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -5378,12 +5385,11 @@ threadMessageContainer highlight messageIndex canEdit currentUserId reactions is
 
 previewThreadLastMessage :
     Time.Zone
-    -> SeqSet String
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone domainWhitelist allUsers messageId thread =
+previewThreadLastMessage timezone allUsers messageId thread =
     let
         lastMessage =
             Array.Extra.last thread.messages
@@ -5444,8 +5450,8 @@ previewThreadLastMessage timezone domainWhitelist allUsers messageId thread =
                                     ]
                                     [ Html.text (User.toString data.createdBy allUsers) ]
                                     :: RichText.preview
-                                        MessageView_PressedLink
-                                        domainWhitelist
+                                        (\_ -> MessageView_NoOp)
+                                        SeqSet.empty
                                         SeqSet.empty
                                         allUsers
                                         data.attachedFiles

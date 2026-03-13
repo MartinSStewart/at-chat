@@ -2857,15 +2857,19 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                 MessageView.MessageView_PressedLink url ->
-                    if Route.decode url then
-                        if MyUi.isMobile model then
-                            routeRequest (Just model.route) route model
+                    Debug.todo ""
 
-                        else
-                            ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
-
-                    else
-                        model
+                --if Route.decode url then
+                --    if MyUi.isMobile model then
+                --        routeRequest (Just model.route) route model
+                --
+                --    else
+                --        ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
+                --
+                --else
+                --    model
+                MessageView.MessageView_NoOp ->
+                    ( model, Command.none )
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn

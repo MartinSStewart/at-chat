@@ -17,14 +17,15 @@ import Id
 import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
 import Postmark
-import RichText exposing (Embed(..), RichText(..))
+import RichText exposing (Domain, Embed(..), RichText(..))
 import SeqDict
-import SeqSet
+import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
 import Time
 import Ui
 import Ui.Font
 import Unsafe
+import Url exposing (Protocol(..))
 
 
 main : Html ()
@@ -45,8 +46,24 @@ main =
                 ]
             , Ui.column
                 [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
-                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Rich text")
-                , richTextExamples
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Non-whitelisted embeds")
+                , embedExamples SeqSet.empty
+                ]
+            , Ui.column
+                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Non-whitelisted embeds")
+                , embedExamples
+                    (SeqSet.fromList
+                        [ RichText.urlToDomain
+                            { protocol = Https
+                            , host = "cool-link.com"
+                            , port_ = Nothing
+                            , path = ""
+                            , query = Nothing
+                            , fragment = Nothing
+                            }
+                        ]
+                    )
                 ]
             ]
         )
@@ -135,14 +152,16 @@ logExamples =
         ]
 
 
-richTextExamples : Ui.Element ()
-richTextExamples =
+embedExamples : SeqSet Domain -> Ui.Element ()
+embedExamples whitelistedDomains =
     let
         message : NonemptyString -> List Embed -> Ui.Element ()
         message text embeds =
             RichText.view
                 (Dom.id "richText")
                 800
+                (\_ -> ())
+                whitelistedDomains
                 (\_ -> ())
                 SeqSet.empty
                 SeqDict.empty

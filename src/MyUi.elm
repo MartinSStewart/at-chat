@@ -393,7 +393,7 @@ textLinkColor =
 
 textLinkColorOnDarkBackground : Ui.Color
 textLinkColorOnDarkBackground =
-    Ui.rgb 137 157 241
+    Ui.rgb 176 193 255
 
 
 emailAddress : EmailAddress -> Element msg

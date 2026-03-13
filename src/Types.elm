@@ -86,6 +86,7 @@ import RichText exposing (EmbedData, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)

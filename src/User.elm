@@ -45,11 +45,13 @@ import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
+import RichText exposing (Domain)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import Url exposing (Url)
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -78,6 +80,7 @@ type alias BackendUser =
     , expandedGuilds : SeqSet (Id GuildId)
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , linkDiscordAcknowledgementIsChecked : Bool
+    , domainWhitelist : SeqSet Domain
     }
 
 
@@ -150,6 +153,7 @@ init createdAt name email userIsAdmin =
     , expandedGuilds = SeqSet.empty
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
+    , domainWhitelist = SeqSet.empty
     }
 
 
@@ -447,6 +451,7 @@ backendToFrontendCurrent user =
     , expandedGuilds = user.expandedGuilds
     , expandedDiscordGuilds = user.expandedDiscordGuilds
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
+    , domainWhitelist = user.domainWhitelist
     }
 
 
