@@ -27,6 +27,7 @@ import RichText exposing (Embed(..), EmbedData, RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Time
+import Url
 
 
 type Message messageId userId
@@ -108,7 +109,15 @@ decodeEmbedData =
         (\dict ->
             case Dict.get "og:title" dict of
                 Just title ->
-                    Json.Decode.succeed { title = title, image = Nothing, content = "" }
+                    Json.Decode.succeed
+                        { title = Just title
+                        , image =
+                            Dict.get "og:image" dict
+                                |> Maybe.andThen Url.fromString
+                        , content = Dict.get "og:description" dict |> Maybe.withDefault ""
+                        , createdAt = Nothing
+                        , favicon = Nothing
+                        }
 
                 Nothing ->
                     Json.Decode.fail "Invalid embed data"
