@@ -71,11 +71,26 @@ fn thumbnail_filepath(hash: &str) -> String {
 }
 
 async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
-    let info = Webpage::from_url(&url, WebpageOptions::default()).expect("Could not read from URL");
+    let mut options = WebpageOptions::default();
+
+    options.useragent =
+        String::from("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
+
+    let info = Webpage::from_url(&url, options).expect("Could not read from URL");
+
+    let info2 = match info.html.meta.get("refresh") {
+        Some(refresh) => {
+            let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
+
+            Webpage::from_url(&redirect_url, WebpageOptions::default())
+                .expect("Could not read from URL")
+        }
+        None => info,
+    };
 
     response_with_headers(
         StatusCode::OK,
-        serde_json::to_string(&info.html.meta).unwrap(),
+        serde_json::to_string(&info2.html.meta).unwrap(),
     )
 }
 

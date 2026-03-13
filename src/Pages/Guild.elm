@@ -4380,7 +4380,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Ui.none
                 , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
-                        previewThreadLastMessage local.localUser.timezone allUsers messageId thread
+                        previewThreadLastMessage local.localUser.timezone domainWhitelist allUsers messageId thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
@@ -4951,6 +4951,8 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 (RichText.view
                     (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageIndex))
                     containerWidth
+                    MessageView_PressedLink
+                    domainWhitelist
                     MessageView_PressedSpoiler
                     (case SeqDict.get messageIndex revealedSpoilers of
                         Just nonempty ->
@@ -5052,6 +5054,7 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
                 isMobile
                 repliedToIndex
                 (userTextMessagePreview
+                    domainWhitelist
                     allUsers
                     (case SeqDict.get repliedToIndex revealedSpoilers of
                         Just set ->
@@ -5080,11 +5083,12 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
 
 
 userTextMessagePreview :
-    SeqDict userId { a | name : PersonName }
+    SeqSet String
+    -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessagePreview allUsers revealedSpoilers message =
+userTextMessagePreview domainWhitelist allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -5095,7 +5099,7 @@ userTextMessagePreview allUsers revealedSpoilers message =
             , Html.Attributes.style "padding" "0 6px 0 2px"
             ]
             [ Html.text (User.toString message.createdBy allUsers) ]
-            :: RichText.preview revealedSpoilers allUsers message.attachedFiles message.content
+            :: RichText.preview MessageView_PressedLink domainWhitelist revealedSpoilers allUsers message.attachedFiles message.content
         )
         |> Ui.html
 
@@ -5258,7 +5262,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone domainWhitelist allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -5374,11 +5378,12 @@ threadMessageContainer highlight messageIndex canEdit currentUserId reactions is
 
 previewThreadLastMessage :
     Time.Zone
+    -> SeqSet String
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone allUsers messageId thread =
+previewThreadLastMessage timezone domainWhitelist allUsers messageId thread =
     let
         lastMessage =
             Array.Extra.last thread.messages
@@ -5439,6 +5444,8 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                     ]
                                     [ Html.text (User.toString data.createdBy allUsers) ]
                                     :: RichText.preview
+                                        MessageView_PressedLink
+                                        domainWhitelist
                                         SeqSet.empty
                                         allUsers
                                         data.attachedFiles

@@ -23,6 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
+import Env
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -2854,6 +2855,17 @@ updateLoaded msg model =
 
                         _ ->
                             ( model, Command.none )
+
+                MessageView.MessageView_PressedLink url ->
+                    if Route.decode url then
+                        if MyUi.isMobile model then
+                            routeRequest (Just model.route) route model
+
+                        else
+                            ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
+
+                    else
+                        model
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn

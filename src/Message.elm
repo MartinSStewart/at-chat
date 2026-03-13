@@ -19,6 +19,7 @@ import Effect.Http as Http
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id)
+import Iso8601
 import Json.Decode
 import Json.Encode
 import List.Nonempty exposing (Nonempty)
@@ -105,20 +106,20 @@ addEmbed ( embedIndex, result ) message =
 
 decodeEmbedData : Json.Decode.Decoder EmbedData
 decodeEmbedData =
-    Json.Decode.andThen
+    Json.Decode.map
         (\dict ->
-            case Dict.get "og:title" dict of
-                Just title ->
-                    Json.Decode.succeed
-                        { title = Just title
-                        , image = Dict.get "og:image" dict
-                        , content = Dict.get "og:description" dict |> Maybe.withDefault ""
-                        , createdAt = Nothing
-                        , favicon = Nothing
-                        }
+            { title = Dict.get "og:title" dict
+            , image = Dict.get "og:image" dict
+            , content = Dict.get "og:description" dict |> Maybe.withDefault ""
+            , createdAt =
+                case Dict.get "article:published_time" dict of
+                    Just time ->
+                        Iso8601.toTime time |> Result.toMaybe
 
-                Nothing ->
-                    Json.Decode.fail "Invalid embed data"
+                    Nothing ->
+                        Nothing
+            , favicon = Dict.get "og:logo" dict
+            }
         )
         (Json.Decode.dict Json.Decode.string)
 

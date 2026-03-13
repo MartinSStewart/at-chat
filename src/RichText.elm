@@ -852,6 +852,8 @@ mentionsUserHelper set nonempty =
 view :
     HtmlId
     -> Int
+    -> (String -> msg)
+    -> SeqSet String
     -> (Int -> msg)
     -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
@@ -859,10 +861,12 @@ view :
     -> Array Embed
     -> Nonempty (RichText userId)
     -> List (Html msg)
-view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles embeds nonempty =
+view htmlIdPrefix containerWidth onPressLink domainWhitelist onPressSpoiler revealedSpoilers users attachedFiles embeds nonempty =
     viewHelper
         (Just containerWidth)
-        (Just ( htmlIdPrefix, pressedSpoiler ))
+        (Just ( htmlIdPrefix, onPressSpoiler ))
+        onPressLink
+        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
@@ -875,15 +879,19 @@ view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedF
 
 
 preview :
-    SeqSet Int
+    (String -> msg)
+    -> SeqSet String
+    -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
     -> Nonempty (RichText userId)
     -> List (Html msg)
-preview revealedSpoilers users attachedFiles nonempty =
+preview onPressLink domainWhitelist revealedSpoilers users attachedFiles nonempty =
     viewHelper
         Nothing
         Nothing
+        onPressLink
+        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
@@ -911,6 +919,8 @@ normalTextView text state =
 viewHelper :
     Maybe Int
     -> Maybe ( HtmlId, Int -> msg )
+    -> (String -> msg)
+    -> SeqSet String
     -> Int
     -> RichTextState
     -> SeqSet Int
@@ -920,7 +930,7 @@ viewHelper :
     -> Int
     -> Nonempty (RichText userId)
     -> ( Int, List (Html msg) )
-viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
+viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -938,6 +948,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | italic = True }
                                 revealedSpoilers
@@ -955,6 +967,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | underline = True }
                                 revealedSpoilers
@@ -972,6 +986,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | bold = True }
                                 revealedSpoilers
@@ -989,6 +1005,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | strikethrough = True }
                                 revealedSpoilers
@@ -1010,6 +1028,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 (if revealed then
                                     state
@@ -1239,6 +1259,8 @@ embedView url embed =
                         , Html.Attributes.style "overflow" "hidden"
                         , Html.Attributes.style "text-overflow" "ellipsis"
                         , Html.Attributes.style "white-space" "nowrap"
+                        , Html.Attributes.target "_blank"
+                        , Html.Attributes.rel "noreferrer"
                         ]
                         [ Html.text title ]
                         |> Just
@@ -1331,6 +1353,8 @@ smallHyperlink maybeFavicon url =
         , Html.Attributes.style "margin-top" "4px"
         , Html.Attributes.href url
         , Html.Attributes.style "text-decoration" "none"
+        , Html.Attributes.target "_blank"
+        , Html.Attributes.rel "noreferrer"
         ]
         [ case maybeFavicon of
             Just favicon ->
@@ -1360,15 +1384,22 @@ smallHyperlink maybeFavicon url =
             ]
             (case Url.fromString url of
                 Just parsedUrl ->
+                    let
+                        path : String
+                        path =
+                            parsedUrl.path
+                                |> urlAddPrefixed "?" parsedUrl.query
+                                |> urlAddPrefixed "#" parsedUrl.fragment
+                    in
                     [ Html.text parsedUrl.host
-                    , Html.span
-                        [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
-                        ]
-                        [ parsedUrl.path
-                            |> urlAddPrefixed "?" parsedUrl.query
-                            |> urlAddPrefixed "#" parsedUrl.fragment
-                            |> Html.text
-                        ]
+                    , if path == "/" then
+                        Html.text ""
+
+                      else
+                        Html.span
+                            [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                            ]
+                            [ Html.text path ]
                     ]
 
                 Nothing ->

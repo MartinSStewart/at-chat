@@ -18,6 +18,7 @@ import Ui.Events
 
 type MessageViewMsg
     = MessageView_PressedSpoiler Int
+    | MessageView_PressedLink String
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
@@ -36,6 +37,9 @@ isPressMsg : MessageViewMsg -> Bool
 isPressMsg msg =
     case msg of
         MessageView_PressedSpoiler _ ->
+            True
+
+        MessageView_PressedLink _ ->
             True
 
         MessageView_MouseEnteredMessage ->
