@@ -14,8 +14,10 @@ import LocalState exposing (AdminStatus(..), LocalState)
 import Log
 import MyUi
 import PersonName
+import RichText exposing (Domain(..))
 import Route
 import SeqDict
+import SeqSet
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -296,6 +298,51 @@ view isMobile time local loggedIn loaded model =
                 --    ]
                 --    (Ui.text "Link Slack account")
                 ]
+            , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
+                Ui.none
+
+              else
+                MyUi.container
+                    MyUi.background1
+                    isMobile
+                    "Whitelisted domains"
+                    (List.map
+                        (\domain ->
+                            Ui.row
+                                [ Ui.spacing 8, Ui.width Ui.fill ]
+                                [ Ui.el
+                                    [ Ui.Font.size 14 ]
+                                    (Ui.text
+                                        (case domain of
+                                            Domain text ->
+                                                text
+                                        )
+                                    )
+                                , MyUi.elButton
+                                    (Dom.id
+                                        ("userOptions_removeWhitelistDomain_"
+                                            ++ (case domain of
+                                                    Domain text ->
+                                                        text
+                                               )
+                                        )
+                                    )
+                                    (PressedRemoveDomainFromWhitelist domain)
+                                    [ Ui.background MyUi.deleteButtonBackground
+                                    , Ui.Font.color MyUi.deleteButtonFont
+                                    , Ui.width Ui.shrink
+                                    , Ui.paddingXY 12 0
+                                    , Ui.rounded 4
+                                    , Ui.Font.size 14
+                                    , Ui.contentCenterY
+                                    , Ui.height (Ui.px 30)
+                                    , Ui.alignRight
+                                    ]
+                                    (Ui.text "Remove")
+                                ]
+                        )
+                        (SeqSet.toList local.localUser.user.domainWhitelist)
+                    )
             , MyUi.container
                 MyUi.background1
                 isMobile

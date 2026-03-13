@@ -3140,6 +3140,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedRemoveDomainFromWhitelist domain ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Just (Local_SetDomainWhitelist False domain))
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 setShowMembers showMembers model =

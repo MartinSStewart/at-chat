@@ -465,6 +465,7 @@ type FrontendMsg
     | GotVersionNumber (Result Http.Error Int)
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
+    | PressedRemoveDomainFromWhitelist Domain
 
 
 type ScrollPosition
