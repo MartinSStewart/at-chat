@@ -250,42 +250,7 @@ update msg model =
             )
 
         UserDisconnected sessionId clientId ->
-            let
-                model2 : BackendModel
-                model2 =
-                    { model
-                        | connections =
-                            SeqDict.update
-                                sessionId
-                                (Maybe.andThen
-                                    (\value ->
-                                        NonemptyDict.toSeqDict value
-                                            |> SeqDict.remove clientId
-                                            |> NonemptyDict.fromSeqDict
-                                    )
-                                )
-                                model.connections
-                    }
-            in
-            case SeqDict.get sessionId model2.sessions of
-                Just session ->
-                    ( { model2
-                        | sessions =
-                            SeqDict.insert
-                                sessionId
-                                (UserSession.setCurrentlyViewing Nothing session)
-                                model2.sessions
-                      }
-                    , Broadcast.toUser
-                        Nothing
-                        Nothing
-                        session.userId
-                        (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
-                        model2
-                    )
-
-                Nothing ->
-                    ( model2, Command.none )
+            disconnectClient sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
             updateFromFrontendWithTime
@@ -1210,6 +1175,34 @@ attachmentsUploadedHelper model message results =
         )
         ( SeqDict.empty, model.discordAttachments )
         message.attachments
+
+
+disconnectClient : SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
+disconnectClient sessionId clientId model =
+    let
+        model2 : BackendModel
+        model2 =
+
+    in
+    case SeqDict.get sessionId model2.sessions of
+        Just session ->
+            ( { model2
+                | sessions =
+                    SeqDict.insert
+                        sessionId
+                        (UserSession.setCurrentlyViewing Nothing session)
+                        model2.sessions
+              }
+            , Broadcast.toUser
+                Nothing
+                Nothing
+                session.userId
+                (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
+                model2
+            )
+
+        Nothing ->
+            ( model2, Command.none )
 
 
 
@@ -4549,6 +4542,20 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.DisconnectClient sessionIdHash disconnectClientId ->
+            case Broadcast.getSessionFromSessionIdHash sessionIdHash model of
+                Just ( sessionId, _ ) ->
+                    let
+                        ( model2, cmds ) =
+                            disconnectClient sessionId disconnectClientId model
+                    in
+                    ( model2
+                    , Command.batch [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId, cmds ]
+                    )
+
+                Nothing ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
 
 updateFromFrontendAdmin :
     ClientId
@@ -4589,44 +4596,6 @@ updateFromFrontendAdmin clientId toBackend model =
                     ( model
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
-
-        Pages.Admin.DisconnectClientRequest sessionIdHash disconnectClientId ->
-            case Broadcast.getSessionFromSessionIdHash sessionIdHash model of
-                Just ( sessionId, session ) ->
-                    let
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | connections =
-                                    SeqDict.update
-                                        sessionId
-                                        (Maybe.andThen
-                                            (\value ->
-                                                NonemptyDict.toSeqDict value
-                                                    |> SeqDict.remove disconnectClientId
-                                                    |> NonemptyDict.fromSeqDict
-                                            )
-                                        )
-                                        model.connections
-                            }
-                    in
-                    ( { model2
-                        | sessions =
-                            SeqDict.insert
-                                sessionId
-                                (UserSession.setCurrentlyViewing Nothing session)
-                                model2.sessions
-                      }
-                    , Broadcast.toUser
-                        Nothing
-                        Nothing
-                        session.userId
-                        (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
-                        model2
-                    )
-
-                Nothing ->
-                    ( model, Command.none )
 
 
 asUser :

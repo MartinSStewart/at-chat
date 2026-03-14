@@ -59,7 +59,7 @@ import Ports
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash
+import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Table
@@ -127,7 +127,6 @@ type ToBackend
     = ExportBackendRequest
     | ExportSubsetBackendRequest
     | ImportBackendRequest Bytes
-    | DisconnectClientRequest SessionIdHash.SessionIdHash ClientId
 
 
 type ToFrontend
@@ -189,7 +188,7 @@ type alias InitAdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
-    , connections : List LocalState.AdminConnection
+    , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     }
 
 
@@ -220,6 +219,7 @@ type AdminChange
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
     | HideLog (Id ItemId)
     | UnhideLog (Id ItemId)
+    | DisconnectClient SessionIdHash.SessionIdHash ClientId
 
 
 type alias EditedBackendUser =
@@ -480,6 +480,29 @@ updateAdmin changedBy change adminData local =
                         }
             }
 
+        DisconnectClient sessionIdHash clientId ->
+            { local
+                | adminData =
+                    IsAdmin (disconnectClient sessionIdHash clientId adminData)
+            }
+
+
+disconnectClient : sessionId -> id -> { b | connections : SeqDict sessionId (NonemptyDict id v) } -> { b | connections : SeqDict sessionId (NonemptyDict id v) }
+disconnectClient sessionId clientId adminData =
+    { adminData
+        | connections =
+            SeqDict.update
+                sessionId
+                (Maybe.andThen
+                    (\value ->
+                        NonemptyDict.toSeqDict value
+                            |> SeqDict.remove clientId
+                            |> NonemptyDict.fromSeqDict
+                    )
+                )
+                adminData.connections
+    }
+
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser
 expandGuild guildId user =
@@ -545,7 +568,7 @@ update navigationKey time adminData localState msg model =
             ( { model | showHiddenLogs = show }, Command.none, NoOutMsg )
 
         PressedDisconnectClient sessionIdHash clientId ->
-            ( model, Lamdera.sendToBackend (DisconnectClientRequest sessionIdHash clientId), NoOutMsg )
+            ( model, Command.none, DisconnectClient sessionIdHash clientId |> AdminChange )
 
         PressedCollapseSection section2 ->
             ( model, Command.none, CollapseSection section2 |> AdminChange )
@@ -1236,6 +1259,9 @@ pendingChangesText change =
         UnhideLog logIndex ->
             "Unhid log " ++ Id.toString logIndex
 
+        DisconnectClient sessionIdHash clientId ->
+            "Disconnect client"
+
 
 view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
 view isMobile2 version local adminData user model =
@@ -1278,17 +1304,17 @@ connectionsSection timezone user adminData =
         8
         user.expandedSections
         ConnectionsSection
-        [ if List.isEmpty adminData.connections then
+        [ if SeqDict.isEmpty adminData.connections then
             Ui.text "No connections"
 
           else
             Ui.column
                 [ Ui.spacing 4 ]
                 (List.map
-                    (\connection ->
+                    (\( sessionIdHash, clients ) ->
                         Ui.column
                             [ Ui.spacing 2 ]
-                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text ("Session hash: " ++ SessionIdHash.toString connection.sessionId))
+                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
                             , Ui.column
                                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
                                 (List.map
@@ -1304,17 +1330,16 @@ connectionsSection timezone user adminData =
                                                     Ui.text "No requests made"
                                               )
                                                 |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
-                                            , MyUi.simpleButton
+                                            , MyUi.deleteButton
                                                 (Dom.id ("admin_disconnectClient_" ++ Lamdera.clientIdToString clientId))
-                                                (PressedDisconnectClient connection.sessionId clientId)
-                                                (Ui.text "Disconnect")
+                                                (PressedDisconnectClient sessionIdHash clientId)
                                             ]
                                     )
-                                    (NonemptyDict.toList connection.clients)
+                                    (NonemptyDict.toList clients)
                                 )
                             ]
                     )
-                    adminData.connections
+                    (SeqDict.toList adminData.connections)
                 )
         ]
 

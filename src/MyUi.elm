@@ -700,8 +700,8 @@ deleteButton htmlId onPress =
         , Dom.idToString htmlId |> Ui.id
         , hoverText "Delete"
         , Ui.padding 3
-        , Ui.background (Ui.rgb 255 100 100)
-        , Ui.Font.color white
+        , Ui.background deleteButtonBackground
+        , Ui.Font.color deleteButtonFont
         , Ui.rounded 4
         , Ui.width Ui.shrink
         , Ui.Shadow.shadows

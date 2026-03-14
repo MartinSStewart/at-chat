@@ -1,6 +1,5 @@
 module LocalState exposing
-    ( AdminConnection
-    , AdminData
+    ( AdminData
     , AdminData_DiscordChannel
     , AdminData_DiscordDmChannel
     , AdminData_DiscordGuild
@@ -436,13 +435,7 @@ type alias AdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
-    , connections : List AdminConnection
-    }
-
-
-type alias AdminConnection =
-    { sessionId : SessionIdHash
-    , clients : NonemptyDict ClientId LastRequest
+    , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     }
 
 
