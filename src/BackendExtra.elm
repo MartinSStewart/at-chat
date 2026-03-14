@@ -732,16 +732,16 @@ adminData model lastLogPageViewed =
         SeqDict.toList model.connections
             |> List.map
                 (\( sessionId, clients ) ->
-                    { sessionId =
-                        case SeqDict.get sessionId model.sessions of
-                            Just session ->
-                                session.sessionIdHash
+                    ( case SeqDict.get sessionId model.sessions of
+                        Just session ->
+                            session.sessionIdHash
 
-                            Nothing ->
-                                SessionIdHash.fromString "Session not found"
-                    , clients = clients
-                    }
+                        Nothing ->
+                            SessionIdHash.fromString "Session not found"
+                    , clients
+                    )
                 )
+            |> SeqDict.fromList
     }
 
 

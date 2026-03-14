@@ -14,6 +14,7 @@ module Pages.Admin exposing
     , UserTableId(..)
     , UsersChangeError(..)
     , applyChangesToBackendUsers
+    , disconnectClient
     , initForAdmin
     , initForUser
     , logSectionId

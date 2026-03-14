@@ -1182,7 +1182,7 @@ disconnectClient sessionId clientId model =
     let
         model2 : BackendModel
         model2 =
-
+            Pages.Admin.disconnectClient sessionId clientId model
     in
     case SeqDict.get sessionId model2.sessions of
         Just session ->
