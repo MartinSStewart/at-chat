@@ -186,6 +186,7 @@ type alias InitAdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
+    , connections : List LocalState.AdminConnection
     }
 
 
@@ -1259,9 +1260,51 @@ view isMobile2 version local adminData user model =
             , discordUsersSection user adminData
             , logSection isMobile2 local.localUser.timezone user adminData model
             , apiKeysSection local user adminData model
+            , connectionsSection user adminData
             , exportSection user model
             ]
         )
+
+
+connectionsSection : BackendUser -> AdminData -> Element Msg
+connectionsSection user adminData =
+    section
+        8
+        user.expandedSections
+        ConnectionsSection
+        [ if List.isEmpty adminData.connections then
+            Ui.text "No connections"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\connection ->
+                        Ui.column
+                            [ Ui.spacing 2 ]
+                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text ("Session: " ++ connection.sessionId))
+                            , Ui.column
+                                [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
+                                (List.map
+                                    (\client ->
+                                        Ui.row
+                                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                                            [ Ui.text ("Client: " ++ client.clientId)
+                                            , case client.lastRequest of
+                                                Just time ->
+                                                    Ui.text ("Last request: " ++ String.fromInt (Time.posixToMillis time))
+
+                                                Nothing ->
+                                                    Ui.text "No requests made"
+                                            ]
+                                    )
+                                    connection.clients
+                                )
+                            ]
+                    )
+                    adminData.connections
+                )
+        ]
 
 
 exportSection : BackendUser -> Model -> Element Msg

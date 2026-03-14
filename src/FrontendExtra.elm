@@ -3053,6 +3053,7 @@ initAdminData adminData =
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
     , logs = adminData.logs
+    , connections = adminData.connections
     }
 
 

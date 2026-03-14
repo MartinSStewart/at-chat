@@ -727,6 +727,27 @@ adminData model lastLogPageViewed =
             )
             model.loadingDiscordChannels
     , logs = Pagination.init lastLogPageViewed model.logs
+    , connections =
+        SeqDict.toList model.connections
+            |> List.map
+                (\( sessionId, clients ) ->
+                    { sessionId = Lamdera.sessionIdToString sessionId
+                    , clients =
+                        NonemptyDict.toList clients
+                            |> List.map
+                                (\( clientId, lastRequest ) ->
+                                    { clientId = Lamdera.clientIdToString clientId
+                                    , lastRequest =
+                                        case lastRequest of
+                                            Types.NoRequestsMade ->
+                                                Nothing
+
+                                            Types.LastRequest time ->
+                                                Just time
+                                    }
+                                )
+                    }
+                )
     }
 
 

@@ -349,6 +349,7 @@ type AdminUiSection
     | GuildsSection
     | ApiKeysSection
     | ExportSection
+    | ConnectionsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -377,6 +378,9 @@ sectionToString section2 =
 
         ExportSection ->
             "Export/Import"
+
+        ConnectionsSection ->
+            "Connections"
 
 
 {-| User containing only publicly visible data
