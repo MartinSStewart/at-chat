@@ -47,7 +47,7 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import Message exposing (Message)
 import MyUi
@@ -59,6 +59,7 @@ import Ports
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import SessionIdHash
 import Set exposing (Set)
 import Slack
 import Table
@@ -1260,14 +1261,14 @@ view isMobile2 version local adminData user model =
             , discordUsersSection user adminData
             , logSection isMobile2 local.localUser.timezone user adminData model
             , apiKeysSection local user adminData model
-            , connectionsSection user adminData
+            , connectionsSection local.localUser.timezone user adminData
             , exportSection user model
             ]
         )
 
 
-connectionsSection : BackendUser -> AdminData -> Element Msg
-connectionsSection user adminData =
+connectionsSection : Time.Zone -> BackendUser -> AdminData -> Element Msg
+connectionsSection timezone user adminData =
     section
         8
         user.expandedSections
@@ -1282,20 +1283,22 @@ connectionsSection user adminData =
                     (\connection ->
                         Ui.column
                             [ Ui.spacing 2 ]
-                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text ("Session: " ++ connection.sessionId))
+                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text ("Session hash: " ++ SessionIdHash.toString connection.sessionId))
                             , Ui.column
                                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
                                 (List.map
-                                    (\client ->
+                                    (\( clientId, lastRequest ) ->
                                         Ui.row
-                                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                                            [ Ui.text ("Client: " ++ client.clientId)
-                                            , case client.lastRequest of
-                                                Just time ->
-                                                    Ui.text ("Last request: " ++ String.fromInt (Time.posixToMillis time))
+                                            [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 500 ]
+                                            [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
+                                            , (case lastRequest of
+                                                LastRequest time ->
+                                                    Ui.text ("Last request: " ++ MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone)
 
-                                                Nothing ->
+                                                NoRequestsMade ->
                                                     Ui.text "No requests made"
+                                              )
+                                                |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
                                             ]
                                     )
                                     connection.clients

@@ -57,6 +57,7 @@ import RichText exposing (RichText)
 import SecretId
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
@@ -731,21 +732,14 @@ adminData model lastLogPageViewed =
         SeqDict.toList model.connections
             |> List.map
                 (\( sessionId, clients ) ->
-                    { sessionId = Lamdera.sessionIdToString sessionId
-                    , clients =
-                        NonemptyDict.toList clients
-                            |> List.map
-                                (\( clientId, lastRequest ) ->
-                                    { clientId = Lamdera.clientIdToString clientId
-                                    , lastRequest =
-                                        case lastRequest of
-                                            Types.NoRequestsMade ->
-                                                Nothing
+                    { sessionId =
+                        case SeqDict.get sessionId model.sessions of
+                            Just session ->
+                                session.sessionIdHash
 
-                                            Types.LastRequest time ->
-                                                Just time
-                                    }
-                                )
+                            Nothing ->
+                                SessionIdHash.fromString "Session not found"
+                    , clients = NonemptyDict.toList clients
                     }
                 )
     }

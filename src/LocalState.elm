@@ -21,6 +21,7 @@ module LocalState exposing
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
+    , LastRequest(..)
     , LoadingDiscordChannel(..)
     , LoadingDiscordChannelStep(..)
     , LocalState
@@ -109,6 +110,7 @@ import ChannelName exposing (ChannelName)
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -439,9 +441,14 @@ type alias AdminData =
 
 
 type alias AdminConnection =
-    { sessionId : String
-    , clients : List { clientId : String, lastRequest : Maybe Time.Posix }
+    { sessionId : SessionIdHash
+    , clients : List ( ClientId, LastRequest )
     }
+
+
+type LastRequest
+    = NoRequestsMade
+    | LastRequest Time.Posix
 
 
 type LoadingDiscordChannel messages

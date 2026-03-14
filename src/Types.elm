@@ -12,7 +12,6 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
     , InitialLoadRequest(..)
-    , LastRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -66,7 +65,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -308,11 +307,6 @@ type alias DiscordAttachmentData =
 
 type alias BackendFileData =
     { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
-
-
-type LastRequest
-    = NoRequestsMade
-    | LastRequest Time.Posix
 
 
 type LoginTokenData
