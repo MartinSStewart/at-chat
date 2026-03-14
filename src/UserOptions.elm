@@ -184,314 +184,319 @@ view isMobile time local loggedIn loaded model =
                 ]
             )
         ]
-        (Ui.column
-            [ MyUi.htmlStyle
-                "padding"
-                ("calc(80px + " ++ MyUi.insetTop ++ ") 0 calc(24px + " ++ MyUi.insetBottom ++ ") 0")
+        (Ui.el
+            [ Ui.scrollable ]
+            (Ui.column
+                [ MyUi.htmlStyle
+                    "padding"
+                    ("calc(80px + " ++ MyUi.insetTop ++ ") 0 calc(24px + " ++ MyUi.insetBottom ++ ") 0")
 
-            --Ui.paddingXY 0 64
-            , Ui.spacing 16
-            , Ui.scrollable
-            ]
-            [ case local.adminData of
-                IsAdmin _ ->
-                    gotoAdmin
-
-                IsAdminButDataNotLoaded ->
-                    gotoAdmin
-
-                IsNotAdmin ->
-                    Ui.none
-            , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
-                |> Ui.map TwoFactorMsg
-            , MyUi.container
-                MyUi.background1
-                isMobile
-                "Miscellaneous"
-                [ Editable.view
-                    (Dom.id "userOptions_name")
-                    False
-                    "Display Name"
-                    PersonName.fromString
-                    UserNameEditableMsg
-                    (PersonName.toString local.localUser.user.name)
-                    model.name
-                , Ui.column
-                    [ Ui.spacing 8 ]
-                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Profile Picture")
-                    , Ui.row
-                        [ Ui.spacing 12, Ui.alignLeft ]
-                        [ User.profileImage local.localUser.user.icon
-                        , ImageEditor.view
-                            loaded.windowSize
-                            loggedIn.profilePictureEditor
-                            |> Ui.map ProfilePictureEditorMsg
-                        ]
-                    ]
-                , Ui.column
-                    [ Ui.spacing 8 ]
-                    [ MyUi.radioColumn
-                        (Dom.id "userOptions_notificationMode")
-                        SelectedNotificationMode
-                        (Just local.localUser.session.notificationMode)
-                        (if isMobile then
-                            "Notifications"
-
-                         else
-                            "Desktop notifications"
-                        )
-                        (if isMobile then
-                            [ ( NoNotifications, "No notifications" )
-                            , ( PushNotifications, "Allow notifications" )
-                            ]
-
-                         else
-                            [ ( NoNotifications, "No notifications" )
-                            , ( NotifyWhenRunning, "When the app is running" )
-                            , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
-                            ]
-                        )
-                    , case local.localUser.session.pushSubscription of
-                        NotSubscribed ->
-                            Ui.none
-
-                        Subscribed _ ->
-                            Ui.none
-
-                        SubscriptionError error ->
-                            MyUi.errorBox
-                                (Dom.id "userOptions_pushNotificationError")
-                                PressedCopyText
-                                (Log.httpErrorToString error)
-                    ]
-
-                --, Ui.el
-                --    [ Ui.linkNewTab
-                --        (Slack.buildOAuthUrl
-                --            { clientId = Env.slackClientId
-                --            , redirectUri = Slack.redirectUri
-                --            , botScopes =
-                --                Nonempty
-                --                    "channels:read"
-                --                    [ "channels:history"
-                --                    , "users:read"
-                --                    , "team:read"
-                --                    ]
-                --            , userScopes =
-                --                Nonempty
-                --                    "channels:read"
-                --                    [ "channels:history"
-                --                    , "channels:write"
-                --                    , "groups:read"
-                --                    , "groups:history"
-                --                    , "groups:write"
-                --                    , "mpim:read"
-                --                    , "mpim:history"
-                --                    , "mpim:write"
-                --                    , "im:read"
-                --                    , "im:history"
-                --                    , "im:write"
-                --                    ]
-                --            , state = SessionIdHash.toString local.localUser.session.sessionIdHash
-                --            }
-                --        )
-                --    ]
-                --    (Ui.text "Link Slack account")
+                --Ui.paddingXY 0 64
+                , Ui.spacing 16
+                , Ui.widthMax 1000
+                , Ui.centerX
                 ]
-            , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
-                Ui.none
+                [ case local.adminData of
+                    IsAdmin _ ->
+                        gotoAdmin
 
-              else
-                MyUi.container
+                    IsAdminButDataNotLoaded ->
+                        gotoAdmin
+
+                    IsNotAdmin ->
+                        Ui.none
+                , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
+                    |> Ui.map TwoFactorMsg
+                , MyUi.container
                     MyUi.background1
                     isMobile
-                    "Whitelisted domains"
-                    (List.map
-                        (\domain ->
-                            Ui.row
-                                [ Ui.spacing 8, Ui.width Ui.fill ]
-                                [ Ui.el
-                                    [ Ui.Font.size 14 ]
-                                    (Ui.text
-                                        (case domain of
-                                            Domain text ->
-                                                text
-                                        )
-                                    )
-                                , MyUi.elButton
-                                    (Dom.id
-                                        ("userOptions_removeWhitelistDomain_"
-                                            ++ (case domain of
-                                                    Domain text ->
-                                                        text
-                                               )
-                                        )
-                                    )
-                                    (PressedRemoveDomainFromWhitelist domain)
-                                    [ Ui.background MyUi.deleteButtonBackground
-                                    , Ui.Font.color MyUi.deleteButtonFont
-                                    , Ui.width Ui.shrink
-                                    , Ui.paddingXY 12 0
-                                    , Ui.rounded 4
-                                    , Ui.Font.size 14
-                                    , Ui.contentCenterY
-                                    , Ui.height (Ui.px 30)
-                                    , Ui.alignRight
-                                    ]
-                                    (Ui.text "Remove")
+                    "Miscellaneous"
+                    [ Editable.view
+                        (Dom.id "userOptions_name")
+                        False
+                        "Display Name"
+                        PersonName.fromString
+                        UserNameEditableMsg
+                        (PersonName.toString local.localUser.user.name)
+                        model.name
+                    , Ui.column
+                        [ Ui.spacing 8 ]
+                        [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Profile Picture")
+                        , Ui.row
+                            [ Ui.spacing 12, Ui.alignLeft ]
+                            [ User.profileImage local.localUser.user.icon
+                            , ImageEditor.view
+                                loaded.windowSize
+                                loggedIn.profilePictureEditor
+                                |> Ui.map ProfilePictureEditorMsg
+                            ]
+                        ]
+                    , Ui.column
+                        [ Ui.spacing 8 ]
+                        [ MyUi.radioColumn
+                            (Dom.id "userOptions_notificationMode")
+                            SelectedNotificationMode
+                            (Just local.localUser.session.notificationMode)
+                            (if isMobile then
+                                "Notifications"
+
+                             else
+                                "Desktop notifications"
+                            )
+                            (if isMobile then
+                                [ ( NoNotifications, "No notifications" )
+                                , ( PushNotifications, "Allow notifications" )
                                 ]
-                        )
-                        (SeqSet.toList local.localUser.user.domainWhitelist)
-                    )
-            , MyUi.container
-                MyUi.background1
-                isMobile
-                "Discord integration"
-                [ if SeqDict.isEmpty local.localUser.linkedDiscordUsers then
+
+                             else
+                                [ ( NoNotifications, "No notifications" )
+                                , ( NotifyWhenRunning, "When the app is running" )
+                                , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
+                                ]
+                            )
+                        , case local.localUser.session.pushSubscription of
+                            NotSubscribed ->
+                                Ui.none
+
+                            Subscribed _ ->
+                                Ui.none
+
+                            SubscriptionError error ->
+                                MyUi.errorBox
+                                    (Dom.id "userOptions_pushNotificationError")
+                                    PressedCopyText
+                                    (Log.httpErrorToString error)
+                        ]
+
+                    --, Ui.el
+                    --    [ Ui.linkNewTab
+                    --        (Slack.buildOAuthUrl
+                    --            { clientId = Env.slackClientId
+                    --            , redirectUri = Slack.redirectUri
+                    --            , botScopes =
+                    --                Nonempty
+                    --                    "channels:read"
+                    --                    [ "channels:history"
+                    --                    , "users:read"
+                    --                    , "team:read"
+                    --                    ]
+                    --            , userScopes =
+                    --                Nonempty
+                    --                    "channels:read"
+                    --                    [ "channels:history"
+                    --                    , "channels:write"
+                    --                    , "groups:read"
+                    --                    , "groups:history"
+                    --                    , "groups:write"
+                    --                    , "mpim:read"
+                    --                    , "mpim:history"
+                    --                    , "mpim:write"
+                    --                    , "im:read"
+                    --                    , "im:history"
+                    --                    , "im:write"
+                    --                    ]
+                    --            , state = SessionIdHash.toString local.localUser.session.sessionIdHash
+                    --            }
+                    --        )
+                    --    ]
+                    --    (Ui.text "Link Slack account")
+                    ]
+                , if SeqSet.isEmpty local.localUser.user.domainWhitelist then
                     Ui.none
 
                   else
-                    Ui.column
-                        [ Ui.spacing 8 ]
-                        [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Discord users")
-                        , Ui.column
-                            [ Ui.spacing 8 ]
-                            (List.map
-                                (\( discordUserId, data ) -> discordUserCard loaded discordUserId data)
-                                (SeqDict.toList local.localUser.linkedDiscordUsers)
-                            )
-                        ]
-                , if model.showLinkDiscordSetup then
-                    let
-                        bookmarkletLabel =
-                            Ui.Input.label
-                                (Dom.idToString discordBookmarkletId)
-                                [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
-                                (Ui.text "Bookmarklet URL")
-                    in
-                    Ui.column
-                        [ Ui.spacing 16 ]
-                        [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
-                        , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
-                            Ui.column
-                                [ Ui.spacing 16 ]
-                                [ Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
-                                , Ui.column
-                                    [ Ui.spacing 4 ]
-                                    [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Discord account:\n")
-                                    , Ui.text "1. Copy the bookmarklet URL below\n"
-                                    , Ui.text "2. Create a new bookmark in your browser\n"
-                                    , Ui.text "3. Paste the URL as the bookmark address\n"
-                                    , Ui.Prose.paragraph
-                                        [ Ui.paddingXY 0 5 ]
-                                        [ Ui.text "4. Go to "
-                                        , Ui.el
-                                            [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
-                                            , Ui.Font.underline
-                                            , Ui.linkNewTab "https://discord.com/app"
-                                            ]
-                                            (Ui.text "discord.com/app")
-                                        , Ui.text " in your browser and click the bookmark"
-                                        ]
-                                    ]
-                                , Ui.column
-                                    [ Ui.spacing 2, Ui.widthMax 400 ]
-                                    [ bookmarkletLabel.element
-                                    , Ui.row
-                                        []
-                                        [ Ui.Input.text
-                                            [ Ui.clipWithEllipsis
-                                            , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
-                                            , Ui.htmlAttribute (Html.Attributes.readonly True)
-                                            , Ui.background MyUi.background1
-                                            , Ui.border 1
-                                            , Ui.borderColor MyUi.inputBorder
-                                            , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
-                                            , Ui.height Ui.fill
-                                            , Ui.Events.onFocus (TextInputGotFocus discordBookmarkletId)
-                                            ]
-                                            { onChange = \_ -> TypedDiscordLinkBookmarklet
-                                            , text = bookmarklet
-                                            , placeholder = Nothing
-                                            , label = bookmarkletLabel.id
-                                            }
-                                        , MyUi.elButton
-                                            (Dom.id "userOptions_copyBookmarklet")
-                                            (PressedCopyText bookmarklet)
-                                            [ Ui.width Ui.shrink
-                                            , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
-                                            , Ui.borderColor MyUi.inputBorder
-                                            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-                                            , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
-                                            , Ui.spacing 4
-                                            , Ui.background MyUi.buttonBackground
-                                            , Ui.Font.size 14
-                                            , Ui.height Ui.fill
-                                            , Ui.contentCenterY
-                                            ]
-                                            (case loaded.lastCopied of
-                                                Just copied ->
-                                                    if copied.copiedText == bookmarklet then
-                                                        Ui.text "Copied!"
-
-                                                    else
-                                                        Ui.html Icons.copy
-
-                                                Nothing ->
-                                                    Ui.html Icons.copy
+                    MyUi.container
+                        MyUi.background1
+                        isMobile
+                        ("Whitelisted domains (" ++ String.fromInt (SeqSet.size local.localUser.user.domainWhitelist) ++ ")")
+                        (SeqSet.toList local.localUser.user.domainWhitelist
+                            |> List.sortBy RichText.domainToString
+                            |> List.map
+                                (\domain ->
+                                    Ui.row
+                                        [ Ui.spacing 8, Ui.width Ui.fill ]
+                                        [ Ui.el
+                                            []
+                                            (Ui.text
+                                                (case domain of
+                                                    Domain text ->
+                                                        text
+                                                )
                                             )
+                                        , MyUi.elButton
+                                            (Dom.id
+                                                ("userOptions_removeWhitelistDomain_"
+                                                    ++ (case domain of
+                                                            Domain text ->
+                                                                text
+                                                       )
+                                                )
+                                            )
+                                            (PressedRemoveDomainFromWhitelist domain)
+                                            [ Ui.background MyUi.deleteButtonBackground
+                                            , Ui.Font.color MyUi.deleteButtonFont
+                                            , Ui.width Ui.shrink
+                                            , Ui.paddingXY 12 0
+                                            , Ui.rounded 4
+                                            , Ui.Font.size 14
+                                            , Ui.contentCenterY
+                                            , Ui.height (Ui.px 30)
+                                            , Ui.alignRight
+                                            ]
+                                            (Ui.text "Remove")
+                                        ]
+                                )
+                        )
+                , MyUi.container
+                    MyUi.background1
+                    isMobile
+                    "Discord integration"
+                    [ if SeqDict.isEmpty local.localUser.linkedDiscordUsers then
+                        Ui.none
+
+                      else
+                        Ui.column
+                            [ Ui.spacing 8 ]
+                            [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Discord users")
+                            , Ui.column
+                                [ Ui.spacing 8 ]
+                                (List.map
+                                    (\( discordUserId, data ) -> discordUserCard loaded discordUserId data)
+                                    (SeqDict.toList local.localUser.linkedDiscordUsers)
+                                )
+                            ]
+                    , if model.showLinkDiscordSetup then
+                        let
+                            bookmarkletLabel =
+                                Ui.Input.label
+                                    (Dom.idToString discordBookmarkletId)
+                                    [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
+                                    (Ui.text "Bookmarklet URL")
+                        in
+                        Ui.column
+                            [ Ui.spacing 16 ]
+                            [ discordAcknowledgement local.localUser.user.linkDiscordAcknowledgementIsChecked
+                            , if local.localUser.user.linkDiscordAcknowledgementIsChecked then
+                                Ui.column
+                                    [ Ui.spacing 16 ]
+                                    [ Ui.el [ Ui.height (Ui.px 2), Ui.background MyUi.border1 ] Ui.none
+                                    , Ui.column
+                                        [ Ui.spacing 4 ]
+                                        [ Ui.el [ Ui.Font.bold, Ui.Font.color MyUi.font3 ] (Ui.text "To link your Discord account:\n")
+                                        , Ui.text "1. Copy the bookmarklet URL below\n"
+                                        , Ui.text "2. Create a new bookmark in your browser\n"
+                                        , Ui.text "3. Paste the URL as the bookmark address\n"
+                                        , Ui.Prose.paragraph
+                                            [ Ui.paddingXY 0 5 ]
+                                            [ Ui.text "4. Go to "
+                                            , Ui.el
+                                                [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
+                                                , Ui.Font.underline
+                                                , Ui.linkNewTab "https://discord.com/app"
+                                                ]
+                                                (Ui.text "discord.com/app")
+                                            , Ui.text " in your browser and click the bookmark"
+                                            ]
+                                        ]
+                                    , Ui.column
+                                        [ Ui.spacing 2, Ui.widthMax 400 ]
+                                        [ bookmarkletLabel.element
+                                        , Ui.row
+                                            []
+                                            [ Ui.Input.text
+                                                [ Ui.clipWithEllipsis
+                                                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+                                                , Ui.htmlAttribute (Html.Attributes.readonly True)
+                                                , Ui.background MyUi.background1
+                                                , Ui.border 1
+                                                , Ui.borderColor MyUi.inputBorder
+                                                , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                                                , Ui.height Ui.fill
+                                                , Ui.Events.onFocus (TextInputGotFocus discordBookmarkletId)
+                                                ]
+                                                { onChange = \_ -> TypedDiscordLinkBookmarklet
+                                                , text = bookmarklet
+                                                , placeholder = Nothing
+                                                , label = bookmarkletLabel.id
+                                                }
+                                            , MyUi.elButton
+                                                (Dom.id "userOptions_copyBookmarklet")
+                                                (PressedCopyText bookmarklet)
+                                                [ Ui.width Ui.shrink
+                                                , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+                                                , Ui.borderColor MyUi.inputBorder
+                                                , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                                                , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+                                                , Ui.spacing 4
+                                                , Ui.background MyUi.buttonBackground
+                                                , Ui.Font.size 14
+                                                , Ui.height Ui.fill
+                                                , Ui.contentCenterY
+                                                ]
+                                                (case loaded.lastCopied of
+                                                    Just copied ->
+                                                        if copied.copiedText == bookmarklet then
+                                                            Ui.text "Copied!"
+
+                                                        else
+                                                            Ui.html Icons.copy
+
+                                                    Nothing ->
+                                                        Ui.html Icons.copy
+                                                )
+                                            ]
                                         ]
                                     ]
-                                ]
 
-                          else
-                            Ui.none
-                        ]
-
-                  else
-                    MyUi.elButton
-                        (Dom.id "userOptions_linkDiscord")
-                        PressedLinkDiscordUser
-                        [ Ui.borderColor MyUi.buttonBorder
-                        , Ui.border 1
-                        , Ui.background MyUi.buttonBackground
-                        , Ui.Font.color MyUi.font1
-                        , Ui.width Ui.shrink
-                        , Ui.paddingXY 16 8
-                        , Ui.rounded 4
-                        ]
-                        (Ui.text "Link Discord account")
-                ]
-            , MyUi.container
-                MyUi.background1
-                isMobile
-                "Connected devices"
-                (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
-            , Ui.row
-                [ Ui.paddingXY 16 0 ]
-                [ MyUi.simpleButton
-                    (Dom.id "options_logout")
-                    PressedLogOut
-                    (Ui.row
-                        [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 } ]
-                        [ Ui.el [ Ui.width (Ui.px 26) ] (Ui.html Icons.logoutSvg)
-                        , Ui.text "Logout"
-                        ]
-                    )
-                , case loaded.versionNumber of
-                    Just version ->
-                        Ui.el
-                            [ Ui.Font.size 12
-                            , Ui.Font.color MyUi.font3
-                            , Ui.alignRight
-                            , Ui.centerY
+                              else
+                                Ui.none
                             ]
-                            (Ui.text ("Version " ++ String.fromInt version))
 
-                    Nothing ->
-                        Ui.none
+                      else
+                        MyUi.elButton
+                            (Dom.id "userOptions_linkDiscord")
+                            PressedLinkDiscordUser
+                            [ Ui.borderColor MyUi.buttonBorder
+                            , Ui.border 1
+                            , Ui.background MyUi.buttonBackground
+                            , Ui.Font.color MyUi.font1
+                            , Ui.width Ui.shrink
+                            , Ui.paddingXY 16 8
+                            , Ui.rounded 4
+                            ]
+                            (Ui.text "Link Discord account")
+                    ]
+                , MyUi.container
+                    MyUi.background1
+                    isMobile
+                    "Connected devices"
+                    (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
+                , Ui.row
+                    [ Ui.paddingXY 16 0 ]
+                    [ MyUi.simpleButton
+                        (Dom.id "options_logout")
+                        PressedLogOut
+                        (Ui.row
+                            [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 } ]
+                            [ Ui.el [ Ui.width (Ui.px 26) ] (Ui.html Icons.logoutSvg)
+                            , Ui.text "Logout"
+                            ]
+                        )
+                    , case loaded.versionNumber of
+                        Just version ->
+                            Ui.el
+                                [ Ui.Font.size 12
+                                , Ui.Font.color MyUi.font3
+                                , Ui.alignRight
+                                , Ui.centerY
+                                ]
+                                (Ui.text ("Version " ++ String.fromInt version))
+
+                        Nothing ->
+                            Ui.none
+                    ]
                 ]
-            ]
+            )
         )
 
 

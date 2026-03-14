@@ -9,6 +9,7 @@ module RichText exposing
     , append
     , attachedFilePrefix
     , attachedFileSuffix
+    , domainToString
     , fromDiscord
     , fromNonemptyString
     , fromSlack
@@ -950,6 +951,11 @@ type Domain
 urlToDomain : Url -> Domain
 urlToDomain data =
     Domain data.host
+
+
+domainToString : Domain -> String
+domainToString (Domain domain) =
+    domain
 
 
 view :

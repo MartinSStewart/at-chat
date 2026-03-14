@@ -261,9 +261,9 @@ setupView userAgent isMobile { qrCodeUrl, code, attempts } =
                 step : Int -> Element msg -> Element msg
                 step count content =
                     Ui.column
-                        []
+                        [ Ui.spacing 2 ]
                         [ Ui.el
-                            [ Ui.Font.bold ]
+                            [ Ui.Font.bold, Ui.Font.color MyUi.font3 ]
                             (Ui.text ("Step " ++ String.fromInt count))
                         , content
                         ]
@@ -281,8 +281,9 @@ setupView userAgent isMobile { qrCodeUrl, code, attempts } =
                 [ Ui.el
                     [ Ui.Font.size 20
                     , Ui.Font.bold
+                    , Ui.Font.color MyUi.font3
                     ]
-                    (Ui.text "In order to setup two factor authentication, please do the following steps.")
+                    (Ui.text "In order to setup two factor authentication, please do the following:")
                 , step 1
                     (Ui.Prose.paragraph
                         [ Ui.paddingXY 0 4 ]

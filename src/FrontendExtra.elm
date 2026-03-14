@@ -15,6 +15,7 @@ import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (Emoji)
+import Env
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
@@ -350,8 +351,8 @@ externalLinkWarning domainWhitelist isMobile url =
             [ Ui.column
                 [ Ui.spacing 8 ]
                 [ Ui.row
-                    [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY ]
-                    [ Ui.html (Icons.warning 36), Ui.text "Heads up, you are leaving this page and going to:" ]
+                    [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY, Ui.Font.bold ]
+                    [ Ui.html (Icons.warning 36), Ui.text "Heads up, you are leaving at-chat and going to:" ]
                 , Ui.el [ MyUi.htmlStyle "word-break" "break-all" ] (Ui.text urlText)
                 ]
             , Ui.row
