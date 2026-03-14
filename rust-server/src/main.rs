@@ -78,19 +78,21 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
 
     let info = Webpage::from_url(&url, options).expect("Could not read from URL");
 
-    let info2 = match info.html.meta.get("refresh") {
-        Some(refresh) => {
-            let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
+    //println!("{:?}", info);
 
-            Webpage::from_url(&redirect_url, WebpageOptions::default())
-                .expect("Could not read from URL")
-        }
-        None => info,
-    };
+    // let info2 = match info.html.meta.get("refresh") {
+    //     Some(refresh) => {
+    //         let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
+    //
+    //         Webpage::from_url(&redirect_url, WebpageOptions::default())
+    //             .expect("Could not read from URL")
+    //     }
+    //     None => info,
+    // };
 
     response_with_headers(
         StatusCode::OK,
-        serde_json::to_string(&info2.html.meta).unwrap(),
+        serde_json::to_string(&info.html.meta).unwrap(),
     )
 }
 

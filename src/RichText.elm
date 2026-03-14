@@ -156,10 +156,10 @@ hyperlinks nonempty =
                 Hyperlink data ->
                     [ Url.toString data ]
 
-                UserMention userId ->
+                UserMention _ ->
                     []
 
-                NormalText char string ->
+                NormalText _ _ ->
                     []
 
                 Bold nonempty2 ->
@@ -177,13 +177,13 @@ hyperlinks nonempty =
                 Spoiler nonempty2 ->
                     hyperlinks nonempty2
 
-                InlineCode char string ->
+                InlineCode _ _ ->
                     []
 
-                CodeBlock language string ->
+                CodeBlock _ _ ->
                     []
 
-                AttachedFile id ->
+                AttachedFile _ ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -571,78 +571,6 @@ parser users modifiers =
                 , Parser.map (\() -> bailOut state modifiers) Parser.end
                 ]
         )
-
-
-{-| Copied from elm/url
--}
-chompAfterProtocol : Protocol -> String -> Maybe Url
-chompAfterProtocol protocol str =
-    if String.isEmpty str then
-        Nothing
-
-    else
-        case String.indexes "#" str of
-            [] ->
-                chompBeforeFragment protocol Nothing str
-
-            i :: _ ->
-                chompBeforeFragment protocol (Just (String.dropLeft (i + 1) str)) (String.left i str)
-
-
-{-| Copied from elm/url
--}
-chompBeforeFragment : Protocol -> Maybe String -> String -> Maybe Url
-chompBeforeFragment protocol frag str =
-    if String.isEmpty str then
-        Nothing
-
-    else
-        case String.indexes "?" str of
-            [] ->
-                chompBeforeQuery protocol Nothing frag str
-
-            i :: _ ->
-                chompBeforeQuery protocol (Just (String.dropLeft (i + 1) str)) frag (String.left i str)
-
-
-{-| Copied from elm/url
--}
-chompBeforeQuery : Protocol -> Maybe String -> Maybe String -> String -> Maybe Url
-chompBeforeQuery protocol params frag str =
-    if String.isEmpty str then
-        Nothing
-
-    else
-        case String.indexes "/" str of
-            [] ->
-                chompBeforePath protocol "/" params frag str
-
-            i :: _ ->
-                chompBeforePath protocol (String.dropLeft i str) params frag (String.left i str)
-
-
-{-| Copied from elm/url
--}
-chompBeforePath : Protocol -> String -> Maybe String -> Maybe String -> String -> Maybe Url
-chompBeforePath protocol path params frag str =
-    if String.isEmpty str || String.contains "@" str then
-        Nothing
-
-    else
-        case String.indexes ":" str of
-            [] ->
-                Just <| Url protocol str Nothing path params frag
-
-            i :: [] ->
-                case String.toInt (String.dropLeft (i + 1) str) of
-                    Nothing ->
-                        Nothing
-
-                    port_ ->
-                        Just <| Url protocol (String.left i str) port_ path params frag
-
-            _ ->
-                Nothing
 
 
 urlParser : Parser { hyperlink : Result String Url, trailing : String }
@@ -1475,10 +1403,6 @@ embedLoadingView onPressLink domainWhitelist url =
 smallHyperlink : (Url -> msg) -> SeqSet Domain -> Maybe String -> Url -> Html msg
 smallHyperlink onPressUrl domainWhitelist maybeFavicon url =
     let
-        urlText : String
-        urlText =
-            Url.toString url
-
         path : String
         path =
             url.path
@@ -1511,6 +1435,7 @@ smallHyperlink onPressUrl domainWhitelist maybeFavicon url =
                     , Html.Attributes.style "height" "16px"
                     , Html.Attributes.style "border-radius" "2px"
                     , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+                    , Html.Attributes.style "flex-shrink" "0"
                     ]
                     []
         , Html.span

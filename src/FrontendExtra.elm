@@ -27,7 +27,7 @@ import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..), MessageState)
+import Message exposing (MessageState)
 import MessageInput
 import MessageMenu
 import MessageView
@@ -168,7 +168,7 @@ pendingChangesText localChange =
         Local_LinkDiscordAcknowledgementIsChecked _ ->
             "Checked link Discord account acknowledgement"
 
-        Local_SetDomainWhitelist bool domain ->
+        Local_SetDomainWhitelist _ _ ->
             "Whitelist domain"
 
 
@@ -336,7 +336,7 @@ externalLinkWarning domainWhitelist isMobile url =
                 Ui.paddingXY 16 16
 
               else
-                Ui.paddingXY 32 24
+                Ui.paddingXY 24 24
             , Ui.background MyUi.background3
             , if isMobile then
                 Ui.width Ui.fill
@@ -1366,7 +1366,7 @@ isPressMsg msg =
         PressedCloseExternalLinkWarning ->
             True
 
-        PressedAddDomainToWhitelist bool ->
+        PressedAddDomainToWhitelist _ ->
             True
 
         PressedRemoveDomainFromWhitelist _ ->

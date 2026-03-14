@@ -52,7 +52,6 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
-import Url exposing (Url)
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.

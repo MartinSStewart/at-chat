@@ -14,10 +14,9 @@ import EmailAddress exposing (EmailAddress)
 import Html exposing (Html)
 import Html.Attributes
 import Id
-import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
 import Postmark
-import RichText exposing (Domain, Embed(..), RichText(..))
+import RichText exposing (Domain, Embed(..))
 import SeqDict
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))

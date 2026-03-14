@@ -28,7 +28,6 @@ import RichText exposing (Embed(..), EmbedData, RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Time
-import Url
 
 
 type Message messageId userId
@@ -97,10 +96,10 @@ addEmbed ( embedIndex, result ) message =
                             message2.embeds
                 }
 
-        UserJoinedMessage posix userId seqDict ->
+        UserJoinedMessage _ _ _ ->
             message
 
-        DeletedMessage posix ->
+        DeletedMessage _ ->
             message
 
 
