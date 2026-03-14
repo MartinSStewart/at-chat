@@ -36,7 +36,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Download
 import Effect.File.Select
-import Effect.Lamdera as Lamdera
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
@@ -120,12 +120,14 @@ type Msg
     | PressedHideLog (Id ItemId)
     | PressedUnhideLog (Id ItemId)
     | PressedShowHiddenLogs Bool
+    | PressedDisconnectClient SessionIdHash.SessionIdHash ClientId
 
 
 type ToBackend
     = ExportBackendRequest
     | ExportSubsetBackendRequest
     | ImportBackendRequest Bytes
+    | DisconnectClientRequest SessionIdHash.SessionIdHash ClientId
 
 
 type ToFrontend
@@ -541,6 +543,9 @@ update navigationKey time adminData localState msg model =
 
         PressedShowHiddenLogs show ->
             ( { model | showHiddenLogs = show }, Command.none, NoOutMsg )
+
+        PressedDisconnectClient sessionIdHash clientId ->
+            ( model, Lamdera.sendToBackend (DisconnectClientRequest sessionIdHash clientId), NoOutMsg )
 
         PressedCollapseSection section2 ->
             ( model, Command.none, CollapseSection section2 |> AdminChange )
@@ -1289,7 +1294,7 @@ connectionsSection timezone user adminData =
                                 (List.map
                                     (\( clientId, lastRequest ) ->
                                         Ui.row
-                                            [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 500 ]
+                                            [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
                                             [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
                                             , (case lastRequest of
                                                 LastRequest time ->
@@ -1299,6 +1304,10 @@ connectionsSection timezone user adminData =
                                                     Ui.text "No requests made"
                                               )
                                                 |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
+                                            , MyUi.simpleButton
+                                                (Dom.id ("admin_disconnectClient_" ++ Lamdera.clientIdToString clientId))
+                                                (PressedDisconnectClient connection.sessionId clientId)
+                                                (Ui.text "Disconnect")
                                             ]
                                     )
                                     (NonemptyDict.toList connection.clients)

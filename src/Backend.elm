@@ -4590,6 +4590,44 @@ updateFromFrontendAdmin clientId toBackend model =
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
 
+        Pages.Admin.DisconnectClientRequest sessionIdHash disconnectClientId ->
+            case Broadcast.getSessionFromSessionIdHash sessionIdHash model of
+                Just ( sessionId, session ) ->
+                    let
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | connections =
+                                    SeqDict.update
+                                        sessionId
+                                        (Maybe.andThen
+                                            (\value ->
+                                                NonemptyDict.toSeqDict value
+                                                    |> SeqDict.remove disconnectClientId
+                                                    |> NonemptyDict.fromSeqDict
+                                            )
+                                        )
+                                        model.connections
+                            }
+                    in
+                    ( { model2
+                        | sessions =
+                            SeqDict.insert
+                                sessionId
+                                (UserSession.setCurrentlyViewing Nothing session)
+                                model2.sessions
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        session.userId
+                        (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
+                        model2
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
 
 asUser :
     BackendModel
