@@ -739,7 +739,7 @@ adminData model lastLogPageViewed =
 
                             Nothing ->
                                 SessionIdHash.fromString "Session not found"
-                    , clients = NonemptyDict.toList clients
+                    , clients = clients
                     }
                 )
     }

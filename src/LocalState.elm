@@ -442,7 +442,7 @@ type alias AdminData =
 
 type alias AdminConnection =
     { sessionId : SessionIdHash
-    , clients : List ( ClientId, LastRequest )
+    , clients : NonemptyDict ClientId LastRequest
     }
 
 

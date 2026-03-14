@@ -1301,7 +1301,7 @@ connectionsSection timezone user adminData =
                                                 |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
                                             ]
                                     )
-                                    connection.clients
+                                    (NonemptyDict.toList connection.clients)
                                 )
                             ]
                     )
