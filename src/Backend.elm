@@ -673,7 +673,10 @@ update msg model =
                                                                     , lastTypedAt = SeqDict.empty
                                                                     , linkedMessageIds = OneToOne.empty
                                                                     , members =
-                                                                        List.foldl NonemptySet.insert (NonemptySet.singleton discordUserId) data.members
+                                                                        List.foldl
+                                                                            (\member dict -> NonemptyDict.insert member { messagesSent = 0 } dict)
+                                                                            (NonemptyDict.singleton discordUserId { messagesSent = 0 })
+                                                                            data.members
                                                                     }
                                                                         |> Just
                                                         )
@@ -925,7 +928,28 @@ update msg model =
                                     | discordDmChannels =
                                         SeqDict.insert
                                             channelId
-                                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+                                            { channel
+                                                | messages = messages2
+                                                , linkedMessageIds = linkedMessageIds
+                                                , members =
+                                                    Array.foldl
+                                                        (\message members ->
+                                                            case message of
+                                                                UserTextMessage message2 ->
+                                                                    NonemptyDict.updateIfExists
+                                                                        message2.createdBy
+                                                                        (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                                                        members
+
+                                                                UserJoinedMessage posix userId seqDict ->
+                                                                    members
+
+                                                                DeletedMessage posix ->
+                                                                    members
+                                                        )
+                                                        channel.members
+                                                        messages2
+                                            }
                                             model.discordDmChannels
                                     , discordAttachments = attachments2
                                     , loadingDiscordChannels =

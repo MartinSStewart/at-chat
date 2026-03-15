@@ -557,7 +557,7 @@ loadingDiscordChannelMap mapFunc channel =
 
 
 type alias AdminData_DiscordDmChannel =
-    { members : NonemptySet (Discord.Id Discord.UserId)
+    { members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     , messageCount : Int
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
     }
@@ -791,7 +791,27 @@ createDiscordDmChannelMessageBackend :
     -> DiscordDmChannel
     -> Result DiscordMessageAlreadyExists DiscordDmChannel
 createDiscordDmChannelMessageBackend messageId message channel =
-    createDiscordMessageBackend messageId message channel
+    case createDiscordMessageBackend messageId message channel of
+        Ok channel2 ->
+            case message of
+                UserTextMessage message2 ->
+                    { channel2
+                        | members =
+                            NonemptyDict.updateIfExists
+                                message2.createdBy
+                                (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                channel2.members
+                    }
+                        |> Ok
+
+                UserJoinedMessage posix userId seqDict ->
+                    Ok channel2
+
+                DeletedMessage posix ->
+                    Ok channel2
+
+        Err error ->
+            Err error
 
 
 createDiscordMessageBackend :
@@ -2206,23 +2226,14 @@ canSendDiscordMessage local guildOrDmId =
                             Just channel ->
                                 let
                                     messagesSent =
-                                        Array.foldl
-                                            (\message count ->
-                                                case message of
-                                                    MessageLoaded (UserTextMessage message2) ->
-                                                        if message2.createdBy == data.currentUserId then
-                                                            count + 1
+                                        case NonemptyDict.get data.currentUserId channel.members of
+                                            Just member ->
+                                                member.messagesSent
 
-                                                        else
-                                                            count
-
-                                                    _ ->
-                                                        count
-                                            )
-                                            0
-                                            channel.messages
+                                            Nothing ->
+                                                0
                                 in
-                                if messagesSent > 4 then
+                                if messagesSent >= 4 then
                                     Ok ()
 
                                 else

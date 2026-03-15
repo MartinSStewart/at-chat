@@ -48,6 +48,7 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
+import List.Nonempty
 import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import Message exposing (Message)
@@ -1836,21 +1837,23 @@ discordDmChannelsSection user adminData =
 
                             userThatCanReload : Maybe (Discord.Id Discord.UserId)
                             userThatCanReload =
-                                SeqSet.intersect
-                                    (SeqDict.filter
-                                        (\_ discordUser ->
-                                            case discordUser of
-                                                FullData_ForAdmin _ ->
-                                                    True
+                                NonemptyDict.keys channel.members
+                                    |> List.Nonempty.toList
+                                    |> SeqSet.fromList
+                                    |> SeqSet.intersect
+                                        (SeqDict.filter
+                                            (\_ discordUser ->
+                                                case discordUser of
+                                                    FullData_ForAdmin _ ->
+                                                        True
 
-                                                _ ->
-                                                    False
+                                                    _ ->
+                                                        False
+                                            )
+                                            adminData.discordUsers
+                                            |> SeqDict.keys
+                                            |> SeqSet.fromList
                                         )
-                                        adminData.discordUsers
-                                        |> SeqDict.keys
-                                        |> SeqSet.fromList
-                                    )
-                                    (NonemptySet.toSeqSet channel.members)
                                     |> SeqSet.toList
                                     |> List.head
                         in
@@ -1871,9 +1874,9 @@ discordDmChannelsSection user adminData =
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ Ui.text "Members:"
-                                , NonemptySet.toList channel.members
+                                , NonemptyDict.toList channel.members
                                     |> List.map
-                                        (\discordUserId ->
+                                        (\( discordUserId, _ ) ->
                                             case SeqDict.get discordUserId adminData.discordUsers of
                                                 Just discordUser ->
                                                     discordUserLabel discordUser

@@ -134,18 +134,19 @@ discordDmConnections : Discord.Id Discord.PrivateChannelId -> BackendModel -> Li
 discordDmConnections channelId model =
     case SeqDict.get channelId model.discordDmChannels of
         Just channel ->
-            List.concatMap
-                (\member ->
-                    case SeqDict.get member model.discordUsers of
-                        Just (FullData discordUser) ->
-                            List.concatMap
-                                (\( _, clientIds ) -> List.Nonempty.toList clientIds)
-                                (userConnections discordUser.linkedTo model)
+            NonemptyDict.keys channel.members
+                |> List.Nonempty.toList
+                |> List.concatMap
+                    (\member ->
+                        case SeqDict.get member model.discordUsers of
+                            Just (FullData discordUser) ->
+                                List.concatMap
+                                    (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                                    (userConnections discordUser.linkedTo model)
 
-                        _ ->
-                            []
-                )
-                (NonemptySet.toList channel.members)
+                            _ ->
+                                []
+                    )
 
         Nothing ->
             []
@@ -621,24 +622,25 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
         usersToNotify =
             case SeqDict.get channelId model.discordDmChannels of
                 Just channel ->
-                    List.filterMap
-                        (\member ->
-                            if member == senderId then
-                                Nothing
+                    NonemptyDict.keys channel.members
+                        |> List.Nonempty.toList
+                        |> List.filterMap
+                            (\member ->
+                                if member == senderId then
+                                    Nothing
 
-                            else
-                                case SeqDict.get member model.discordUsers of
-                                    Just (FullData discordUser) ->
-                                        if isViewingDiscordDm channelId discordUser.linkedTo model then
+                                else
+                                    case SeqDict.get member model.discordUsers of
+                                        Just (FullData discordUser) ->
+                                            if isViewingDiscordDm channelId discordUser.linkedTo model then
+                                                Nothing
+
+                                            else
+                                                Just ( discordUser.linkedTo, member )
+
+                                        _ ->
                                             Nothing
-
-                                        else
-                                            Just ( discordUser.linkedTo, member )
-
-                                    _ ->
-                                        Nothing
-                        )
-                        (NonemptySet.toList channel.members)
+                            )
                         |> SeqDict.fromList
 
                 Nothing ->

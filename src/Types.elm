@@ -671,7 +671,7 @@ type ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName
-    | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptySet (Discord.Id Discord.UserId))
+    | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int })
     | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone
         (Discord.Id Discord.UserId)

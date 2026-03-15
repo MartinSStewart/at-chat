@@ -695,11 +695,11 @@ discordDmChannelView routeData loggedIn local model =
                 loggedIn
                 model
                 local
-                (NonemptySet.toSeqSet dmChannel.members
-                    |> SeqSet.remove routeData.currentDiscordUserId
-                    |> SeqSet.toList
+                (NonemptyDict.toSeqDict dmChannel.members
+                    |> SeqDict.remove routeData.currentDiscordUserId
+                    |> SeqDict.toList
                     |> List.filterMap
-                        (\userId ->
+                        (\( userId, _ ) ->
                             case LocalState.getDiscordUser userId local.localUser of
                                 Just user ->
                                     PersonName.toString user.name |> Just
@@ -3292,7 +3292,7 @@ chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
 chattingWithYourself data local =
     case SeqDict.get data.channelId local.discordDmChannels of
         Just channel ->
-            NonemptySet.all (\userId -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
+            NonemptyDict.all (\userId _ -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
 
         Nothing ->
             False
@@ -6442,7 +6442,7 @@ friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers mes
 discordFriendLabelMobile :
     Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptySet (Discord.Id Discord.UserId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
@@ -6453,7 +6453,7 @@ discordFriendLabelMobile isSelected dmChannelId members localUser message =
 discordFriendLabelNotMobile :
     Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptySet (Discord.Id Discord.UserId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
@@ -6465,7 +6465,7 @@ discordFriendLabel :
     Bool
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptySet (Discord.Id Discord.UserId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
@@ -6501,7 +6501,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
         maybeCurrentUserId =
             List.Extra.findMap
                 (\( userId, _ ) ->
-                    if NonemptySet.member userId members then
+                    if NonemptyDict.member userId members then
                         Just userId
 
                     else
@@ -6514,7 +6514,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
             let
                 members2 : List (Discord.Id Discord.UserId)
                 members2 =
-                    NonemptySet.remove currentUserId members |> SeqSet.toList
+                    NonemptyDict.remove currentUserId members |> SeqDict.keys
             in
             MyUi.rowButton
                 ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)

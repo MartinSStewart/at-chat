@@ -3080,7 +3080,7 @@ updateLoaded msg model =
                             (\( _, channel ) ->
                                 NonemptySet.unorderedEquals
                                     (NonemptySet.fromNonemptyList (Nonempty data.currentUserId [ data.otherUserId ]))
-                                    channel.members
+                                    (NonemptySet.fromNonemptyList (NonemptyDict.keys channel.members))
                             )
                             (SeqDict.toList local.discordDmChannels)
                     of

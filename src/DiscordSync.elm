@@ -46,8 +46,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
-import NonemptyDict
-import NonemptySet exposing (NonemptySet)
+import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Quantity
 import RichText exposing (RichText)
@@ -1325,7 +1324,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ChannelCreated channel ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleChannelCreated channel model2
+                                    handleDmChannelCreated channel model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -1716,8 +1715,8 @@ attachmentsToFileData attachment fileHash imageSize =
     }
 
 
-handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleChannelCreated channel model =
+handleDmChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDmChannelCreated channel model =
     case channel.guildId of
         Missing ->
             case channel.recipients of
@@ -1727,10 +1726,12 @@ handleChannelCreated channel model =
                         channelId =
                             Discord.idToUInt64 channel.id |> Discord.idFromUInt64
 
-                        members : NonemptySet (Discord.Id Discord.UserId)
+                        members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
                         members =
-                            NonemptySet.fromNonemptyList
-                                (Nonempty head.id (List.map .id rest))
+                            Nonempty
+                                ( head.id, { messagesSent = 0 } )
+                                (List.map (\user -> ( user.id, { messagesSent = 0 } )) rest)
+                                |> NonemptyDict.fromNonemptyList
 
                         existingUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
                         existingUsers =

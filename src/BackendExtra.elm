@@ -576,7 +576,7 @@ discordDmChannelToFrontend :
     -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendDmChannel
 discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
-    if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
+    if List.any (\( linkedId, _ ) -> NonemptyDict.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
         { messages = DmChannel.toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
         , visibleMessages = VisibleMessages.init preloadMessages dmChannel
         , lastTypedAt = dmChannel.lastTypedAt

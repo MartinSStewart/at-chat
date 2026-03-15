@@ -5,7 +5,7 @@ module NonemptyDict exposing
     , updateIfExists
     , keys, values, fromNonemptyList, toNonemptyList, toList, fromList
     , map, toSeqDict, fromSeqDict
-    , any, foldl, foldr, head, insert, merge, updateOrInsert
+    , all, any, foldl, foldr, head, insert, merge, remove, updateOrInsert
     )
 
 {-| A dictionary mapping unique keys to values.
@@ -97,6 +97,15 @@ singleton key value =
 map : (k -> a -> b) -> NonemptyDict k a -> NonemptyDict k b
 map func (NonemptyDict id a dict) =
     SeqDict.map func dict |> NonemptyDict id (func id a)
+
+
+remove : k -> NonemptyDict k v -> SeqDict k v
+remove k (NonemptyDict id v set) =
+    if k == id then
+        set
+
+    else
+        SeqDict.remove k set |> SeqDict.insert id v
 
 
 {-| -}
@@ -203,6 +212,15 @@ size (NonemptyDict _ _ dict) =
     SeqDict.size dict + 1
 
 
+{-| Check if all items in the NonemptyDict fulfill some predicate.
+-}
+all : (k -> v -> Bool) -> NonemptyDict k v -> Bool
+all predicate (NonemptyDict id a set) =
+    predicate id a && SeqDict.foldl (\key value state -> state && predicate key value) True set
+
+
+{-| Check if any items in the NonemptyDict fulfill some predicate.
+-}
 any : (k -> v -> Bool) -> NonemptyDict k v -> Bool
 any f (NonemptyDict k1 v1 dict) =
     f k1 v1 || SeqDict.foldl (\k v acc -> acc || f k v) False dict
