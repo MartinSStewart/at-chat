@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, isPressMsg, layout, logout, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -15,9 +15,11 @@ import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (Emoji)
+import Env
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
+import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
@@ -25,7 +27,7 @@ import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..), MessageState)
+import Message exposing (MessageState)
 import MessageInput
 import MessageMenu
 import MessageView
@@ -34,11 +36,11 @@ import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
 import Ports
-import RichText exposing (RichText)
+import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
@@ -46,7 +48,11 @@ import TwoFactorAuthentication
 import Types exposing (ChannelSidebarMode(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
+import Ui.Events
 import Ui.Font
+import Ui.Input
+import Ui.Prose
+import Url exposing (Url)
 import User exposing (FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -159,8 +165,11 @@ pendingChangesText localChange =
         Local_StartReloadingDiscordUser _ _ ->
             "Reload Discord user"
 
-        LinkDiscordAcknowledgementIsChecked _ ->
+        Local_LinkDiscordAcknowledgementIsChecked _ ->
             "Checked link Discord account acknowledgement"
+
+        Local_SetDomainWhitelist _ _ ->
+            "Whitelist domain"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -285,6 +294,102 @@ layout model attributes child =
                )
         )
         child
+
+
+externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg
+externalLinkWarning domainWhitelist isMobile url =
+    let
+        urlText =
+            Url.toString url
+
+        label =
+            Ui.Input.label
+                "frontend_addDomainToWhitelist"
+                [ MyUi.htmlStyle "cursor" "pointer", Ui.paddingLeft 12 ]
+                (Ui.Prose.paragraph
+                    [ Ui.paddingXY 0 4 ]
+                    [ Ui.el [ Ui.Font.color MyUi.font3 ] (Ui.text "Don't ask again about links to ")
+                    , Ui.el [ Ui.Font.noWrap ] (Ui.text url.host)
+                    ]
+                )
+    in
+    Ui.el
+        [ Ui.behindContent
+            (Ui.el
+                [ Ui.background (Ui.rgba 0 0 0 0.5)
+                , Ui.height Ui.fill
+                , Ui.Events.onClick PressedCloseExternalLinkWarning
+                ]
+                Ui.none
+            )
+        , Ui.height Ui.fill
+        ]
+        (Ui.column
+            [ Ui.centerX
+            , if isMobile then
+                Ui.alignBottom
+
+              else
+                Ui.centerY
+            , Ui.attrIf (not isMobile) (Ui.rounded 16)
+            , if isMobile then
+                Ui.paddingXY 16 16
+
+              else
+                Ui.paddingXY 24 24
+            , Ui.background MyUi.background3
+            , if isMobile then
+                Ui.width Ui.fill
+
+              else
+                Ui.widthMax 600
+            , Ui.width Ui.shrink
+            , Ui.spacing 24
+            , Ui.borderColor MyUi.border1
+            , Ui.border 1
+            ]
+            [ Ui.column
+                [ Ui.spacing 8 ]
+                [ Ui.row
+                    [ Ui.Font.color MyUi.font3, Ui.spacing 16, Ui.contentCenterY, Ui.Font.bold ]
+                    [ Ui.html (Icons.warning 36), Ui.text "Heads up, you are leaving at-chat and going to:" ]
+                , Ui.el [ MyUi.htmlStyle "word-break" "break-all" ] (Ui.text urlText)
+                ]
+            , Ui.row
+                []
+                [ Ui.Input.checkbox
+                    [ Ui.Font.size 14 ]
+                    { onChange = PressedAddDomainToWhitelist
+                    , icon = Nothing
+                    , checked = SeqSet.member (RichText.urlToDomain url) domainWhitelist
+                    , label = label.id
+                    }
+                , label.element
+                ]
+            , Ui.row
+                []
+                [ MyUi.secondaryButton
+                    (Dom.id "frontend_cancelLeaveExternal")
+                    PressedCloseExternalLinkWarning
+                    "Back"
+                , Ui.el
+                    [ Ui.linkNewTab urlText
+                    , Ui.borderColor MyUi.buttonBorder
+                    , Ui.border 1
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.rounded 4
+                    , Ui.width Ui.shrink
+                    , Ui.paddingXY 16 8
+                    , MyUi.focusEffect
+                    , Ui.Font.weight 500
+                    , Ui.Font.color MyUi.white
+                    , MyUi.htmlStyle "text-decoration" "none"
+                    , Ui.alignRight
+                    ]
+                    (Ui.text "Continue to site")
+                ]
+            ]
+        )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -1258,6 +1363,15 @@ isPressMsg msg =
         PressedDiscordGuildNotificationLevel _ _ ->
             True
 
+        PressedCloseExternalLinkWarning ->
+            True
+
+        PressedAddDomainToWhitelist _ ->
+            True
+
+        PressedRemoveDomainFromWhitelist _ ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
@@ -1326,45 +1440,17 @@ changeUpdate localMsg local =
                                     in
                                     { local
                                         | guilds =
-                                            SeqDict.insert
+                                            guildSendMessage
                                                 guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            (case threadRouteWithRepliedTo of
-                                                                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                                    LocalState.createThreadMessageFrontend
-                                                                        threadId
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = localUser.session.userId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-
-                                                                NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                    LocalState.createChannelMessageFrontend
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = localUser.session.userId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-                                                            )
-                                                            guild.channels
-                                                }
-                                                local.guilds
+                                                guild
+                                                channelId
+                                                channel
+                                                threadRouteWithRepliedTo
+                                                createdAt
+                                                localUser.session.userId
+                                                text
+                                                attachedFiles
+                                                local
                                         , localUser =
                                             { localUser
                                                 | user =
@@ -1400,29 +1486,25 @@ changeUpdate localMsg local =
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                             LocalState.createThreadMessageFrontend
                                                 threadId
-                                                (UserTextMessage
-                                                    { createdAt = createdAt
-                                                    , createdBy = localUser.session.userId
-                                                    , content = text
-                                                    , reactions = SeqDict.empty
-                                                    , editedAt = Nothing
-                                                    , repliedTo = maybeReplyTo
-                                                    , attachedFiles = attachedFiles
-                                                    }
+                                                (Message.userTextMessage
+                                                    createdAt
+                                                    localUser.session.userId
+                                                    text
+                                                    maybeReplyTo
+                                                    attachedFiles
+                                                    |> Tuple.first
                                                 )
                                                 dmChannel
 
                                         NoThreadWithMaybeMessage maybeReplyTo ->
                                             LocalState.createChannelMessageFrontend
-                                                (UserTextMessage
-                                                    { createdAt = createdAt
-                                                    , createdBy = localUser.session.userId
-                                                    , content = text
-                                                    , reactions = SeqDict.empty
-                                                    , editedAt = Nothing
-                                                    , repliedTo = maybeReplyTo
-                                                    , attachedFiles = attachedFiles
-                                                    }
+                                                (Message.userTextMessage
+                                                    createdAt
+                                                    localUser.session.userId
+                                                    text
+                                                    maybeReplyTo
+                                                    attachedFiles
+                                                    |> Tuple.first
                                                 )
                                                 dmChannel
                             in
@@ -1455,45 +1537,17 @@ changeUpdate localMsg local =
                                     in
                                     { local
                                         | discordGuilds =
-                                            SeqDict.insert
+                                            discordGuildSendMessage
                                                 guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            (case threadRouteWithRepliedTo of
-                                                                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                                    LocalState.createThreadMessageFrontend
-                                                                        threadId
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = currentDiscordUserId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-
-                                                                NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                    LocalState.createChannelMessageFrontend
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = currentDiscordUserId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-                                                            )
-                                                            guild.channels
-                                                }
-                                                local.discordGuilds
+                                                guild
+                                                channelId
+                                                channel
+                                                threadRouteWithRepliedTo
+                                                createdAt
+                                                currentDiscordUserId
+                                                text
+                                                attachedFiles
+                                                local
                                         , localUser =
                                             { localUser
                                                 | user =
@@ -1531,15 +1585,13 @@ changeUpdate localMsg local =
 
                                                     NoThreadWithMaybeMessage maybeReplyTo ->
                                                         LocalState.createChannelMessageFrontend
-                                                            (UserTextMessage
-                                                                { createdAt = createdAt
-                                                                , createdBy = currentUserId
-                                                                , content = text
-                                                                , reactions = SeqDict.empty
-                                                                , editedAt = Nothing
-                                                                , repliedTo = maybeReplyTo
-                                                                , attachedFiles = attachedFiles
-                                                                }
+                                                            (Message.userTextMessage
+                                                                createdAt
+                                                                currentUserId
+                                                                text
+                                                                maybeReplyTo
+                                                                attachedFiles
+                                                                |> Tuple.first
                                                             )
                                                             dmChannel
                                                 )
@@ -2064,7 +2116,7 @@ changeUpdate localMsg local =
                 Local_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
 
-                LinkDiscordAcknowledgementIsChecked isChecked ->
+                Local_LinkDiscordAcknowledgementIsChecked isChecked ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -2077,6 +2129,16 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | user = { user | linkDiscordAcknowledgementIsChecked = isChecked } }
+                    }
+
+                Local_SetDomainWhitelist enable domain ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user }
                     }
 
         ServerChange serverChange ->
@@ -2111,45 +2173,17 @@ changeUpdate localMsg local =
                                     in
                                     { local
                                         | guilds =
-                                            SeqDict.insert
+                                            guildSendMessage
                                                 guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            (case threadRouteWithRepliedTo of
-                                                                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                                    LocalState.createThreadMessageFrontend
-                                                                        threadId
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = userId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-
-                                                                NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                    LocalState.createChannelMessageFrontend
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = userId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-                                                            )
-                                                            guild.channels
-                                                }
-                                                local.guilds
+                                                guild
+                                                channelId
+                                                channel
+                                                threadRouteWithRepliedTo
+                                                createdAt
+                                                userId
+                                                text
+                                                attachedFiles
+                                                local
                                         , localUser =
                                             { localUser
                                                 | user =
@@ -2211,29 +2245,25 @@ changeUpdate localMsg local =
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                             LocalState.createThreadMessageFrontend
                                                 threadId
-                                                (UserTextMessage
-                                                    { createdAt = createdAt
-                                                    , createdBy = userId
-                                                    , content = text
-                                                    , reactions = SeqDict.empty
-                                                    , editedAt = Nothing
-                                                    , repliedTo = maybeReplyTo
-                                                    , attachedFiles = attachedFiles
-                                                    }
+                                                (Message.userTextMessage
+                                                    createdAt
+                                                    localUser.session.userId
+                                                    text
+                                                    maybeReplyTo
+                                                    attachedFiles
+                                                    |> Tuple.first
                                                 )
                                                 dmChannel
 
                                         NoThreadWithMaybeMessage maybeReplyTo ->
                                             LocalState.createChannelMessageFrontend
-                                                (UserTextMessage
-                                                    { createdAt = createdAt
-                                                    , createdBy = userId
-                                                    , content = text
-                                                    , reactions = SeqDict.empty
-                                                    , editedAt = Nothing
-                                                    , repliedTo = maybeReplyTo
-                                                    , attachedFiles = attachedFiles
-                                                    }
+                                                (Message.userTextMessage
+                                                    createdAt
+                                                    localUser.session.userId
+                                                    text
+                                                    maybeReplyTo
+                                                    attachedFiles
+                                                    |> Tuple.first
                                                 )
                                                 dmChannel
                             in
@@ -2286,45 +2316,17 @@ changeUpdate localMsg local =
                                     in
                                     { local
                                         | discordGuilds =
-                                            SeqDict.insert
+                                            discordGuildSendMessage
                                                 guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            (case threadRouteWithRepliedTo of
-                                                                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                                    LocalState.createThreadMessageFrontend
-                                                                        threadId
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = discordUserId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-
-                                                                NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                    LocalState.createChannelMessageFrontend
-                                                                        (UserTextMessage
-                                                                            { createdAt = createdAt
-                                                                            , createdBy = discordUserId
-                                                                            , content = text
-                                                                            , reactions = SeqDict.empty
-                                                                            , editedAt = Nothing
-                                                                            , repliedTo = maybeReplyTo
-                                                                            , attachedFiles = attachedFiles
-                                                                            }
-                                                                        )
-                                                                        channel
-                                                            )
-                                                            guild.channels
-                                                }
-                                                local.discordGuilds
+                                                guild
+                                                channelId
+                                                channel
+                                                threadRouteWithRepliedTo
+                                                createdAt
+                                                discordUserId
+                                                text
+                                                attachedFiles
+                                                local
                                         , localUser =
                                             { localUser
                                                 | user =
@@ -2381,21 +2383,19 @@ changeUpdate localMsg local =
                                         dmChannel2 : DiscordFrontendDmChannel
                                         dmChannel2 =
                                             LocalState.createChannelMessageFrontend
-                                                (UserTextMessage
-                                                    { createdAt = createdAt
-                                                    , createdBy = data.currentUserId
-                                                    , content = text
-                                                    , reactions = SeqDict.empty
-                                                    , editedAt = Nothing
-                                                    , repliedTo =
-                                                        case threadRouteWithRepliedTo of
-                                                            NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                maybeReplyTo
+                                                (Message.userTextMessage
+                                                    createdAt
+                                                    data.currentUserId
+                                                    text
+                                                    (case threadRouteWithRepliedTo of
+                                                        NoThreadWithMaybeMessage maybeReplyTo ->
+                                                            maybeReplyTo
 
-                                                            ViewThreadWithMaybeMessage _ _ ->
-                                                                Nothing
-                                                    , attachedFiles = attachedFiles
-                                                    }
+                                                        ViewThreadWithMaybeMessage _ _ ->
+                                                            Nothing
+                                                    )
+                                                    attachedFiles
+                                                    |> Tuple.first
                                                 )
                                                 dmChannel
                                     in
@@ -2903,6 +2903,140 @@ changeUpdate localMsg local =
                                     local.adminData
                     }
 
+                Server_GotGuildMessageEmbed guildId channelId threadRouteWithMessage result ->
+                    case LocalState.getGuildAndChannel guildId channelId local of
+                        Just ( guild, channel ) ->
+                            { local
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    (case threadRouteWithMessage of
+                                                        NoThreadWithMessage messageId ->
+                                                            LocalState.addEmbedFrontend messageId result channel
+
+                                                        ViewThreadWithMessage threadId messageId ->
+                                                            { channel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadId
+                                                                        (LocalState.addEmbedFrontend messageId result)
+                                                                        channel.threads
+                                                            }
+                                                    )
+                                                    guild.channels
+                                        }
+                                        local.guilds
+                            }
+
+                        Nothing ->
+                            local
+
+                Server_GotDmMessageEmbed channelId threadRouteWithMessage result ->
+                    case SeqDict.get channelId local.dmChannels of
+                        Just channel ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.insert
+                                        channelId
+                                        (case threadRouteWithMessage of
+                                            NoThreadWithMessage messageId ->
+                                                LocalState.addEmbedFrontend messageId result channel
+
+                                            ViewThreadWithMessage threadId messageId ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            threadId
+                                                            (LocalState.addEmbedFrontend messageId result)
+                                                            channel.threads
+                                                }
+                                        )
+                                        local.dmChannels
+                            }
+
+                        Nothing ->
+                            local
+
+
+guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt userId text attachedFiles local =
+    SeqDict.insert
+        guildId
+        { guild
+            | channels =
+                SeqDict.insert
+                    channelId
+                    (case threadRouteWithRepliedTo of
+                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                            LocalState.createThreadMessageFrontend
+                                threadId
+                                (Message.userTextMessage
+                                    createdAt
+                                    userId
+                                    text
+                                    maybeReplyTo
+                                    attachedFiles
+                                    |> Tuple.first
+                                )
+                                channel
+
+                        NoThreadWithMaybeMessage maybeReplyTo ->
+                            LocalState.createChannelMessageFrontend
+                                (Message.userTextMessage
+                                    createdAt
+                                    userId
+                                    text
+                                    maybeReplyTo
+                                    attachedFiles
+                                    |> Tuple.first
+                                )
+                                channel
+                    )
+                    guild.channels
+        }
+        local.guilds
+
+
+discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt discordUserId text attachedFiles local =
+    SeqDict.insert
+        guildId
+        { guild
+            | channels =
+                SeqDict.insert
+                    channelId
+                    (case threadRouteWithRepliedTo of
+                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                            LocalState.createThreadMessageFrontend
+                                threadId
+                                (Message.userTextMessage
+                                    createdAt
+                                    discordUserId
+                                    text
+                                    maybeReplyTo
+                                    attachedFiles
+                                    |> Tuple.first
+                                )
+                                channel
+
+                        NoThreadWithMaybeMessage maybeReplyTo ->
+                            LocalState.createChannelMessageFrontend
+                                (Message.userTextMessage
+                                    createdAt
+                                    discordUserId
+                                    text
+                                    maybeReplyTo
+                                    attachedFiles
+                                    |> Tuple.first
+                                )
+                                channel
+                    )
+                    guild.channels
+        }
+        local.discordGuilds
+
 
 initAdminData : InitAdminData -> AdminData
 initAdminData adminData =
@@ -2919,6 +3053,7 @@ initAdminData adminData =
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
     , logs = adminData.logs
+    , connections = adminData.connections
     }
 
 

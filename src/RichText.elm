@@ -1,15 +1,20 @@
 module RichText exposing
-    ( Language(..)
+    ( Domain(..)
+    , Embed(..)
+    , EmbedData
+    , Language(..)
     , Range
     , RichText(..)
     , RichTextState
     , append
     , attachedFilePrefix
     , attachedFileSuffix
+    , domainToString
+    , emptyEmbed
     , fromDiscord
     , fromNonemptyString
     , fromSlack
-    , hyperlinkToString
+    , hyperlinks
     , mentionsUser
     , preview
     , rangeSize
@@ -18,6 +23,7 @@ module RichText exposing
     , toDiscord
     , toString
     , toStringWithGetter
+    , urlToDomain
     , view
     )
 
@@ -26,6 +32,7 @@ import Coord
 import Discord
 import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Time as Time
 import FileName
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
@@ -44,7 +51,7 @@ import SeqSet exposing (SeqSet)
 import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
-import Url exposing (Protocol(..))
+import Url exposing (Protocol(..), Url)
 
 
 type RichText userId
@@ -55,7 +62,7 @@ type RichText userId
     | Underline (Nonempty (RichText userId))
     | Strikethrough (Nonempty (RichText userId))
     | Spoiler (Nonempty (RichText userId))
-    | Hyperlink Protocol String
+    | Hyperlink Url
     | InlineCode Char String
     | CodeBlock Language String
     | AttachedFile (Id FileId)
@@ -64,6 +71,28 @@ type RichText userId
 type Language
     = Language NonemptyString
     | NoLanguage
+
+
+type Embed
+    = EmbedLoading
+    | EmbedLoaded EmbedData
+
+
+emptyEmbed : EmbedData
+emptyEmbed =
+    { title = Nothing
+    , image = Nothing
+    , content = Nothing
+    , createdAt = Nothing
+    }
+
+
+type alias EmbedData =
+    { title : Maybe String
+    , image : Maybe String
+    , content : Maybe String
+    , createdAt : Maybe Time.Posix
+    }
 
 
 normalTextFromString : String -> Maybe (RichText userId)
@@ -107,7 +136,7 @@ removeAttachedFile fileId list =
                 Spoiler nonempty ->
                     removeAttachedFile fileId nonempty |> Maybe.map Spoiler
 
-                Hyperlink _ _ ->
+                Hyperlink _ ->
                     Just richText
 
                 InlineCode _ _ ->
@@ -125,6 +154,47 @@ removeAttachedFile fileId list =
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
+
+
+hyperlinks : Nonempty (RichText userId) -> List String
+hyperlinks nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink data ->
+                    [ Url.toString data ]
+
+                UserMention _ ->
+                    []
+
+                NormalText _ _ ->
+                    []
+
+                Bold nonempty2 ->
+                    hyperlinks nonempty2
+
+                Italic nonempty2 ->
+                    hyperlinks nonempty2
+
+                Underline nonempty2 ->
+                    hyperlinks nonempty2
+
+                Strikethrough nonempty2 ->
+                    hyperlinks nonempty2
+
+                Spoiler nonempty2 ->
+                    hyperlinks nonempty2
+
+                InlineCode _ _ ->
+                    []
+
+                CodeBlock _ _ ->
+                    []
+
+                AttachedFile _ ->
+                    []
+        )
+        (List.Nonempty.toList nonempty)
 
 
 toStringWithGetter : (a -> String) -> SeqDict userId a -> Nonempty (RichText userId) -> String
@@ -158,8 +228,8 @@ toStringWithGetter userToString users nonempty =
                 Spoiler a ->
                     "||" ++ toStringWithGetter userToString users a ++ "||"
 
-                Hyperlink protocol rest ->
-                    hyperlinkToString protocol rest
+                Hyperlink data ->
+                    Url.toString data
 
                 InlineCode char rest ->
                     "`" ++ String.cons char rest ++ "`"
@@ -215,8 +285,8 @@ toString users nonempty =
                 Spoiler a ->
                     "||" ++ toString users a ++ "||"
 
-                Hyperlink protocol rest ->
-                    hyperlinkToString protocol rest
+                Hyperlink data ->
+                    Url.toString data
 
                 InlineCode char rest ->
                     "`" ++ String.cons char rest ++ "`"
@@ -294,8 +364,8 @@ normalize nonempty =
                 Spoiler a ->
                     List.Nonempty.cons (Spoiler (normalize a)) nonempty2
 
-                Hyperlink protocol rest ->
-                    List.Nonempty.cons (Hyperlink protocol rest) nonempty2
+                Hyperlink data ->
+                    List.Nonempty.cons (Hyperlink data) nonempty2
 
                 InlineCode char string ->
                     List.Nonempty.cons (InlineCode char string) nonempty2
@@ -329,8 +399,8 @@ normalize nonempty =
                 Spoiler a ->
                     Spoiler (normalize a)
 
-                Hyperlink protocol rest ->
-                    Hyperlink protocol rest
+                Hyperlink data ->
+                    Hyperlink data
 
                 InlineCode char string ->
                     InlineCode char string
@@ -464,18 +534,18 @@ parser users modifiers =
                     |> Parser.backtrackable
                 , urlParser
                     |> Parser.map
-                        (\{ protocol, url, trailing } ->
-                            (case Url.fromString ("https://" ++ url) of
-                                Just _ ->
+                        (\{ hyperlink, trailing } ->
+                            (case hyperlink of
+                                Ok hyperlink2 ->
                                     { current = Array.fromList [ trailing ]
                                     , rest =
                                         Array.append
                                             state.rest
-                                            (Array.push (Hyperlink protocol url) (parserHelper state))
+                                            (Array.push (Hyperlink hyperlink2) (parserHelper state))
                                     }
 
-                                Nothing ->
-                                    { current = Array.push (hyperlinkToString protocol url ++ trailing) state.current
+                                Err text ->
+                                    { current = Array.push (text ++ trailing) state.current
                                     , rest = state.rest
                                     }
                             )
@@ -511,7 +581,7 @@ parser users modifiers =
         )
 
 
-urlParser : Parser { protocol : Protocol, url : String, trailing : String }
+urlParser : Parser { hyperlink : Result String Url, trailing : String }
 urlParser =
     Parser.succeed
         (\protocol url ->
@@ -534,8 +604,27 @@ urlParser =
                         )
                         ( urlLength, False )
                         url
+
+                url2 =
+                    case protocol of
+                        Http ->
+                            "http://" ++ url
+
+                        Https ->
+                            "https://" ++ url
+
+                url4 : Result String Url
+                url4 =
+                    case Url.fromString url2 of
+                        Just url3 ->
+                            Ok { url3 | protocol = protocol }
+
+                        Nothing ->
+                            Err url2
             in
-            { protocol = protocol, url = String.slice 0 index url, trailing = String.slice index urlLength url }
+            { hyperlink = url4
+            , trailing = String.slice index urlLength url
+            }
         )
         |= Parser.oneOf
             [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
@@ -773,7 +862,7 @@ mentionsUserHelper set nonempty =
                 Spoiler nonempty2 ->
                     mentionsUserHelper set2 nonempty2
 
-                Hyperlink _ _ ->
+                Hyperlink _ ->
                     set2
 
                 InlineCode _ _ ->
@@ -789,43 +878,72 @@ mentionsUserHelper set nonempty =
         nonempty
 
 
+{-| OpaqueVariants
+-}
+type Domain
+    = Domain String
+
+
+urlToDomain : Url -> Domain
+urlToDomain data =
+    Domain data.host
+
+
+domainToString : Domain -> String
+domainToString (Domain domain) =
+    domain
+
+
 view :
     HtmlId
     -> Int
+    -> (Url -> msg)
+    -> SeqSet Domain
     -> (Int -> msg)
     -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
+    -> Array Embed
     -> Nonempty (RichText userId)
     -> List (Html msg)
-view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty =
+view htmlIdPrefix containerWidth onPressLink domainWhitelist onPressSpoiler revealedSpoilers users attachedFiles embeds nonempty =
     viewHelper
         (Just containerWidth)
-        (Just ( htmlIdPrefix, pressedSpoiler ))
+        (Just ( htmlIdPrefix, onPressSpoiler ))
+        onPressLink
+        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
         attachedFiles
+        embeds
+        0
         nonempty
         |> Tuple.second
 
 
 preview :
-    SeqSet Int
+    (Url -> msg)
+    -> SeqSet Domain
+    -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
     -> Nonempty (RichText userId)
     -> List (Html msg)
-preview revealedSpoilers users attachedFiles nonempty =
+preview onPressLink domainWhitelist revealedSpoilers users attachedFiles nonempty =
     viewHelper
         Nothing
         Nothing
+        onPressLink
+        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
         attachedFiles
+        Array.empty
+        0
         nonempty
         |> Tuple.second
 
@@ -846,14 +964,18 @@ normalTextView text state =
 viewHelper :
     Maybe Int
     -> Maybe ( HtmlId, Int -> msg )
+    -> (Url -> msg)
+    -> SeqSet Domain
     -> Int
     -> RichTextState
     -> SeqSet Int
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
+    -> Array Embed
+    -> Int
     -> Nonempty (RichText userId)
     -> ( Int, List (Html msg) )
-viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
+viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -871,11 +993,15 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | italic = True }
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -886,11 +1012,15 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | underline = True }
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -901,11 +1031,15 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | bold = True }
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -916,11 +1050,15 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 { state | strikethrough = True }
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -935,6 +1073,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
+                                onPressLink
+                                domainWhitelist
                                 spoilerIndex2
                                 (if revealed then
                                     state
@@ -945,6 +1085,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                 revealedSpoilers
                                 allUsers
                                 attachedFiles
+                                embeds
+                                embedIndex
                                 nonempty2
                     in
                     ( spoilerIndex2 + 1
@@ -975,11 +1117,11 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                            ]
                     )
 
-                Hyperlink protocol rest ->
+                Hyperlink data ->
                     let
                         text : String
                         text =
-                            hyperlinkToString protocol rest
+                            Url.toString data
                     in
                     ( spoilerIndex2
                     , currentList
@@ -994,16 +1136,19 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                     [ Html.text text ]
 
                              else
-                                Html.a
-                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                                    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                                    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
-                                    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                                    , Html.Attributes.href text
-                                    , Html.Attributes.target "_blank"
-                                    , Html.Attributes.rel "noreferrer"
-                                    ]
-                                    [ Html.text text ]
+                                case Array.get embedIndex embeds of
+                                    Just EmbedLoading ->
+                                        embedLoadingView onPressLink domainWhitelist data
+
+                                    Just (EmbedLoaded embed) ->
+                                        if embed == emptyEmbed then
+                                            inlineEmbedView containerWidth onPressLink domainWhitelist data
+
+                                        else
+                                            embedView onPressLink domainWhitelist data embed
+
+                                    Nothing ->
+                                        inlineEmbedView containerWidth onPressLink domainWhitelist data
                            ]
                     )
 
@@ -1113,6 +1258,282 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+embedContainer : List (Html msg) -> Html msg
+embedContainer contents =
+    Html.div
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "max-width" "432px"
+        , Html.Attributes.style "margin-top" "4px"
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "overflow" "hidden"
+        ]
+        [ Html.div
+            [ Html.Attributes.style "width" "4px"
+            , Html.Attributes.style "flex-shrink" "0"
+            , Html.Attributes.style "background-color" "rgb(80,120,200)"
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+            , Html.Attributes.style "padding" "8px 12px"
+            , Html.Attributes.style "min-width" "0"
+            , Html.Attributes.style "flex" "1"
+            ]
+            contents
+        ]
+
+
+buttonOrA : (Url -> msg) -> SeqSet Domain -> Url -> List (Html.Attribute msg) -> List (Html msg) -> Html msg
+buttonOrA onLinkPress domainWhitelist url attributes content =
+    if SeqSet.member (urlToDomain url) domainWhitelist then
+        Html.a
+            (Html.Attributes.href (Url.toString url)
+                :: Html.Attributes.target "_blank"
+                :: Html.Attributes.rel "noreferrer"
+                :: attributes
+            )
+            content
+
+    else
+        Html.span
+            (Html.Events.onClick (onLinkPress url)
+                :: Html.Attributes.style "cursor" "pointer"
+                :: Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColorOnDarkBackground)
+                :: attributes
+            )
+            content
+
+
+embedView : (Url -> msg) -> SeqSet Domain -> Url -> EmbedData -> Html msg
+embedView onPressLink domainWhitelist url embed =
+    embedContainer
+        (List.filterMap
+            identity
+            [ case embed.title of
+                Just title ->
+                    buttonOrA
+                        onPressLink
+                        domainWhitelist
+                        url
+                        [ Html.Attributes.style "font-size" "14px"
+                        , Html.Attributes.style "font-weight" "600"
+                        , Html.Attributes.style "color" "rgb(100,160,255)"
+                        , Html.Attributes.style "display" "block"
+                        , Html.Attributes.style "margin-bottom" "4px"
+                        , Html.Attributes.style "text-decoration" "none"
+                        , Html.Attributes.style "overflow" "hidden"
+                        , Html.Attributes.style "text-overflow" "ellipsis"
+                        , Html.Attributes.style "white-space" "nowrap"
+                        ]
+                        [ Html.text title ]
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , case embed.content of
+                Just content ->
+                    Html.div
+                        [ Html.Attributes.style "font-size" "13px"
+                        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+                        , Html.Attributes.style "overflow" "hidden"
+                        , Html.Attributes.style "display" "-webkit-box"
+                        , Html.Attributes.style "-webkit-line-clamp" "3"
+                        , Html.Attributes.style "-webkit-box-orient" "vertical"
+                        , Html.Attributes.style "white-space" "pre-wrap"
+                        ]
+                        [ Html.text (String.left 300 content) ]
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , case embed.image of
+                Just image ->
+                    Html.img
+                        [ Html.Attributes.src image
+                        , Html.Attributes.style "max-width" "100%"
+                        , Html.Attributes.style "max-height" "300px"
+                        , Html.Attributes.style "border-radius" "4px"
+                        , Html.Attributes.style "margin-top" "8px"
+                        , Html.Attributes.style "display" "block"
+                        ]
+                        []
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , case embed.createdAt of
+                Just createdAt ->
+                    Html.div
+                        [ Html.Attributes.style "font-size" "11px"
+                        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                        , Html.Attributes.style "margin-top" "6px"
+                        ]
+                        [ Html.text (formatPosix createdAt) ]
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , smallHyperlink onPressLink domainWhitelist url |> Just
+            ]
+        )
+
+
+embedLoadingView : (Url -> msg) -> SeqSet Domain -> Url -> Html msg
+embedLoadingView onPressLink domainWhitelist url =
+    embedContainer
+        [ Html.div
+            [ Html.Attributes.style "width" "60%"
+            , Html.Attributes.style "height" "14px"
+            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "margin-bottom" "8px"
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "width" "90%"
+            , Html.Attributes.style "height" "12px"
+            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "margin-bottom" "6px"
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "width" "75%"
+            , Html.Attributes.style "height" "12px"
+            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
+            , Html.Attributes.style "border-radius" "4px"
+            ]
+            []
+        , smallHyperlink onPressLink domainWhitelist url
+        ]
+
+
+favicon : Url -> String
+favicon url =
+    "https://icons.duckduckgo.com/ip2/" ++ url.host ++ ".ico"
+
+
+smallHyperlink : (Url -> msg) -> SeqSet Domain -> Url -> Html msg
+smallHyperlink onPressUrl domainWhitelist url =
+    let
+        path : String
+        path =
+            url.path
+                |> urlAddPrefixed "?" url.query
+                |> urlAddPrefixed "#" url.fragment
+    in
+    buttonOrA
+        onPressUrl
+        domainWhitelist
+        url
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "align-items" "center"
+        , Html.Attributes.style "gap" "6px"
+        , Html.Attributes.style "margin-top" "4px"
+        , Html.Attributes.style "text-decoration" "none"
+        ]
+        [ Html.img
+            [ Html.Attributes.style "width" "16px"
+            , Html.Attributes.style "height" "16px"
+            , Html.Attributes.style "border-radius" "2px"
+            , Html.Attributes.src (favicon url)
+            ]
+            []
+        , Html.span
+            [ Html.Attributes.style "font-size" "14px"
+            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+            , Html.Attributes.style "overflow" "hidden"
+            , Html.Attributes.style "text-overflow" "ellipsis"
+            , Html.Attributes.style "white-space" "nowrap"
+            , Html.Attributes.style "min-width" "0"
+            ]
+            [ Html.text url.host
+            , if path == "/" then
+                Html.text ""
+
+              else
+                Html.span
+                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                    ]
+                    [ Html.text path ]
+            ]
+        ]
+
+
+urlAddPrefixed : String -> Maybe String -> String -> String
+urlAddPrefixed prefix maybeSegment starter =
+    case maybeSegment of
+        Nothing ->
+            starter
+
+        Just segment ->
+            starter ++ prefix ++ segment
+
+
+formatPosix : Time.Posix -> String
+formatPosix time =
+    MyUi.datestamp time
+
+
+inlineEmbedView : Maybe Int -> (Url -> msg) -> SeqSet Domain -> Url -> Html msg
+inlineEmbedView containerWidth onPressUrl domainWhitelist url =
+    let
+        path : String
+        path =
+            url.path
+                |> urlAddPrefixed "?" url.query
+                |> urlAddPrefixed "#" url.fragment
+    in
+    buttonOrA
+        onPressUrl
+        domainWhitelist
+        url
+        [ Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.style "max-width" (String.fromInt (min 600 (Maybe.withDefault 600 containerWidth - 4)) ++ "px")
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "overflow" "hidden"
+        , Html.Attributes.style "text-overflow" "ellipsis"
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+        , Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "transform" "translateY(4px)"
+        , Html.Attributes.style "border-left" "solid 5px rgb(80,120,200)"
+        , Html.Attributes.style "padding-right" "4px"
+        ]
+        [ Html.img
+            [ Html.Attributes.style "width" "16px"
+            , Html.Attributes.style "height" "16px"
+            , Html.Attributes.style "border-radius" "2px"
+            , Html.Attributes.style "transform" "translateY(2px)"
+            , Html.Attributes.style "padding" "0 4px 0 4px"
+            , Html.Attributes.src (favicon url)
+            ]
+            []
+        , Html.text url.host
+        , if path == "/" then
+            Html.text ""
+
+          else
+            Html.span
+                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                ]
+                [ Html.text path ]
+        ]
+
+
+
+--buttonOrA
+--    onPressUrl
+--    domainWhitelist
+--    url
+--    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+--    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+--    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+--    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+--    ]
+--    [ Html.text urlText ]
 
 
 fileDownloadView : FileData -> Html msg
@@ -1258,7 +1679,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                             nonempty2
                         ++ [ formatText "||" ]
 
-                Hyperlink protocol rest ->
+                Hyperlink data ->
                     [ Html.span
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
@@ -1267,7 +1688,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                         , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
                         , Html.Attributes.style "color" "rgb(66,93,203)"
                         ]
-                        [ Html.text (hyperlinkToString protocol rest) ]
+                        [ Html.text (Url.toString data) ]
                     ]
 
                 InlineCode char rest ->
@@ -1316,18 +1737,6 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                     ]
         )
         (List.Nonempty.toList nonempty)
-
-
-hyperlinkToString : Protocol -> String -> String
-hyperlinkToString protocol rest =
-    (case protocol of
-        Http ->
-            "http://"
-
-        Https ->
-            "https://"
-    )
-        ++ rest
 
 
 formatText : String -> Html msg
@@ -1582,18 +1991,18 @@ discordParser modifiers =
                     |> Parser.backtrackable
                 , urlParser
                     |> Parser.map
-                        (\{ protocol, url, trailing } ->
-                            (case Url.fromString ("https://" ++ url) of
-                                Just _ ->
+                        (\{ hyperlink, trailing } ->
+                            (case hyperlink of
+                                Ok hyperlink2 ->
                                     { current = Array.fromList [ trailing ]
                                     , rest =
                                         Array.append
                                             state.rest
-                                            (Array.push (Hyperlink protocol url) (parserHelper state))
+                                            (Array.push (Hyperlink hyperlink2) (parserHelper state))
                                     }
 
-                                Nothing ->
-                                    { current = Array.push (hyperlinkToString protocol url ++ trailing) state.current
+                                Err text ->
+                                    { current = Array.push (text ++ trailing) state.current
                                     , rest = state.rest
                                     }
                             )
@@ -1651,8 +2060,8 @@ toDiscord content =
                 Spoiler nonempty ->
                     Discord.Markdown.spoiler (toDiscord nonempty)
 
-                Hyperlink protocol string ->
-                    Discord.Markdown.text (hyperlinkToString protocol string)
+                Hyperlink data ->
+                    Discord.Markdown.text (Url.toString data)
 
                 InlineCode char string ->
                     Discord.Markdown.code (String.cons char string)

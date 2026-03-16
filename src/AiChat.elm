@@ -32,6 +32,7 @@ import Ui.Font
 import Ui.Gradient
 import Ui.Input
 import Ui.Shadow
+import Url
 
 
 port save_user_settings_to_js : Json.Encode.Value -> Cmd msg
@@ -448,9 +449,9 @@ richTextToMessage previousText previousList nonempty =
                     richTextToMessage (currentText ++ "||") list nonempty2
                         |> Tuple.mapFirst (\b -> b ++ "||")
 
-                RichText.Hyperlink protocol url ->
+                RichText.Hyperlink url ->
                     ( ""
-                    , ImageUrlMessage (RichText.hyperlinkToString protocol url)
+                    , ImageUrlMessage (Url.toString url)
                         :: TextMessage currentText
                         :: list
                     )

@@ -20,6 +20,9 @@ sha2 = "0.10.9"
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
 vapid = "0.6.0"
 web-push = "0.11.0"
+webpage = { version = "2.0.1", features = ["serde"] }
+
+
 
 [lints.rust]
 unsafe_code = "deny"
@@ -61,7 +64,7 @@ disallowed_methods = "warn"                 # See clippy.toml
 disallowed_names = "warn"                   # See clippy.toml
 disallowed_script_idents = "warn"           # See clippy.toml
 disallowed_types = "warn"                   # See clippy.toml
-doc_include_without_cfg  = "warn"
+doc_include_without_cfg = "warn"
 doc_link_with_quotes = "warn"
 doc_markdown = "warn"
 empty_enum = "warn"

@@ -53,7 +53,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
-import RichText
+import RichText exposing (Domain)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -695,11 +695,11 @@ discordDmChannelView routeData loggedIn local model =
                 loggedIn
                 model
                 local
-                (NonemptySet.toSeqSet dmChannel.members
-                    |> SeqSet.remove routeData.currentDiscordUserId
-                    |> SeqSet.toList
+                (NonemptyDict.toSeqDict dmChannel.members
+                    |> SeqDict.remove routeData.currentDiscordUserId
+                    |> SeqDict.toList
                     |> List.filterMap
-                        (\userId ->
+                        (\( userId, _ ) ->
                             case LocalState.getDiscordUser userId local.localUser of
                                 Just user ->
                                     PersonName.toString user.name |> Just
@@ -3292,7 +3292,7 @@ chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
 chattingWithYourself data local =
     case SeqDict.get data.channelId local.discordDmChannels of
         Just channel ->
-            NonemptySet.all (\userId -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
+            NonemptyDict.all (\userId _ -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
 
         Nothing ->
             False
@@ -4781,6 +4781,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     isBeingEdited
                     isMobile
                     maybeRepliedTo
+                    localUser.user.domainWhitelist
                     revealedSpoilers
                     allUsers
                     localUser.timezone
@@ -4863,6 +4864,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     isBeingEdited
                     isMobile
                     maybeRepliedTo
+                    localUser.user.domainWhitelist
                     revealedSpoilers
                     allUsers
                     localUser.timezone
@@ -4902,13 +4904,14 @@ userTextMessageContent :
     -> Bool
     -> Bool
     -> Maybe ( Id messageId, Message messageId userId )
+    -> SeqSet Domain
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Time.Zone
     -> Id messageId
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo revealedSpoilers allUsers timezone messageIndex message2 =
+userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo domainWhitelist revealedSpoilers allUsers timezone messageIndex message2 =
     Ui.row
         []
         [ Ui.el
@@ -4951,6 +4954,8 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 (RichText.view
                     (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageIndex))
                     containerWidth
+                    MessageView_PressedNonWhitelistLink
+                    domainWhitelist
                     MessageView_PressedSpoiler
                     (case SeqDict.get messageIndex revealedSpoilers of
                         Just nonempty ->
@@ -4961,6 +4966,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     )
                     allUsers
                     message2.attachedFiles
+                    message2.embeds
                     message2.content
                     ++ (if isBeingEdited then
                             [ Html.span
@@ -5094,7 +5100,13 @@ userTextMessagePreview allUsers revealedSpoilers message =
             , Html.Attributes.style "padding" "0 6px 0 2px"
             ]
             [ Html.text (User.toString message.createdBy allUsers) ]
-            :: RichText.preview revealedSpoilers allUsers message.attachedFiles message.content
+            :: RichText.preview
+                (\_ -> MessageView_NoOp)
+                SeqSet.empty
+                revealedSpoilers
+                allUsers
+                message.attachedFiles
+                message.content
         )
         |> Ui.html
 
@@ -5438,6 +5450,8 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                     ]
                                     [ Html.text (User.toString data.createdBy allUsers) ]
                                     :: RichText.preview
+                                        (\_ -> MessageView_NoOp)
+                                        SeqSet.empty
                                         SeqSet.empty
                                         allUsers
                                         data.attachedFiles
@@ -6428,7 +6442,7 @@ friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers mes
 discordFriendLabelMobile :
     Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptySet (Discord.Id Discord.UserId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
@@ -6439,7 +6453,7 @@ discordFriendLabelMobile isSelected dmChannelId members localUser message =
 discordFriendLabelNotMobile :
     Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptySet (Discord.Id Discord.UserId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
@@ -6451,7 +6465,7 @@ discordFriendLabel :
     Bool
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptySet (Discord.Id Discord.UserId)
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
@@ -6487,7 +6501,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
         maybeCurrentUserId =
             List.Extra.findMap
                 (\( userId, _ ) ->
-                    if NonemptySet.member userId members then
+                    if NonemptyDict.member userId members then
                         Just userId
 
                     else
@@ -6500,7 +6514,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
             let
                 members2 : List (Discord.Id Discord.UserId)
                 members2 =
-                    NonemptySet.remove currentUserId members |> SeqSet.toList
+                    NonemptyDict.remove currentUserId members |> SeqDict.keys
             in
             MyUi.rowButton
                 ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)

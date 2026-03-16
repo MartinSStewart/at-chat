@@ -4,8 +4,10 @@ module UiViewer exposing (main)
 Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 -}
 
+import Array
 import BackendExtra
 import Discord
+import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
@@ -13,29 +15,39 @@ import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log exposing (Log)
+import MyUi
 import Postmark
-import String.Nonempty exposing (NonemptyString)
+import RichText exposing (Domain, Embed(..))
+import SeqDict
+import SeqSet exposing (SeqSet)
+import String.Nonempty exposing (NonemptyString(..))
 import Time
 import Ui
 import Ui.Font
 import Unsafe
+import Url exposing (Protocol(..))
 
 
 main : Html ()
 main =
     Ui.layout
-        []
+        [ Ui.Font.color MyUi.font1, Ui.background MyUi.background1 ]
         (Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ Ui.column
-                [ Ui.background (Ui.rgb 255 255 255) ]
+                [ Ui.background MyUi.background3 ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
                 , Ui.html loginEmail
                 ]
             , Ui.column
-                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Log entries")
                 , logExamples
+                ]
+            , Ui.column
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
+                , embedExamples SeqSet.empty
                 ]
             ]
         )
@@ -78,7 +90,18 @@ logExamples =
 
         logEntry : Log -> Ui.Element ()
         logEntry log =
-            Log.view Time.utc () (\_ -> ()) False False { time = exampleTime, log = log }
+            Log.view
+                False
+                False
+                Time.utc
+                { onPressCopyLink = ()
+                , onPressCopy = \_ -> ()
+                , onPressHide = ()
+                , onPressUnhide = ()
+                }
+                False
+                False
+                { time = exampleTime, log = log }
     in
     Ui.column
         [ Ui.spacing 24 ]
@@ -109,5 +132,66 @@ logExamples =
                 (Discord.NotFound404 Discord.UnknownMessage10008)
             )
         , logEntry
-            (Log.FailedToParseDiscordWebsocket "Expecting STRING but instead got blah blah blah at blah in json[0].field")
+            (Log.FailedToParseDiscordWebsocket Nothing "Expecting STRING but instead got blah blah blah at blah in json[0].field")
+        ]
+
+
+embedExamples : SeqSet Domain -> Ui.Element ()
+embedExamples whitelistedDomains =
+    let
+        message : NonemptyString -> List Embed -> Ui.Element ()
+        message text embeds =
+            RichText.view
+                (Dom.id "richText")
+                800
+                (\_ -> ())
+                whitelistedDomains
+                (\_ -> ())
+                SeqSet.empty
+                SeqDict.empty
+                SeqDict.empty
+                (Array.fromList embeds)
+                (RichText.fromNonemptyString SeqDict.empty text)
+                |> Html.div []
+                |> Ui.html
+
+        url : String
+        url =
+            "https://ascii-collab.app/verycool/path/subpath/more/?blah=123#title-page"
+
+        shortUrl : String
+        shortUrl =
+            "https://town-collab.app/"
+    in
+    Ui.column
+        [ Ui.spacing 24 ]
+        [ message (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?")) [ EmbedLoading ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
+            [ EmbedLoaded
+                { title = Nothing
+                , image = Nothing
+                , content = Just "Content of this embedded link"
+                , createdAt = Nothing
+                , favicon = Nothing
+                }
+            ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
+            [ EmbedLoaded
+                { title = Just "Title of this embed"
+                , image = Just "/android-chrome-512x512.png"
+                , content = Just "Content of this embedded link"
+                , createdAt = Just (Time.millisToPosix 0)
+                , favicon = Just "/favicon-32x32.png"
+                }
+            ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
+            [ EmbedLoaded RichText.emptyEmbed
+            ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ shortUrl ++ " Cool huh?"))
+            [ EmbedLoaded RichText.emptyEmbed
+            ]
         ]

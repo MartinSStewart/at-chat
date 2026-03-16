@@ -22,6 +22,7 @@ module User exposing
     , profileImageSize
     , sectionToString
     , setDiscordGuildNotificationLevel
+    , setDomainWhitelist
     , setGuildNotificationLevel
     , setIcon
     , setLastChannelViewed
@@ -45,6 +46,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
+import RichText exposing (Domain)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -78,6 +80,19 @@ type alias BackendUser =
     , expandedGuilds : SeqSet (Id GuildId)
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , linkDiscordAcknowledgementIsChecked : Bool
+    , domainWhitelist : SeqSet Domain
+    }
+
+
+setDomainWhitelist : Bool -> Domain -> { a | domainWhitelist : SeqSet Domain } -> { a | domainWhitelist : SeqSet Domain }
+setDomainWhitelist enable domain user =
+    { user
+        | domainWhitelist =
+            if enable then
+                SeqSet.insert domain user.domainWhitelist
+
+            else
+                SeqSet.remove domain user.domainWhitelist
     }
 
 
@@ -150,6 +165,7 @@ init createdAt name email userIsAdmin =
     , expandedGuilds = SeqSet.empty
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
+    , domainWhitelist = SeqSet.empty
     }
 
 
@@ -333,6 +349,7 @@ type AdminUiSection
     | GuildsSection
     | ApiKeysSection
     | ExportSection
+    | ConnectionsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -361,6 +378,9 @@ sectionToString section2 =
 
         ExportSection ->
             "Export/Import"
+
+        ConnectionsSection ->
+            "Connections"
 
 
 {-| User containing only publicly visible data
@@ -447,6 +467,7 @@ backendToFrontendCurrent user =
     , expandedGuilds = user.expandedGuilds
     , expandedDiscordGuilds = user.expandedDiscordGuilds
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
+    , domainWhitelist = user.domainWhitelist
     }
 
 

@@ -14,6 +14,7 @@ module Pages.Admin exposing
     , UserTableId(..)
     , UsersChangeError(..)
     , applyChangesToBackendUsers
+    , disconnectClient
     , initForAdmin
     , initForUser
     , logSectionId
@@ -36,7 +37,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Download
 import Effect.File.Select
-import Effect.Lamdera as Lamdera
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
@@ -47,7 +48,8 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import List.Nonempty
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import Message exposing (Message)
 import MyUi
@@ -59,6 +61,7 @@ import Ports
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Table
@@ -119,6 +122,7 @@ type Msg
     | PressedHideLog (Id ItemId)
     | PressedUnhideLog (Id ItemId)
     | PressedShowHiddenLogs Bool
+    | PressedDisconnectClient SessionIdHash.SessionIdHash ClientId
 
 
 type ToBackend
@@ -186,6 +190,7 @@ type alias InitAdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
+    , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     }
 
 
@@ -216,6 +221,7 @@ type AdminChange
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
     | HideLog (Id ItemId)
     | UnhideLog (Id ItemId)
+    | DisconnectClient SessionIdHash.SessionIdHash ClientId
 
 
 type alias EditedBackendUser =
@@ -476,6 +482,29 @@ updateAdmin changedBy change adminData local =
                         }
             }
 
+        DisconnectClient sessionIdHash clientId ->
+            { local
+                | adminData =
+                    IsAdmin (disconnectClient sessionIdHash clientId adminData)
+            }
+
+
+disconnectClient : sessionId -> id -> { b | connections : SeqDict sessionId (NonemptyDict id v) } -> { b | connections : SeqDict sessionId (NonemptyDict id v) }
+disconnectClient sessionId clientId adminData =
+    { adminData
+        | connections =
+            SeqDict.update
+                sessionId
+                (Maybe.andThen
+                    (\value ->
+                        NonemptyDict.toSeqDict value
+                            |> SeqDict.remove clientId
+                            |> NonemptyDict.fromSeqDict
+                    )
+                )
+                adminData.connections
+    }
+
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser
 expandGuild guildId user =
@@ -539,6 +568,9 @@ update navigationKey time adminData localState msg model =
 
         PressedShowHiddenLogs show ->
             ( { model | showHiddenLogs = show }, Command.none, NoOutMsg )
+
+        PressedDisconnectClient sessionIdHash clientId ->
+            ( model, Command.none, DisconnectClient sessionIdHash clientId |> AdminChange )
 
         PressedCollapseSection section2 ->
             ( model, Command.none, CollapseSection section2 |> AdminChange )
@@ -1229,6 +1261,9 @@ pendingChangesText change =
         UnhideLog logIndex ->
             "Unhid log " ++ Id.toString logIndex
 
+        DisconnectClient sessionIdHash clientId ->
+            "Disconnect client"
+
 
 view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
 view isMobile2 version local adminData user model =
@@ -1259,9 +1294,56 @@ view isMobile2 version local adminData user model =
             , discordUsersSection user adminData
             , logSection isMobile2 local.localUser.timezone user adminData model
             , apiKeysSection local user adminData model
+            , connectionsSection local.localUser.timezone user adminData
             , exportSection user model
             ]
         )
+
+
+connectionsSection : Time.Zone -> BackendUser -> AdminData -> Element Msg
+connectionsSection timezone user adminData =
+    section
+        8
+        user.expandedSections
+        ConnectionsSection
+        [ if SeqDict.isEmpty adminData.connections then
+            Ui.text "No connections"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( sessionIdHash, clients ) ->
+                        Ui.column
+                            [ Ui.spacing 2 ]
+                            [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
+                            , Ui.column
+                                [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
+                                (List.map
+                                    (\( clientId, lastRequest ) ->
+                                        Ui.row
+                                            [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
+                                            [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
+                                            , (case lastRequest of
+                                                LastRequest time ->
+                                                    Ui.text ("Last request: " ++ MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone)
+
+                                                NoRequestsMade ->
+                                                    Ui.text "No requests made"
+                                              )
+                                                |> Ui.el [ Ui.alignRight, Ui.width Ui.shrink ]
+                                            , MyUi.deleteButton
+                                                (Dom.id ("admin_disconnectClient_" ++ Lamdera.clientIdToString clientId))
+                                                (PressedDisconnectClient sessionIdHash clientId)
+                                            ]
+                                    )
+                                    (NonemptyDict.toList clients)
+                                )
+                            ]
+                    )
+                    (SeqDict.toList adminData.connections)
+                )
+        ]
 
 
 exportSection : BackendUser -> Model -> Element Msg
@@ -1755,21 +1837,23 @@ discordDmChannelsSection user adminData =
 
                             userThatCanReload : Maybe (Discord.Id Discord.UserId)
                             userThatCanReload =
-                                SeqSet.intersect
-                                    (SeqDict.filter
-                                        (\_ discordUser ->
-                                            case discordUser of
-                                                FullData_ForAdmin _ ->
-                                                    True
+                                NonemptyDict.keys channel.members
+                                    |> List.Nonempty.toList
+                                    |> SeqSet.fromList
+                                    |> SeqSet.intersect
+                                        (SeqDict.filter
+                                            (\_ discordUser ->
+                                                case discordUser of
+                                                    FullData_ForAdmin _ ->
+                                                        True
 
-                                                _ ->
-                                                    False
+                                                    _ ->
+                                                        False
+                                            )
+                                            adminData.discordUsers
+                                            |> SeqDict.keys
+                                            |> SeqSet.fromList
                                         )
-                                        adminData.discordUsers
-                                        |> SeqDict.keys
-                                        |> SeqSet.fromList
-                                    )
-                                    (NonemptySet.toSeqSet channel.members)
                                     |> SeqSet.toList
                                     |> List.head
                         in
@@ -1790,9 +1874,9 @@ discordDmChannelsSection user adminData =
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ Ui.text "Members:"
-                                , NonemptySet.toList channel.members
+                                , NonemptyDict.toList channel.members
                                     |> List.map
-                                        (\discordUserId ->
+                                        (\( discordUserId, _ ) ->
                                             case SeqDict.get discordUserId adminData.discordUsers of
                                                 Just discordUser ->
                                                     discordUserLabel discordUser

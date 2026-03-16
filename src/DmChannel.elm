@@ -17,12 +17,14 @@ module DmChannel exposing
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
+    , userIdsFromChannelId
     )
 
 import Array exposing (Array)
 import Discord
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -42,7 +44,7 @@ type alias DiscordDmChannel =
     { messages : Array (Message ChannelMessageId (Discord.Id Discord.UserId))
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id ChannelMessageId)
-    , members : NonemptySet (Discord.Id Discord.UserId)
+    , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     }
 
 
@@ -50,7 +52,7 @@ type alias DiscordFrontendDmChannel =
     { messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
-    , members : NonemptySet (Discord.Id Discord.UserId)
+    , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     }
 
 
@@ -168,6 +170,11 @@ setArray id message array =
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
 channelIdFromUserIds (Id userIdA) (Id userIdB) =
     DmChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
+
+
+userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )
+userIdsFromChannelId (DmChannelId userIdA userIdB) =
+    ( userIdA, userIdB )
 
 
 otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)

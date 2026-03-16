@@ -29,6 +29,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MyUi
+import NonemptyDict
 import NonemptySet
 import PersonName exposing (PersonName)
 import RichText
@@ -631,7 +632,7 @@ discordUserDropdownList guildOrDmId local =
         DiscordGuildOrDmId_Dm data ->
             case SeqDict.get data.channelId local.discordDmChannels of
                 Just channel ->
-                    NonemptySet.toList channel.members
+                    NonemptyDict.keys channel.members |> List.Nonempty.toList
 
                 Nothing ->
                     []

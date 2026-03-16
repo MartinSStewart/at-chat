@@ -14,10 +14,12 @@ import NonemptyDict exposing (NonemptyDict)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Events
+import Url exposing (Url)
 
 
 type MessageViewMsg
     = MessageView_PressedSpoiler Int
+    | MessageView_PressedNonWhitelistLink Url
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
@@ -30,12 +32,16 @@ type MessageViewMsg
     | MessageViewMsg_PressedReply
     | MessageViewMsg_PressedShowFullMenu Bool (Coord CssPixels)
     | MessageView_PressedViewThreadLink
+    | MessageView_NoOp
 
 
 isPressMsg : MessageViewMsg -> Bool
 isPressMsg msg =
     case msg of
         MessageView_PressedSpoiler _ ->
+            True
+
+        MessageView_PressedNonWhitelistLink _ ->
             True
 
         MessageView_MouseEnteredMessage ->
@@ -73,6 +79,9 @@ isPressMsg msg =
 
         MessageView_PressedViewThreadLink ->
             True
+
+        MessageView_NoOp ->
+            False
 
 
 miniView : Bool -> Bool -> Element MessageViewMsg

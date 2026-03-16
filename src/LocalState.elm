@@ -20,14 +20,17 @@ module LocalState exposing
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
+    , LastRequest(..)
     , LoadingDiscordChannel(..)
     , LoadingDiscordChannelStep(..)
     , LocalState
     , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
+    , addEmbedBackend
+    , addEmbedFrontend
     , addInvite
-    , addMember
+    , addMemberBackend
     , addMemberFrontend
     , addReactionEmoji
     , addReactionEmojiFrontend
@@ -106,6 +109,7 @@ import ChannelName exposing (ChannelName)
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -121,7 +125,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
-import RichText exposing (RichText)
+import RichText exposing (EmbedData, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -431,7 +435,13 @@ type alias AdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
+    , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     }
+
+
+type LastRequest
+    = NoRequestsMade
+    | LastRequest Time.Posix
 
 
 type LoadingDiscordChannel messages
@@ -547,7 +557,7 @@ loadingDiscordChannelMap mapFunc channel =
 
 
 type alias AdminData_DiscordDmChannel =
-    { members : NonemptySet (Discord.Id Discord.UserId)
+    { members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     , messageCount : Int
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
     }
@@ -667,20 +677,29 @@ getDiscordUser userId localUser =
 createThreadMessageBackend :
     Id ChannelMessageId
     -> Message ThreadMessageId (Id UserId)
-    -> BackendChannel
-    -> BackendChannel
+    ->
+        { d
+            | messages : Array (Message messageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
+        }
+    ->
+        ( Id ThreadMessageId
+        , { d
+            | messages : Array (Message messageId (Id UserId))
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
+          }
+        )
 createThreadMessageBackend threadId message channel =
-    { channel
-        | threads =
-            SeqDict.update
-                threadId
-                (\maybe ->
-                    Maybe.withDefault Thread.backendInit maybe
-                        |> createMessageBackend message
-                        |> Just
-                )
-                channel.threads
-    }
+    let
+        thread =
+            SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.backendInit
+
+        ( messageId, thread2 ) =
+            createMessageBackend message thread
+    in
+    ( messageId, { channel | threads = SeqDict.insert threadId thread2 channel.threads } )
 
 
 createChannelMessageBackend :
@@ -691,10 +710,12 @@ createChannelMessageBackend :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
         }
     ->
-        { d
+        ( Id ChannelMessageId
+        , { d
             | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-        }
+          }
+        )
 createChannelMessageBackend message channel =
     createMessageBackend message channel
 
@@ -707,12 +728,15 @@ createMessageBackend :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
     ->
-        { d
+        ( Id messageId
+        , { d
             | messages : Array (Message messageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
-        }
+          }
+        )
 createMessageBackend message channel =
-    { channel
+    ( Array.length channel.messages |> Id.fromInt
+    , { channel
         | messages = Array.push message channel.messages
         , lastTypedAt =
             case message of
@@ -724,7 +748,8 @@ createMessageBackend message channel =
 
                 DeletedMessage _ ->
                     channel.lastTypedAt
-    }
+      }
+    )
 
 
 type DiscordMessageAlreadyExists
@@ -766,7 +791,27 @@ createDiscordDmChannelMessageBackend :
     -> DiscordDmChannel
     -> Result DiscordMessageAlreadyExists DiscordDmChannel
 createDiscordDmChannelMessageBackend messageId message channel =
-    createDiscordMessageBackend messageId message channel
+    case createDiscordMessageBackend messageId message channel of
+        Ok channel2 ->
+            case message of
+                UserTextMessage message2 ->
+                    { channel2
+                        | members =
+                            NonemptyDict.updateIfExists
+                                message2.createdBy
+                                (\a -> { a | messagesSent = a.messagesSent + 1 })
+                                channel2.members
+                    }
+                        |> Ok
+
+                UserJoinedMessage posix userId seqDict ->
+                    Ok channel2
+
+                DeletedMessage posix ->
+                    Ok channel2
+
+        Err error ->
+            Err error
 
 
 createDiscordMessageBackend :
@@ -1276,8 +1321,8 @@ addInvite inviteId userId time guild =
     { guild | invites = SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites }
 
 
-addMember : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
-addMember time userId guild =
+addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
+addMemberBackend time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
         Err ()
 
@@ -1287,7 +1332,10 @@ addMember time userId guild =
             , channels =
                 SeqDict.updateIfExists
                     (announcementChannel guild)
-                    (createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty))
+                    (\channel ->
+                        createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty) channel
+                            |> Tuple.second
+                    )
                     guild.channels
         }
             |> Ok
@@ -1988,6 +2036,36 @@ getDiscordGuildAndChannel guildId channelId local =
             Nothing
 
 
+addEmbedBackend :
+    Id messageId
+    -> ( Int, Result e EmbedData )
+    -> { a | messages : Array (Message messageId userId) }
+    -> { a | messages : Array (Message messageId userId) }
+addEmbedBackend messageId embed channel =
+    { channel | messages = updateArray messageId (Message.addEmbed embed) channel.messages }
+
+
+addEmbedFrontend :
+    Id messageId
+    -> ( Int, Result e EmbedData )
+    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : Array (MessageState messageId userId) }
+addEmbedFrontend messageId embed channel =
+    { channel
+        | messages =
+            updateArray messageId
+                (\message ->
+                    case message of
+                        MessageLoaded message2 ->
+                            Message.addEmbed embed message2 |> MessageLoaded
+
+                        MessageUnloaded ->
+                            message
+                )
+                channel.messages
+    }
+
+
 usersMentionedOrRepliedToBackend :
     ThreadRouteWithMaybeMessage
     -> Nonempty (RichText userId)
@@ -2148,23 +2226,14 @@ canSendDiscordMessage local guildOrDmId =
                             Just channel ->
                                 let
                                     messagesSent =
-                                        Array.foldl
-                                            (\message count ->
-                                                case message of
-                                                    MessageLoaded (UserTextMessage message2) ->
-                                                        if message2.createdBy == data.currentUserId then
-                                                            count + 1
+                                        case NonemptyDict.get data.currentUserId channel.members of
+                                            Just member ->
+                                                member.messagesSent
 
-                                                        else
-                                                            count
-
-                                                    _ ->
-                                                        count
-                                            )
-                                            0
-                                            channel.messages
+                                            Nothing ->
+                                                0
                                 in
-                                if messagesSent > 4 then
+                                if messagesSent >= 4 then
                                     Ok ()
 
                                 else

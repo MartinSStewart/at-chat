@@ -12,7 +12,6 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
     , InitialLoadRequest(..)
-    , LastRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -66,7 +65,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -82,7 +81,7 @@ import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
-import RichText exposing (RichText)
+import RichText exposing (Domain, EmbedData, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -188,6 +187,7 @@ type alias LoggedIn2 =
     , channelScrollPosition : ScrollPosition
     , textEditor : TextEditor.Model
     , profilePictureEditor : ImageEditor.Model
+    , externalLinkWarning : Maybe Url
     }
 
 
@@ -307,11 +307,6 @@ type alias DiscordAttachmentData =
 
 type alias BackendFileData =
     { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
-
-
-type LastRequest
-    = NoRequestsMade
-    | LastRequest Time.Posix
 
 
 type LoginTokenData
@@ -461,6 +456,9 @@ type FrontendMsg
         }
     | TypedDiscordLinkBookmarklet
     | GotVersionNumber (Result Http.Error Int)
+    | PressedCloseExternalLinkWarning
+    | PressedAddDomainToWhitelist Bool
+    | PressedRemoveDomainFromWhitelist Domain
 
 
 type ScrollPosition
@@ -570,6 +568,8 @@ type BackendMsg
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
+    | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
+    | GotDmMessageEmbed DmChannelId ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
 
 
 type LoginResult
@@ -671,7 +671,7 @@ type ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName
-    | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptySet (Discord.Id Discord.UserId))
+    | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int })
     | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone
         (Discord.Id Discord.UserId)
@@ -686,6 +686,8 @@ type ServerChange
     | Server_LoadingDiscordChannelChanged (Discord.Id Discord.UserId) (Maybe (LoadingDiscordChannel Int))
     | Server_LoadAdminData InitAdminData
     | Server_NewLog Time.Posix Log
+    | Server_GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result () EmbedData )
+    | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Int, Result () EmbedData )
 
 
 type LocalChange
@@ -720,4 +722,5 @@ type LocalChange
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
-    | LinkDiscordAcknowledgementIsChecked Bool
+    | Local_LinkDiscordAcknowledgementIsChecked Bool
+    | Local_SetDomainWhitelist Bool Domain
