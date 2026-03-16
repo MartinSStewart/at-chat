@@ -77,8 +77,6 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         String::from("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
 
     let info = Webpage::from_url(&url, options).expect("Could not read from URL");
-    println!("Start");
-    println!("{:?}\n", info.html.opengraph);
 
     let info2 = match (info.html.meta.len(), info.html.meta.get("refresh")) {
         (1, Some(refresh)) => {
@@ -86,7 +84,7 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
 
             let info2 = Webpage::from_url(&redirect_url, WebpageOptions::default())
                 .expect("Could not read from URL");
-            println!("{:?}\n", info2.html.opengraph);
+
             info2
         }
         _ => info,
