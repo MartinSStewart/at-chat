@@ -513,7 +513,30 @@ updateLoaded msg model =
                     )
 
                 External url ->
-                    ( model, BrowserNavigation.load url )
+                    ( case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            { model
+                                | loginStatus =
+                                    LoggedIn
+                                        { loggedIn
+                                            | externalLinkWarning =
+                                                case loggedIn.externalLinkWarning of
+                                                    Just warningUrl ->
+                                                        if Url.toString warningUrl == url then
+                                                            Nothing
+
+                                                        else
+                                                            loggedIn.externalLinkWarning
+
+                                                    Nothing ->
+                                                        loggedIn.externalLinkWarning
+                                        }
+                            }
+
+                        NotLoggedIn _ ->
+                            model
+                    , BrowserNavigation.load url
+                    )
 
         UrlChanged url ->
             FrontendExtra.routeRequest (Just model.route) (Route.decode url) model
