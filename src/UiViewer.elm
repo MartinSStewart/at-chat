@@ -15,6 +15,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log exposing (Log)
+import MyUi
 import Postmark
 import RichText exposing (Domain, Embed(..))
 import SeqDict
@@ -30,39 +31,23 @@ import Url exposing (Protocol(..))
 main : Html ()
 main =
     Ui.layout
-        []
+        [ Ui.Font.color MyUi.font1, Ui.background MyUi.background1 ]
         (Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ Ui.column
-                [ Ui.background (Ui.rgb 255 255 255) ]
+                [ Ui.background MyUi.background3 ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
                 , Ui.html loginEmail
                 ]
             , Ui.column
-                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Log entries")
                 , logExamples
                 ]
             , Ui.column
-                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
-                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Non-whitelisted embeds")
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
-                ]
-            , Ui.column
-                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
-                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Non-whitelisted embeds")
-                , embedExamples
-                    (SeqSet.fromList
-                        [ RichText.urlToDomain
-                            { protocol = Https
-                            , host = "cool-link.com"
-                            , port_ = Nothing
-                            , path = ""
-                            , query = Nothing
-                            , fragment = Nothing
-                            }
-                        ]
-                    )
                 ]
             ]
         )
@@ -172,33 +157,41 @@ embedExamples whitelistedDomains =
 
         url : String
         url =
-            "https://cool-link.com/verycool/path/subpath/more/?blah=123#title-page"
+            "https://ascii-collab.app/verycool/path/subpath/more/?blah=123#title-page"
+
+        shortUrl : String
+        shortUrl =
+            "https://town-collab.app/"
     in
     Ui.column
         [ Ui.spacing 24 ]
-        [ message (NonemptyString 'C' ("heck out this cool link! " ++ url)) [ EmbedLoading ]
+        [ message (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?")) [ EmbedLoading ]
         , message
-            (NonemptyString 'C' ("heck out this cool link! " ++ url))
+            (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
             [ EmbedLoaded
                 { title = Nothing
                 , image = Nothing
-                , content = "Content of this embedded link"
+                , content = Just "Content of this embedded link"
                 , createdAt = Nothing
                 , favicon = Nothing
                 }
             ]
         , message
-            (NonemptyString 'C' ("heck out this cool link! " ++ url))
+            (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
             [ EmbedLoaded
                 { title = Just "Title of this embed"
                 , image = Just "/android-chrome-512x512.png"
-                , content = "Content of this embedded link"
+                , content = Just "Content of this embedded link"
                 , createdAt = Just (Time.millisToPosix 0)
                 , favicon = Just "/favicon-32x32.png"
                 }
             ]
         , message
-            (NonemptyString 'C' ("heck out this cool link! " ++ url))
-            [ EmbedFailedToLoad
+            (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
+            [ EmbedLoaded RichText.emptyEmbed
+            ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! " ++ shortUrl ++ " Cool huh?"))
+            [ EmbedLoaded RichText.emptyEmbed
             ]
         ]

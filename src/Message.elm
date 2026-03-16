@@ -91,7 +91,7 @@ addEmbed ( embedIndex, result ) message =
                                     EmbedLoaded embed
 
                                 Err _ ->
-                                    EmbedFailedToLoad
+                                    EmbedLoaded RichText.emptyEmbed
                             )
                             message2.embeds
                 }
@@ -109,7 +109,7 @@ decodeEmbedData =
         (\dict ->
             { title = Dict.get "og:title" dict
             , image = Dict.get "og:image" dict
-            , content = Dict.get "og:description" dict |> Maybe.withDefault ""
+            , content = Dict.get "og:description" dict
             , createdAt =
                 case Dict.get "article:published_time" dict of
                     Just time ->
@@ -117,7 +117,6 @@ decodeEmbedData =
 
                     Nothing ->
                         Nothing
-            , favicon = Dict.get "og:logo" dict
             }
         )
         (Json.Decode.dict Json.Decode.string)

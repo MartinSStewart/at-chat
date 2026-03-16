@@ -10,6 +10,7 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , domainToString
+    , emptyEmbed
     , fromDiscord
     , fromNonemptyString
     , fromSlack
@@ -75,15 +76,22 @@ type Language
 type Embed
     = EmbedLoading
     | EmbedLoaded EmbedData
-    | EmbedFailedToLoad
+
+
+emptyEmbed : EmbedData
+emptyEmbed =
+    { title = Nothing
+    , image = Nothing
+    , content = Nothing
+    , createdAt = Nothing
+    }
 
 
 type alias EmbedData =
     { title : Maybe String
     , image : Maybe String
-    , content : String
+    , content : Maybe String
     , createdAt : Maybe Time.Posix
-    , favicon : Maybe String
     }
 
 
@@ -1133,13 +1141,14 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                         embedLoadingView onPressLink domainWhitelist data
 
                                     Just (EmbedLoaded embed) ->
-                                        embedView onPressLink domainWhitelist data embed
+                                        if embed == emptyEmbed then
+                                            inlineEmbedView containerWidth onPressLink domainWhitelist data
 
-                                    Just EmbedFailedToLoad ->
-                                        hyperlinkView onPressLink domainWhitelist state data
+                                        else
+                                            embedView onPressLink domainWhitelist data embed
 
                                     Nothing ->
-                                        hyperlinkView onPressLink domainWhitelist state data
+                                        inlineEmbedView containerWidth onPressLink domainWhitelist data
                            ]
                     )
 
@@ -1323,21 +1332,22 @@ embedView onPressLink domainWhitelist url embed =
 
                 Nothing ->
                     Nothing
-            , if String.isEmpty embed.content then
-                Nothing
+            , case embed.content of
+                Just content ->
+                    Html.div
+                        [ Html.Attributes.style "font-size" "13px"
+                        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+                        , Html.Attributes.style "overflow" "hidden"
+                        , Html.Attributes.style "display" "-webkit-box"
+                        , Html.Attributes.style "-webkit-line-clamp" "3"
+                        , Html.Attributes.style "-webkit-box-orient" "vertical"
+                        , Html.Attributes.style "white-space" "pre-wrap"
+                        ]
+                        [ Html.text (String.left 300 content) ]
+                        |> Just
 
-              else
-                Html.div
-                    [ Html.Attributes.style "font-size" "13px"
-                    , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
-                    , Html.Attributes.style "overflow" "hidden"
-                    , Html.Attributes.style "display" "-webkit-box"
-                    , Html.Attributes.style "-webkit-line-clamp" "3"
-                    , Html.Attributes.style "-webkit-box-orient" "vertical"
-                    , Html.Attributes.style "white-space" "pre-wrap"
-                    ]
-                    [ Html.text (String.left 300 embed.content) ]
-                    |> Just
+                Nothing ->
+                    Nothing
             , case embed.image of
                 Just image ->
                     Html.img
@@ -1365,7 +1375,7 @@ embedView onPressLink domainWhitelist url embed =
 
                 Nothing ->
                     Nothing
-            , smallHyperlink onPressLink domainWhitelist embed.favicon url |> Just
+            , smallHyperlink onPressLink domainWhitelist url |> Just
             ]
         )
 
@@ -1396,12 +1406,17 @@ embedLoadingView onPressLink domainWhitelist url =
             , Html.Attributes.style "border-radius" "4px"
             ]
             []
-        , smallHyperlink onPressLink domainWhitelist Nothing url
+        , smallHyperlink onPressLink domainWhitelist url
         ]
 
 
-smallHyperlink : (Url -> msg) -> SeqSet Domain -> Maybe String -> Url -> Html msg
-smallHyperlink onPressUrl domainWhitelist maybeFavicon url =
+favicon : Url -> String
+favicon url =
+    "https://icons.duckduckgo.com/ip2/" ++ url.host ++ ".ico"
+
+
+smallHyperlink : (Url -> msg) -> SeqSet Domain -> Url -> Html msg
+smallHyperlink onPressUrl domainWhitelist url =
     let
         path : String
         path =
@@ -1419,25 +1434,13 @@ smallHyperlink onPressUrl domainWhitelist maybeFavicon url =
         , Html.Attributes.style "margin-top" "4px"
         , Html.Attributes.style "text-decoration" "none"
         ]
-        [ case maybeFavicon of
-            Just favicon ->
-                Html.img
-                    [ Html.Attributes.style "width" "16px"
-                    , Html.Attributes.style "height" "16px"
-                    , Html.Attributes.style "border-radius" "2px"
-                    , Html.Attributes.src favicon
-                    ]
-                    []
-
-            Nothing ->
-                Html.div
-                    [ Html.Attributes.style "width" "16px"
-                    , Html.Attributes.style "height" "16px"
-                    , Html.Attributes.style "border-radius" "2px"
-                    , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background3)
-                    , Html.Attributes.style "flex-shrink" "0"
-                    ]
-                    []
+        [ Html.img
+            [ Html.Attributes.style "width" "16px"
+            , Html.Attributes.style "height" "16px"
+            , Html.Attributes.style "border-radius" "2px"
+            , Html.Attributes.src (favicon url)
+            ]
+            []
         , Html.span
             [ Html.Attributes.style "font-size" "14px"
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
@@ -1474,22 +1477,63 @@ formatPosix time =
     MyUi.datestamp time
 
 
-hyperlinkView : (Url -> msg) -> SeqSet Domain -> RichTextState -> Url -> Html msg
-hyperlinkView onPressUrl domainWhitelist state url =
+inlineEmbedView : Maybe Int -> (Url -> msg) -> SeqSet Domain -> Url -> Html msg
+inlineEmbedView containerWidth onPressUrl domainWhitelist url =
     let
-        urlText =
-            Url.toString url
+        path : String
+        path =
+            url.path
+                |> urlAddPrefixed "?" url.query
+                |> urlAddPrefixed "#" url.fragment
     in
     buttonOrA
         onPressUrl
         domainWhitelist
         url
-        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-        , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
-        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+        [ Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.style "max-width" (String.fromInt (min 600 (Maybe.withDefault 600 containerWidth - 4)) ++ "px")
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "overflow" "hidden"
+        , Html.Attributes.style "text-overflow" "ellipsis"
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+        , Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "transform" "translateY(4px)"
+        , Html.Attributes.style "border-left" "solid 5px rgb(80,120,200)"
+        , Html.Attributes.style "padding-right" "4px"
         ]
-        [ Html.text urlText ]
+        [ Html.img
+            [ Html.Attributes.style "width" "16px"
+            , Html.Attributes.style "height" "16px"
+            , Html.Attributes.style "border-radius" "2px"
+            , Html.Attributes.style "transform" "translateY(2px)"
+            , Html.Attributes.style "padding" "0 4px 0 4px"
+            , Html.Attributes.src (favicon url)
+            ]
+            []
+        , Html.text url.host
+        , if path == "/" then
+            Html.text ""
+
+          else
+            Html.span
+                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                ]
+                [ Html.text path ]
+        ]
+
+
+
+--buttonOrA
+--    onPressUrl
+--    domainWhitelist
+--    url
+--    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+--    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+--    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+--    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+--    ]
+--    [ Html.text urlText ]
 
 
 fileDownloadView : FileData -> Html msg

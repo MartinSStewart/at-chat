@@ -77,22 +77,24 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         String::from("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
 
     let info = Webpage::from_url(&url, options).expect("Could not read from URL");
+    println!("Start");
+    println!("{:?}\n", info.html.opengraph);
 
-    //println!("{:?}", info);
+    let info2 = match (info.html.meta.len(), info.html.meta.get("refresh")) {
+        (1, Some(refresh)) => {
+            let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
 
-    // let info2 = match info.html.meta.get("refresh") {
-    //     Some(refresh) => {
-    //         let redirect_url = refresh.split("=").skip(1).collect::<Vec<_>>().join("=");
-    //
-    //         Webpage::from_url(&redirect_url, WebpageOptions::default())
-    //             .expect("Could not read from URL")
-    //     }
-    //     None => info,
-    // };
+            let info2 = Webpage::from_url(&redirect_url, WebpageOptions::default())
+                .expect("Could not read from URL");
+            println!("{:?}\n", info2.html.opengraph);
+            info2
+        }
+        _ => info,
+    };
 
     response_with_headers(
         StatusCode::OK,
-        serde_json::to_string(&info.html.meta).unwrap(),
+        serde_json::to_string(&info2.html.meta).unwrap(),
     )
 }
 
