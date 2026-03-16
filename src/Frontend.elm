@@ -513,28 +513,7 @@ updateLoaded msg model =
                     )
 
                 External url ->
-                    ( case model.loginStatus of
-                        LoggedIn loggedIn ->
-                            { model
-                                | loginStatus =
-                                    LoggedIn
-                                        { loggedIn
-                                            | externalLinkWarning =
-                                                case loggedIn.externalLinkWarning of
-                                                    Just warningUrl ->
-                                                        if Url.toString warningUrl == url then
-                                                            Nothing
-
-                                                        else
-                                                            loggedIn.externalLinkWarning
-
-                                                    Nothing ->
-                                                        loggedIn.externalLinkWarning
-                                        }
-                            }
-
-                        NotLoggedIn _ ->
-                            model
+                    ( model
                     , BrowserNavigation.load url
                     )
 
@@ -3170,6 +3149,11 @@ updateLoaded msg model =
                         loggedIn
                         Command.none
                 )
+                model
+
+        PressedContinueToSite ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn -> ( { loggedIn | externalLinkWarning = Nothing }, Command.none ))
                 model
 
 

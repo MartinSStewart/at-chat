@@ -374,6 +374,7 @@ externalLinkWarning domainWhitelist isMobile url =
                     "Back"
                 , Ui.el
                     [ Ui.linkNewTab urlText
+                    , Ui.Events.onClick PressedContinueToSite
                     , Ui.borderColor MyUi.buttonBorder
                     , Ui.border 1
                     , Ui.background MyUi.buttonBackground
@@ -1370,6 +1371,9 @@ isPressMsg msg =
             True
 
         PressedRemoveDomainFromWhitelist _ ->
+            True
+
+        PressedContinueToSite ->
             True
 
 

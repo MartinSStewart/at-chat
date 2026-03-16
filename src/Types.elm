@@ -459,6 +459,7 @@ type FrontendMsg
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | PressedRemoveDomainFromWhitelist Domain
+    | PressedContinueToSite
 
 
 type ScrollPosition
