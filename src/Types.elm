@@ -571,6 +571,14 @@ type BackendMsg
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
     | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
     | GotDmMessageEmbed DmChannelId ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
+    | DiscordGotDataForJoinedOrCreatedGuild
+        (Discord.Id Discord.UserId)
+        (Discord.Id Discord.GuildId)
+        Time.Posix
+        (Result
+            Discord.HttpError
+            { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
+        )
 
 
 type LoginResult
@@ -689,6 +697,7 @@ type ServerChange
     | Server_NewLog Time.Posix Log
     | Server_GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result () EmbedData )
     | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Int, Result () EmbedData )
+    | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
 
 
 type LocalChange

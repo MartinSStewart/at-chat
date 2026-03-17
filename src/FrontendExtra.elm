@@ -2964,6 +2964,22 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
+                Server_DiscordGuildJoinedOrCreated guildId guild ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.update
+                                guildId
+                                (\maybe ->
+                                    case maybe of
+                                        Just _ ->
+                                            maybe
+
+                                        Nothing ->
+                                            Just guild
+                                )
+                                local.discordGuilds
+                    }
+
 
 guildSendMessage :
     Id GuildId

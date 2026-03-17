@@ -3,6 +3,7 @@ module BackendExtra exposing
     , addLogWithCmd
     , adminData
     , discordDmChannelToFrontend
+    , discordGuildToFrontend
     , discordGuildToFrontendForUser
     , getLinkedDiscordUsersAndOtherUsers
     , getLoginCode
@@ -540,33 +541,40 @@ discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
         SeqDict.member guild.owner linkedDiscordUsers
             || not (SeqDict.isEmpty (SeqDict.intersect guild.members linkedDiscordUsers))
     then
-        { name = guild.name
-        , icon = guild.icon
-        , channels =
-            SeqDict.filterMap
-                (\channelId channel ->
-                    LocalState.discordChannelToFrontend
-                        (case requestMessagesFor of
-                            Just ( channelIdB, threadRoute ) ->
-                                if channelId == channelIdB then
-                                    Just threadRoute
-
-                                else
-                                    Nothing
-
-                            _ ->
-                                Nothing
-                        )
-                        channel
-                )
-                guild.channels
-        , members = guild.members
-        , owner = guild.owner
-        }
-            |> Just
+        discordGuildToFrontend requestMessagesFor guild |> Just
 
     else
         Nothing
+
+
+discordGuildToFrontend :
+    Maybe ( Discord.Id Discord.ChannelId, ThreadRoute )
+    -> DiscordBackendGuild
+    -> DiscordFrontendGuild
+discordGuildToFrontend requestMessagesFor guild =
+    { name = guild.name
+    , icon = guild.icon
+    , channels =
+        SeqDict.filterMap
+            (\channelId channel ->
+                LocalState.discordChannelToFrontend
+                    (case requestMessagesFor of
+                        Just ( channelIdB, threadRoute ) ->
+                            if channelId == channelIdB then
+                                Just threadRoute
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+                    )
+                    channel
+            )
+            guild.channels
+    , members = guild.members
+    , owner = guild.owner
+    }
 
 
 discordDmChannelToFrontend :

@@ -1490,6 +1490,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             ( model2, Command.none )
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_JoinedOrCreatedGuild gatewayGuild ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleJoinOrCreateGuild discordUserId gatewayGuild model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1505,6 +1512,28 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
         _ ->
             ( model, Command.none )
+
+
+handleJoinOrCreateGuild :
+    Discord.Id Discord.UserId
+    -> Discord.GatewayGuild
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleJoinOrCreateGuild discordUserId gatewayGuild model =
+    ( { model | discordGuilds = addDiscordGuild gatewayGuild model.discordGuilds }
+    , getDiscordGuildData gatewayGuild
+        |> Task.map (\( _, guildData ) -> Ok guildData)
+        |> Task.onError (\error -> Err error |> Task.succeed)
+        |> Task.andThen (\result -> Task.map (Tuple.pair result) Time.now)
+        |> Task.perform
+            (\( result, time ) ->
+                DiscordGotDataForJoinedOrCreatedGuild
+                    discordUserId
+                    gatewayGuild.properties.id
+                    time
+                    result
+            )
+    )
 
 
 handleGuildMemberUpdate :
@@ -1883,38 +1912,22 @@ handleReadyData readyData model =
             Discord.userToPartialUser readyData.user :: readyData.users
     in
     ( { model
-        | discordGuilds =
-            List.foldl
-                (\data discordGuilds ->
-                    SeqDict.update
-                        data.properties.id
-                        (\maybe ->
-                            case maybe of
-                                Just guild ->
-                                    { guild
-                                        | name = GuildName.fromStringLossy data.properties.name
-                                        , owner = data.properties.ownerId
-                                    }
-                                        |> Just
-
-                                Nothing ->
-                                    { name = GuildName.fromStringLossy data.properties.name
-                                    , icon = Nothing
-                                    , channels = SeqDict.empty -- Gets filled after LinkDiscordUserStep2 is triggered
-                                    , members = SeqDict.empty -- Gets filled in via the websocket connection
-                                    , owner = data.properties.ownerId
-                                    }
-                                        |> Just
-                        )
-                        discordGuilds
-                )
-                model.discordGuilds
-                readyData.guilds
+        | discordGuilds = List.foldl addDiscordGuild model.discordGuilds readyData.guilds
         , discordUsers = List.foldl addDiscordUserData model.discordUsers discordUsers
       }
     , Command.batch
         [ getUserAvatars model.discordUsers discordUsers
-        , (List.filterMap (getDiscordGuildData model) readyData.guilds |> Task.sequence)
+        , (List.filterMap
+            (\guild ->
+                if SeqDict.member guild.properties.id model.discordGuilds then
+                    Nothing
+
+                else
+                    getDiscordGuildData guild |> Just
+            )
+            readyData.guilds
+            |> Task.sequence
+          )
             |> Task.andThen
                 (\data ->
                     Task.map
@@ -1927,6 +1940,31 @@ handleReadyData readyData model =
             |> Task.perform identity
         ]
     )
+
+
+addDiscordGuild : Discord.GatewayGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+addDiscordGuild guild discordGuilds =
+    SeqDict.update
+        guild.properties.id
+        (\maybe ->
+            case maybe of
+                Just existingGuild ->
+                    { existingGuild
+                        | name = GuildName.fromStringLossy guild.properties.name
+                        , owner = guild.properties.ownerId
+                    }
+                        |> Just
+
+                Nothing ->
+                    { name = GuildName.fromStringLossy guild.properties.name
+                    , icon = Nothing
+                    , channels = SeqDict.empty -- Gets filled after LinkDiscordUserStep2 is triggered
+                    , members = SeqDict.empty -- Gets filled in via the websocket connection
+                    , owner = guild.properties.ownerId
+                    }
+                        |> Just
+        )
+        discordGuilds
 
 
 uploadAttachmentsForMessages :
@@ -1959,51 +1997,38 @@ uploadAttachmentsForMessages model messages =
 
 
 getDiscordGuildData :
-    BackendModel
-    -> Discord.GatewayGuild
+    Discord.GatewayGuild
     ->
-        Maybe
-            (Task
-                BackendOnly
-                Discord.HttpError
-                ( Discord.Id Discord.GuildId
-                , { guild : Discord.GatewayGuild
-                  , channels :
-                        List
-                            Discord.Channel
-                  , icon : Maybe FileStatus.UploadResponse
-                  }
-                )
+        Task
+            BackendOnly
+            Discord.HttpError
+            ( Discord.Id Discord.GuildId
+            , { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
             )
-getDiscordGuildData model gatewayGuild =
-    if SeqDict.member gatewayGuild.properties.id model.discordGuilds then
-        Nothing
+getDiscordGuildData gatewayGuild =
+    Task.map
+        (\maybeIcon ->
+            ( gatewayGuild.properties.id
+            , { guild = gatewayGuild
+              , channels = gatewayGuild.channels
+              , icon = maybeIcon
+              }
+            )
+        )
+        (case gatewayGuild.properties.icon of
+            Just icon ->
+                loadImage
+                    (Discord.guildIconUrl
+                        { size = Discord.DefaultImageSize
+                        , imageType = Discord.Choice1 Discord.Png
+                        }
+                        gatewayGuild.properties.id
+                        icon
+                    )
 
-    else
-        Task.map
-            (\maybeIcon ->
-                ( gatewayGuild.properties.id
-                , { guild = gatewayGuild
-                  , channels = gatewayGuild.channels
-                  , icon = maybeIcon
-                  }
-                )
-            )
-            (case gatewayGuild.properties.icon of
-                Just icon ->
-                    loadImage
-                        (Discord.guildIconUrl
-                            { size = Discord.DefaultImageSize
-                            , imageType = Discord.Choice1 Discord.Png
-                            }
-                            gatewayGuild.properties.id
-                            icon
-                        )
-
-                Nothing ->
-                    Task.succeed Nothing
-            )
-            |> Just
+            Nothing ->
+                Task.succeed Nothing
+        )
 
 
 

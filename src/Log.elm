@@ -36,6 +36,7 @@ type Log
     | FailedToSendDiscordDmMessage (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) Discord.HttpError
     | FailedToGetDiscordUserAvatars Discord.HttpError
     | FailedToParseDiscordWebsocket (Maybe String) String
+    | FailedToGetDataForJoinedOrCreatedDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -93,6 +94,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToParseDiscordWebsocket _ _ ->
+            Nothing
+
+        FailedToGetDataForJoinedOrCreatedDiscordGuild id _ _ ->
             Nothing
 
 
@@ -400,6 +404,15 @@ logContent onPressCopy log =
                             "Parsing Discord websocket failed"
                     )
                 , MyUi.errorBox (Dom.id "admin_FailedToParseDiscordWebsocket") onPressCopy jsonError
+                ]
+
+        FailedToGetDataForJoinedOrCreatedDiscordGuild discordUserId guildId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord data for guild that was created or joined failed"
+                , fieldRow "User" (Ui.text (Discord.idToString discordUserId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
 

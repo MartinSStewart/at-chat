@@ -610,49 +610,10 @@ update msg model =
                                                 model.discordUsers
                                         , discordGuilds =
                                             SeqDict.foldl
-                                                (\guildId data discordGuilds ->
+                                                (\guildId guildData2 discordGuilds ->
                                                     SeqDict.updateIfExists
                                                         guildId
-                                                        (\guild ->
-                                                            { name = GuildName.fromStringLossy data.guild.properties.name
-                                                            , icon = Maybe.map .fileHash data.icon
-                                                            , channels =
-                                                                List.foldl
-                                                                    (\channel channels ->
-                                                                        SeqDict.update
-                                                                            channel.id
-                                                                            (\maybe ->
-                                                                                case maybe of
-                                                                                    Just _ ->
-                                                                                        maybe
-
-                                                                                    Nothing ->
-                                                                                        DiscordSync.addDiscordChannel channel
-                                                                            )
-                                                                            channels
-                                                                    )
-                                                                    guild.channels
-                                                                    data.channels
-                                                            , members =
-                                                                if discordUserId == data.guild.properties.ownerId then
-                                                                    guild.members
-
-                                                                else
-                                                                    -- Make sure the current user is included in the guild they loaded
-                                                                    SeqDict.update
-                                                                        discordUserId
-                                                                        (\maybe ->
-                                                                            case maybe of
-                                                                                Just _ ->
-                                                                                    maybe
-
-                                                                                Nothing ->
-                                                                                    Just { joinedAt = Nothing }
-                                                                        )
-                                                                        guild.members
-                                                            , owner = data.guild.properties.ownerId
-                                                            }
-                                                        )
+                                                        (addDiscordGuildData discordUserId guildData2)
                                                         discordGuilds
                                                 )
                                                 model.discordGuilds
@@ -1148,6 +1109,84 @@ update msg model =
 
                 Nothing ->
                     ( model, Command.none )
+
+        DiscordGotDataForJoinedOrCreatedGuild discordUserId guildId time result ->
+            case ( result, SeqDict.get guildId model.discordGuilds ) of
+                ( Ok guildData, Just guild ) ->
+                    let
+                        guild2 : DiscordBackendGuild
+                        guild2 =
+                            addDiscordGuildData discordUserId guildData guild
+                    in
+                    ( { model | discordGuilds = SeqDict.insert guildId guild2 model.discordGuilds }
+                    , case SeqDict.get discordUserId model.discordUsers of
+                        Just (FullData discordUser) ->
+                            Broadcast.toUser
+                                Nothing
+                                Nothing
+                                discordUser.linkedTo
+                                (Server_DiscordGuildJoinedOrCreated
+                                    guildId
+                                    (BackendExtra.discordGuildToFrontend Nothing guild)
+                                    |> ServerChange
+                                )
+                                model
+
+                        _ ->
+                            Command.none
+                    )
+
+                ( Err error, _ ) ->
+                    BackendExtra.addLog time (Log.FailedToGetDataForJoinedOrCreatedDiscordGuild discordUserId guildId error) model
+
+                ( _, Nothing ) ->
+                    ( model, Command.none )
+
+
+addDiscordGuildData :
+    Discord.Id Discord.UserId
+    -> { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
+    -> DiscordBackendGuild
+    -> DiscordBackendGuild
+addDiscordGuildData discordUserId data guild =
+    { name = GuildName.fromStringLossy data.guild.properties.name
+    , icon = Maybe.map .fileHash data.icon
+    , channels =
+        List.foldl
+            (\channel channels ->
+                SeqDict.update
+                    channel.id
+                    (\maybe ->
+                        case maybe of
+                            Just _ ->
+                                maybe
+
+                            Nothing ->
+                                DiscordSync.addDiscordChannel channel
+                    )
+                    channels
+            )
+            guild.channels
+            data.channels
+    , members =
+        if discordUserId == data.guild.properties.ownerId then
+            guild.members
+
+        else
+            -- Make sure the current user is included in the guild they loaded
+            SeqDict.update
+                discordUserId
+                (\maybe ->
+                    case maybe of
+                        Just _ ->
+                            maybe
+
+                        Nothing ->
+                            Just { joinedAt = Nothing }
+                )
+                guild.members
+    , owner = data.guild.properties.ownerId
+    }
 
 
 attachmentsUploadedHelper :
