@@ -1,6 +1,10 @@
-module ChannelDescription exposing (ChannelDescription, empty, fromStringLossy)
+module ChannelDescription exposing (ChannelDescription(..), empty, fromStringLossy)
+
+{-| -}
 
 
+{-| OpaqueVariants
+-}
 type ChannelDescription
     = ChannelDescription String
 
