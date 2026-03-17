@@ -1,0 +1,50 @@
+name: Check master
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  Check:
+    name: Build, test, and end-to-end test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Cache node_modules
+        id: cache-node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ hashFiles('yarn.lock') }}
+
+      - name: Cache ~/.elm
+        uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: elm-${{ hashFiles('elm.json', 'review/elm.json') }}
+
+      - name: install yarn
+        run: npm install -g yarn
+
+      - name: yarn
+        if: steps.cache-node_modules.outputs.cache-hit != 'true'
+        run: yarn --frozen-lockfile
+
+      - name: Fetch lamdera-1.3.2
+        run: |
+          curl https://static.lamdera.com/bin/lamdera-1.3.2-linux-x86_64 > node_modules/.bin/lamdera
+          chmod +x node_modules/.bin/lamdera
+
+      - name: Build project
+        run: npm run make
+
+      - name: Tests
+        run: npm run tests
+
+      - name: End-to-end tests
+        run: npm run end-to-end-tests
