@@ -17,6 +17,15 @@ users =
     SeqDict.fromList [ ( Id.fromInt 123, { name = Unsafe.personName "a" } ) ]
 
 
+unsafeUrl url =
+    case Url.fromString url of
+        Just url2 ->
+            url2
+
+        Nothing ->
+            Debug.todo "Invalid url"
+
+
 test : Test
 test =
     Test.describe
@@ -120,7 +129,7 @@ test =
                     |> Expect.equal
                         (Nonempty
                             (NormalText 'G' "o to ")
-                            [ Hyperlink Https "abc.com/"
+                            [ Hyperlink (unsafeUrl "https://abc.com/")
                             , NormalText '.' " Click on the sign up."
                             ]
                         )
@@ -130,7 +139,7 @@ test =
                     |> Expect.equal
                         (Nonempty
                             (NormalText 'G' "o to ")
-                            [ Spoiler (Nonempty (Hyperlink Https "abc.com/") [])
+                            [ Spoiler (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [])
                             , NormalText '.' " Click on the sign up."
                             ]
                         )

@@ -43,7 +43,7 @@ routeFuzzer : Fuzzer Route
 routeFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant HomePageRoute
-        , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe Fuzz.int))
+        , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe idFuzzer))
         , Fuzz.constant AiChatRoute
         , Fuzz.map2 GuildRoute idFuzzer channelRouteFuzzer
         , Fuzz.map2 DmRoute idFuzzer threadRouteFuzzer
