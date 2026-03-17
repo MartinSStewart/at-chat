@@ -14,6 +14,7 @@ when inside the directory containing this file.
 import BackendOnly
 import Derive
 import Docs.ReviewAtDocs
+import EncoderDecoderNaming
 import ExposeAllRecordFields
 import NoBrokenParserFunctions
 import NoConfusingPrefixOperator
@@ -118,6 +119,7 @@ config =
             , "src/LamderaRPC.elm"
             ]
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
+    , EncoderDecoderNaming.rule |> defaultIgnore
     , NoBrokenParserFunctions.rule
     , BackendOnly.rule
         { functions =
