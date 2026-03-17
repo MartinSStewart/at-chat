@@ -30,7 +30,6 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
-import NonemptySet
 import PersonName exposing (PersonName)
 import RichText
 import SeqDict exposing (SeqDict)

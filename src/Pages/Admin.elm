@@ -54,7 +54,6 @@ import Log
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
@@ -122,7 +121,7 @@ type Msg
     | PressedHideLog (Id ItemId)
     | PressedUnhideLog (Id ItemId)
     | PressedShowHiddenLogs Bool
-    | PressedDisconnectClient SessionIdHash.SessionIdHash ClientId
+    | PressedDisconnectClient SessionIdHash ClientId
 
 
 type ToBackend
@@ -221,7 +220,7 @@ type AdminChange
     | CollapseDiscordGuild (Discord.Id Discord.GuildId)
     | HideLog (Id ItemId)
     | UnhideLog (Id ItemId)
-    | DisconnectClient SessionIdHash.SessionIdHash ClientId
+    | DisconnectClient SessionIdHash ClientId
 
 
 type alias EditedBackendUser =
@@ -1261,7 +1260,7 @@ pendingChangesText change =
         UnhideLog logIndex ->
             "Unhid log " ++ Id.toString logIndex
 
-        DisconnectClient sessionIdHash clientId ->
+        DisconnectClient _ _ ->
             "Disconnect client"
 
 

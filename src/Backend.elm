@@ -41,7 +41,6 @@ import Log
 import LoginForm
 import Message exposing (Message(..))
 import NonemptyDict
-import NonemptySet
 import OneToOne
 import Pages.Admin
 import Pagination
@@ -941,10 +940,10 @@ update msg model =
                                                                         (\a -> { a | messagesSent = a.messagesSent + 1 })
                                                                         members
 
-                                                                UserJoinedMessage posix userId seqDict ->
+                                                                UserJoinedMessage _ _ _ ->
                                                                     members
 
-                                                                DeletedMessage posix ->
+                                                                DeletedMessage _ ->
                                                                     members
                                                         )
                                                         channel.members

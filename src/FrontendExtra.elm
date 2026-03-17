@@ -15,7 +15,6 @@ import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (Emoji)
-import Env
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events

@@ -25,7 +25,6 @@ import Time
 import Ui
 import Ui.Font
 import Unsafe
-import Url exposing (Protocol(..))
 
 
 main : Html ()

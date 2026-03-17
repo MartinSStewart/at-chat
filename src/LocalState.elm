@@ -121,7 +121,6 @@ import Log exposing (Log)
 import Maybe.Extra
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
@@ -804,10 +803,10 @@ createDiscordDmChannelMessageBackend messageId message channel =
                     }
                         |> Ok
 
-                UserJoinedMessage posix userId seqDict ->
+                UserJoinedMessage _ _ _ ->
                     Ok channel2
 
-                DeletedMessage posix ->
+                DeletedMessage _ ->
                     Ok channel2
 
         Err error ->
