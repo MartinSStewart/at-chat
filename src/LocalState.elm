@@ -767,7 +767,7 @@ createDiscordChannelMessageBackend :
     Discord.Id Discord.MessageId
     -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> DiscordBackendChannel
-    -> Result DiscordMessageAlreadyExists DiscordBackendChannel
+    -> Result DiscordMessageAlreadyExists ( Id ChannelMessageId, DiscordBackendChannel )
 createDiscordChannelMessageBackend messageId message channel =
     createDiscordMessageBackend messageId message channel
 
@@ -777,7 +777,7 @@ createDiscordThreadMessageBackend :
     -> Id ChannelMessageId
     -> Message ThreadMessageId (Discord.Id Discord.UserId)
     -> DiscordBackendChannel
-    -> Result DiscordMessageAlreadyExists DiscordBackendChannel
+    -> Result DiscordMessageAlreadyExists ( Id ThreadMessageId, DiscordBackendChannel )
 createDiscordThreadMessageBackend messageId threadId message channel =
     let
         thread : DiscordBackendThread
@@ -785,8 +785,8 @@ createDiscordThreadMessageBackend messageId threadId message channel =
             SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.discordBackendInit
     in
     case createDiscordMessageBackend messageId message thread of
-        Ok thread2 ->
-            Ok { channel | threads = SeqDict.insert threadId thread2 channel.threads }
+        Ok ( messageId2, thread2 ) ->
+            Ok ( messageId2, { channel | threads = SeqDict.insert threadId thread2 channel.threads } )
 
         Err err ->
             Err err
@@ -796,26 +796,28 @@ createDiscordDmChannelMessageBackend :
     Discord.Id Discord.MessageId
     -> Message ChannelMessageId (Discord.Id Discord.UserId)
     -> DiscordDmChannel
-    -> Result DiscordMessageAlreadyExists DiscordDmChannel
+    -> Result DiscordMessageAlreadyExists ( Id ChannelMessageId, DiscordDmChannel )
 createDiscordDmChannelMessageBackend messageId message channel =
     case createDiscordMessageBackend messageId message channel of
-        Ok channel2 ->
+        Ok ( messageId2, channel2 ) ->
             case message of
                 UserTextMessage message2 ->
-                    { channel2
+                    ( messageId2
+                    , { channel2
                         | members =
                             NonemptyDict.updateIfExists
                                 message2.createdBy
                                 (\a -> { a | messagesSent = a.messagesSent + 1 })
                                 channel2.members
-                    }
+                      }
+                    )
                         |> Ok
 
                 UserJoinedMessage _ _ _ ->
-                    Ok channel2
+                    Ok ( messageId2, channel2 )
 
                 DeletedMessage _ ->
-                    Ok channel2
+                    Ok ( messageId2, channel2 )
 
         Err error ->
             Err error
@@ -833,17 +835,20 @@ createDiscordMessageBackend :
     ->
         Result
             DiscordMessageAlreadyExists
-            { d
+            ( Id messageId
+            , { d
                 | messages : Array (Message messageId (Discord.Id Discord.UserId))
                 , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt messageId)
                 , linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
-            }
+              }
+            )
 createDiscordMessageBackend messageId message channel =
     if OneToOne.memberFirst messageId channel.linkedMessageIds then
         Err DiscordMessageAlreadyExists
 
     else
-        { channel
+        ( Array.length channel.messages |> Id.fromInt
+        , { channel
             | messages = Array.push message channel.messages
             , lastTypedAt =
                 case message of
@@ -857,7 +862,8 @@ createDiscordMessageBackend messageId message channel =
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
-        }
+          }
+        )
             |> Ok
 
 

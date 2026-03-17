@@ -5,8 +5,8 @@ module DiscordSync exposing
     , backendSessionIdHash
     , discordUserWebsocketMsg
     , getManyMessages
-    , handleDiscordCreateMessage
-    , handleDiscordEditMessage
+    , handleCreateMessage
+    , handleEditMessage
     , http
     , messagesAndLinks
     , reloadChannelMaxMessages
@@ -658,32 +658,39 @@ messagesAndLinks :
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
 messagesAndLinks messages discordAttachments =
-    List.indexedMap
-        (\index message ->
+    let
+        linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
+        linkedMessageIds =
+            List.indexedMap (\index message -> ( message.id, Id.fromInt index )) messages |> OneToOne.fromList
+    in
+    ( List.map
+        (\message ->
             let
                 attachments : SeqDict (Id FileId) FileData
                 attachments =
                     messageToFileData message discordAttachments
             in
-            ( UserTextMessage
-                { createdAt = message.timestamp
-                , createdBy = message.author.id
-                , content = RichText.fromDiscord message.content attachments
-                , reactions = SeqDict.empty
-                , editedAt = Nothing
-                , repliedTo = Nothing
-                , attachedFiles = attachments
-                , embeds = Array.empty
-                }
-            , ( message.id, Id.fromInt index )
-            )
+            Message.userTextMessage
+                message.timestamp
+                message.author.id
+                (RichText.fromDiscord message.content attachments)
+                (case message.referencedMessage of
+                    Discord.Referenced referenced ->
+                        OneToOne.second referenced.id linkedMessageIds
+
+                    Discord.ReferenceDeleted ->
+                        Nothing
+
+                    Discord.NoReference ->
+                        Nothing
+                )
+                attachments
+                |> Tuple.first
         )
         messages
-        |> (\list ->
-                ( List.map Tuple.first list |> Array.fromList
-                , List.map Tuple.second list |> OneToOne.fromList
-                )
-           )
+        |> Array.fromList
+    , linkedMessageIds
+    )
 
 
 addUploadResponsesToDiscordAttachments :
@@ -728,12 +735,12 @@ backendSessionIdHash =
     SessionIdHash.fromString Env.secretKey
 
 
-handleDiscordCreateMessage :
+handleCreateMessage :
     Discord.Message
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateMessage message attachments model =
+handleCreateMessage message attachments model =
     case message.type_ of
         Discord.ThreadCreated ->
             ( model, Command.none )
@@ -764,29 +771,20 @@ handleDiscordCreateMessage message attachments model =
                                     replyTo =
                                         referencedMessageToMessageId message channel
 
-                                    channel2Result : Result DiscordMessageAlreadyExists DiscordDmChannel
-                                    channel2Result =
-                                        LocalState.createDiscordDmChannelMessageBackend
-                                            message.id
-                                            (UserTextMessage
-                                                { createdAt = message.timestamp
-                                                , createdBy = message.author.id
-                                                , content = richText
-                                                , reactions = SeqDict.empty
-                                                , editedAt = Nothing
-                                                , repliedTo = replyTo
-                                                , attachedFiles = attachments
-                                                , embeds = Array.empty
-                                                }
-                                            )
-                                            channel
+                                    ( message2, embedCmds ) =
+                                        Message.userTextMessage
+                                            message.timestamp
+                                            message.author.id
+                                            richText
+                                            replyTo
+                                            attachments
 
                                     guildOrDmId : DiscordGuildOrDmId
                                     guildOrDmId =
                                         DiscordGuildOrDmId_Dm { currentUserId = message.author.id, channelId = dmChannelId }
                                 in
-                                case channel2Result of
-                                    Ok channel2 ->
+                                case LocalState.createDiscordDmChannelMessageBackend message.id message2 channel of
+                                    Ok ( messageId, channel2 ) ->
                                         let
                                             notification : Command BackendOnly toMsg BackendMsg
                                             notification =
@@ -843,6 +841,10 @@ handleDiscordCreateMessage message attachments model =
                                                         )
                                                         model
                                                     , notification
+                                                    , Command.map
+                                                        identity
+                                                        (DiscordGotDmMessageEmbed dmChannelId messageId)
+                                                        embedCmds
                                                     ]
 
                                             Nothing ->
@@ -859,6 +861,10 @@ handleDiscordCreateMessage message attachments model =
                                                         )
                                                         model
                                                     , notification
+                                                    , Command.map
+                                                        identity
+                                                        (DiscordGotDmMessageEmbed dmChannelId messageId)
+                                                        embedCmds
                                                     ]
                                         )
 
@@ -968,50 +974,62 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                             guildOrDmId =
                                 DiscordGuildOrDmId_Guild message.author.id discordGuildId channelId
 
-                            channel2 : Result DiscordMessageAlreadyExists DiscordBackendChannel
-                            channel2 =
+                            channelResult =
                                 case threadRoute of
                                     ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                        LocalState.createDiscordThreadMessageBackend
-                                            message.id
-                                            threadId
-                                            (UserTextMessage
-                                                { createdAt = message.timestamp
-                                                , createdBy = message.author.id
-                                                , content = richText
-                                                , reactions = SeqDict.empty
-                                                , editedAt = Nothing
-                                                , repliedTo = maybeReplyTo
-                                                , attachedFiles = attachments
-                                                , embeds = Array.empty
-                                                }
-                                            )
-                                            channel
+                                        let
+                                            ( message2, embedCmds ) =
+                                                Message.userTextMessage
+                                                    message.timestamp
+                                                    message.author.id
+                                                    richText
+                                                    maybeReplyTo
+                                                    attachments
+                                        in
+                                        case LocalState.createDiscordThreadMessageBackend message.id threadId message2 channel of
+                                            Ok ( messageId, channel3 ) ->
+                                                ( channel3
+                                                , Command.map
+                                                    identity
+                                                    (DiscordGotGuildMessageEmbed discordGuildId channelId (ViewThreadWithMessage threadId messageId))
+                                                    embedCmds
+                                                )
+                                                    |> Ok
+
+                                            Err DiscordMessageAlreadyExists ->
+                                                Err DiscordMessageAlreadyExists
 
                                     NoThreadWithMaybeMessage maybeReplyTo ->
-                                        LocalState.createDiscordChannelMessageBackend
-                                            message.id
-                                            (UserTextMessage
-                                                { createdAt = message.timestamp
-                                                , createdBy = message.author.id
-                                                , content = richText
-                                                , reactions = SeqDict.empty
-                                                , editedAt = Nothing
-                                                , repliedTo = maybeReplyTo
-                                                , attachedFiles = attachments
-                                                , embeds = Array.empty
-                                                }
-                                            )
-                                            channel
+                                        let
+                                            ( message2, embedCmds ) =
+                                                Message.userTextMessage
+                                                    message.timestamp
+                                                    message.author.id
+                                                    richText
+                                                    maybeReplyTo
+                                                    attachments
+                                        in
+                                        case LocalState.createDiscordChannelMessageBackend message.id message2 channel of
+                                            Ok ( messageId, channel3 ) ->
+                                                ( channel3
+                                                , Command.map
+                                                    identity
+                                                    (DiscordGotGuildMessageEmbed discordGuildId channelId (NoThreadWithMessage messageId))
+                                                    embedCmds
+                                                )
+                                                    |> Ok
+
+                                            Err DiscordMessageAlreadyExists ->
+                                                Err DiscordMessageAlreadyExists
                         in
-                        case channel2 of
-                            Ok channel3 ->
+                        case channelResult of
+                            Ok ( channel4, embedCmds ) ->
                                 ( { model
                                     | discordGuilds =
                                         SeqDict.insert
                                             discordGuildId
                                             { guild
-                                                | channels = SeqDict.insert channelId channel3 guild.channels
+                                                | channels = SeqDict.insert channelId channel4 guild.channels
                                                 , members =
                                                     SeqDict.update
                                                         message.author.id
@@ -1100,6 +1118,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                         richText
                                         (guild.owner :: SeqDict.keys guild.members)
                                         model
+                                    , embedCmds
                                     ]
                                 )
 
@@ -1206,7 +1225,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             if SeqDict.size attachments == List.length message.attachments then
                                 let
                                     ( model3, cmd2 ) =
-                                        handleDiscordCreateMessage message attachments model2
+                                        handleCreateMessage message attachments model2
                                 in
                                 ( model3, cmd2 :: cmds )
 
@@ -1241,7 +1260,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             if SeqDict.size attachments == List.length edit.attachments then
                                 let
                                     ( model3, cmd2 ) =
-                                        handleDiscordEditMessage edit attachments model2
+                                        handleEditMessage edit attachments model2
                                 in
                                 ( model3, cmd2 :: cmds )
 
@@ -1745,12 +1764,12 @@ handleTypingStarted typingStart model =
                     ( model, Command.none )
 
 
-handleDiscordEditMessage :
+handleEditMessage :
     Discord.UserMessageUpdate
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordEditMessage edit attachments model2 =
+handleEditMessage edit attachments model2 =
     case edit.guildId of
         Included guildId ->
             case SeqDict.get guildId model2.discordGuilds of

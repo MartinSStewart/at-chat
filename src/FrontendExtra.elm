@@ -2977,6 +2977,52 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
+                Server_GotDiscordGuildMessageEmbed guildId channelId threadRouteWithMessage result ->
+                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                        Just ( guild, channel ) ->
+                            { local
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    (case threadRouteWithMessage of
+                                                        NoThreadWithMessage messageId ->
+                                                            LocalState.addEmbedFrontend messageId result channel
+
+                                                        ViewThreadWithMessage threadId messageId ->
+                                                            { channel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadId
+                                                                        (LocalState.addEmbedFrontend messageId result)
+                                                                        channel.threads
+                                                            }
+                                                    )
+                                                    guild.channels
+                                        }
+                                        local.discordGuilds
+                            }
+
+                        Nothing ->
+                            local
+
+                Server_GotDiscordDmMessageEmbed channelId messageId result ->
+                    case SeqDict.get channelId local.discordDmChannels of
+                        Just channel ->
+                            { local
+                                | discordDmChannels =
+                                    SeqDict.insert
+                                        channelId
+                                        (LocalState.addEmbedFrontend messageId result channel)
+                                        local.discordDmChannels
+                            }
+
+                        Nothing ->
+                            local
+
                 Server_DiscordGuildJoinedOrCreated guildId guild ->
                     { local
                         | discordGuilds =

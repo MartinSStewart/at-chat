@@ -571,6 +571,8 @@ type BackendMsg
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
     | GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
     | GotDmMessageEmbed DmChannelId ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
+    | DiscordGotGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Int, Result Http.Error EmbedData )
+    | DiscordGotDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Int, Result Http.Error EmbedData )
     | DiscordGotDataForJoinedOrCreatedGuild
         (Discord.Id Discord.UserId)
         (Discord.Id Discord.GuildId)
@@ -697,6 +699,8 @@ type ServerChange
     | Server_NewLog Time.Posix Log
     | Server_GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result () EmbedData )
     | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Int, Result () EmbedData )
+    | Server_GotDiscordGuildMessageEmbed (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage ( Int, Result () EmbedData )
+    | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Int, Result () EmbedData )
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
 

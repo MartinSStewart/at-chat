@@ -772,14 +772,14 @@ update msg model =
                 ( attachments, discordAttachments ) =
                     attachmentsUploadedHelper model message results
             in
-            DiscordSync.handleDiscordCreateMessage message attachments { model | discordAttachments = discordAttachments }
+            DiscordSync.handleCreateMessage message attachments { model | discordAttachments = discordAttachments }
 
         DiscordMessageUpdate_AttachmentsUploaded message results ->
             let
                 ( attachments, discordAttachments ) =
                     attachmentsUploadedHelper model message results
             in
-            DiscordSync.handleDiscordEditMessage message attachments { model | discordAttachments = discordAttachments }
+            DiscordSync.handleEditMessage message attachments { model | discordAttachments = discordAttachments }
 
         ReloadedDiscordGuildChannel userIdToLoadWith guildId channelId attachments ->
             case ( LocalState.getDiscordGuildAndChannel guildId channelId model, SeqDict.get userIdToLoadWith model.loadingDiscordChannels ) of
@@ -1106,6 +1106,78 @@ update msg model =
                                 otherUserId
                                 threadRouteWithMessage
                                 (Tuple.mapSecond (Result.mapError (\_ -> ())) result)
+                        )
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        DiscordGotGuildMessageEmbed guildId channelId threadRouteWithMessage result ->
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    case SeqDict.get channelId guild.channels of
+                        Just channel ->
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    (case threadRouteWithMessage of
+                                                        NoThreadWithMessage messageId ->
+                                                            LocalState.addEmbedBackend messageId result channel
+
+                                                        ViewThreadWithMessage threadId messageId ->
+                                                            { channel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadId
+                                                                        (LocalState.addEmbedBackend messageId result)
+                                                                        channel.threads
+                                                            }
+                                                    )
+                                                    guild.channels
+                                        }
+                                        model.discordGuilds
+                              }
+                            , Broadcast.toDiscordGuild
+                                guildId
+                                (Server_GotDiscordGuildMessageEmbed
+                                    guildId
+                                    channelId
+                                    threadRouteWithMessage
+                                    (Tuple.mapSecond (Result.mapError (\_ -> ())) result)
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        DiscordGotDmMessageEmbed channelId messageId result ->
+            case SeqDict.get channelId model.discordDmChannels of
+                Just channel ->
+                    ( { model
+                        | discordDmChannels =
+                            SeqDict.insert
+                                channelId
+                                (LocalState.addEmbedBackend messageId result channel)
+                                model.discordDmChannels
+                      }
+                    , Broadcast.toDiscordDmChannel
+                        channelId
+                        (Server_GotDiscordDmMessageEmbed
+                            channelId
+                            messageId
+                            (Tuple.mapSecond (Result.mapError (\_ -> ())) result)
+                            |> ServerChange
                         )
                         model
                     )
