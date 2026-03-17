@@ -605,13 +605,16 @@ urlParser =
                         ( urlLength, False )
                         url
 
+                url2 : String
                 url2 =
-                    case protocol of
+                    (case protocol of
                         Http ->
-                            "http://" ++ url
+                            "http://"
 
                         Https ->
-                            "https://" ++ url
+                            "https://"
+                    )
+                        ++ String.slice 0 index url
 
                 url5 : Result String Url
                 url5 =
