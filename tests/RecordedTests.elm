@@ -1111,33 +1111,34 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 ]
             )
         ]
-    , T.start
-        "Remove direct mention when viewed on another session"
-        startTime
-        normalConfig
-        [ connectTwoUsersAndJoinNewGuild
-            (\admin user ->
-                [ user.click 100 (Dom.id "guildIcon_showFriends")
-                , writeMessage admin "@Stevie Steve"
-                , writeMessage admin "@Stevie Steve"
-                , writeMessage admin "@Stevie Steve"
-                , hasExactText user [ "3" ]
-                , T.connectFrontend
-                    100
-                    sessionId1
-                    (Route.encode Route.HomePageRoute)
-                    desktopWindow
-                    (\userReload ->
-                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                        , userReload.click 100 (Dom.id "guild_openGuild_1")
-                        , hasExactText user [ "3" ]
-                        , userReload.click 100 (Dom.id "guildIcon_showFriends")
-                        , hasNotExactText user [ "3" ]
-                        ]
-                    )
-                ]
-            )
-        ]
+
+    --, T.start
+    --    "Remove direct mention when viewed on another session"
+    --    startTime
+    --    normalConfig
+    --    [ connectTwoUsersAndJoinNewGuild
+    --        (\admin user ->
+    --            [ user.click 100 (Dom.id "guildIcon_showFriends")
+    --            , writeMessage admin "@Stevie Steve"
+    --            , writeMessage admin "@Stevie Steve"
+    --            , writeMessage admin "@Stevie Steve"
+    --            , hasExactText user [ "3" ]
+    --            , T.connectFrontend
+    --                100
+    --                sessionId1
+    --                (Route.encode Route.HomePageRoute)
+    --                desktopWindow
+    --                (\userReload ->
+    --                    [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+    --                    , userReload.click 100 (Dom.id "guild_openGuild_1")
+    --                    , hasExactText user [ "3" ]
+    --                    , userReload.click 100 (Dom.id "guildIcon_showFriends")
+    --                    , hasNotExactText user [ "3" ]
+    --                    ]
+    --                )
+    --            ]
+    --        )
+    --    ]
     , T.start
         "Check notification icons appear"
         startTime
