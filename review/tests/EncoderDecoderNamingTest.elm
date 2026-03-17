@@ -191,4 +191,73 @@ decoder = ()
                     |> String.replace "\u{000D}" ""
                     |> Review.Test.run EncoderDecoderNaming.rule
                     |> Review.Test.expectNoErrors
+        , Test.test "fixes same-module usage of renamed function" <|
+            \() ->
+                """module A exposing (..)
+
+userEncoder = ()
+
+foo = userEncoder
+"""
+                    |> String.replace "\u{000D}" ""
+                    |> Review.Test.run EncoderDecoderNaming.rule
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "userEncoder should be named encodeUser"
+                            , details = [ "Encoders should be named `encodeTypeName` instead of `typeNameEncoder` for consistency." ]
+                            , under = "userEncoder"
+                            }
+                            |> Review.Test.atExactly { start = { row = 3, column = 1 }, end = { row = 3, column = 12 } }
+                            |> Review.Test.whenFixed
+                                """module A exposing (..)
+
+encodeUser = ()
+
+foo = encodeUser
+"""
+                        ]
+        , Test.test "fixes cross-module usage of renamed function" <|
+            \() ->
+                [ """module A exposing (..)
+
+userEncoder = ()
+"""
+                , """module B exposing (..)
+
+import A
+
+foo = A.userEncoder
+"""
+                ]
+                    |> Review.Test.runOnModules EncoderDecoderNaming.rule
+                    |> Review.Test.expectErrorsForModules
+                        [ ( "A"
+                          , [ Review.Test.error
+                                { message = "userEncoder should be named encodeUser"
+                                , details = [ "Encoders should be named `encodeTypeName` instead of `typeNameEncoder` for consistency." ]
+                                , under = "userEncoder"
+                                }
+                                |> Review.Test.whenFixed
+                                    """module A exposing (..)
+
+encodeUser = ()
+"""
+                            ]
+                          )
+                        , ( "B"
+                          , [ Review.Test.error
+                                { message = "userEncoder should be named encodeUser"
+                                , details = [ "Encoders should be named `encodeTypeName` instead of `typeNameEncoder` for consistency." ]
+                                , under = "A.userEncoder"
+                                }
+                                |> Review.Test.whenFixed
+                                    """module B exposing (..)
+
+import A
+
+foo = A.encodeUser
+"""
+                            ]
+                          )
+                        ]
         ]
