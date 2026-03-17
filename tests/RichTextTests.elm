@@ -133,6 +133,26 @@ test =
                             , NormalText '.' " Click on the sign up."
                             ]
                         )
+        , Test.test "Parser slightly malformed url with trailing punctuation" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString 'G' "o to https://abc.com?a=4. Click on the sign up.")
+                    |> Expect.equal
+                        (Nonempty
+                            (NormalText 'G' "o to ")
+                            [ Hyperlink { protocol = Https, host = "abc.com", path = "", port_ = Nothing, fragment = Nothing, query = Just "a=4" }
+                            , NormalText '.' " Click on the sign up."
+                            ]
+                        )
+        , Test.test "Parser url with trailing punctuation and no slash" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString 'G' "o to https://abc.com. Click on the sign up.")
+                    |> Expect.equal
+                        (Nonempty
+                            (NormalText 'G' "o to ")
+                            [ Hyperlink { protocol = Https, host = "abc.com", path = "", port_ = Nothing, fragment = Nothing, query = Nothing }
+                            , NormalText '.' " Click on the sign up."
+                            ]
+                        )
         , Test.test "Parser spoilered url" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString 'G' "o to ||https://abc.com/||. Click on the sign up.")

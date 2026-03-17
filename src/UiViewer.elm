@@ -173,7 +173,6 @@ embedExamples whitelistedDomains =
                 , image = Nothing
                 , content = Just "Content of this embedded link"
                 , createdAt = Nothing
-                , favicon = Nothing
                 }
             ]
         , message
@@ -183,7 +182,6 @@ embedExamples whitelistedDomains =
                 , image = Just "/android-chrome-512x512.png"
                 , content = Just "Content of this embedded link"
                 , createdAt = Just (Time.millisToPosix 0)
-                , favicon = Just "/favicon-32x32.png"
                 }
             ]
         , message
@@ -192,6 +190,10 @@ embedExamples whitelistedDomains =
             ]
         , message
             (NonemptyString 'C' ("heck out this cool link! " ++ shortUrl ++ " Cool huh?"))
+            [ EmbedLoaded RichText.emptyEmbed
+            ]
+        , message
+            (NonemptyString 'C' "heck out this cool link! http://town-collab.app/ Cool huh?")
             [ EmbedLoaded RichText.emptyEmbed
             ]
         ]

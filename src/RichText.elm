@@ -1465,7 +1465,15 @@ smallHyperlink onPressUrl domainWhitelist url =
             , Html.Attributes.style "white-space" "nowrap"
             , Html.Attributes.style "min-width" "0"
             ]
-            [ Html.text url.host
+            [ if url.protocol == Http then
+                Html.span
+                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                    ]
+                    [ Html.text "http://" ]
+
+              else
+                Html.text ""
+            , Html.text url.host
             , if path == "/" then
                 Html.text ""
 
@@ -1514,19 +1522,27 @@ inlineEmbedView containerWidth onPressUrl domainWhitelist url =
         , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
         , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
         , Html.Attributes.style "white-space" "nowrap"
-        , Html.Attributes.style "transform" "translateY(4px)"
+        , Html.Attributes.style "transform" "translateY(0.3em)"
         , Html.Attributes.style "border-left" "solid 5px rgb(80,120,200)"
         , Html.Attributes.style "padding-right" "4px"
         ]
         [ Html.img
-            [ Html.Attributes.style "width" "16px"
-            , Html.Attributes.style "height" "16px"
+            [ Html.Attributes.style "width" "1em"
+            , Html.Attributes.style "height" "1em"
             , Html.Attributes.style "border-radius" "2px"
-            , Html.Attributes.style "transform" "translateY(2px)"
+            , Html.Attributes.style "transform" "translateY(0.125em)"
             , Html.Attributes.style "padding" "0 4px 0 4px"
             , Html.Attributes.src (favicon url)
             ]
             []
+        , if url.protocol == Http then
+            Html.span
+                [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                ]
+                [ Html.text "http://" ]
+
+          else
+            Html.text ""
         , Html.text url.host
         , if path == "/" then
             Html.text ""
