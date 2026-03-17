@@ -135,6 +135,52 @@ chatMessageEncoder = ()
 encodeChatMessage = ()
 """
                         ]
+        , Test.test "fixes type signature along with declaration" <|
+            \() ->
+                """module A exposing (..)
+
+quantityDecoder : Decoder (Quantity Float unit)
+quantityDecoder = ()
+"""
+                    |> String.replace "\u{000D}" ""
+                    |> Review.Test.run EncoderDecoderNaming.rule
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "quantityDecoder should be named decodeQuantity"
+                            , details = [ "Decoders should be named `decodeTypeName` instead of `typeNameDecoder` for consistency." ]
+                            , under = "quantityDecoder"
+                            }
+                            |> Review.Test.atExactly { start = { row = 4, column = 1 }, end = { row = 4, column = 16 } }
+                            |> Review.Test.whenFixed
+                                """module A exposing (..)
+
+decodeQuantity : Decoder (Quantity Float unit)
+decodeQuantity = ()
+"""
+                        ]
+        , Test.test "fixes type signature for encoder" <|
+            \() ->
+                """module A exposing (..)
+
+userEncoder : User -> Value
+userEncoder = ()
+"""
+                    |> String.replace "\u{000D}" ""
+                    |> Review.Test.run EncoderDecoderNaming.rule
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "userEncoder should be named encodeUser"
+                            , details = [ "Encoders should be named `encodeTypeName` instead of `typeNameEncoder` for consistency." ]
+                            , under = "userEncoder"
+                            }
+                            |> Review.Test.atExactly { start = { row = 4, column = 1 }, end = { row = 4, column = 12 } }
+                            |> Review.Test.whenFixed
+                                """module A exposing (..)
+
+encodeUser : User -> Value
+encodeUser = ()
+"""
+                        ]
         , Test.test "does not report bare Encoder or Decoder" <|
             \() ->
                 """module A exposing (..)
