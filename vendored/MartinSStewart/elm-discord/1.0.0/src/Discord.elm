@@ -4899,6 +4899,9 @@ decodeDispatchUserEvent eventName =
         "GUILD_CREATE" ->
             JD.field "d" gatewayGuildDecoder |> JD.map DispatchUser_GuildCreate
 
+        "CHANNEL_UPDATE" ->
+            JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5108,6 +5111,7 @@ type OpDispatchUserEvent
     | DispatchUser_CallDelete
     | DispatchUser_StateUpdate
     | DispatchUser_GuildCreate GatewayGuild
+    | DispatchUser_ChannelUpdate Channel
 
 
 type alias ContentInventoryInboxStale =
@@ -5776,6 +5780,7 @@ type UserOutMsg connection
     | UserOutMsg_GuildMemberUpdateEvent GuildMemberUpdate
     | UserOutMsg_VoiceStateUpdate VoiceStateUpdate
     | UserOutMsg_JoinedOrCreatedGuild GatewayGuild
+    | UserOutMsg_ChannelUpdated Channel
 
 
 type alias Presence =
@@ -6171,6 +6176,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildCreate gatewayGuild ->
                             ( model, [ UserOutMsg_JoinedOrCreatedGuild gatewayGuild ] )
+
+                        DispatchUser_ChannelUpdate channel ->
+                            ( model, [ UserOutMsg_ChannelUpdated channel ] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )

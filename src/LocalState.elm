@@ -63,6 +63,7 @@ module LocalState exposing
     , discordChannelToFrontend
     , discordGuildOrDmIdToMessage
     , discordGuildOrDmIdToMessages
+    , discordTopicToDescription
     , editChannel
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -105,8 +106,9 @@ module LocalState exposing
 
 import Array exposing (Array)
 import Array.Extra
+import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
-import Discord
+import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Lamdera exposing (ClientId)
@@ -288,6 +290,7 @@ type alias BackendChannel =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : ChannelName
+    , description : ChannelDescription
     , messages : Array (Message ChannelMessageId (Id UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
@@ -297,6 +300,7 @@ type alias BackendChannel =
 
 type alias DiscordBackendChannel =
     { name : ChannelName
+    , description : ChannelDescription
     , messages : Array (Message ChannelMessageId (Discord.Id Discord.UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -309,6 +313,7 @@ type alias FrontendChannel =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : ChannelName
+    , description : ChannelDescription
     , messages : Array (MessageState ChannelMessageId (Id UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , isArchived : Maybe Archived
@@ -319,6 +324,7 @@ type alias FrontendChannel =
 
 type alias DiscordFrontendChannel =
     { name : ChannelName
+    , description : ChannelDescription
     , messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
@@ -356,6 +362,7 @@ channelToFrontend threadRoute channel =
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
             , name = channel.name
+            , description = channel.description
             , messages = DmChannel.toFrontendHelper preloadMessages channel
             , visibleMessages = VisibleMessages.init preloadMessages channel
             , isArchived = Nothing
@@ -382,6 +389,7 @@ discordChannelToFrontend threadRoute channel =
                 channel2 : DiscordFrontendChannel
                 channel2 =
                     { name = channel.name
+                    , description = channel.description
                     , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
                     , visibleMessages = VisibleMessages.init preloadMessages channel
                     , lastTypedAt = channel.lastTypedAt
@@ -945,6 +953,7 @@ createGuild time userId guildName =
               , { createdAt = time
                 , createdBy = userId
                 , name = defaultChannelName
+                , description = ChannelDescription.empty
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
@@ -977,6 +986,7 @@ createChannel time userId channelName guild =
                 { createdAt = time
                 , createdBy = userId
                 , name = channelName
+                , description = ChannelDescription.empty
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
@@ -984,6 +994,19 @@ createChannel time userId channelName guild =
                 }
                 guild.channels
     }
+
+
+discordTopicToDescription : OptionalData (Maybe String) -> ChannelDescription -> ChannelDescription
+discordTopicToDescription topic existingDescription =
+    case topic of
+        Discord.Included (Just topic2) ->
+            ChannelDescription.fromStringLossy topic2
+
+        Discord.Included Nothing ->
+            ChannelDescription.empty
+
+        Discord.Missing ->
+            existingDescription
 
 
 createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> FrontendGuild -> FrontendGuild
@@ -995,6 +1018,7 @@ createChannelFrontend time userId channelName guild =
                 { createdAt = time
                 , createdBy = userId
                 , name = channelName
+                , description = ChannelDescription.empty
                 , messages = Array.empty
                 , visibleMessages = VisibleMessages.empty
                 , isArchived = Nothing

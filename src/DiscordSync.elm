@@ -20,6 +20,7 @@ import Array exposing (Array)
 import Array.Extra
 import Broadcast
 import Bytes exposing (Bytes)
+import ChannelDescription
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Markdown
@@ -636,6 +637,7 @@ addDiscordChannel discordChannel =
 
                 Missing ->
                     ChannelName.fromStringLossy "Missing"
+        , description = LocalState.discordTopicToDescription discordChannel.topic ChannelDescription.empty
         , messages = Array.empty
         , status = ChannelActive
         , lastTypedAt = SeqDict.empty
@@ -1324,7 +1326,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ChannelCreated channel ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleDmChannelCreated channel model2
+                                    handleChannelCreated channel model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -1497,6 +1499,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleJoinOrCreateGuild discordUserId gatewayGuild model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_ChannelUpdated channel ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleChannelUpdated channel model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1534,6 +1543,66 @@ handleJoinOrCreateGuild discordUserId gatewayGuild model =
                     result
             )
     )
+
+
+handleChannelUpdated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelUpdated channel model =
+    case channel.guildId of
+        Missing ->
+            --let
+            --    channelId : Discord.Id Discord.PrivateChannelId
+            --    channelId =
+            --        Discord.idToUInt64 channel.id |> Discord.idFromUInt64
+            --in
+            --case SeqDict.get channelId model.discordDmChannels of
+            --    Just existingChannel ->
+            --        { model
+            --            | discordDmChannels =
+            --                SeqDict.insert
+            --                    channelId
+            --                    { existingChannel | members =  channel.recipients }
+            --                    model.discordDmChannels
+            --        }
+            --
+            --    Nothing ->
+            --        ( model, Command.none )
+            ( model, Command.none )
+
+        Included guildId ->
+            ( { model
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (\guild ->
+                            { guild
+                                | channels =
+                                    SeqDict.updateIfExists
+                                        channel.id
+                                        (\existingChannel ->
+                                            { existingChannel
+                                                | name =
+                                                    case channel.name of
+                                                        Included name ->
+                                                            ChannelName.fromStringLossy name
+
+                                                        Missing ->
+                                                            existingChannel.name
+                                                , description =
+                                                    LocalState.discordTopicToDescription
+                                                        channel.topic
+                                                        existingChannel.description
+                                            }
+                                        )
+                                        guild.channels
+                            }
+                        )
+                        model.discordGuilds
+              }
+            , Broadcast.toDiscordGuild
+                guildId
+                (Server_DiscordUpdateChannel guildId channel.id channel.name channel.topic |> ServerChange)
+                model
+            )
 
 
 handleGuildMemberUpdate :
@@ -1744,8 +1813,8 @@ attachmentsToFileData attachment fileHash imageSize =
     }
 
 
-handleDmChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDmChannelCreated channel model =
+handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelCreated channel model =
     case channel.guildId of
         Missing ->
             case channel.recipients of
@@ -1834,11 +1903,22 @@ handleDmChannelCreated channel model =
                                         channel.id
                                         (\maybeChannel ->
                                             case maybeChannel of
-                                                Just _ ->
-                                                    maybeChannel
+                                                Just existingChannel ->
+                                                    Just
+                                                        { existingChannel
+                                                            | name = name
+                                                            , description =
+                                                                LocalState.discordTopicToDescription
+                                                                    channel.topic
+                                                                    existingChannel.description
+                                                        }
 
                                                 Nothing ->
                                                     { name = name
+                                                    , description =
+                                                        LocalState.discordTopicToDescription
+                                                            channel.topic
+                                                            ChannelDescription.empty
                                                     , messages = Array.empty
                                                     , status = ChannelActive
                                                     , lastTypedAt = SeqDict.empty
@@ -1854,7 +1934,7 @@ handleDmChannelCreated channel model =
               }
             , Broadcast.toDiscordGuild
                 guildId
-                (Server_DiscordChannelCreated guildId channel.id name |> ServerChange)
+                (Server_DiscordChannelCreated guildId channel.id name channel.topic |> ServerChange)
                 model
             )
 

@@ -43,7 +43,7 @@ import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord
+import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
@@ -679,7 +679,7 @@ type ServerChange
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
     | Server_UnlinkDiscordUser (Discord.Id Discord.UserId)
-    | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName
+    | Server_DiscordChannelCreated (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ChannelName (OptionalData (Maybe String))
     | Server_DiscordDmChannelCreated (Discord.Id Discord.PrivateChannelId) (NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int })
     | Server_DiscordNeedsAuthAgain (Discord.Id Discord.UserId)
     | Server_DiscordUserLoadingDataIsDone
@@ -698,6 +698,7 @@ type ServerChange
     | Server_GotGuildMessageEmbed (Id GuildId) (Id ChannelId) ThreadRouteWithMessage ( Int, Result () EmbedData )
     | Server_GotDmMessageEmbed (Id UserId) ThreadRouteWithMessage ( Int, Result () EmbedData )
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
+    | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
 
 
 type LocalChange

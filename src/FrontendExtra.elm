@@ -2,6 +2,8 @@ module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalCha
 
 import AiChat
 import Array exposing (Array)
+import ChannelDescription
+import ChannelName
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
@@ -2747,7 +2749,7 @@ changeUpdate localMsg local =
                 Server_UnlinkDiscordUser userId ->
                     unlinkDiscordUser userId local
 
-                Server_DiscordChannelCreated guildId channelId channelName ->
+                Server_DiscordChannelCreated guildId channelId channelName topic ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
@@ -2759,11 +2761,22 @@ changeUpdate localMsg local =
                                                 channelId
                                                 (\maybeChannel ->
                                                     case maybeChannel of
-                                                        Just _ ->
-                                                            maybeChannel
+                                                        Just channel ->
+                                                            { channel
+                                                                | name = channelName
+                                                                , description =
+                                                                    LocalState.discordTopicToDescription
+                                                                        topic
+                                                                        ChannelDescription.empty
+                                                            }
+                                                                |> Just
 
                                                         Nothing ->
                                                             { name = channelName
+                                                            , description =
+                                                                LocalState.discordTopicToDescription
+                                                                    topic
+                                                                    ChannelDescription.empty
                                                             , messages = Array.empty
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
@@ -2976,6 +2989,30 @@ changeUpdate localMsg local =
 
                                         Nothing ->
                                             Just guild
+                                )
+                                local.discordGuilds
+                    }
+
+                Server_DiscordUpdateChannel guildId channelId name topic ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (\channel ->
+                                        { channel
+                                            | name =
+                                                case name of
+                                                    Discord.Included name2 ->
+                                                        ChannelName.fromStringLossy name2
+
+                                                    Discord.Missing ->
+                                                        channel.name
+                                            , description =
+                                                LocalState.discordTopicToDescription topic channel.description
+                                        }
+                                    )
+                                    channelId
                                 )
                                 local.discordGuilds
                     }

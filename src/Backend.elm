@@ -11,6 +11,7 @@ import BackendExtra
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
+import ChannelDescription
 import Discord exposing (OptionalData(..))
 import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -111,6 +112,7 @@ init =
                       , { createdAt = Time.millisToPosix 0
                         , createdBy = Broadcast.adminUserId
                         , name = Unsafe.channelName "Welcome"
+                        , description = ChannelDescription.fromStringLossy "The welcome channel!"
                         , messages = Array.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
@@ -121,6 +123,7 @@ init =
                       , { createdAt = Time.millisToPosix 0
                         , createdBy = Broadcast.adminUserId
                         , name = Unsafe.channelName "General"
+                        , description = ChannelDescription.empty
                         , messages = Array.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
@@ -1127,7 +1130,7 @@ update msg model =
                                 discordUser.linkedTo
                                 (Server_DiscordGuildJoinedOrCreated
                                     guildId
-                                    (BackendExtra.discordGuildToFrontend Nothing guild)
+                                    (BackendExtra.discordGuildToFrontend Nothing guild2)
                                     |> ServerChange
                                 )
                                 model

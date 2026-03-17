@@ -96,7 +96,7 @@ shouldNotifyAdmin log =
         FailedToParseDiscordWebsocket _ _ ->
             Nothing
 
-        FailedToGetDataForJoinedOrCreatedDiscordGuild id _ _ ->
+        FailedToGetDataForJoinedOrCreatedDiscordGuild _ _ _ ->
             Nothing
 
 
