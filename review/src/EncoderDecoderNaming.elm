@@ -6,6 +6,7 @@ rather than `typeNameEncoder` and `typeNameDecoder`.
 
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
+import Elm.Syntax.Signature exposing (Signature)
 import Review.Fix as Fix
 import Review.Rule as Rule exposing (Rule)
 
@@ -29,93 +30,63 @@ declarationVisitor (Node _ declaration) context =
                 name : String
                 name =
                     Node.value nameNode
+
+                signatureNameNode : Maybe (Node String)
+                signatureNameNode =
+                    function.signature
+                        |> Maybe.map (\(Node _ sig) -> sig.name)
             in
-            ( checkName nameNode name, context )
+            ( checkName nameNode signatureNameNode name, context )
 
         _ ->
             ( [], context )
 
 
-checkName : Node String -> String -> List (Rule.Error {})
-checkName nameNode name =
+checkName : Node String -> Maybe (Node String) -> String -> List (Rule.Error {})
+checkName nameNode signatureNameNode name =
     if String.endsWith "Encoder" name && String.length name > 7 then
-        let
-            typeName : String
-            typeName =
-                String.dropRight 7 name
-
-            suggested : String
-            suggested =
-                "encode" ++ capitalize typeName
-        in
-        [ Rule.errorWithFix
-            { message = name ++ " should be named " ++ suggested
-            , details =
-                [ "Encoders should be named `encodeTypeName` instead of `typeNameEncoder` for consistency." ]
-            }
-            (Node.range nameNode)
-            [ Fix.replaceRangeBy (Node.range nameNode) suggested ]
-        ]
+        makeError nameNode signatureNameNode name 7 "encode" "Encoders should be named `encodeTypeName` instead of `typeNameEncoder` for consistency."
 
     else if String.endsWith "Decoder" name && String.length name > 7 then
-        let
-            typeName : String
-            typeName =
-                String.dropRight 7 name
-
-            suggested : String
-            suggested =
-                "decode" ++ capitalize typeName
-        in
-        [ Rule.errorWithFix
-            { message = name ++ " should be named " ++ suggested
-            , details =
-                [ "Decoders should be named `decodeTypeName` instead of `typeNameDecoder` for consistency." ]
-            }
-            (Node.range nameNode)
-            [ Fix.replaceRangeBy (Node.range nameNode) suggested ]
-        ]
+        makeError nameNode signatureNameNode name 7 "decode" "Decoders should be named `decodeTypeName` instead of `typeNameDecoder` for consistency."
 
     else if String.endsWith "Encode" name && String.length name > 6 then
-        let
-            typeName : String
-            typeName =
-                String.dropRight 6 name
-
-            suggested : String
-            suggested =
-                "encode" ++ capitalize typeName
-        in
-        [ Rule.errorWithFix
-            { message = name ++ " should be named " ++ suggested
-            , details =
-                [ "Encoders should be named `encodeTypeName` instead of `typeNameEncode` for consistency." ]
-            }
-            (Node.range nameNode)
-            [ Fix.replaceRangeBy (Node.range nameNode) suggested ]
-        ]
+        makeError nameNode signatureNameNode name 6 "encode" "Encoders should be named `encodeTypeName` instead of `typeNameEncode` for consistency."
 
     else if String.endsWith "Decode" name && String.length name > 6 then
-        let
-            typeName : String
-            typeName =
-                String.dropRight 6 name
-
-            suggested : String
-            suggested =
-                "decode" ++ capitalize typeName
-        in
-        [ Rule.errorWithFix
-            { message = name ++ " should be named " ++ suggested
-            , details =
-                [ "Decoders should be named `decodeTypeName` instead of `typeNameDecode` for consistency." ]
-            }
-            (Node.range nameNode)
-            [ Fix.replaceRangeBy (Node.range nameNode) suggested ]
-        ]
+        makeError nameNode signatureNameNode name 6 "decode" "Decoders should be named `decodeTypeName` instead of `typeNameDecode` for consistency."
 
     else
         []
+
+
+makeError : Node String -> Maybe (Node String) -> String -> Int -> String -> String -> List (Rule.Error {})
+makeError nameNode signatureNameNode name suffixLen prefix detail =
+    let
+        typeName : String
+        typeName =
+            String.dropRight suffixLen name
+
+        suggested : String
+        suggested =
+            prefix ++ capitalize typeName
+
+        signatureFix : List Fix.Fix
+        signatureFix =
+            case signatureNameNode of
+                Just sigNameNode ->
+                    [ Fix.replaceRangeBy (Node.range sigNameNode) suggested ]
+
+                Nothing ->
+                    []
+    in
+    [ Rule.errorWithFix
+        { message = name ++ " should be named " ++ suggested
+        , details = [ detail ]
+        }
+        (Node.range nameNode)
+        (Fix.replaceRangeBy (Node.range nameNode) suggested :: signatureFix)
+    ]
 
 
 capitalize : String -> String
