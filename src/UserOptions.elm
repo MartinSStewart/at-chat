@@ -14,7 +14,7 @@ import LocalState exposing (AdminStatus(..), LocalState)
 import Log
 import MyUi
 import PersonName
-import RichText exposing (Domain(..))
+import RichText
 import Route
 import SeqDict
 import SeqSet
@@ -315,23 +315,9 @@ view isMobile time local loggedIn loaded model =
                                 (\domain ->
                                     Ui.row
                                         [ Ui.spacing 8, Ui.width Ui.fill ]
-                                        [ Ui.el
-                                            []
-                                            (Ui.text
-                                                (case domain of
-                                                    Domain text ->
-                                                        text
-                                                )
-                                            )
+                                        [ Ui.text (RichText.domainToString domain)
                                         , MyUi.elButton
-                                            (Dom.id
-                                                ("userOptions_removeWhitelistDomain_"
-                                                    ++ (case domain of
-                                                            Domain text ->
-                                                                text
-                                                       )
-                                                )
-                                            )
+                                            (Dom.id ("userOptions_removeWhitelistDomain_" ++ RichText.domainToString domain))
                                             (PressedRemoveDomainFromWhitelist domain)
                                             [ Ui.background MyUi.deleteButtonBackground
                                             , Ui.Font.color MyUi.deleteButtonFont

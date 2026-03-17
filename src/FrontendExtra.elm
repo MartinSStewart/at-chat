@@ -19,12 +19,12 @@ import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
 import Local
-import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import LoginForm
 import Message exposing (MessageState)
 import MessageInput
@@ -2965,6 +2965,18 @@ changeUpdate localMsg local =
                             local
 
 
+guildSendMessage :
+    Id GuildId
+    -> FrontendGuild
+    -> Id ChannelId
+    -> FrontendChannel
+    -> ThreadRouteWithMaybeMessage
+    -> Time.Posix
+    -> Id UserId
+    -> Nonempty (RichText (Id UserId))
+    -> SeqDict (Id FileId) FileData
+    -> LocalState
+    -> SeqDict (Id GuildId) FrontendGuild
 guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt userId text attachedFiles local =
     SeqDict.insert
         guildId
@@ -3003,6 +3015,18 @@ guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo create
         local.guilds
 
 
+discordGuildSendMessage :
+    Discord.Id Discord.GuildId
+    -> DiscordFrontendGuild
+    -> Discord.Id Discord.ChannelId
+    -> DiscordFrontendChannel
+    -> ThreadRouteWithMaybeMessage
+    -> Time.Posix
+    -> Discord.Id Discord.UserId
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> SeqDict (Id FileId) FileData
+    -> LocalState
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordFrontendGuild
 discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo createdAt discordUserId text attachedFiles local =
     SeqDict.insert
         guildId

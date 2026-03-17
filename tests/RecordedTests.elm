@@ -1,6 +1,6 @@
 module RecordedTests exposing (main, setup)
 
-import Array exposing (Array)
+import Array
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
@@ -16,7 +16,7 @@ import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpRe
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Env
-import FileStatus exposing (FileHash(..))
+import FileStatus
 import Frontend
 import Html.Attributes
 import Id exposing (ChannelMessageId, Id)

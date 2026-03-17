@@ -605,8 +605,8 @@ urlParser =
                         ( urlLength, False )
                         url
 
-                url2 : String
-                url2 =
+                urlText : String
+                urlText =
                     (case protocol of
                         Http ->
                             "http://"
@@ -615,30 +615,27 @@ urlParser =
                             "https://"
                     )
                         ++ String.slice 0 index url
-
-                url5 : Result String Url
-                url5 =
-                    case Url.fromString url2 of
-                        Just url3 ->
-                            let
-                                url4 =
-                                    { url3 | protocol = protocol }
-
-                                urlNoPath =
-                                    { url4 | path = "" }
-                            in
-                            -- This is a hack to get the url decode to exactly match the user's input
-                            -- Otherwise what the user is typing will get out of sync in the case they type http://google.com?query and it gets decoded to http://google.com/?query
-                            if Url.toString urlNoPath == url2 then
-                                Ok urlNoPath
-
-                            else
-                                Ok url4
-
-                        Nothing ->
-                            Err url2
             in
-            { hyperlink = url5
+            { hyperlink =
+                case Url.fromString urlText of
+                    Just url2 ->
+                        let
+                            url3 =
+                                { url2 | protocol = protocol }
+
+                            urlNoPath =
+                                { url3 | path = "" }
+                        in
+                        -- This is a hack to get the url decode to exactly match the user's input
+                        -- Otherwise what the user is typing will get out of sync in the case they type http://google.com?query and it gets decoded to http://google.com/?query
+                        if Url.toString urlNoPath == urlText then
+                            Ok urlNoPath
+
+                        else
+                            Ok url3
+
+                    Nothing ->
+                        Err urlText
             , trailing = String.slice index urlLength url
             }
         )

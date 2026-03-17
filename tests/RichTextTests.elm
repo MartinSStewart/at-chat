@@ -9,7 +9,7 @@ import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Unsafe
-import Url exposing (Protocol(..))
+import Url exposing (Protocol(..), Url)
 
 
 users : SeqDict.SeqDict (Id.Id a) { name : PersonName }
@@ -17,6 +17,7 @@ users =
     SeqDict.fromList [ ( Id.fromInt 123, { name = Unsafe.personName "a" } ) ]
 
 
+unsafeUrl : String -> Url
 unsafeUrl url =
     case Url.fromString url of
         Just url2 ->
