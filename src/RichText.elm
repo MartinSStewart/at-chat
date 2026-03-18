@@ -156,13 +156,13 @@ removeAttachedFile fileId list =
         |> List.Nonempty.fromList
 
 
-hyperlinks : Nonempty (RichText userId) -> List String
+hyperlinks : Nonempty (RichText userId) -> List Url
 hyperlinks nonempty =
     List.concatMap
         (\richText ->
             case richText of
                 Hyperlink data ->
-                    [ Url.toString data ]
+                    [ data ]
 
                 UserMention _ ->
                     []
@@ -933,7 +933,7 @@ view htmlIdPrefix containerWidth onPressLink domainWhitelist onPressSpoiler reve
         embeds
         0
         nonempty
-        |> Tuple.second
+        |> (\( _, _, a ) -> a)
 
 
 preview :
@@ -958,7 +958,7 @@ preview onPressLink domainWhitelist revealedSpoilers users attachedFiles nonempt
         Array.empty
         0
         nonempty
-        |> Tuple.second
+        |> (\( _, _, a ) -> a)
 
 
 normalTextView : String -> RichTextState -> List (Html msg)
@@ -987,22 +987,23 @@ viewHelper :
     -> Array Embed
     -> Int
     -> Nonempty (RichText userId)
-    -> ( Int, List (Html msg) )
+    -> ( Int, Int, List (Html msg) )
 viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
     List.foldl
-        (\item ( spoilerIndex2, currentList ) ->
+        (\item ( spoilerIndex2, embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, currentList ++ [ MyUi.userLabelHtml userId allUsers ] )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId allUsers ] )
 
                 NormalText char text ->
                     ( spoilerIndex2
+                    , embedIndex2
                     , currentList ++ normalTextView (String.cons char text) state
                     )
 
                 Italic nonempty2 ->
                     let
-                        ( spoilerIndex3, list ) =
+                        ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
@@ -1014,14 +1015,14 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                 allUsers
                                 attachedFiles
                                 embeds
-                                embedIndex
+                                embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, currentList ++ list )
+                    ( spoilerIndex3, embedIndex3, currentList ++ list )
 
                 Underline nonempty2 ->
                     let
-                        ( spoilerIndex3, list ) =
+                        ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
@@ -1033,14 +1034,14 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                 allUsers
                                 attachedFiles
                                 embeds
-                                embedIndex
+                                embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, currentList ++ list )
+                    ( spoilerIndex3, embedIndex3, currentList ++ list )
 
                 Bold nonempty2 ->
                     let
-                        ( spoilerIndex3, list ) =
+                        ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
@@ -1052,14 +1053,14 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                 allUsers
                                 attachedFiles
                                 embeds
-                                embedIndex
+                                embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, currentList ++ list )
+                    ( spoilerIndex3, embedIndex3, currentList ++ list )
 
                 Strikethrough nonempty2 ->
                     let
-                        ( spoilerIndex3, list ) =
+                        ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
@@ -1071,10 +1072,10 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                 allUsers
                                 attachedFiles
                                 embeds
-                                embedIndex
+                                embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, currentList ++ list )
+                    ( spoilerIndex3, embedIndex3, currentList ++ list )
 
                 Spoiler nonempty2 ->
                     let
@@ -1082,7 +1083,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                             SeqSet.member spoilerIndex2 revealedSpoilers
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
-                        ( _, list ) =
+                        ( _, embedIndex3, list ) =
                             viewHelper
                                 containerWidth
                                 maybePressedSpoiler
@@ -1099,10 +1100,11 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                 allUsers
                                 attachedFiles
                                 embeds
-                                embedIndex
+                                embedIndex2
                                 nonempty2
                     in
                     ( spoilerIndex2 + 1
+                    , embedIndex3
                     , currentList
                         ++ [ Html.span
                                 ([ Html.Attributes.style "padding" "0 2px 0 2px"
@@ -1137,6 +1139,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                             Url.toString data
                     in
                     ( spoilerIndex2
+                    , embedIndex2 + 1
                     , currentList
                         ++ [ if state.spoiler then
                                 Html.span
@@ -1149,7 +1152,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                     [ Html.text text ]
 
                              else
-                                case Array.get embedIndex embeds of
+                                case Array.get embedIndex2 embeds of
                                     Just EmbedLoading ->
                                         embedLoadingView onPressLink domainWhitelist data
 
@@ -1167,6 +1170,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
 
                 InlineCode char rest ->
                     ( spoilerIndex2
+                    , embedIndex2
                     , currentList
                         ++ [ Html.span
                                 [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
@@ -1188,6 +1192,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                     case containerWidth of
                         Just _ ->
                             ( spoilerIndex2
+                            , embedIndex2
                             , currentList
                                 ++ [ Html.div
                                         [ Html.Attributes.style "background-color" "rgb(90,100,120)"
@@ -1201,14 +1206,13 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                             )
 
                         Nothing ->
-                            ( spoilerIndex2
-                            , currentList ++ [ Html.text "<...>" ]
-                            )
+                            ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text "<...>" ] )
 
                 AttachedFile fileId ->
                     case containerWidth of
                         Just containerWidth2 ->
                             ( spoilerIndex2
+                            , embedIndex2
                             , case SeqDict.get fileId attachedFiles of
                                 Just fileData ->
                                     currentList
@@ -1267,9 +1271,9 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                             )
 
                         Nothing ->
-                            ( spoilerIndex2, currentList ++ [ Icons.image ] )
+                            ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
         )
-        ( spoilerIndex, [] )
+        ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
 
 

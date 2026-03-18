@@ -16,6 +16,7 @@ import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpRe
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Env
+import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
@@ -268,7 +269,7 @@ handleLoginFromLoginPage emailAddress client =
                     [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
         )
     ]
-        |> T.group
+        |> T.collapsableGroup "Login from login page"
 
 
 startTime : Time.Posix
@@ -449,6 +450,24 @@ writeMessageMobile user text =
         [ user.input 100 (Dom.id "channel_textinput") text
         , user.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
         ]
+
+
+editMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> HtmlId -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+editMessage user messageId text =
+    [ user.custom
+        100
+        messageId
+        "contextmenu"
+        (Json.Encode.object
+            [ ( "clientX", Json.Encode.float 50 )
+            , ( "clientY", Json.Encode.float 150 )
+            ]
+        )
+    , user.click 2000 (Dom.id "messageMenu_editMessage")
+    , user.input 200 (Dom.id "editMessageTextInput") text
+    , user.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+    ]
+        |> T.collapsableGroup "Edit message"
 
 
 createThread : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> Id ChannelMessageId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -817,6 +836,49 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                                 }
                                 ""
 
+                        "http://localhost:3000/file/embed" ->
+                            case currentRequest.body of
+                                T.JsonBody json ->
+                                    case Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) json of
+                                        Ok embedUrl ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 200
+                                                , statusText = "OK"
+                                                , headers = Dict.empty
+                                                }
+                                                ([ Just ( "og:title", "Title for " ++ embedUrl )
+                                                 , if String.startsWith "https://elm.camp" embedUrl then
+                                                    Just ( "og:image", "https://elm.camp/logo-26.png" )
+
+                                                   else
+                                                    Nothing
+                                                 , Just ( "og:description", "Description for " ++ embedUrl )
+                                                 ]
+                                                    |> List.filterMap identity
+                                                    |> Dict.fromList
+                                                    |> Json.Encode.dict identity Json.Encode.string
+                                                    |> Json.Encode.encode 0
+                                                )
+
+                                        Err _ ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 500
+                                                , statusText = "Bad request"
+                                                , headers = Dict.empty
+                                                }
+                                                ""
+
+                                _ ->
+                                    StringHttpResponse
+                                        { url = currentRequest.url
+                                        , statusCode = 500
+                                        , statusText = "Bad request"
+                                        , headers = Dict.empty
+                                        }
+                                        ""
+
                         "https://api.postmarkapp.com/email" ->
                             case currentRequest.body of
                                 T.JsonBody json ->
@@ -885,7 +947,75 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ T.testGroup "Discord"
+    [ T.start
+        "Create message with embeds and then edit that message"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                let
+                    checkCards elmCampCardCount meetdownCardCount =
+                        [ admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.exactText "Title for https://elm.camp/" ] html
+                                    |> Test.Html.Query.count (Expect.equal elmCampCardCount)
+                            )
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.exactText "Title for https://meetdown.app/" ] html
+                                    |> Test.Html.Query.count (Expect.equal meetdownCardCount)
+                            )
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Title for https://some-other-website.app/" ])
+                        , user.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.exactText "Title for https://elm.camp/" ] html
+                                    |> Test.Html.Query.count (Expect.equal elmCampCardCount)
+                            )
+                        , user.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.exactText "Title for https://meetdown.app/" ] html
+                                    |> Test.Html.Query.count (Expect.equal meetdownCardCount)
+                            )
+                        , user.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Title for https://some-other-website.app/" ])
+                        ]
+                            |> T.collapsableGroup "Check cards"
+                in
+                [ writeMessage admin "Test https://elm.camp/ https://elm.camp/ https://meetdown.app/"
+                , checkCards 2 1
+                , T.collapsableGroup
+                    "Edit message"
+                    [ admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            ]
+                        )
+                    , user.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "(editing...)" ])
+                    , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                    , admin.input 200 (Dom.id "editMessageTextInput") "Edited https://elm.camp/ https://some-other-website.app/"
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "(editing...)" ])
+                    , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+                    ]
+                , checkCards 1 1
+                ]
+            )
+        ]
+    , T.testGroup "Discord"
         [ T.start
             "Link Discord account with login"
             startTime

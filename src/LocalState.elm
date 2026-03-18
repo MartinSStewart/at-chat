@@ -137,6 +137,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import UInt64
 import Unsafe
+import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -1580,6 +1581,23 @@ editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex ch
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy && data.content /= newContent then
                 let
+                    oldUrls : SeqDict Url EmbedData
+                    oldUrls =
+                        List.indexedMap
+                            (\index link ->
+                                case Array.get index data.embeds of
+                                    Just (RichText.EmbedLoaded embed) ->
+                                        ( link, embed )
+
+                                    Just RichText.EmbedLoading ->
+                                        ( link, RichText.emptyEmbed )
+
+                                    Nothing ->
+                                        ( link, RichText.emptyEmbed )
+                            )
+                            (RichText.hyperlinks data.content)
+                            |> SeqDict.fromList
+
                     data2 : UserTextMessageData messageId userId
                     data2 =
                         { data
@@ -1592,6 +1610,15 @@ editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex ch
 
                                     DoNotChangeAttachments ->
                                         data.attachedFiles
+                            , embeds =
+                                RichText.hyperlinks data.content
+                                    |> List.map
+                                        (\url ->
+                                            SeqDict.get url oldUrls
+                                                |> Maybe.withDefault RichText.emptyEmbed
+                                                |> RichText.EmbedLoaded
+                                        )
+                                    |> Array.fromList
                         }
                 in
                 { channel
@@ -2067,7 +2094,7 @@ getDiscordGuildAndChannel guildId channelId local =
 
 addEmbedBackend :
     Id messageId
-    -> ( Int, Result e EmbedData )
+    -> ( Url, Result e EmbedData )
     -> { a | messages : Array (Message messageId userId) }
     -> { a | messages : Array (Message messageId userId) }
 addEmbedBackend messageId embed channel =
@@ -2076,7 +2103,7 @@ addEmbedBackend messageId embed channel =
 
 addEmbedFrontend :
     Id messageId
-    -> ( Int, Result e EmbedData )
+    -> ( Url, Result e EmbedData )
     -> { a | messages : Array (MessageState messageId userId) }
     -> { a | messages : Array (MessageState messageId userId) }
 addEmbedFrontend messageId embed channel =

@@ -28,6 +28,7 @@ import RichText exposing (Embed(..), EmbedData, RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Time
+import Url exposing (Url)
 
 
 type Message messageId userId
@@ -47,10 +48,10 @@ userTextMessage :
     -> Nonempty (RichText userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> ( Message messageId userId, Command r toMsg ( Int, Result Http.Error EmbedData ) )
+    -> ( Message messageId userId, Command r toMsg ( Url, Result Http.Error EmbedData ) )
 userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
     let
-        hyperlinks : List String
+        hyperlinks : List Url
         hyperlinks =
             RichText.hyperlinks content |> List.take maxEmbeds
     in
@@ -64,36 +65,47 @@ userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
       , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
       }
         |> UserTextMessage
-    , List.indexedMap
-        (\index hyperlink ->
-            Http.post
-                { url = FileStatus.domain ++ "/file/embed"
-                , body = Json.Encode.object [ ( "url", Json.Encode.string hyperlink ) ] |> Http.jsonBody
-                , expect = Http.expectJson (Tuple.pair index) decodeEmbedData
-                }
-        )
-        hyperlinks
+    , SeqSet.fromList hyperlinks
+        |> SeqSet.toList
+        |> List.map
+            (\url ->
+                Http.post
+                    { url = FileStatus.domain ++ "/file/embed"
+                    , body = Json.Encode.object [ ( "url", Json.Encode.string (Url.toString url) ) ] |> Http.jsonBody
+                    , expect = Http.expectJson (Tuple.pair url) decodeEmbedData
+                    }
+            )
         |> Command.batch
     )
 
 
-addEmbed : ( Int, Result e EmbedData ) -> Message messageId userId -> Message messageId userId
-addEmbed ( embedIndex, result ) message =
+addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message messageId userId
+addEmbed ( url, result ) message =
     case message of
         UserTextMessage message2 ->
             UserTextMessage
                 { message2
                     | embeds =
-                        Array.set
-                            embedIndex
-                            (case result of
-                                Ok embed ->
-                                    EmbedLoaded embed
+                        RichText.hyperlinks message2.content
+                            |> List.indexedMap Tuple.pair
+                            |> List.foldl
+                                (\( index, hyperlink ) array ->
+                                    if hyperlink == url then
+                                        Array.set
+                                            index
+                                            (case result of
+                                                Ok embed ->
+                                                    EmbedLoaded embed
 
-                                Err _ ->
-                                    EmbedLoaded RichText.emptyEmbed
-                            )
-                            message2.embeds
+                                                Err _ ->
+                                                    EmbedLoaded RichText.emptyEmbed
+                                            )
+                                            array
+
+                                    else
+                                        array
+                                )
+                                message2.embeds
                 }
 
         UserJoinedMessage _ _ _ ->
