@@ -14,7 +14,7 @@ import Url exposing (Protocol(..), Url)
 
 users : SeqDict.SeqDict (Id.Id a) { name : PersonName }
 users =
-    SeqDict.fromList [ ( Id.fromInt 123, { name = Unsafe.personName "a" } ) ]
+    SeqDict.fromList [ ( Id.fromInt 123, { name = Unsafe.personName "a" } ), ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ) ]
 
 
 unsafeUrl : String -> Url
@@ -40,6 +40,11 @@ test =
                 RichText.fromNonemptyString users (NonemptyString ' ' "@a ")
                     |> Expect.equal
                         (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "" ])
+        , Test.test "mention2" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString ' ' "@a1 ")
+                    |> Expect.equal
+                        (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 1234), NormalText ' ' "" ])
         , Test.test "not bold" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString ' ' "* abc *")

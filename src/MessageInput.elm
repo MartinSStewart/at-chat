@@ -610,6 +610,11 @@ userDropdownList guildOrDmId local =
                         Nothing
             )
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+        |> List.take maxDropdownUsers
+
+
+maxDropdownUsers =
+    10
 
 
 discordUserDropdownList : DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
@@ -646,6 +651,7 @@ discordUserDropdownList guildOrDmId local =
                         Nothing
             )
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+        |> List.take maxDropdownUsers
 
 
 pressedArrowInDropdown : AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
@@ -763,28 +769,10 @@ pingDropdownView :
     -> MentionUserDropdown
     -> Element msg
 pingDropdownView msgConfig guildOrDmId localState dropdownButtonId dropdown =
-    Ui.column
-        [ Ui.background MyUi.background2
-        , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
-        , Ui.borderColor MyUi.border1
-        , Ui.border 1
-        , Ui.Font.color MyUi.font2
-        , Ui.move
-            { x = round dropdown.inputElement.x
-            , y = round (dropdown.inputElement.y - 400 + 1)
-            , z = 0
-            }
-        , Ui.width (Ui.px (round dropdown.inputElement.width))
-        , Ui.height (Ui.px 400)
-        , Ui.clip
-        , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-
-        --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
-        ]
-        [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
-        , Ui.column
-            []
-            (case guildOrDmId of
+    let
+        rows : List (Element msg)
+        rows =
+            case guildOrDmId of
                 GuildOrDmId guildOrDmId2 ->
                     List.indexedMap
                         (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
@@ -794,8 +782,42 @@ pingDropdownView msgConfig guildOrDmId localState dropdownButtonId dropdown =
                     List.indexedMap
                         (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
                         (discordUserDropdownList guildOrDmId2 localState)
-            )
+
+        headerHeight =
+            20
+
+        pingDropdownViewHeight : Int
+        pingDropdownViewHeight =
+            List.length rows * dropdownButtonHeight + headerHeight
+    in
+    Ui.column
+        [ Ui.background MyUi.background2
+        , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
+        , Ui.borderColor MyUi.border1
+        , Ui.border 1
+        , Ui.Font.color MyUi.font2
+        , Ui.move
+            { x = round dropdown.inputElement.x
+            , y = round (dropdown.inputElement.y - toFloat pingDropdownViewHeight + 1)
+            , z = 0
+            }
+        , Ui.width (Ui.px (round dropdown.inputElement.width))
+        , Ui.height (Ui.px pingDropdownViewHeight)
+        , Ui.clip
+        , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+
+        --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
         ]
+        [ Ui.el
+            [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 0, Ui.height (Ui.px headerHeight) ]
+            (Ui.text "Mention a user:")
+        , Ui.column [] rows
+        ]
+
+
+dropdownButtonHeight : number
+dropdownButtonHeight =
+    30
 
 
 dropdownButton : MsgConfig msg -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element msg
@@ -803,7 +825,9 @@ dropdownButton msgConfig dropdown dropdownButtonId index name =
     MyUi.elButton
         (dropdownButtonId index)
         (msgConfig.pressedPingUser index)
-        [ Ui.paddingXY 8 4
+        [ Ui.paddingXY 8 0
+        , Ui.contentCenterY
+        , Ui.height (Ui.px dropdownButtonHeight)
         , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
         , if dropdown.dropdownIndex == index then
             Ui.background MyUi.background3
