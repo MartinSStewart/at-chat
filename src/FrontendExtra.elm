@@ -26,9 +26,9 @@ import ImageEditor
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
 import Local
-import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import LoginForm
-import Message exposing (MessageState)
+import Message exposing (ChangeAttachments(..), MessageState)
 import MessageInput
 import MessageMenu
 import MessageView

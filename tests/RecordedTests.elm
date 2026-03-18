@@ -954,6 +954,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
         [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
                 let
+                    checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                     checkCards elmCampCardCount meetdownCardCount =
                         [ admin.checkView
                             100
@@ -1011,7 +1012,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                         (Test.Html.Query.has [ Test.Html.Selector.text "(editing...)" ])
                     , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
                     ]
-                , checkCards 1 1
+                , checkCards 1 0
                 ]
             )
         ]

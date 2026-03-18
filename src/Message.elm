@@ -1,5 +1,6 @@
 module Message exposing
-    ( Message(..)
+    ( ChangeAttachments(..)
+    , Message(..)
     , MessageNoReply(..)
     , MessageState(..)
     , MessageStateNoReply(..)
@@ -8,6 +9,7 @@ module Message exposing
     , addEmbed
     , addReactionEmoji
     , createdAt
+    , editUserTextMessage
     , removeReactionEmoji
     , userTextMessage
     )
@@ -77,6 +79,58 @@ userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
             )
         |> Command.batch
     )
+
+
+type ChangeAttachments
+    = ChangeAttachments (SeqDict (Id FileId) FileData)
+    | DoNotChangeAttachments
+
+
+editUserTextMessage :
+    Time.Posix
+    -> Nonempty (RichText userId)
+    -> ChangeAttachments
+    -> UserTextMessageData messageId userId
+    -> UserTextMessageData messageId userId
+editUserTextMessage time newContent attachedFiles data =
+    let
+        oldUrls : SeqDict Url EmbedData
+        oldUrls =
+            List.indexedMap
+                (\index link ->
+                    case Array.get index data.embeds of
+                        Just (RichText.EmbedLoaded embed) ->
+                            ( link, embed )
+
+                        Just RichText.EmbedLoading ->
+                            ( link, RichText.emptyEmbed )
+
+                        Nothing ->
+                            ( link, RichText.emptyEmbed )
+                )
+                (RichText.hyperlinks data.content)
+                |> SeqDict.fromList
+    in
+    { data
+        | editedAt = Just time
+        , content = newContent
+        , attachedFiles =
+            case attachedFiles of
+                ChangeAttachments attachedFiles2 ->
+                    attachedFiles2
+
+                DoNotChangeAttachments ->
+                    data.attachedFiles
+        , embeds =
+            RichText.hyperlinks newContent
+                |> List.map
+                    (\url ->
+                        SeqDict.get url oldUrls
+                            |> Maybe.withDefault RichText.emptyEmbed
+                            |> RichText.EmbedLoaded
+                    )
+                |> Array.fromList
+    }
 
 
 addEmbed : ( Url, Result e EmbedData ) -> Message messageId userId -> Message messageId userId

@@ -9,7 +9,6 @@ module LocalState exposing
     , Archived
     , BackendChannel
     , BackendGuild
-    , ChangeAttachments(..)
     , ChannelStatus(..)
     , DiscordBackendChannel
     , DiscordBackendGuild
@@ -121,7 +120,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
-import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments(..), Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
@@ -1580,49 +1579,12 @@ editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex ch
     case DmChannel.getArray messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy && data.content /= newContent then
-                let
-                    oldUrls : SeqDict Url EmbedData
-                    oldUrls =
-                        List.indexedMap
-                            (\index link ->
-                                case Array.get index data.embeds of
-                                    Just (RichText.EmbedLoaded embed) ->
-                                        ( link, embed )
-
-                                    Just RichText.EmbedLoading ->
-                                        ( link, RichText.emptyEmbed )
-
-                                    Nothing ->
-                                        ( link, RichText.emptyEmbed )
-                            )
-                            (RichText.hyperlinks data.content)
-                            |> SeqDict.fromList
-
-                    data2 : UserTextMessageData messageId userId
-                    data2 =
-                        { data
-                            | editedAt = Just time
-                            , content = newContent
-                            , attachedFiles =
-                                case attachedFiles of
-                                    ChangeAttachments attachedFiles2 ->
-                                        attachedFiles2
-
-                                    DoNotChangeAttachments ->
-                                        data.attachedFiles
-                            , embeds =
-                                RichText.hyperlinks data.content
-                                    |> List.map
-                                        (\url ->
-                                            SeqDict.get url oldUrls
-                                                |> Maybe.withDefault RichText.emptyEmbed
-                                                |> RichText.EmbedLoaded
-                                        )
-                                    |> Array.fromList
-                        }
-                in
                 { channel
-                    | messages = DmChannel.setArray messageIndex (UserTextMessage data2) channel.messages
+                    | messages =
+                        DmChannel.setArray
+                            messageIndex
+                            (UserTextMessage (Message.editUserTextMessage time newContent attachedFiles data))
+                            channel.messages
                     , lastTypedAt =
                         SeqDict.update
                             editedBy
@@ -1676,11 +1638,6 @@ editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute cha
             editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageId channel
 
 
-type ChangeAttachments
-    = ChangeAttachments (SeqDict (Id FileId) FileData)
-    | DoNotChangeAttachments
-
-
 editMessageFrontendHelperNoThread :
     Time.Posix
     -> userId
@@ -1693,23 +1650,12 @@ editMessageFrontendHelperNoThread time editedBy newContent attachedFiles message
     case DmChannel.getArray messageIndex channel.messages of
         Just (MessageLoaded (UserTextMessage data)) ->
             if data.createdBy == editedBy && data.content /= newContent then
-                let
-                    data2 : UserTextMessageData messageId userId
-                    data2 =
-                        { data
-                            | editedAt = Just time
-                            , content = newContent
-                            , attachedFiles =
-                                case attachedFiles of
-                                    ChangeAttachments attachedFiles2 ->
-                                        attachedFiles2
-
-                                    DoNotChangeAttachments ->
-                                        data.attachedFiles
-                        }
-                in
                 { channel
-                    | messages = DmChannel.setArray messageIndex (MessageLoaded (UserTextMessage data2)) channel.messages
+                    | messages =
+                        DmChannel.setArray
+                            messageIndex
+                            (MessageLoaded (UserTextMessage (Message.editUserTextMessage time newContent attachedFiles data)))
+                            channel.messages
                     , lastTypedAt =
                         SeqDict.update
                             editedBy
