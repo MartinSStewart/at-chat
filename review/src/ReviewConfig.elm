@@ -130,7 +130,6 @@ config =
             [ [ "Backend" ]
             , [ "BackendExtra" ]
             , [ "UiViewer" ]
-            , [ "TwoFactorAuthentication" ]
             ]
         }
     ]

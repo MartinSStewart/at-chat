@@ -740,8 +740,8 @@ handleCreateMessage :
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleCreateMessage message attachments model =
-    case message.type_ of
+handleCreateMessage discordMessage attachments model =
+    case discordMessage.type_ of
         Discord.ThreadCreated ->
             ( model, Command.none )
 
@@ -749,51 +749,51 @@ handleCreateMessage message attachments model =
             ( model, Command.none )
 
         _ ->
-            case message.guildId of
+            case discordMessage.guildId of
                 Missing ->
                     let
                         dmChannelId : Discord.Id Discord.PrivateChannelId
                         dmChannelId =
-                            Discord.idToUInt64 message.channelId |> Discord.idFromUInt64
+                            Discord.idToUInt64 discordMessage.channelId |> Discord.idFromUInt64
                     in
                     case SeqDict.get dmChannelId model.discordDmChannels of
                         Just channel ->
-                            if OneToOne.memberFirst message.id channel.linkedMessageIds then
+                            if OneToOne.memberFirst discordMessage.id channel.linkedMessageIds then
                                 ( model, Command.none )
 
                             else
                                 let
                                     richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                     richText =
-                                        RichText.fromDiscord message.content attachments
+                                        RichText.fromDiscord discordMessage.content attachments
 
                                     replyTo : Maybe (Id ChannelMessageId)
                                     replyTo =
-                                        referencedMessageToMessageId message channel
+                                        referencedMessageToMessageId discordMessage channel
 
-                                    ( message2, embedCmds ) =
+                                    ( message, embedCmds ) =
                                         Message.userTextMessage
-                                            message.timestamp
-                                            message.author.id
+                                            discordMessage.timestamp
+                                            discordMessage.author.id
                                             richText
                                             replyTo
                                             attachments
 
                                     guildOrDmId : DiscordGuildOrDmId
                                     guildOrDmId =
-                                        DiscordGuildOrDmId_Dm { currentUserId = message.author.id, channelId = dmChannelId }
+                                        DiscordGuildOrDmId_Dm { currentUserId = discordMessage.author.id, channelId = dmChannelId }
                                 in
-                                case LocalState.createDiscordDmChannelMessageBackend message.id message2 channel of
+                                case LocalState.createDiscordDmChannelMessageBackend discordMessage.id message channel of
                                     Ok ( messageId, channel2 ) ->
                                         let
                                             notification : Command BackendOnly toMsg BackendMsg
                                             notification =
                                                 Broadcast.discordDmNotification
-                                                    message.timestamp
+                                                    discordMessage.timestamp
                                                     dmChannelId
-                                                    message.author.id
-                                                    message.author.username
-                                                    (case SeqDict.get message.author.id model.discordUsers of
+                                                    discordMessage.author.id
+                                                    discordMessage.author.username
+                                                    (case SeqDict.get discordMessage.author.id model.discordUsers of
                                                         Just discordUser ->
                                                             DiscordUserData.icon discordUser
 
@@ -808,12 +808,12 @@ handleCreateMessage message attachments model =
                                                 SeqDict.insert dmChannelId channel2 model.discordDmChannels
                                             , discordUsers =
                                                 addDiscordUserData
-                                                    (Discord.userToPartialUser message.author)
+                                                    (Discord.userToPartialUser discordMessage.author)
                                                     model.discordUsers
                                           }
                                         , case
                                             SeqDict.get
-                                                { currentUserId = message.author.id, channelId = dmChannelId }
+                                                { currentUserId = discordMessage.author.id, channelId = dmChannelId }
                                                 model.pendingDiscordCreateDmMessages
                                           of
                                             Just ( clientId, changeId ) ->
@@ -821,7 +821,7 @@ handleCreateMessage message attachments model =
                                                     [ LocalChangeResponse
                                                         changeId
                                                         (Local_Discord_SendMessage
-                                                            message.timestamp
+                                                            discordMessage.timestamp
                                                             guildOrDmId
                                                             richText
                                                             (NoThreadWithMaybeMessage replyTo)
@@ -832,7 +832,7 @@ handleCreateMessage message attachments model =
                                                         clientId
                                                         dmChannelId
                                                         (Server_Discord_SendMessage
-                                                            message.timestamp
+                                                            discordMessage.timestamp
                                                             guildOrDmId
                                                             richText
                                                             (NoThreadWithMaybeMessage replyTo)
@@ -852,7 +852,7 @@ handleCreateMessage message attachments model =
                                                     [ Broadcast.toDiscordDmChannel
                                                         dmChannelId
                                                         (Server_Discord_SendMessage
-                                                            message.timestamp
+                                                            discordMessage.timestamp
                                                             guildOrDmId
                                                             richText
                                                             (NoThreadWithMaybeMessage replyTo)
@@ -875,7 +875,7 @@ handleCreateMessage message attachments model =
                             ( model, Command.none )
 
                 Included discordGuildId ->
-                    handleDiscordCreateGuildMessage discordGuildId message attachments model
+                    handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model
 
 
 discordGetGuildChannel :
@@ -925,19 +925,19 @@ handleDiscordCreateGuildMessage :
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateGuildMessage discordGuildId message attachments model =
+handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model =
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
-            case discordGetGuildChannel message guild of
+            case discordGetGuildChannel discordMessage guild of
                 Just ( channelId, channel, threadRoute ) ->
-                    if OneToOne.memberFirst message.id channel.linkedMessageIds then
+                    if OneToOne.memberFirst discordMessage.id channel.linkedMessageIds then
                         ( model, Command.none )
 
                     else
                         let
                             richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
-                                RichText.fromDiscord message.content attachments
+                                RichText.fromDiscord discordMessage.content attachments
 
                             threadOrChannelId : Discord.Id Discord.ChannelId
                             threadOrChannelId =
@@ -972,7 +972,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
 
                             guildOrDmId : DiscordGuildOrDmId
                             guildOrDmId =
-                                DiscordGuildOrDmId_Guild message.author.id discordGuildId channelId
+                                DiscordGuildOrDmId_Guild discordMessage.author.id discordGuildId channelId
 
                             channelResult =
                                 case threadRoute of
@@ -980,13 +980,13 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                         let
                                             ( message2, embedCmds ) =
                                                 Message.userTextMessage
-                                                    message.timestamp
-                                                    message.author.id
+                                                    discordMessage.timestamp
+                                                    discordMessage.author.id
                                                     richText
                                                     maybeReplyTo
                                                     attachments
                                         in
-                                        case LocalState.createDiscordThreadMessageBackend message.id threadId message2 channel of
+                                        case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId message2 channel of
                                             Ok ( messageId, channel3 ) ->
                                                 ( channel3
                                                 , Command.map
@@ -1001,15 +1001,15 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
 
                                     NoThreadWithMaybeMessage maybeReplyTo ->
                                         let
-                                            ( message2, embedCmds ) =
+                                            ( message, embedCmds ) =
                                                 Message.userTextMessage
-                                                    message.timestamp
-                                                    message.author.id
+                                                    discordMessage.timestamp
+                                                    discordMessage.author.id
                                                     richText
                                                     maybeReplyTo
                                                     attachments
                                         in
-                                        case LocalState.createDiscordChannelMessageBackend message.id message2 channel of
+                                        case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
                                             Ok ( messageId, channel3 ) ->
                                                 ( channel3
                                                 , Command.map
@@ -1032,7 +1032,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                 | channels = SeqDict.insert channelId channel4 guild.channels
                                                 , members =
                                                     SeqDict.update
-                                                        message.author.id
+                                                        discordMessage.author.id
                                                         (\maybe ->
                                                             case maybe of
                                                                 Just _ ->
@@ -1046,7 +1046,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                             model.discordGuilds
                                     , discordUsers =
                                         addDiscordUserData
-                                            (Discord.userToPartialUser message.author)
+                                            (Discord.userToPartialUser discordMessage.author)
                                             model.discordUsers
                                     , users =
                                         SeqSet.foldl
@@ -1076,20 +1076,20 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                             model.users
                                             usersMentioned
                                     , pendingDiscordCreateMessages =
-                                        SeqDict.remove ( message.author.id, threadOrChannelId ) model.pendingDiscordCreateMessages
+                                        SeqDict.remove ( discordMessage.author.id, threadOrChannelId ) model.pendingDiscordCreateMessages
                                   }
                                 , Command.batch
-                                    [ case SeqDict.get ( message.author.id, threadOrChannelId ) model.pendingDiscordCreateMessages of
+                                    [ case SeqDict.get ( discordMessage.author.id, threadOrChannelId ) model.pendingDiscordCreateMessages of
                                         Just ( clientId, changeId ) ->
                                             Command.batch
                                                 [ LocalChangeResponse
                                                     changeId
-                                                    (Local_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute attachments)
+                                                    (Local_Discord_SendMessage discordMessage.timestamp guildOrDmId richText threadRoute attachments)
                                                     |> Lamdera.sendToFrontend clientId
                                                 , Broadcast.toDiscordGuildExcludingOne
                                                     clientId
                                                     discordGuildId
-                                                    (Server_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute attachments
+                                                    (Server_Discord_SendMessage discordMessage.timestamp guildOrDmId richText threadRoute attachments
                                                         |> ServerChange
                                                     )
                                                     model
@@ -1099,7 +1099,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                             Broadcast.toDiscordGuild
                                                 discordGuildId
                                                 (Server_Discord_SendMessage
-                                                    message.timestamp
+                                                    discordMessage.timestamp
                                                     guildOrDmId
                                                     richText
                                                     threadRoute
@@ -1107,11 +1107,11 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                     |> ServerChange
                                                 )
                                                 model
-                                    , getUserAvatars model.discordUsers [ message.author ]
+                                    , getUserAvatars model.discordUsers [ discordMessage.author ]
                                     , Broadcast.discordGuildMessageNotification
                                         usersMentioned
-                                        message.timestamp
-                                        message.author.id
+                                        discordMessage.timestamp
+                                        discordMessage.author.id
                                         discordGuildId
                                         channelId
                                         threadRouteNoReply

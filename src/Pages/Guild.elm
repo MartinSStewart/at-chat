@@ -3159,9 +3159,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 EmojiSelectorForReaction _ _ ->
                     Ui.inFront emojiSelector
-
-                EmojiSelectorForMessage ->
-                    Ui.inFront emojiSelector
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3365,9 +3362,6 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
-
-                EmojiSelectorForMessage ->
                     Ui.inFront emojiSelector
             , Ui.heightMin 0
             , Ui.height Ui.fill
@@ -3647,9 +3641,6 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
                 EmojiSelectorForReaction _ _ ->
                     Ui.inFront emojiSelector
-
-                EmojiSelectorForMessage ->
-                    Ui.inFront emojiSelector
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3852,9 +3843,6 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
-
-                EmojiSelectorForMessage ->
                     Ui.inFront emojiSelector
             , Ui.heightMin 0
             , Ui.height Ui.fill

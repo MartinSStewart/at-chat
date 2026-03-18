@@ -452,24 +452,6 @@ writeMessageMobile user text =
         ]
 
 
-editMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> HtmlId -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-editMessage user messageId text =
-    [ user.custom
-        100
-        messageId
-        "contextmenu"
-        (Json.Encode.object
-            [ ( "clientX", Json.Encode.float 50 )
-            , ( "clientY", Json.Encode.float 150 )
-            ]
-        )
-    , user.click 2000 (Dom.id "messageMenu_editMessage")
-    , user.input 200 (Dom.id "editMessageTextInput") text
-    , user.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
-    ]
-        |> T.collapsableGroup "Edit message"
-
-
 createThread : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> Id ChannelMessageId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 createThread user messageId =
     T.group
@@ -505,7 +487,10 @@ handleHttpRequests overrides fileData requestAndData =
     let
         key : String
         key =
-            requestAndData.currentRequest.method ++ "_" ++ requestAndData.currentRequest.url
+            requestAndData.currentRequest.method
+                ++ "_"
+                ++ requestAndData.currentRequest.url
+                |> Debug.log "key"
 
         getData : String -> HttpResponse
         getData path =
@@ -516,15 +501,21 @@ handleHttpRequests overrides fileData requestAndData =
                 Nothing ->
                     UnhandledHttpRequest
     in
-    case ( Dict.get key overrides, Dict.get key fileRequests ) of
-        ( Just path, _ ) ->
-            getData path
+    if key == "GET_/_i" then
+        StringHttpResponse
+            { url = requestAndData.currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+            infoEndpointResponse
 
-        ( Nothing, Just path ) ->
-            getData path
+    else
+        case ( Dict.get key overrides, Dict.get key fileRequests ) of
+            ( Just path, _ ) ->
+                getData path
 
-        _ ->
-            UnhandledHttpRequest
+            ( Nothing, Just path ) ->
+                getData path
+
+            _ ->
+                UnhandledHttpRequest
 
 
 scrollToTop :
@@ -746,6 +737,11 @@ linkDiscordAndLogin name emailAddress isNewAccount discordOp0Ready discordOp0Rea
         )
 
 
+infoEndpointResponse : String
+infoEndpointResponse =
+    """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
+
+
 tests : Dict String Bytes -> String -> String -> Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
     let
@@ -764,7 +760,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                                 , statusText = "OK"
                                 , headers = Dict.empty
                                 }
-                                """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
+                                infoEndpointResponse
 
                         "http://localhost:3000/file/custom-request" ->
                             case currentRequest.body of
@@ -941,13 +937,33 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             T.Config
                 Frontend.app_
                 Backend.app_
-                (handleHttpRequests Dict.empty fileData)
+                (handleHttpRequests
+                    Dict.empty
+                    fileData
+                )
                 (\_ -> Nothing)
                 (\_ -> UnhandledFileUpload)
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
     [ T.start
+        "Admin can open admin page"
+        startTime
+        config
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_goToHomepage")
+                ]
+            )
+        ]
+    , T.start
         "Create message with embeds and then edit that message"
         startTime
         normalConfig

@@ -21,14 +21,12 @@ module Slack exposing
     , TokenResponse
     , User
     , UserId
-    , buildOAuthUrl
     , channelId
     , exchangeCodeForToken
     , getCurrentUser
     , listUsers
     , loadMessages
     , loadWorkspaceChannels
-    , redirectUri
     , teamInfo
     )
 
@@ -41,7 +39,6 @@ import Hex
 import Id exposing (Id)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Extra
-import List.Nonempty exposing (Nonempty)
 import String.Nonempty exposing (NonemptyString)
 import Url.Builder
 
@@ -91,23 +88,25 @@ type alias TokenResponse =
     }
 
 
-buildOAuthUrl :
-    { clientId : String
-    , redirectUri : String
-    , botScopes : Nonempty String
-    , userScopes : Nonempty String
-    , state : String
-    }
-    -> String
-buildOAuthUrl config =
-    Url.Builder.crossOrigin "https://slack.com"
-        [ "oauth", "v2", "authorize" ]
-        [ Url.Builder.string "client_id" config.clientId
-        , Url.Builder.string "redirect_uri" config.redirectUri
-        , Url.Builder.string "scope" (String.join "," (List.Nonempty.toList config.botScopes))
-        , Url.Builder.string "user_scope" (String.join "," (List.Nonempty.toList config.userScopes))
-        , Url.Builder.string "state" config.state
-        ]
+
+--
+--buildOAuthUrl :
+--    { clientId : String
+--    , redirectUri : String
+--    , botScopes : Nonempty String
+--    , userScopes : Nonempty String
+--    , state : String
+--    }
+--    -> String
+--buildOAuthUrl config =
+--    Url.Builder.crossOrigin "https://slack.com"
+--        [ "oauth", "v2", "authorize" ]
+--        [ Url.Builder.string "client_id" config.clientId
+--        , Url.Builder.string "redirect_uri" config.redirectUri
+--        , Url.Builder.string "scope" (String.join "," (List.Nonempty.toList config.botScopes))
+--        , Url.Builder.string "user_scope" (String.join "," (List.Nonempty.toList config.userScopes))
+--        , Url.Builder.string "state" config.state
+--        ]
 
 
 redirectUri : String

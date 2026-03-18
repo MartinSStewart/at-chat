@@ -1290,9 +1290,6 @@ updateLoaded msg model =
                                 (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                 Command.none
-
-                        EmojiSelectorForMessage ->
-                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -3393,9 +3390,6 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
                         EmojiSelectorForReaction _ _ ->
                             EmojiSelectorHidden
-
-                        EmojiSelectorForMessage ->
-                            EmojiSelectorHidden
                 , messageHover =
                     case loggedIn.messageHover of
                         NoMessageHover ->
@@ -4572,7 +4566,6 @@ view model =
                         requiresLogin
                             (\_ local ->
                                 TextEditor.view
-                                    (MyUi.isMobile loaded)
                                     local.localUser.session.userId
                                     local.textEditor
                                     |> Ui.map TextEditorMsg

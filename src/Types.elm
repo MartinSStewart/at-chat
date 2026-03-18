@@ -261,7 +261,6 @@ type alias EditMessage =
 type EmojiSelector
     = EmojiSelectorHidden
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
-    | EmojiSelectorForMessage
 
 
 type alias BackendModel =

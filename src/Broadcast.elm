@@ -7,7 +7,6 @@ module Broadcast exposing
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
-    , notification
     , pushNotification
     , pushNotificationCodec
     , toAdmins

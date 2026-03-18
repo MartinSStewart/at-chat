@@ -6,14 +6,12 @@ module RichText exposing
     , Range
     , RichText(..)
     , RichTextState
-    , append
     , attachedFilePrefix
     , attachedFileSuffix
     , domainToString
     , emptyEmbed
     , fromDiscord
     , fromNonemptyString
-    , fromSlack
     , hyperlinks
     , mentionsUser
     , preview
@@ -48,7 +46,6 @@ import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..), Url)
@@ -309,11 +306,6 @@ toString users nonempty =
         nonempty
         |> List.Nonempty.toList
         |> String.concat
-
-
-append : Nonempty (RichText userId) -> Nonempty (RichText userId) -> Nonempty (RichText userId)
-append first second =
-    List.Nonempty.append first second |> normalize
 
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
@@ -1777,88 +1769,90 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-fromSlack : List Slack.Block -> Nonempty (RichText (Slack.Id Slack.UserId))
-fromSlack blocks =
-    List.concatMap
-        (\block ->
-            case block of
-                Slack.RichTextBlock elements ->
-                    List.concatMap
-                        (\element ->
-                            case element of
-                                Slack.RichTextSection elements2 ->
-                                    List.filterMap
-                                        (\element2 ->
-                                            case element2 of
-                                                Slack.RichText_Text data ->
-                                                    case String.Nonempty.fromString data.text of
-                                                        Just text ->
-                                                            (if data.code then
-                                                                InlineCode (String.Nonempty.head text) (String.Nonempty.tail text)
 
-                                                             else
-                                                                NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
-                                                            )
-                                                                |> (\a ->
-                                                                        if data.italic then
-                                                                            Italic (Nonempty a [])
-
-                                                                        else
-                                                                            a
-                                                                   )
-                                                                |> (\a ->
-                                                                        if data.bold then
-                                                                            Bold (Nonempty a [])
-
-                                                                        else
-                                                                            a
-                                                                   )
-                                                                |> (\a ->
-                                                                        if data.strikethrough then
-                                                                            Strikethrough (Nonempty a [])
-
-                                                                        else
-                                                                            a
-                                                                   )
-                                                                |> Just
-
-                                                        Nothing ->
-                                                            Nothing
-
-                                                Slack.RichText_Emoji data ->
-                                                    NormalText
-                                                        (String.Nonempty.head data.unicode)
-                                                        (String.Nonempty.tail data.unicode)
-                                                        |> Just
-
-                                                Slack.RichText_UserMention id ->
-                                                    UserMention id |> Just
-                                        )
-                                        elements2
-
-                                Slack.RichTextPreformattedSection elements2 ->
-                                    [ List.filterMap
-                                        (\element2 ->
-                                            case element2 of
-                                                Slack.RichText_Text data ->
-                                                    Just data.text
-
-                                                Slack.RichText_Emoji _ ->
-                                                    Nothing
-
-                                                Slack.RichText_UserMention _ ->
-                                                    Nothing
-                                        )
-                                        elements2
-                                        |> String.concat
-                                        |> CodeBlock NoLanguage
-                                    ]
-                        )
-                        elements
-        )
-        blocks
-        |> List.Nonempty.fromList
-        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
+--
+--fromSlack : List Slack.Block -> Nonempty (RichText (Slack.Id Slack.UserId))
+--fromSlack blocks =
+--    List.concatMap
+--        (\block ->
+--            case block of
+--                Slack.RichTextBlock elements ->
+--                    List.concatMap
+--                        (\element ->
+--                            case element of
+--                                Slack.RichTextSection elements2 ->
+--                                    List.filterMap
+--                                        (\element2 ->
+--                                            case element2 of
+--                                                Slack.RichText_Text data ->
+--                                                    case String.Nonempty.fromString data.text of
+--                                                        Just text ->
+--                                                            (if data.code then
+--                                                                InlineCode (String.Nonempty.head text) (String.Nonempty.tail text)
+--
+--                                                             else
+--                                                                NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
+--                                                            )
+--                                                                |> (\a ->
+--                                                                        if data.italic then
+--                                                                            Italic (Nonempty a [])
+--
+--                                                                        else
+--                                                                            a
+--                                                                   )
+--                                                                |> (\a ->
+--                                                                        if data.bold then
+--                                                                            Bold (Nonempty a [])
+--
+--                                                                        else
+--                                                                            a
+--                                                                   )
+--                                                                |> (\a ->
+--                                                                        if data.strikethrough then
+--                                                                            Strikethrough (Nonempty a [])
+--
+--                                                                        else
+--                                                                            a
+--                                                                   )
+--                                                                |> Just
+--
+--                                                        Nothing ->
+--                                                            Nothing
+--
+--                                                Slack.RichText_Emoji data ->
+--                                                    NormalText
+--                                                        (String.Nonempty.head data.unicode)
+--                                                        (String.Nonempty.tail data.unicode)
+--                                                        |> Just
+--
+--                                                Slack.RichText_UserMention id ->
+--                                                    UserMention id |> Just
+--                                        )
+--                                        elements2
+--
+--                                Slack.RichTextPreformattedSection elements2 ->
+--                                    [ List.filterMap
+--                                        (\element2 ->
+--                                            case element2 of
+--                                                Slack.RichText_Text data ->
+--                                                    Just data.text
+--
+--                                                Slack.RichText_Emoji _ ->
+--                                                    Nothing
+--
+--                                                Slack.RichText_UserMention _ ->
+--                                                    Nothing
+--                                        )
+--                                        elements2
+--                                        |> String.concat
+--                                        |> CodeBlock NoLanguage
+--                                    ]
+--                        )
+--                        elements
+--        )
+--        blocks
+--        |> List.Nonempty.fromList
+--        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
 fromDiscord : String -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Discord.Id Discord.UserId))

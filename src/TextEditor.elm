@@ -427,8 +427,8 @@ inputId =
     Dom.id "textEditor_input"
 
 
-view : Bool -> Id UserId -> LocalState -> Element Msg
-view isMobile currentUserId local =
+view : Id UserId -> LocalState -> Element Msg
+view currentUserId local =
     let
         editorState : EditorState
         editorState =
@@ -633,17 +633,17 @@ mixColors first rest =
                             colorText =
                                 Color.toCssString color
 
-                            offset0 =
+                            offsetA =
                                 " " ++ String.fromInt (index * 6) ++ "px,"
 
-                            offset1 =
+                            offsetB =
                                 " " ++ String.fromInt ((index + 1) * 6) ++ "px"
                         in
                         if index == 0 then
-                            "," ++ colorText ++ "," ++ colorText ++ offset1
+                            "," ++ colorText ++ "," ++ colorText ++ offsetB
 
                         else
-                            "," ++ colorText ++ offset0 ++ colorText ++ offset1
+                            "," ++ colorText ++ offsetA ++ colorText ++ offsetB
                     )
                     (first :: rest)
                 )
@@ -652,7 +652,7 @@ mixColors first rest =
 
 
 highlightText : String -> Id UserId -> EditorState -> LocalState -> List (Html msg)
-highlightText text currentUserId editorState local =
+highlightText text currentUserId _ local =
     let
         list =
             SeqDict.toList (SeqDict.remove currentUserId local.cursorPosition)
