@@ -341,7 +341,7 @@ finalProjectEvaluation context =
                                 |> List.filterMap
                                     (\usage ->
                                         if
-                                            (usage.referencedModule == rename.moduleName)
+                                            (usage.referencedModule == rename.moduleName || usage.referencedModule == [])
                                                 && (usage.oldName == rename.oldName)
                                                 && (usage.moduleName == rename.moduleName)
                                         then
