@@ -449,20 +449,22 @@ parser users modifiers =
                 [ Parser.succeed identity
                     |. Parser.symbol "@"
                     |= Parser.oneOf
-                        (List.map
-                            (\( userId, user ) ->
-                                Parser.succeed
-                                    (Loop
-                                        { current = Array.empty
-                                        , rest =
-                                            Array.append
-                                                state.rest
-                                                (Array.push (UserMention userId) (parserHelper state))
-                                        }
-                                    )
-                                    |. Parser.symbol (PersonName.toString user.name)
-                            )
-                            (SeqDict.toList users)
+                        ((SeqDict.toList users
+                            |> List.sortBy (\( _, user ) -> PersonName.toString user.name |> String.length |> negate)
+                            |> List.map
+                                (\( userId, user ) ->
+                                    Parser.succeed
+                                        (Loop
+                                            { current = Array.empty
+                                            , rest =
+                                                Array.append
+                                                    state.rest
+                                                    (Array.push (UserMention userId) (parserHelper state))
+                                            }
+                                        )
+                                        |. Parser.symbol (PersonName.toString user.name)
+                                )
+                         )
                             ++ [ Parser.succeed
                                     (Loop
                                         { current = Array.push "@" state.current
