@@ -26,7 +26,7 @@ import Discord exposing (OptionalData(..))
 import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
-import DmChannel exposing (DiscordDmChannel)
+import DmChannel
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http

@@ -506,8 +506,8 @@ isPress msg =
             False
 
 
-selectionDecoder : Json.Decode.Decoder Range
-selectionDecoder =
+decodeSelection : Json.Decode.Decoder Range
+decodeSelection =
     Json.Decode.map2 (\start end -> Range (min start end) (max start end))
         (Json.Decode.at [ "target", "selectionStart" ] Json.Decode.int)
         (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
@@ -539,7 +539,7 @@ textarea local currentUserId placeholderText editorState =
             , Html.Attributes.style "outline" "none"
             , Html.Events.onInput TypedText
             , Html.Attributes.value editorState.text
-            , Html.Events.on "selectionchange" (Json.Decode.map MovedCursor selectionDecoder)
+            , Html.Events.on "selectionchange" (Json.Decode.map MovedCursor decodeSelection)
             , Dom.idToAttribute inputId
             , Html.Events.preventDefaultOn
                 "keydown"

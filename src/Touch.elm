@@ -1,4 +1,4 @@
-module Touch exposing (ScreenCoordinate(..), Touch, averageTouchMove, touchEventDecoder)
+module Touch exposing (ScreenCoordinate(..), Touch, averageTouchMove, decodeTouchEvent)
 
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -20,11 +20,11 @@ type ScreenCoordinate
     = ScreenCoordinate Never
 
 
-touchEventDecoder : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
-touchEventDecoder msg =
+decodeTouchEvent : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
+decodeTouchEvent msg =
     Json.Decode.map2
         Tuple.pair
-        (Json.Decode.field "touches" (dynamicListOf touchDecoder))
+        (Json.Decode.field "touches" (dynamicListOf decodeTouch))
         (Json.Decode.field "timeStamp" Json.Decode.float)
         |> Json.Decode.andThen
             (\( list, time ) ->
@@ -37,20 +37,20 @@ touchEventDecoder msg =
             )
 
 
-touchDecoder : Decoder ( Int, Touch )
-touchDecoder =
+decodeTouch : Decoder ( Int, Touch )
+decodeTouch =
     Json.Decode.map4
         (\identifier clientX clientY target ->
             ( identifier, { client = Point2d.xy clientX clientY, target = target } )
         )
         (Json.Decode.field "identifier" Json.Decode.int)
-        (Json.Decode.field "clientX" quantityDecoder)
-        (Json.Decode.field "clientY" quantityDecoder)
-        (Json.Decode.field "target" (idDecoder 10))
+        (Json.Decode.field "clientX" decodeQuantity)
+        (Json.Decode.field "clientY" decodeQuantity)
+        (Json.Decode.field "target" (decodeId 10))
 
 
-idDecoder : Int -> Decoder (Maybe HtmlId)
-idDecoder depth =
+decodeId : Int -> Decoder (Maybe HtmlId)
+decodeId depth =
     if depth > 0 then
         Json.Decode.field "id" Json.Decode.string
             |> Json.Decode.andThen
@@ -58,7 +58,7 @@ idDecoder depth =
                     if id == "" then
                         Json.Decode.field
                             "parentElement"
-                            (Json.Decode.nullable (idDecoder (depth - 1)) |> Json.Decode.map (Maybe.andThen identity))
+                            (Json.Decode.nullable (decodeId (depth - 1)) |> Json.Decode.map (Maybe.andThen identity))
 
                     else
                         Json.Decode.succeed (Just (Dom.id id))
@@ -68,8 +68,8 @@ idDecoder depth =
         Json.Decode.succeed Nothing
 
 
-quantityDecoder : Decoder (Quantity Float unit)
-quantityDecoder =
+decodeQuantity : Decoder (Quantity Float unit)
+decodeQuantity =
     Json.Decode.map Quantity.unsafe Json.Decode.float
 
 

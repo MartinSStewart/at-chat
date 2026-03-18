@@ -271,8 +271,8 @@ layout model attributes child =
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: attributes
             ++ (if MyUi.isMobile model then
-                    [ Html.Events.on "touchstart" (Touch.touchEventDecoder (TouchStart Nothing)) |> Ui.htmlAttribute
-                    , Html.Events.on "touchmove" (Touch.touchEventDecoder TouchMoved) |> Ui.htmlAttribute
+                    [ Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
+                    , Html.Events.on "touchmove" (Touch.decodeTouchEvent TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
                         "touchend"
                         (Json.Decode.field "timeStamp" Json.Decode.float

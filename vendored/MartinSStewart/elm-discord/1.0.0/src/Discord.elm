@@ -3782,7 +3782,7 @@ decodePartialGuild =
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
-        |> JD.andMap (JD.field "stickers" (JD.list stickerDecoder))
+        |> JD.andMap (JD.field "stickers" (JD.list decodeSticker))
 
 
 decodeGuild : JD.Decoder Guild
@@ -4352,24 +4352,24 @@ type StickerFormatType
     | GifFormat
 
 
-stickerDecoder : JD.Decoder Sticker
-stickerDecoder =
+decodeSticker : JD.Decoder Sticker
+decodeSticker =
     JD.succeed Sticker
         |> JD.andMap (JD.field "id" decodeId)
         |> JD.andMap (decodeOptionalData "pack_id" decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "description" (JD.nullable JD.string))
         |> JD.andMap (JD.field "tags" JD.string)
-        |> JD.andMap (JD.field "type" stickerTypeDecoder)
-        |> JD.andMap (JD.field "format_type" formatTypeDecoder)
+        |> JD.andMap (JD.field "type" decodeStickerType)
+        |> JD.andMap (JD.field "format_type" decodeFormatType)
         |> JD.andMap (decodeOptionalData "available" JD.bool)
         |> JD.andMap (decodeOptionalData "guild_id" JD.string)
         |> JD.andMap (decodeOptionalData "user" decodePartialUser)
         |> JD.andMap (decodeOptionalData "sort_value" JD.int)
 
 
-stickerTypeDecoder : JD.Decoder StickerType
-stickerTypeDecoder =
+decodeStickerType : JD.Decoder StickerType
+decodeStickerType =
     JD.andThen
         (\typeInt ->
             case typeInt of
@@ -4385,8 +4385,8 @@ stickerTypeDecoder =
         JD.int
 
 
-formatTypeDecoder : JD.Decoder StickerFormatType
-formatTypeDecoder =
+decodeFormatType : JD.Decoder StickerFormatType
+decodeFormatType =
     JD.andThen
         (\formatInt ->
             case formatInt of
@@ -4416,10 +4416,10 @@ type alias ReadySupplementalData =
     }
 
 
-readySupplementalDecoder : JD.Decoder ReadySupplementalData
-readySupplementalDecoder =
+decodeReadySupplemental : JD.Decoder ReadySupplementalData
+decodeReadySupplemental =
     JD.succeed ReadySupplementalData
-        |> JD.andMap (JD.field "guilds" (JD.list supplementalGuildDecoder))
+        |> JD.andMap (JD.field "guilds" (JD.list decodeSupplementalGuild))
         |> JD.andMap (JD.field "merged_members" (JD.list (JD.list decodeMergedMember)))
         |> JD.andMap (JD.field "lazy_private_channels" (JD.list decodePrivateChannel))
         |> JD.andMap (JD.field "disclose" (JD.list JD.string))
@@ -4459,8 +4459,8 @@ type alias SupplementalGuild =
     }
 
 
-supplementalGuildDecoder : JD.Decoder SupplementalGuild
-supplementalGuildDecoder =
+decodeSupplementalGuild : JD.Decoder SupplementalGuild
+decodeSupplementalGuild =
     JD.map SupplementalGuild (JD.field "id" decodeId)
 
 
@@ -4537,38 +4537,38 @@ type RequiredAction
     | RequiresReverifiedEmailOrReverifiedPhone
 
 
-readyEventDecoder : JD.Decoder ReadyData
-readyEventDecoder =
+decodeReadyEvent : JD.Decoder ReadyData
+decodeReadyEvent =
     JD.succeed ReadyData
         |> JD.andMap (JD.field "_trace" (JD.list JD.string))
         |> JD.andMap (JD.field "v" JD.int)
         |> JD.andMap (JD.field "user" decodeUser)
         |> JD.andMap (decodeOptionalData "user_settings_proto" JD.string)
-        |> JD.andMap (JD.field "guilds" (JD.list gatewayGuildDecoder))
-        |> JD.andMap (decodeOptionalData "relationships" (JD.list relationshipDecoder))
+        |> JD.andMap (JD.field "guilds" (JD.list decodeGatewayGuild))
+        |> JD.andMap (decodeOptionalData "relationships" (JD.list decodeRelationship))
         |> JD.andMap (decodeOptionalData "friend_suggestion_count" JD.int)
         |> JD.andMap (decodeOptionalData "private_channels" (JD.list decodePrivateChannel))
         |> JD.andMap (decodeOptionalData "merged_members" (JD.list (JD.list decodeMergedMember)))
         |> JD.andMap (JD.field "users" (JD.list decodePartialUser))
         |> JD.andMap (decodeOptionalData "scopes" (JD.list JD.string))
         |> JD.andMap (JD.field "session_id" decodeSessionId)
-        |> JD.andMap (JD.field "session_type" sessionTypeDecoder)
+        |> JD.andMap (JD.field "session_type" decodeSessionType)
         |> JD.andMap (JD.field "static_client_session_id" JD.string)
         |> JD.andMap (decodeOptionalData "auth_session_id_hash" JD.string)
         |> JD.andMap (decodeOptionalData "auth_token" JD.string)
         |> JD.andMap (decodeOptionalData "analytics_token" JD.string)
-        |> JD.andMap (decodeOptionalData "required_action" requiredActionDecoder)
+        |> JD.andMap (decodeOptionalData "required_action" decodeRequiredAction)
         |> JD.andMap (decodeOptionalData "country_code" JD.string)
         |> JD.andMap (JD.field "geo_ordered_rtc_regions" (JD.list JD.string))
-        |> JD.andMap (decodeOptionalData "shard" shardDecoder)
+        |> JD.andMap (decodeOptionalData "shard" decodeShard)
         |> JD.andMap (JD.field "resume_gateway_url" JD.string)
         |> JD.andMap (decodeOptionalData "api_code_version" JD.int)
         |> JD.andMap (JD.field "explicit_content_scan_version" JD.int)
         |> JD.andMap (decodeOptionalData "av_sf_protocol_floor" JD.int)
 
 
-sessionTypeDecoder : JD.Decoder SessionType
-sessionTypeDecoder =
+decodeSessionType : JD.Decoder SessionType
+decodeSessionType =
     JD.andThen
         (\str ->
             case str of
@@ -4584,8 +4584,8 @@ sessionTypeDecoder =
         JD.string
 
 
-requiredActionDecoder : JD.Decoder RequiredAction
-requiredActionDecoder =
+decodeRequiredAction : JD.Decoder RequiredAction
+decodeRequiredAction =
     JD.andThen
         (\str ->
             case str of
@@ -4622,8 +4622,8 @@ requiredActionDecoder =
         JD.string
 
 
-shardDecoder : JD.Decoder ( Int, Int )
-shardDecoder =
+decodeShard : JD.Decoder ( Int, Int )
+decodeShard =
     JD.list JD.int
         |> JD.andThen
             (\list ->
@@ -4636,8 +4636,8 @@ shardDecoder =
             )
 
 
-gatewayGuildDecoder : JD.Decoder GatewayGuild
-gatewayGuildDecoder =
+decodeGatewayGuild : JD.Decoder GatewayGuild
+decodeGatewayGuild =
     JD.succeed GatewayGuild
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (JD.field "large" JD.bool)
@@ -4653,7 +4653,7 @@ gatewayGuildDecoder =
         --|> JD.andMap (JD.field "guild_scheduled_events" (JD.list scheduledEventDecoder))
         |> JD.andMap (JD.field "data_mode" JD.string)
         |> JD.andMap (JD.field "properties" decodeGatewayGuildProperties)
-        |> JD.andMap (JD.field "stickers" (JD.list stickerDecoder))
+        |> JD.andMap (JD.field "stickers" (JD.list decodeSticker))
         --|> JD.andMap (JD.field "roles" (JD.list roleDecoder))
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
         --|> JD.andMap (JD.field "soundboard_sounds" (JD.list soundboardSoundDecoder))
@@ -4747,11 +4747,11 @@ decodeTypingStart =
         |> JD.andMap (decodeOptionalData "guild_id" decodeId)
         |> JD.andMap (JD.field "channel_id" decodeId)
         |> JD.andMap (JD.field "user_id" decodeId)
-        |> JD.andMap (JD.field "timestamp" posixTimeDecoder)
+        |> JD.andMap (JD.field "timestamp" decodePosixTime)
 
 
-posixTimeDecoder : JD.Decoder Posix
-posixTimeDecoder =
+decodePosixTime : JD.Decoder Posix
+decodePosixTime =
     JD.map (\value -> Time.millisToPosix (value * 1000)) JD.int
 
 
@@ -4759,10 +4759,10 @@ decodeDispatchUserEvent : String -> JD.Decoder OpDispatchUserEvent
 decodeDispatchUserEvent eventName =
     case eventName of
         "READY" ->
-            JD.field "d" (JD.map DispatchUser_ReadyEvent readyEventDecoder)
+            JD.field "d" (JD.map DispatchUser_ReadyEvent decodeReadyEvent)
 
         "READY_SUPPLEMENTAL" ->
-            JD.field "d" (JD.map DispatchUser_ReadySupplementalEvent readySupplementalDecoder)
+            JD.field "d" (JD.map DispatchUser_ReadySupplementalEvent decodeReadySupplemental)
 
         "RESUMED" ->
             JD.field "d" (JD.succeed DispatchUser_ResumedEvent)
@@ -4897,7 +4897,7 @@ decodeDispatchUserEvent eventName =
             JD.succeed DispatchUser_StateUpdate
 
         "GUILD_CREATE" ->
-            JD.field "d" gatewayGuildDecoder |> JD.map DispatchUser_GuildCreate
+            JD.field "d" decodeGatewayGuild |> JD.map DispatchUser_GuildCreate
 
         "CHANNEL_UPDATE" ->
             JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelUpdate
@@ -6209,11 +6209,11 @@ type alias Relationship =
     }
 
 
-relationshipDecoder : JD.Decoder Relationship
-relationshipDecoder =
+decodeRelationship : JD.Decoder Relationship
+decodeRelationship =
     JD.succeed Relationship
         |> JD.andMap (JD.field "id" decodeId)
-        |> JD.andMap (JD.field "type" relationshipTypeDecoder)
+        |> JD.andMap (JD.field "type" decodeRelationshipType)
         |> JD.andMap (JD.field "nickname" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "is_spam_request" JD.bool)
         |> JD.andMap (decodeOptionalData "stranger_request" JD.bool)
@@ -6231,8 +6231,8 @@ type RelationshipType
     | RelationshipType_Implicit
 
 
-relationshipTypeDecoder : JD.Decoder RelationshipType
-relationshipTypeDecoder =
+decodeRelationshipType : JD.Decoder RelationshipType
+decodeRelationshipType =
     JD.andThen
         (\int ->
             case int of
@@ -6325,7 +6325,7 @@ getRelationshipsPayload : UserAuth -> HttpRequest (List Relationship)
 getRelationshipsPayload auth =
     httpGet
         (userToken auth)
-        (JD.list relationshipDecoder)
+        (JD.list decodeRelationship)
         [ "users", "@me", "relationships" ]
         []
 
@@ -6480,8 +6480,8 @@ type alias CaptchaChallengeData =
     }
 
 
-captchaChallengeDecoder : JD.Decoder CaptchaChallengeData
-captchaChallengeDecoder =
+decodeCaptchaChallenge : JD.Decoder CaptchaChallengeData
+decodeCaptchaChallenge =
     JD.succeed CaptchaChallengeData
         |> JD.andMap (JD.field "captcha_key" (JD.array JD.string))
         |> JD.andMap (JD.field "captcha_service" JD.string)
@@ -6506,8 +6506,8 @@ type alias LoginResponse =
     }
 
 
-loginResponseDecoder : JD.Decoder LoginResponse
-loginResponseDecoder =
+decodeLoginResponse : JD.Decoder LoginResponse
+decodeLoginResponse =
     JD.succeed LoginResponse
         |> JD.andMap (JD.field "user_id" decodeId)
         |> JD.andMap (decodeOptionalData "token" JD.string)

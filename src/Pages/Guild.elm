@@ -6,13 +6,13 @@ module Pages.Guild exposing
     , channelMessageHtmlId
     , channelTextInputId
     , conversationContainerId
+    , decodeMessageView
     , discordGuildView
     , dropdownButtonId
+    , encodeMessageView
     , guildView
     , homePageLoggedInView
     , messageInputConfig
-    , messageViewDecode
-    , messageViewEncode
     , newGuildFormInit
     , threadMessageHtmlId
     , typingDebouncerDelay
@@ -2002,7 +2002,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                             Nothing ->
                                                 Ui.Lazy.lazy5
                                                     messageViewNotThreadStarter
-                                                    (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                                     revealedSpoilers
                                                     local.localUser
                                                     index
@@ -2032,7 +2032,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                             Nothing ->
                                                 Ui.Lazy.lazy6
                                                     messageViewThreadStarter
-                                                    (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                                     revealedSpoilers
                                                     local.localUser
                                                     index
@@ -2266,7 +2266,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                             Nothing ->
                                                 Ui.Lazy.lazy6
                                                     discordMessageViewNotThreadStarter
-                                                    (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                                     revealedSpoilers
                                                     currentDiscordUserId
                                                     local.localUser
@@ -2296,7 +2296,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
                                             Nothing ->
                                                 discordMessageViewThreadStarter
-                                                    (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                                     revealedSpoilers
                                                     currentDiscordUserId
                                                     local.localUser
@@ -2572,7 +2572,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                     Nothing ->
                                         Ui.Lazy.lazy5
                                             threadMessageViewLazy
-                                            (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                             revealedSpoilers
                                             local.localUser
                                             index
@@ -2789,7 +2789,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                     Nothing ->
                                         Ui.Lazy.lazy6
                                             discordThreadMessageViewLazy
-                                            (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                             revealedSpoilers
                                             currentDiscordUserId
                                             local.localUser
@@ -2867,8 +2867,8 @@ newContentLabel =
     ]
 
 
-messageViewEncode : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int
-messageViewEncode isMobile isHovered containerWidth otherUserIsEditing highlight =
+encodeMessageView : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int
+encodeMessageView isMobile isHovered containerWidth otherUserIsEditing highlight =
     (if otherUserIsEditing then
         1
 
@@ -2913,8 +2913,8 @@ messageViewEncode isMobile isHovered containerWidth otherUserIsEditing highlight
         + Bitwise.shiftLeftBy 6 containerWidth
 
 
-messageViewDecode : Int -> { containerWidth : Int, isEditing : Bool, highlight : HighlightMessage, isHovered : IsHovered, isMobile : Bool }
-messageViewDecode value =
+decodeMessageView : Int -> { containerWidth : Int, isEditing : Bool, highlight : HighlightMessage, isHovered : IsHovered, isMobile : Bool }
+decodeMessageView value =
     { isEditing = Bitwise.and 0x01 value == 1
     , isHovered =
         case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x03 of
@@ -3030,8 +3030,8 @@ messageInputConfig ( guildOrDmId, threadRoute ) =
     }
 
 
-scrollToBottomDecoder : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
-scrollToBottomDecoder guildOrDmId threadRoute currentScrollPosition =
+decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
+decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
         (\scrollTop scrollHeight clientHeight ->
             if scrollTop + clientHeight >= scrollHeight - 5 then
@@ -3174,7 +3174,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on
                     "scroll"
-                    (scrollToBottomDecoder (GuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
+                    (decodeScrollToBottom (GuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -3381,7 +3381,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on
                     "scroll"
-                    (scrollToBottomDecoder (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
+                    (decodeScrollToBottom (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread loggedIn.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -3662,7 +3662,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on
                     "scroll"
-                    (scrollToBottomDecoder (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
+                    (decodeScrollToBottom (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -3868,7 +3868,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on
                     "scroll"
-                    (scrollToBottomDecoder (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
+                    (decodeScrollToBottom (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId) loggedIn.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
@@ -4522,7 +4522,7 @@ messageViewNotThreadStarter :
 messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
-            messageViewDecode data
+            decodeMessageView data
 
         _ =
             Debug.log "rerender messageViewNotThreadStarter" ()
@@ -4555,7 +4555,7 @@ discordMessageViewNotThreadStarter :
 discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
-            messageViewDecode data
+            decodeMessageView data
 
         _ =
             Debug.log "discord rerender messageViewNotThreadStarter" ()
@@ -4596,7 +4596,7 @@ messageViewThreadStarter :
 messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
-            messageViewDecode data
+            decodeMessageView data
 
         _ =
             Debug.log "rerender messageViewThreadStarter" ()
@@ -4630,7 +4630,7 @@ discordMessageViewThreadStarter :
 discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
-            messageViewDecode data
+            decodeMessageView data
 
         -- TODO, figure out why this lazy keeps getting triggered even though all the values seem reference unchanged
         --_ =
@@ -4672,7 +4672,7 @@ threadMessageViewLazy :
 threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
-            messageViewDecode data
+            decodeMessageView data
 
         _ =
             Debug.log "rerender threadMessageViewLazy" ()
@@ -4703,7 +4703,7 @@ discordThreadMessageViewLazy :
 discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
-            messageViewDecode data
+            decodeMessageView data
 
         _ =
             Debug.log "discord rerender threadMessageViewLazy" ()
@@ -5184,7 +5184,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
          , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
-            (Touch.touchEventDecoder
+            (Touch.decodeTouchEvent
                 (\time touches ->
                     MessageView_TouchStart
                         time
@@ -5299,7 +5299,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId reactions is
          , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
-            (Touch.touchEventDecoder
+            (Touch.decodeTouchEvent
                 (\time touches ->
                     MessageView_TouchStart
                         time

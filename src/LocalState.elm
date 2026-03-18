@@ -113,14 +113,14 @@ import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendD
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileData, FileHash, FileId)
+import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
-import Message exposing (ChangeAttachments(..), Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
+import Message exposing (ChangeAttachments, Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)

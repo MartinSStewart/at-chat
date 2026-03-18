@@ -119,7 +119,9 @@ config =
             , "src/LamderaRPC.elm"
             ]
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
-    , EncoderDecoderNaming.rule |> defaultIgnore
+    , EncoderDecoderNaming.rule
+        |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
+        |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
     , NoBrokenParserFunctions.rule
     , BackendOnly.rule
         { functions =
@@ -144,7 +146,6 @@ defaultIgnore rule =
         , "src/OneToOne.elm"
         , "src/RPC.elm"
         , "src/Discord.elm"
-        , "src/Discord/Id.elm"
         ]
         rule
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
