@@ -32,6 +32,28 @@ exports.init = async function init(app)
         }
     });
 
+
+    // Store the original getTargetRanges method
+    const originalGetTargetRanges = InputEvent.prototype.getTargetRanges;
+    Object.defineProperty(InputEvent.prototype, 'targetRanges', {
+        get: function () {
+            return originalGetTargetRanges.call(this).map(range => ({
+                startContainer: range.startContainer,
+                startOffset: range.startOffset,
+                endContainer: range.endContainer,
+                endOffset: range.endOffset,
+                collapsed: range.collapsed,
+            }));
+        },
+        configurable: true,
+    });
+//    app.ports.exec_command_to_js.subscribe((data) => {
+//        var textarea = document.getElementById(data.htmlId);
+//        textarea.focus();
+//        textarea.setSelectionRange(data.start, data.end);
+//        document.execCommand('insertText', false, 'replacement');
+//    });
+
     app.ports.fix_cursor_position_to_js.subscribe((htmlId) => {
         var a = document.getElementById(htmlId);
 

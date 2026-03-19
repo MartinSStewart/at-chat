@@ -4355,7 +4355,7 @@ view model =
                         case loading.time of
                             Just _ ->
                                 -- Make sure all of these error messages are slightly different so we know which branch was reached
-                                [ Html.text "Something went isn't working."
+                                [ Html.text "Something isn't working."
                                 ]
 
                             Nothing ->

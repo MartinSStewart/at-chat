@@ -155,6 +155,13 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                                 )
                         )
             , Html.Events.onInput msgConfig.typedMessage
+            , Html.Events.on
+                "input"
+                (Json.Decode.map2  (\_ text -> msgConfig.typedMessage
+                    (Json.Decode.field "getTargetRanges" )
+                    (Json.Decode.at [ "target", "value" ] Json.Decode.string)
+
+                )
             , Html.Attributes.value text
             ]
             []

@@ -11,6 +11,7 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , execCommand
     , fixCursorPosition
     , getScrollbarWidth
     , getUserAgent
@@ -45,6 +46,9 @@ import RichText exposing (Range)
 import Url
 import UserAgent exposing (UserAgent)
 import UserSession exposing (SubscribeData)
+
+
+port exec_command_to_js : Json.Encode.Value -> Cmd msg
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
@@ -99,6 +103,19 @@ port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
 
 
 port fix_cursor_position_to_js : Json.Encode.Value -> Cmd msg
+
+
+execCommand : HtmlId -> Int -> Int -> Command FrontendOnly toMsg msg
+execCommand htmlId start end =
+    Command.sendToJs
+        "exec_command_to_js"
+        exec_command_to_js
+        (Json.Encode.object
+            [ ( "htmlId", Json.Encode.string (Dom.idToString htmlId) )
+            , ( "start", Json.Encode.int start )
+            , ( "end", Json.Encode.int end )
+            ]
+        )
 
 
 fixCursorPosition : HtmlId -> Command FrontendOnly toMsg msg
