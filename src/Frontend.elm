@@ -11,7 +11,7 @@ import Discord
 import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Editable
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -39,10 +39,10 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
-import MessageInput
+import MessageInput exposing (NameSoFar)
 import MessageMenu
 import MessageView
-import MyUi
+import MyUi exposing (Range)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -2463,38 +2463,30 @@ updateLoaded msg model =
                         LoggedIn loggedIn ->
                             { loggedIn
                                 | pingUser =
-                                    case ( range.start == range.end, Route.toGuildOrDmId model.route ) of
-                                        ( True, Just guildOrDmId ) ->
-                                            if htmlId == Pages.Guild.channelTextInputId then
-                                                case SeqDict.get guildOrDmId loggedIn.drafts of
-                                                    Just draft ->
-                                                        let
-                                                            previous : String
-                                                            previous =
-                                                                String.Nonempty.toString draft |> String.slice 0 range.start
+                                    case Route.toGuildOrDmId model.route of
+                                        Just ( guildOrDmId, threadRoute ) ->
+                                            case pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
+                                                Just data ->
+                                                    { dropdownIndex = 0
+                                                    , inputElement = { x = Float, y = Float, width = Float, height = Float }
+                                                    , target = data.target
+                                                    }
 
-                                                            a =
-                                                                case String.split "@" previous |> List.reverse of
-                                                                    name :: beforeAt :: _ ->
-                                                                        if beforeAt == "" || beforeAt == " " || beforeAt == "\n" || beforeAt == "\r" then
-                                                                            MessageMenu.
-                                                        in
-                                                        { charIndex = Int
-                                                        , dropdownIndex = Int
-                                                        , inputElement = { x = Float, y = Float, width = Float, height = Float }
-                                                        , target = MentionUserTarget
-                                                        }
+                                                --let
+                                                --    local : LocalState
+                                                --    local =
+                                                --        Local.model loggedIn.localState
+                                                --in
+                                                --case guildOrDmId of
+                                                --    GuildOrDmId guildOrDmId2 ->
+                                                --        MessageInput.userDropdownList nameSoFar guildOrDmId2 local |> Just
+                                                --
+                                                --    DiscordGuildOrDmId guildOrDmId2 ->
+                                                --        MessageInput.discordUserDropdownList nameSoFar guildOrDmId2 local |> Just
+                                                Nothing ->
+                                                    loggedIn.pingUser
 
-                                                    Nothing ->
-                                                        loggedIn.pingUser
-
-                                            else if htmlId == MessageMenu.editMessageTextInputId then
-                                                Debug.todo ""
-
-                                            else
-                                                loggedIn.pingUser
-
-                                        _ ->
+                                        Nothing ->
                                             loggedIn.pingUser
                             }
                                 |> LoggedIn
@@ -4713,3 +4705,59 @@ routeToInitialDataRequest route =
 
         _ ->
             InitialLoadRequested_None
+
+
+pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
+pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
+    if selection.start == selection.end then
+        if htmlId == Pages.Guild.channelTextInputId then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
+                Just draft ->
+                    let
+                        previous : String
+                        previous =
+                            String.Nonempty.toString draft |> String.slice 0 selection.start
+                    in
+                    case String.split "@" previous |> List.reverse of
+                        nameSoFar :: beforeAt :: _ ->
+                            if beforeAt == "" || beforeAt == " " || beforeAt == "\n" || beforeAt == "\u{000D}" then
+                                { nameSoFar = nameSoFar
+                                , index = String.length beforeAt + 1
+                                , target = MessageInput.NewMessage
+                                }
+                                    |> Just
+
+                            else
+                                Nothing
+
+                Nothing ->
+                    loggedIn.pingUser
+
+        else if htmlId == MessageMenu.editMessageTextInputId then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
+                Just edit ->
+                    let
+                        previous : String
+                        previous =
+                            String.slice 0 selection.start edit.text
+                    in
+                    case String.split "@" previous |> List.reverse of
+                        nameSoFar :: beforeAt :: _ ->
+                            if beforeAt == "" || beforeAt == " " || beforeAt == "\n" || beforeAt == "\u{000D}" then
+                                { nameSoFar = nameSoFar
+                                , index = String.length beforeAt + 1
+                                , target = MessageInput.EditMessage
+                                }
+                                    |> Just
+
+                            else
+                                Nothing
+
+                Nothing ->
+                    Nothing
+
+        else
+            Nothing
+
+    else
+        Nothing

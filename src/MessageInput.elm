@@ -2,11 +2,14 @@ module MessageInput exposing
     ( MentionUserDropdown
     , MentionUserTarget(..)
     , MsgConfig
+    , NameSoFar
     , disabledView
+    , discordUserDropdownList
     , editView
     , pingDropdownView
     , pressedArrowInDropdown
     , pressedPingUser
+    , userDropdownList
     , view
     )
 
@@ -39,11 +42,14 @@ import User exposing (DiscordFrontendUser, FrontendUser)
 
 
 type alias MentionUserDropdown =
-    { charIndex : Int
-    , dropdownIndex : Int
+    { dropdownIndex : Int
     , inputElement : { x : Float, y : Float, width : Float, height : Float }
     , target : MentionUserTarget
     }
+
+
+type alias NameSoFar =
+    { nameSoFar : String, index : Int, target : MentionUserTarget }
 
 
 type MentionUserTarget
@@ -506,7 +512,11 @@ userDropdownList nameSoFar guildOrDmId local =
             (\userId ->
                 case SeqDict.get userId allUsers of
                     Just user ->
-                        Just ( userId, user )
+                        if String.startsWith nameSoFar (PersonName.toString user.name) then
+                            Just ( userId, user )
+
+                        else
+                            Nothing
 
                     Nothing ->
                         Nothing
@@ -520,8 +530,8 @@ maxDropdownUsers =
     10
 
 
-discordUserDropdownList : DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
-discordUserDropdownList guildOrDmId local =
+discordUserDropdownList : String -> DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
+discordUserDropdownList nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
@@ -548,7 +558,11 @@ discordUserDropdownList guildOrDmId local =
             (\userId ->
                 case SeqDict.get userId allUsers of
                     Just user ->
-                        Just ( userId, user )
+                        if String.startsWith nameSoFar (PersonName.toString user.name) then
+                            Just ( userId, user )
+
+                        else
+                            Nothing
 
                     Nothing ->
                         Nothing
@@ -557,8 +571,8 @@ discordUserDropdownList guildOrDmId local =
         |> List.take maxDropdownUsers
 
 
-pressedArrowInDropdown : AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
-pressedArrowInDropdown guildOrDmId index maybePingUser local =
+pressedArrowInDropdown : String -> AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
+pressedArrowInDropdown nameSoFar guildOrDmId index maybePingUser local =
     case maybePingUser of
         Just pingUser ->
             let
@@ -566,10 +580,10 @@ pressedArrowInDropdown guildOrDmId index maybePingUser local =
                 dropdownListLength =
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
-                            userDropdownList guildOrDmId2 local |> List.length
+                            userDropdownList nameSoFar guildOrDmId2 local |> List.length
 
                         DiscordGuildOrDmId guildOrDmId2 ->
-                            discordUserDropdownList guildOrDmId2 local |> List.length
+                            discordUserDropdownList nameSoFar guildOrDmId2 local |> List.length
             in
             { pingUser
                 | dropdownIndex =
@@ -590,6 +604,7 @@ pressedArrowInDropdown guildOrDmId index maybePingUser local =
 
 pressedPingUser :
     msg
+    -> String
     -> AnyGuildOrDmId
     -> HtmlId
     -> Int
@@ -597,9 +612,9 @@ pressedPingUser :
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local inputText =
-    case ( pingUser, selectedUserName guildOrDmId index local ) of
-        ( Just { charIndex }, Just name ) ->
+pressedPingUser setFocusMsg nameSoFar guildOrDmId channelTextInputId index pingUser local inputText =
+    case ( pingUser, selectedUserName nameSoFar guildOrDmId index local ) of
+        ( Just _, Just name ) ->
             let
                 applyText : NonemptyString -> NonemptyString
                 applyText nonempty =
@@ -644,11 +659,11 @@ pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local 
             ( Nothing, inputText, Command.none )
 
 
-selectedUserName : AnyGuildOrDmId -> Int -> LocalState -> Maybe String
-selectedUserName guildOrDmId index local =
+selectedUserName : String -> AnyGuildOrDmId -> Int -> LocalState -> Maybe String
+selectedUserName nameSoFar guildOrDmId index local =
     case guildOrDmId of
         GuildOrDmId guildOrDmId2 ->
-            case userDropdownList guildOrDmId2 local |> List.Extra.getAt index of
+            case userDropdownList nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
                 Just ( _, user ) ->
                     PersonName.toString user.name |> Just
 
@@ -656,7 +671,7 @@ selectedUserName guildOrDmId index local =
                     Nothing
 
         DiscordGuildOrDmId guildOrDmId2 ->
-            case discordUserDropdownList guildOrDmId2 local |> List.Extra.getAt index of
+            case discordUserDropdownList nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
                 Just ( _, user ) ->
                     PersonName.toString user.name |> Just
 
@@ -666,12 +681,13 @@ selectedUserName guildOrDmId index local =
 
 pingDropdownView :
     MsgConfig msg
+    -> String
     -> AnyGuildOrDmId
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element msg
-pingDropdownView msgConfig guildOrDmId localState dropdownButtonId dropdown =
+pingDropdownView msgConfig nameSoFar guildOrDmId localState dropdownButtonId dropdown =
     let
         rows : List (Element msg)
         rows =
@@ -679,12 +695,12 @@ pingDropdownView msgConfig guildOrDmId localState dropdownButtonId dropdown =
                 GuildOrDmId guildOrDmId2 ->
                     List.indexedMap
                         (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
-                        (userDropdownList guildOrDmId2 localState)
+                        (userDropdownList nameSoFar guildOrDmId2 localState)
 
                 DiscordGuildOrDmId guildOrDmId2 ->
                     List.indexedMap
                         (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
-                        (discordUserDropdownList guildOrDmId2 localState)
+                        (discordUserDropdownList nameSoFar guildOrDmId2 localState)
 
         headerHeight =
             20
