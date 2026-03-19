@@ -669,21 +669,6 @@ updateLoaded msg model =
         TypedMessage guildOrDmId text ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    let
-                        ( pingUser, cmd ) =
-                            MessageInput.multilineUpdate
-                                (Pages.Guild.messageInputConfig guildOrDmId)
-                                Pages.Guild.channelTextInputId
-                                text
-                                (case SeqDict.get guildOrDmId loggedIn.drafts of
-                                    Just nonempty ->
-                                        String.Nonempty.toString nonempty
-
-                                    Nothing ->
-                                        ""
-                                )
-                                loggedIn.pingUser
-                    in
                     FrontendExtra.handleLocalChange
                         model.time
                         (if loggedIn.typingDebouncer then
@@ -693,8 +678,7 @@ updateLoaded msg model =
                             Nothing
                         )
                         { loggedIn
-                            | pingUser = pingUser
-                            , drafts =
+                            | drafts =
                                 case String.Nonempty.fromString text of
                                     Just nonempty ->
                                         SeqDict.insert guildOrDmId nonempty loggedIn.drafts
@@ -703,12 +687,7 @@ updateLoaded msg model =
                                         SeqDict.remove guildOrDmId loggedIn.drafts
                             , typingDebouncer = False
                         }
-                        (Command.batch
-                            [ cmd
-                            , Process.sleep Pages.Guild.typingDebouncerDelay
-                                |> Task.perform (\() -> DebouncedTyping)
-                            ]
-                        )
+                        (Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping))
                 )
                 model
 
@@ -1168,9 +1147,9 @@ updateLoaded msg model =
                 model
 
         TextInputGotFocus htmlId ->
-            ( { model | textInputFocus = Just htmlId }
+            ( { model | textInputFocus = Just ( htmlId, { start = 0, end = 0 } ) }
             , Command.batch
-                [ if model.userAgent.device == UserAgent.Desktop || model.textInputFocus == Just htmlId then
+                [ if model.userAgent.device == UserAgent.Desktop || Maybe.map Tuple.first model.textInputFocus == Just htmlId then
                     Command.none
 
                   else
@@ -1188,7 +1167,7 @@ updateLoaded msg model =
                 (\loggedIn -> ( loggedIn, Command.none ))
                 { model
                     | textInputFocus =
-                        if Just htmlId == model.textInputFocus then
+                        if Just htmlId == Maybe.map Tuple.first model.textInputFocus then
                             Nothing
 
                         else
@@ -1313,14 +1292,6 @@ updateLoaded msg model =
                     case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                         Just edit ->
                             let
-                                ( pingUser, cmd ) =
-                                    MessageInput.multilineUpdate
-                                        (MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute)
-                                        MessageMenu.editMessageTextInputId
-                                        text
-                                        edit.text
-                                        loggedIn.pingUser
-
                                 oldTypingDebouncer : Bool
                                 oldTypingDebouncer =
                                     loggedIn.typingDebouncer
@@ -1328,8 +1299,7 @@ updateLoaded msg model =
                                 loggedIn2 : LoggedIn2
                                 loggedIn2 =
                                     { loggedIn
-                                        | pingUser = pingUser
-                                        , editMessage =
+                                        | editMessage =
                                             SeqDict.insert
                                                 ( guildOrDmId, threadRoute )
                                                 { edit | text = text }
@@ -1376,11 +1346,8 @@ updateLoaded msg model =
                                                 }
                                                     |> MessageMenu
                                 }
-                                (Command.batch
-                                    [ cmd
-                                    , Process.sleep (Duration.seconds 1)
-                                        |> Task.perform (\() -> DebouncedTyping)
-                                    ]
+                                (Process.sleep (Duration.seconds 1)
+                                    |> Task.perform (\() -> DebouncedTyping)
                                 )
 
                         Nothing ->
@@ -2488,6 +2455,56 @@ updateLoaded msg model =
         PastedFiles guildOrDmId files ->
             gotFiles guildOrDmId files model
 
+        TextInputSelectionChanged htmlId range ->
+            ( { model
+                | textInputFocus = Just ( htmlId, range )
+                , loginStatus =
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            { loggedIn
+                                | pingUser =
+                                    case ( range.start == range.end, Route.toGuildOrDmId model.route ) of
+                                        ( True, Just guildOrDmId ) ->
+                                            if htmlId == Pages.Guild.channelTextInputId then
+                                                case SeqDict.get guildOrDmId loggedIn.drafts of
+                                                    Just draft ->
+                                                        let
+                                                            previous : String
+                                                            previous =
+                                                                String.Nonempty.toString draft |> String.slice 0 range.start
+
+                                                            a =
+                                                                case String.split "@" previous |> List.reverse of
+                                                                    name :: beforeAt :: _ ->
+                                                                        if beforeAt == "" || beforeAt == " " || beforeAt == "\n" || beforeAt == "\r" then
+                                                                            MessageMenu.
+                                                        in
+                                                        { charIndex = Int
+                                                        , dropdownIndex = Int
+                                                        , inputElement = { x = Float, y = Float, width = Float, height = Float }
+                                                        , target = MentionUserTarget
+                                                        }
+
+                                                    Nothing ->
+                                                        loggedIn.pingUser
+
+                                            else if htmlId == MessageMenu.editMessageTextInputId then
+                                                Debug.todo ""
+
+                                            else
+                                                loggedIn.pingUser
+
+                                        _ ->
+                                            loggedIn.pingUser
+                            }
+                                |> LoggedIn
+
+                        NotLoggedIn _ ->
+                            model.loginStatus
+              }
+            , Command.none
+            )
+
         PressedTextInput ->
             ( { model | virtualKeyboardOpen = True }, Command.none )
 
@@ -3436,7 +3453,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
                         _ ->
                             Command.none
                     , case model.textInputFocus of
-                        Just textInputId ->
+                        Just ( textInputId, _ ) ->
                             Dom.blur textInputId |> Task.attempt (\_ -> RemoveFocus)
 
                         Nothing ->

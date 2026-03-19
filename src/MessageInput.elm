@@ -4,14 +4,12 @@ module MessageInput exposing
     , MsgConfig
     , disabledView
     , editView
-    , multilineUpdate
     , pingDropdownView
     , pressedArrowInDropdown
     , pressedPingUser
     , view
     )
 
-import Diff
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -28,7 +26,7 @@ import Json.Decode.Extra
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
-import MyUi
+import MyUi exposing (Range)
 import NonemptyDict
 import PersonName exposing (PersonName)
 import RichText
@@ -67,6 +65,7 @@ type alias MsgConfig msg =
     , pressedUploadFile : msg
     , target : MentionUserTarget
     , onPasteFiles : Nonempty File -> msg
+    , onSelectionChanged : HtmlId -> Range -> msg
     }
 
 
@@ -155,13 +154,7 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                                 )
                         )
             , Html.Events.onInput msgConfig.typedMessage
-            , Html.Events.on
-                "input"
-                (Json.Decode.map2  (\_ text -> msgConfig.typedMessage
-                    (Json.Decode.field "getTargetRanges" )
-                    (Json.Decode.at [ "target", "value" ] Json.Decode.string)
-
-                )
+            , MyUi.onSelectionChanged (msgConfig.onSelectionChanged channelTextInputId)
             , Html.Attributes.value text
             ]
             []
@@ -490,106 +483,8 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
             ]
 
 
-multilineUpdate :
-    MsgConfig msg
-    -> HtmlId
-    -> String
-    -> String
-    -> Maybe MentionUserDropdown
-    -> ( Maybe MentionUserDropdown, Command FrontendOnly toMsg msg )
-multilineUpdate msgConfig multilineId text oldText pingUser =
-    let
-        oldAtCount : Int
-        oldAtCount =
-            List.length (String.indexes "@" oldText)
-
-        atCount : Int
-        atCount =
-            List.length (String.indexes "@" text)
-
-        typedAtSymbol : Maybe Int
-        typedAtSymbol =
-            if
-                (atCount > oldAtCount)
-                    && -- Detect if the user is pasting in text and if they are, abort the @mention dropdown
-                       (String.length text - String.length oldText < 3)
-            then
-                case newAtSymbol oldText text of
-                    Just { index } ->
-                        let
-                            previous =
-                                String.slice (index - 1) index text
-                        in
-                        if index == 0 || previous == " " || previous == "\n" then
-                            Just index
-
-                        else
-                            Nothing
-
-                    Nothing ->
-                        Nothing
-
-            else
-                Nothing
-    in
-    ( if oldAtCount > atCount then
-        Nothing
-
-      else
-        pingUser
-    , case typedAtSymbol of
-        Just index ->
-            Dom.getElement multilineId
-                |> Task.map
-                    (\{ element } ->
-                        { dropdownIndex = 0
-                        , charIndex = index
-                        , inputElement = element
-                        , target = msgConfig.target
-                        }
-                    )
-                |> Task.attempt msgConfig.gotPingUserPosition
-
-        Nothing ->
-            Command.none
-    )
-
-
-newAtSymbol : String -> String -> Maybe { index : Int }
-newAtSymbol oldText text =
-    List.foldl
-        (\change state ->
-            case change of
-                Diff.Added char ->
-                    if char == '@' then
-                        { index = state.index + 1
-                        , foundAtSymbol = Just { index = state.index }
-                        }
-
-                    else
-                        case state.foundAtSymbol of
-                            Just found ->
-                                { index = state.index + 1
-                                , foundAtSymbol = Just { index = found.index }
-                                }
-
-                            Nothing ->
-                                { index = state.index + 1
-                                , foundAtSymbol = state.foundAtSymbol
-                                }
-
-                _ ->
-                    { index = state.index + 1
-                    , foundAtSymbol = state.foundAtSymbol
-                    }
-        )
-        { index = 0, foundAtSymbol = Nothing }
-        (Diff.diff (String.toList oldText) (String.toList text))
-        |> .foundAtSymbol
-
-
-userDropdownList : GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
-userDropdownList guildOrDmId local =
+userDropdownList : String -> GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -620,6 +515,7 @@ userDropdownList guildOrDmId local =
         |> List.take maxDropdownUsers
 
 
+maxDropdownUsers : number
 maxDropdownUsers =
     10
 

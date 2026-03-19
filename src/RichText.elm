@@ -3,7 +3,6 @@ module RichText exposing
     , Embed(..)
     , EmbedData
     , Language(..)
-    , Range
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
@@ -15,7 +14,6 @@ module RichText exposing
     , hyperlinks
     , mentionsUser
     , preview
-    , rangeSize
     , removeAttachedFile
     , textInputView
     , toDiscord
@@ -1589,15 +1587,6 @@ fileDownloadView fileData =
             ]
             [ Icons.download ]
         ]
-
-
-type alias Range =
-    { start : Int, end : Int }
-
-
-rangeSize : Range -> Int
-rangeSize range =
-    range.end - range.start
 
 
 textInputView :

@@ -1,5 +1,6 @@
 module MyUi exposing
-    ( alertColor
+    ( Range
+    , alertColor
     , background1
     , background2
     , background3
@@ -16,6 +17,7 @@ module MyUi exposing
     , css
     , datestamp
     , datestampDate
+    , decodeSelection
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
@@ -47,9 +49,11 @@ module MyUi exposing
     , montserrat
     , noPointerEvents
     , noShrinking
+    , onSelectionChanged
     , prewrap
     , radioColumn
     , radioRowWithSeparators
+    , rangeSize
     , replyToColor
     , rowButton
     , secondaryButton
@@ -73,6 +77,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress exposing (EmailAddress)
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Html.Events.Extra.Touch
 import Icons
 import Json.Decode
@@ -652,6 +657,27 @@ simpleButton htmlId onPress content =
         , Ui.Font.weight 500
         ]
         content
+
+
+type alias Range =
+    { start : Int, end : Int }
+
+
+rangeSize : Range -> Int
+rangeSize range =
+    range.end - range.start
+
+
+decodeSelection : Json.Decode.Decoder Range
+decodeSelection =
+    Json.Decode.map2 (\start end -> Range (min start end) (max start end))
+        (Json.Decode.at [ "target", "selectionStart" ] Json.Decode.int)
+        (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
+
+
+onSelectionChanged : (Range -> value) -> Html.Attribute value
+onSelectionChanged onSelectionChange =
+    Html.Events.on "selectionchange" (Json.Decode.map onSelectionChange decodeSelection)
 
 
 focusEffect : Ui.Attribute msg

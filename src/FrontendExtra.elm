@@ -1377,6 +1377,9 @@ isPressMsg msg =
         PressedContinueToSite ->
             True
 
+        TextInputSelectionChanged _ _ ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

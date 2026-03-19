@@ -40,9 +40,9 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
 import Json.Encode
+import MyUi exposing (Range)
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
-import RichText exposing (Range)
 import Url
 import UserAgent exposing (UserAgent)
 import UserSession exposing (SubscribeData)

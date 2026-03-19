@@ -34,19 +34,18 @@ exports.init = async function init(app)
 
 
     // Store the original getTargetRanges method
-    const originalGetTargetRanges = InputEvent.prototype.getTargetRanges;
-    Object.defineProperty(InputEvent.prototype, 'targetRanges', {
-        get: function () {
-            return originalGetTargetRanges.call(this).map(range => ({
-                startContainer: range.startContainer,
-                startOffset: range.startOffset,
-                endContainer: range.endContainer,
-                endOffset: range.endOffset,
-                collapsed: range.collapsed,
-            }));
-        },
-        configurable: true,
-    });
+//    const originalGetTargetRanges = InputEvent.prototype.getTargetRanges;
+//    Object.defineProperty(InputEvent.prototype, 'targetRanges', {
+//        get: function () {
+//
+//            console.log(this);
+//            return {
+//                selectionStart: this.target.selectionStart,
+//                selectionEnd: this.target.selectionEnd
+//            }
+//        },
+//        configurable: true,
+//    });
 //    app.ports.exec_command_to_js.subscribe((data) => {
 //        var textarea = document.getElementById(data.htmlId);
 //        textarea.focus();

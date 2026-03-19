@@ -72,6 +72,7 @@ import Maybe exposing (Maybe)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown)
 import MessageView
+import MyUi exposing (Range)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -133,7 +134,7 @@ type alias LoadedFrontend =
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
-    , textInputFocus : Maybe HtmlId
+    , textInputFocus : Maybe ( HtmlId, Range )
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , drag : Drag
@@ -431,6 +432,7 @@ type FrontendMsg
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | EditMessage_PastedFiles ( AnyGuildOrDmId, ThreadRoute ) (Nonempty File)
     | PastedFiles ( AnyGuildOrDmId, ThreadRoute ) (Nonempty File)
+    | TextInputSelectionChanged HtmlId Range
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
     | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String SubscribeData)

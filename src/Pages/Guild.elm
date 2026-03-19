@@ -3027,6 +3027,7 @@ messageInputConfig ( guildOrDmId, threadRoute ) =
     , pressedUploadFile = PressedAttachFiles ( guildOrDmId, threadRoute )
     , target = MessageInput.NewMessage
     , onPasteFiles = PastedFiles ( guildOrDmId, threadRoute )
+    , onSelectionChanged = TextInputSelectionChanged
     }
 
 
