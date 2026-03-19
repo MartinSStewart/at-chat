@@ -44,7 +44,7 @@ import List.Nonempty
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
-import MessageInput exposing (MentionUserDropdown, MsgConfig)
+import MessageInput exposing (MentionUserDropdown, MsgConfig, TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi
@@ -1972,7 +1972,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         local.localUser.session.userId
                                         (LocalState.allUsers2 local.localUser)
                                         local
@@ -2236,7 +2236,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         currentDiscordUserId
                                         (LocalState.allDiscordUsers2 local.localUser)
                                         local
@@ -2546,7 +2546,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         maybeRepliedTo
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         local.localUser.session.userId
                                         (LocalState.allUsers2 local.localUser)
                                         local
@@ -2763,7 +2763,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         maybeRepliedTo
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         currentDiscordUserId
                                         (LocalState.allDiscordUsers2 local.localUser)
                                         local
@@ -3014,18 +3014,16 @@ conversationContainerId =
 
 messageInputConfig : ( AnyGuildOrDmId, ThreadRoute ) -> MsgConfig FrontendMsg
 messageInputConfig ( guildOrDmId, threadRoute ) =
-    { gotPingUserPosition = GotPingUserPosition
-    , textInputGotFocus = TextInputGotFocus
+    { textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
     , pressedTextInput = PressedTextInput
     , typedMessage = TypedMessage ( guildOrDmId, threadRoute )
     , pressedSendMessage = PressedSendMessage guildOrDmId threadRoute
-    , pressedArrowInDropdown = PressedArrowInDropdown guildOrDmId
+    , pressedArrowInDropdown = PressedArrowInDropdown ( guildOrDmId, threadRoute )
     , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput ( guildOrDmId, threadRoute )
     , pressedPingUser = PressedPingUser ( guildOrDmId, threadRoute )
     , pressedPingDropdownContainer = PressedPingDropdownContainer
     , pressedUploadFile = PressedAttachFiles ( guildOrDmId, threadRoute )
-    , target = MessageInput.NewMessage
     , onPasteFiles = PastedFiles ( guildOrDmId, threadRoute )
     , onSelectionChanged = TextInputSelectionChanged
     }
@@ -3279,7 +3277,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
-                loggedIn.pingUser
+                loggedIn.textInputFocus
                 local
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -3486,7 +3484,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        loggedIn.pingUser
+                        loggedIn.textInputFocus
                         local
 
                 Err error ->
@@ -3775,7 +3773,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
-                loggedIn.pingUser
+                loggedIn.textInputFocus
                 local
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -3967,7 +3965,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
-                loggedIn.pingUser
+                loggedIn.textInputFocus
                 local
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
@@ -4024,7 +4022,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             Nothing
                             SeqDict.empty
                             editMessage
-                            loggedIn.pingUser
+                            loggedIn.textInputFocus
                             local.localUser.session.userId
                             (LocalState.allUsers2 local.localUser)
                             local
@@ -4128,7 +4126,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             Nothing
                             SeqDict.empty
                             editMessage
-                            loggedIn.pingUser
+                            loggedIn.textInputFocus
                             currentUserId
                             (LocalState.allDiscordUsers2 local.localUser)
                             local
@@ -4271,7 +4269,7 @@ messageEditingView :
     -> Maybe (FrontendGenericThread userId)
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> EditMessage
-    -> Maybe MentionUserDropdown
+    -> Maybe TextInputFocus
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
@@ -4393,7 +4391,7 @@ threadMessageEditingView :
     -> Maybe ( Id ThreadMessageId, Message ThreadMessageId userId )
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> EditMessage
-    -> Maybe MentionUserDropdown
+    -> Maybe TextInputFocus
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState

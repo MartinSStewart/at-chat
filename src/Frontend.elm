@@ -282,7 +282,6 @@ initLoadedFrontend loading time userAgent loginResult =
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
-            , textInputFocus = Nothing
             , notificationPermission = loading.notificationPermission
             , pwaStatus = loading.pwaStatus
             , drag = NoDrag
@@ -358,7 +357,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , newGuildForm = Nothing
             , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
-            , pingUser = Nothing
+            , textInputFocus = Nothing
             , messageHover = NoMessageHover
             , showEmojiSelector = EmojiSelectorHidden
             , editMessage = SeqDict.empty
@@ -1082,12 +1081,21 @@ updateLoaded msg model =
                 )
                 model
 
-        GotPingUserPosition result ->
+        GotPingUserPosition htmlId result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( case result of
                         Ok ok ->
-                            { loggedIn | pingUser = Just ok }
+                            case loggedIn.textInputFocus of
+                                Just textInputFocus ->
+                                    if textInputFocus.htmlId == htmlId then
+                                        { loggedIn | textInputFocus = Just { textInputFocus | dropdown = Just ok } }
+
+                                    else
+                                        loggedIn
+
+                                Nothing ->
+                                    loggedIn
 
                         Err _ ->
                             loggedIn
@@ -1099,27 +1107,40 @@ updateLoaded msg model =
         PressedPingUser ( guildOrDmId, threadRoute ) index ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
-                        Just text ->
-                            let
-                                ( pingUser, text2, cmd ) =
-                                    MessageInput.pressedPingUser
-                                        SetFocus
-                                        guildOrDmId
-                                        Pages.Guild.channelTextInputId
-                                        index
-                                        loggedIn.pingUser
-                                        (Local.model loggedIn.localState)
-                                        text
-                            in
-                            ( { loggedIn
-                                | pingUser = pingUser
-                                , drafts = SeqDict.insert ( guildOrDmId, threadRoute ) text2 loggedIn.drafts
-                              }
-                            , cmd
-                            )
+                    case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts, loggedIn.textInputFocus ) of
+                        ( Just text, Just textInputFocus ) ->
+                            case
+                                FrontendExtra.pingUserNameSoFar
+                                    Pages.Guild.channelTextInputId
+                                    textInputFocus.selection
+                                    guildOrDmId
+                                    threadRoute
+                                    loggedIn
+                            of
+                                Just nameSoFar ->
+                                    let
+                                        ( pingUser, text2, cmd ) =
+                                            MessageInput.pressedPingUser
+                                                SetFocus
+                                                nameSoFar
+                                                guildOrDmId
+                                                Pages.Guild.channelTextInputId
+                                                index
+                                                textInputFocus.dropdown
+                                                (Local.model loggedIn.localState)
+                                                text
+                                    in
+                                    ( { loggedIn
+                                        | textInputFocus = Just { textInputFocus | dropdown = pingUser }
+                                        , drafts = SeqDict.insert ( guildOrDmId, threadRoute ) text2 loggedIn.drafts
+                                      }
+                                    , cmd
+                                    )
 
-                        Nothing ->
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+
+                        _ ->
                             ( loggedIn, Command.none )
                 )
                 model
@@ -1130,16 +1151,38 @@ updateLoaded msg model =
         RemoveFocus ->
             ( model, Command.none )
 
-        PressedArrowInDropdown guildOrDmId index ->
+        PressedArrowInDropdown ( guildOrDmId, threadRoute ) index ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
-                        | pingUser =
-                            MessageInput.pressedArrowInDropdown
-                                guildOrDmId
-                                index
-                                loggedIn.pingUser
-                                (Local.model loggedIn.localState)
+                        | textInputFocus =
+                            case loggedIn.textInputFocus of
+                                Just textInputFocus ->
+                                    case
+                                        FrontendExtra.pingUserNameSoFar
+                                            Pages.Guild.channelTextInputId
+                                            textInputFocus.selection
+                                            guildOrDmId
+                                            threadRoute
+                                            loggedIn
+                                    of
+                                        Just nameSoFar ->
+                                            { textInputFocus
+                                                | dropdown =
+                                                    MessageInput.pressedArrowInDropdown
+                                                        nameSoFar
+                                                        guildOrDmId
+                                                        index
+                                                        textInputFocus.dropdown
+                                                        (Local.model loggedIn.localState)
+                                            }
+                                                |> Just
+
+                                        Nothing ->
+                                            loggedIn.textInputFocus
+
+                                Nothing ->
+                                    loggedIn.textInputFocus
                       }
                     , Command.none
                     )
@@ -1147,32 +1190,41 @@ updateLoaded msg model =
                 model
 
         TextInputGotFocus htmlId ->
-            ( { model | textInputFocus = Just ( htmlId, { start = 0, end = 0 } ) }
-            , Command.batch
-                [ if model.userAgent.device == UserAgent.Desktop || Maybe.map Tuple.first model.textInputFocus == Just htmlId then
-                    Command.none
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | textInputFocus = Just { htmlId = htmlId, selection = { start = 0, end = 0 }, dropdown = Nothing } }
+                    , Command.batch
+                        [ if model.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
+                            Command.none
 
-                  else
-                    Ports.fixCursorPosition htmlId
-                , if htmlId == UserOptions.discordBookmarkletId then
-                    Ports.textInputSelectAll htmlId
+                          else
+                            Ports.fixCursorPosition htmlId
+                        , if htmlId == UserOptions.discordBookmarkletId then
+                            Ports.textInputSelectAll htmlId
 
-                  else
-                    Command.none
-                ]
-            )
+                          else
+                            Command.none
+                        ]
+                    )
+                )
+                model
 
         TextInputLostFocus htmlId ->
             FrontendExtra.updateLoggedIn
-                (\loggedIn -> ( loggedIn, Command.none ))
-                { model
-                    | textInputFocus =
-                        if Just htmlId == Maybe.map Tuple.first model.textInputFocus then
-                            Nothing
+                (\loggedIn ->
+                    ( { loggedIn
+                        | textInputFocus =
+                            if Just htmlId == Maybe.map .htmlId loggedIn.textInputFocus then
+                                Nothing
 
-                        else
-                            model.textInputFocus
-                    , virtualKeyboardOpen = False
+                            else
+                                loggedIn.textInputFocus
+                      }
+                    , Command.none
+                    )
+                )
+                { model
+                    | virtualKeyboardOpen = False
                 }
 
         KeyDown key ->
@@ -1183,12 +1235,30 @@ updateLoaded msg model =
                             let
                                 loggedIn2 =
                                     MessageMenu.close model loggedIn
+
+                                isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
+                                isPingUserDropdownOpen =
+                                    case loggedIn2.textInputFocus of
+                                        Just textInputFocus ->
+                                            case textInputFocus.dropdown of
+                                                Just _ ->
+                                                    ( { loggedIn2
+                                                        | textInputFocus = Just { textInputFocus | dropdown = Nothing }
+                                                        , showEmojiSelector = EmojiSelectorHidden
+                                                      }
+                                                    , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                                                    )
+                                                        |> Just
+
+                                                Nothing ->
+                                                    Nothing
+
+                                        Nothing ->
+                                            Nothing
                             in
-                            case loggedIn2.pingUser of
-                                Just _ ->
-                                    ( { loggedIn2 | pingUser = Nothing, showEmojiSelector = EmojiSelectorHidden }
-                                    , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
-                                    )
+                            case isPingUserDropdownOpen of
+                                Just a ->
+                                    a
 
                                 Nothing ->
                                     case loggedIn2.showEmojiSelector of
@@ -1269,20 +1339,6 @@ updateLoaded msg model =
                                 (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                 Command.none
-                )
-                model
-
-        GotPingUserPositionForEditMessage result ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( case result of
-                        Ok ok ->
-                            { loggedIn | pingUser = Just ok }
-
-                        Err _ ->
-                            loggedIn
-                    , Command.none
-                    )
                 )
                 model
 
@@ -1470,16 +1526,38 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedArrowInDropdownForEditMessage guildOrDmId index ->
+        PressedArrowInDropdownForEditMessage ( guildOrDmId, threadRoute ) index ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
-                        | pingUser =
-                            MessageInput.pressedArrowInDropdown
-                                guildOrDmId
-                                index
-                                loggedIn.pingUser
-                                (Local.model loggedIn.localState)
+                        | textInputFocus =
+                            case loggedIn.textInputFocus of
+                                Just textInputFocus ->
+                                    case
+                                        FrontendExtra.pingUserNameSoFar
+                                            Pages.Guild.channelTextInputId
+                                            textInputFocus.selection
+                                            guildOrDmId
+                                            threadRoute
+                                            loggedIn
+                                    of
+                                        Just nameSoFar ->
+                                            { textInputFocus
+                                                | dropdown =
+                                                    MessageInput.pressedArrowInDropdown
+                                                        nameSoFar
+                                                        guildOrDmId
+                                                        index
+                                                        textInputFocus.dropdown
+                                                        (Local.model loggedIn.localState)
+                                            }
+                                                |> Just
+
+                                        Nothing ->
+                                            loggedIn.textInputFocus
+
+                                Nothing ->
+                                    loggedIn.textInputFocus
                       }
                     , Command.none
                     )
@@ -1489,23 +1567,33 @@ updateLoaded msg model =
         PressedPingUserForEditMessage ( guildOrDmId, threadRoute ) dropdownIndex ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
-                        Just edit ->
-                            case String.Nonempty.fromString edit.text of
-                                Just nonempty ->
+                    case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage, loggedIn.textInputFocus ) of
+                        ( Just edit, Just textInputFocus ) ->
+                            case
+                                ( String.Nonempty.fromString edit.text
+                                , FrontendExtra.pingUserNameSoFar
+                                    Pages.Guild.channelTextInputId
+                                    textInputFocus.selection
+                                    guildOrDmId
+                                    threadRoute
+                                    loggedIn
+                                )
+                            of
+                                ( Just nonempty, Just nameSoFar ) ->
                                     let
                                         ( pingUser, text2, cmd ) =
                                             MessageInput.pressedPingUser
                                                 SetFocus
+                                                nameSoFar
                                                 guildOrDmId
                                                 MessageMenu.editMessageTextInputId
                                                 dropdownIndex
-                                                loggedIn.pingUser
+                                                textInputFocus.dropdown
                                                 (Local.model loggedIn.localState)
                                                 nonempty
                                     in
                                     ( { loggedIn
-                                        | pingUser = pingUser
+                                        | textInputFocus = Just { textInputFocus | dropdown = pingUser }
                                         , editMessage =
                                             SeqDict.insert
                                                 ( guildOrDmId, threadRoute )
@@ -1515,10 +1603,10 @@ updateLoaded msg model =
                                     , cmd
                                     )
 
-                                Nothing ->
+                                _ ->
                                     ( loggedIn, Command.none )
 
-                        Nothing ->
+                        _ ->
                             ( loggedIn, Command.none )
                 )
                 model
@@ -1829,7 +1917,7 @@ updateLoaded msg model =
                                         in
                                         { loggedIn
                                             | sidebarMode =
-                                                case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
+                                                case ( loggedIn.textInputFocus, isTouchingTextInput dragging.touches ) of
                                                     ( Just _, True ) ->
                                                         loggedIn.sidebarMode
 
@@ -1867,7 +1955,7 @@ updateLoaded msg model =
                                 in
                                 { loggedIn
                                     | sidebarMode =
-                                        case ( model.textInputFocus, isTouchingTextInput startTouches ) of
+                                        case ( loggedIn.textInputFocus, isTouchingTextInput startTouches ) of
                                             ( Just _, True ) ->
                                                 loggedIn.sidebarMode
 
@@ -2456,46 +2544,41 @@ updateLoaded msg model =
             gotFiles guildOrDmId files model
 
         TextInputSelectionChanged htmlId range ->
-            ( { model
-                | textInputFocus = Just ( htmlId, range )
-                , loginStatus =
-                    case model.loginStatus of
-                        LoggedIn loggedIn ->
-                            { loggedIn
-                                | pingUser =
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( guildOrDmId, threadRoute ) ->
-                                            case pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
-                                                Just data ->
-                                                    { dropdownIndex = 0
-                                                    , inputElement = { x = Float, y = Float, width = Float, height = Float }
-                                                    , target = data.target
-                                                    }
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | textInputFocus =
+                            case loggedIn.textInputFocus of
+                                Just textInputFocus ->
+                                    if htmlId == textInputFocus.htmlId then
+                                        Just { textInputFocus | selection = range }
 
-                                                --let
-                                                --    local : LocalState
-                                                --    local =
-                                                --        Local.model loggedIn.localState
-                                                --in
-                                                --case guildOrDmId of
-                                                --    GuildOrDmId guildOrDmId2 ->
-                                                --        MessageInput.userDropdownList nameSoFar guildOrDmId2 local |> Just
-                                                --
-                                                --    DiscordGuildOrDmId guildOrDmId2 ->
-                                                --        MessageInput.discordUserDropdownList nameSoFar guildOrDmId2 local |> Just
-                                                Nothing ->
-                                                    loggedIn.pingUser
+                                    else
+                                        Just { htmlId = htmlId, selection = range, dropdown = Nothing }
 
-                                        Nothing ->
-                                            loggedIn.pingUser
-                            }
-                                |> LoggedIn
+                                Nothing ->
+                                    Just { htmlId = htmlId, selection = range, dropdown = Nothing }
+                      }
+                    , case Route.toGuildOrDmId model.route of
+                        Just ( guildOrDmId, threadRoute ) ->
+                            case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn |> Debug.log "TextInputSelectionChanged" of
+                                Just data ->
+                                    if htmlId == Pages.Guild.channelTextInputId || htmlId == MessageMenu.editMessageTextInputId then
+                                        Dom.getElement htmlId
+                                            |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                                            |> Task.attempt (GotPingUserPosition htmlId)
 
-                        NotLoggedIn _ ->
-                            model.loginStatus
-              }
-            , Command.none
-            )
+                                    else
+                                        Command.none
+
+                                Nothing ->
+                                    Command.none
+
+                        Nothing ->
+                            Command.none
+                    )
+                )
+                model
 
         PressedTextInput ->
             ( { model | virtualKeyboardOpen = True }, Command.none )
@@ -3444,11 +3527,16 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
 
                         _ ->
                             Command.none
-                    , case model.textInputFocus of
-                        Just ( textInputId, _ ) ->
-                            Dom.blur textInputId |> Task.attempt (\_ -> RemoveFocus)
+                    , case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            case loggedIn.textInputFocus of
+                                Just textInputFocus ->
+                                    Dom.blur textInputFocus.htmlId |> Task.attempt (\_ -> RemoveFocus)
 
-                        Nothing ->
+                                Nothing ->
+                                    Command.none
+
+                        NotLoggedIn _ ->
                             Command.none
                     ]
                 )
@@ -4705,59 +4793,3 @@ routeToInitialDataRequest route =
 
         _ ->
             InitialLoadRequested_None
-
-
-pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
-pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
-    if selection.start == selection.end then
-        if htmlId == Pages.Guild.channelTextInputId then
-            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
-                Just draft ->
-                    let
-                        previous : String
-                        previous =
-                            String.Nonempty.toString draft |> String.slice 0 selection.start
-                    in
-                    case String.split "@" previous |> List.reverse of
-                        nameSoFar :: beforeAt :: _ ->
-                            if beforeAt == "" || beforeAt == " " || beforeAt == "\n" || beforeAt == "\u{000D}" then
-                                { nameSoFar = nameSoFar
-                                , index = String.length beforeAt + 1
-                                , target = MessageInput.NewMessage
-                                }
-                                    |> Just
-
-                            else
-                                Nothing
-
-                Nothing ->
-                    loggedIn.pingUser
-
-        else if htmlId == MessageMenu.editMessageTextInputId then
-            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
-                Just edit ->
-                    let
-                        previous : String
-                        previous =
-                            String.slice 0 selection.start edit.text
-                    in
-                    case String.split "@" previous |> List.reverse of
-                        nameSoFar :: beforeAt :: _ ->
-                            if beforeAt == "" || beforeAt == " " || beforeAt == "\n" || beforeAt == "\u{000D}" then
-                                { nameSoFar = nameSoFar
-                                , index = String.length beforeAt + 1
-                                , target = MessageInput.EditMessage
-                                }
-                                    |> Just
-
-                            else
-                                Nothing
-
-                Nothing ->
-                    Nothing
-
-        else
-            Nothing
-
-    else
-        Nothing

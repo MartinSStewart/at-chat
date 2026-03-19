@@ -105,8 +105,8 @@ port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
 port fix_cursor_position_to_js : Json.Encode.Value -> Cmd msg
 
 
-execCommand : HtmlId -> Int -> Int -> Command FrontendOnly toMsg msg
-execCommand htmlId start end =
+execCommand : HtmlId -> Int -> Int -> String -> Command FrontendOnly toMsg msg
+execCommand htmlId start end text =
     Command.sendToJs
         "exec_command_to_js"
         exec_command_to_js
@@ -114,6 +114,7 @@ execCommand htmlId start end =
             [ ( "htmlId", Json.Encode.string (Dom.idToString htmlId) )
             , ( "start", Json.Encode.int start )
             , ( "end", Json.Encode.int end )
+            , ( "text", Json.Encode.string text )
             ]
         )
 

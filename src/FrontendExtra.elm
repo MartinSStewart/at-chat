@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -29,10 +29,10 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import LoginForm
 import Message exposing (ChangeAttachments(..), MessageState)
-import MessageInput
+import MessageInput exposing (NameSoFar)
 import MessageMenu
 import MessageView
-import MyUi
+import MyUi exposing (Range)
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -42,6 +42,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), Sho
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import String.Nonempty
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
@@ -205,21 +206,39 @@ layout model attributes child =
                     |> Ui.inFront
                 , case maybeMessageId of
                     Just ( guildOrDmId, threadRoute ) ->
-                        case loggedIn.pingUser of
+                        case loggedIn.textInputFocus of
                             Just pingUser ->
-                                MessageInput.pingDropdownView
-                                    (case pingUser.target of
-                                        MessageInput.NewMessage ->
-                                            Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute )
-
-                                        MessageInput.EditMessage ->
-                                            MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute
+                                case
+                                    ( pingUserNameSoFar pingUser.htmlId pingUser.selection guildOrDmId threadRoute loggedIn
+                                    , pingUser.dropdown
                                     )
-                                    guildOrDmId
-                                    local
-                                    Pages.Guild.dropdownButtonId
-                                    pingUser
-                                    |> Ui.inFront
+                                of
+                                    ( Just nameSoFar, Just dropdown ) ->
+                                        if pingUser.htmlId == Pages.Guild.channelTextInputId then
+                                            MessageInput.pingDropdownView
+                                                (Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute ))
+                                                nameSoFar
+                                                guildOrDmId
+                                                local
+                                                Pages.Guild.dropdownButtonId
+                                                dropdown
+                                                |> Ui.inFront
+
+                                        else if pingUser.htmlId == MessageMenu.editMessageTextInputId then
+                                            MessageInput.pingDropdownView
+                                                (MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute)
+                                                nameSoFar
+                                                guildOrDmId
+                                                local
+                                                Pages.Guild.dropdownButtonId
+                                                dropdown
+                                                |> Ui.inFront
+
+                                        else
+                                            Ui.noAttr
+
+                                    _ ->
+                                        Ui.noAttr
 
                             Nothing ->
                                 Ui.noAttr
@@ -1104,7 +1123,7 @@ isPressMsg msg =
         DebouncedTyping ->
             False
 
-        GotPingUserPosition _ ->
+        GotPingUserPosition _ _ ->
             False
 
         PressedPingUser _ _ ->
@@ -1136,9 +1155,6 @@ isPressMsg msg =
 
         PressedEmojiSelectorEmoji _ ->
             True
-
-        GotPingUserPositionForEditMessage _ ->
-            False
 
         TypedEditMessage _ _ ->
             False
@@ -3529,3 +3545,50 @@ deleteMessage guildOrDmId threadRoute local =
 
                 ViewThreadWithMessage _ _ ->
                     local
+
+
+pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
+pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
+    let
+        helper text =
+            let
+                previous : String
+                previous =
+                    text |> String.slice 0 selection.start
+            in
+            case String.split "@" previous |> Debug.log "abc" |> List.reverse of
+                nameSoFar :: beforeAt :: _ ->
+                    if beforeAt == "" || String.endsWith " " beforeAt || String.endsWith "\n" beforeAt || String.endsWith "\u{000D}" beforeAt then
+                        { nameSoFar = nameSoFar
+                        , index = String.length beforeAt + 1
+                        }
+                            |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+    in
+    if selection.start == selection.end then
+        if htmlId == Pages.Guild.channelTextInputId then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
+                Just draft ->
+                    helper (String.Nonempty.toString draft)
+
+                Nothing ->
+                    Nothing
+
+        else if htmlId == MessageMenu.editMessageTextInputId then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
+                Just edit ->
+                    helper edit.text
+
+                Nothing ->
+                    Nothing
+
+        else
+            Nothing
+
+    else
+        Nothing

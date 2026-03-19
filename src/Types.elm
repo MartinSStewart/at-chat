@@ -70,7 +70,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
 import Message exposing (Message)
-import MessageInput exposing (MentionUserDropdown)
+import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
 import MyUi exposing (Range)
 import NonemptyDict exposing (NonemptyDict)
@@ -134,7 +134,6 @@ type alias LoadedFrontend =
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
-    , textInputFocus : Maybe ( HtmlId, Range )
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , drag : Drag
@@ -173,7 +172,7 @@ type alias LoggedIn2 =
     , newGuildForm : Maybe NewGuildForm
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
-    , pingUser : Maybe MentionUserDropdown
+    , textInputFocus : Maybe TextInputFocus
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
@@ -372,21 +371,20 @@ type FrontendMsg
     | PressedSubmitNewGuild NewGuildForm
     | PressedCancelNewGuild
     | DebouncedTyping
-    | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
+    | GotPingUserPosition HtmlId (Result Dom.Error MentionUserDropdown)
     | PressedPingUser ( AnyGuildOrDmId, ThreadRoute ) Int
     | SetFocus
     | RemoveFocus
-    | PressedArrowInDropdown AnyGuildOrDmId Int
+    | PressedArrowInDropdown ( AnyGuildOrDmId, ThreadRoute ) Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
     | PressedEmojiSelectorEmoji Emoji
-    | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
     | TypedEditMessage ( AnyGuildOrDmId, ThreadRoute ) String
     | PressedSendEditMessage ( AnyGuildOrDmId, ThreadRoute )
-    | PressedArrowInDropdownForEditMessage AnyGuildOrDmId Int
+    | PressedArrowInDropdownForEditMessage ( AnyGuildOrDmId, ThreadRoute ) Int
     | PressedPingUserForEditMessage ( AnyGuildOrDmId, ThreadRoute ) Int
     | PressedArrowUpInEmptyInput ( AnyGuildOrDmId, ThreadRoute )
     | MessageMenu_PressedReply ThreadRouteWithMessage

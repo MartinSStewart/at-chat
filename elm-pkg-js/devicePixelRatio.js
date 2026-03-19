@@ -46,12 +46,12 @@ exports.init = async function init(app)
 //        },
 //        configurable: true,
 //    });
-//    app.ports.exec_command_to_js.subscribe((data) => {
-//        var textarea = document.getElementById(data.htmlId);
-//        textarea.focus();
-//        textarea.setSelectionRange(data.start, data.end);
-//        document.execCommand('insertText', false, 'replacement');
-//    });
+    app.ports.exec_command_to_js.subscribe((data) => {
+        var textarea = document.getElementById(data.htmlId);
+        textarea.focus();
+        textarea.setSelectionRange(data.start, data.end);
+        document.execCommand('insertText', false, data.text);
+    });
 
     app.ports.fix_cursor_position_to_js.subscribe((htmlId) => {
         var a = document.getElementById(htmlId);

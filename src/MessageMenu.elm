@@ -251,7 +251,7 @@ viewMobile offset extraOptions loggedIn local model =
                             ""
                             edit.text
                             edit.attachedFiles
-                            loggedIn.pingUser
+                            loggedIn.textInputFocus
                             local
                         ]
 
@@ -310,18 +310,16 @@ view model extraOptions local loggedIn =
 
 editMessageTextInputConfig : AnyGuildOrDmId -> ThreadRoute -> MsgConfig FrontendMsg
 editMessageTextInputConfig guildOrDmId threadRoute =
-    { gotPingUserPosition = GotPingUserPositionForEditMessage
-    , textInputGotFocus = TextInputGotFocus
+    { textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
     , pressedTextInput = PressedTextInput
     , typedMessage = TypedEditMessage ( guildOrDmId, threadRoute )
     , pressedSendMessage = PressedSendEditMessage ( guildOrDmId, threadRoute )
-    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildOrDmId
+    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage ( guildOrDmId, threadRoute )
     , pressedArrowUpInEmptyInput = FrontendNoOp
     , pressedPingUser = PressedPingUserForEditMessage ( guildOrDmId, threadRoute )
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
     , pressedUploadFile = EditMessage_PressedAttachFiles ( guildOrDmId, threadRoute )
-    , target = MessageInput.EditMessage
     , onPasteFiles = EditMessage_PastedFiles ( guildOrDmId, threadRoute )
     , onSelectionChanged = TextInputSelectionChanged
     }
