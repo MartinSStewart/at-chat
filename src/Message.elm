@@ -12,6 +12,7 @@ module Message exposing
     , editUserTextMessage
     , removeReactionEmoji
     , userTextMessage
+    , userTextMessageNoEmbeds
     )
 
 import Array exposing (Array)
@@ -42,6 +43,26 @@ type Message messageId userId
 maxEmbeds : number
 maxEmbeds =
     10
+
+
+userTextMessageNoEmbeds :
+    Time.Posix
+    -> userId
+    -> Nonempty (RichText userId)
+    -> Maybe (Id messageId)
+    -> SeqDict (Id FileId) FileData
+    -> Message messageId userId
+userTextMessageNoEmbeds createdAt2 createdBy content repliedTo attachedFiles =
+    { createdAt = createdAt2
+    , createdBy = createdBy
+    , content = content
+    , reactions = SeqDict.empty
+    , editedAt = Nothing
+    , repliedTo = repliedTo
+    , attachedFiles = attachedFiles
+    , embeds = Array.empty
+    }
+        |> UserTextMessage
 
 
 userTextMessage :

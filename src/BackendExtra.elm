@@ -775,12 +775,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             let
                                 ( message2, cmds ) =
-                                    Message.userTextMessage
-                                        time
-                                        session.userId
-                                        text
-                                        maybeReplyTo
-                                        attachedFiles
+                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles
 
                                 ( messageId, channel3 ) =
                                     LocalState.createThreadMessageBackend threadId message2 channel
@@ -795,12 +790,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         NoThreadWithMaybeMessage maybeReplyTo ->
                             let
                                 ( message2, cmds ) =
-                                    Message.userTextMessage
-                                        time
-                                        session.userId
-                                        text
-                                        maybeReplyTo
-                                        attachedFiles
+                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles
 
                                 ( messageId, channel3 ) =
                                     LocalState.createChannelMessageBackend message2 channel

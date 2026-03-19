@@ -670,7 +670,7 @@ messagesAndLinks messages discordAttachments =
                 attachments =
                     messageToFileData message discordAttachments
             in
-            Message.userTextMessage
+            Message.userTextMessageNoEmbeds
                 message.timestamp
                 message.author.id
                 (RichText.fromDiscord message.content attachments)
@@ -685,7 +685,6 @@ messagesAndLinks messages discordAttachments =
                         Nothing
                 )
                 attachments
-                |> Tuple.first
         )
         messages
         |> Array.fromList
