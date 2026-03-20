@@ -230,8 +230,9 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
             (case String.Nonempty.fromString text of
                 Just nonempty ->
                     let
+                        users : SeqDict (Id UserId) FrontendUser
                         users =
-                            LocalState.allUsers local
+                            LocalState.allUsers local.localUser
                     in
                     RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
@@ -294,8 +295,9 @@ disabledTextarea placeholderText text attachedFiles local =
             (case String.Nonempty.fromString text of
                 Just nonempty ->
                     let
+                        users : SeqDict (Id UserId) FrontendUser
                         users =
-                            LocalState.allUsers local
+                            LocalState.allUsers local.localUser
                     in
                     RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
@@ -539,7 +541,7 @@ userDropdownList nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local
+            LocalState.allUsers local.localUser
     in
     (case guildOrDmId of
         GuildOrDmId_Guild guildId _ ->
@@ -580,7 +582,7 @@ discordUserDropdownList nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers2 local.localUser
+            LocalState.allDiscordUsers local.localUser
     in
     (case guildOrDmId of
         DiscordGuildOrDmId_Guild _ guildId _ ->

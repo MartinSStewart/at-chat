@@ -55,7 +55,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
-import User exposing (FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
+import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 
@@ -487,9 +487,12 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                     , Ports.setFavicon "/favicon-red.ico"
                     , case model.notificationPermission of
                         Ports.Granted ->
-                            Ports.showNotification
-                                (User.toString senderId (LocalState.allUsers local))
-                                (RichText.toString (LocalState.allUsers local) content)
+                            let
+                                users : SeqDict (Id UserId) FrontendUser
+                                users =
+                                    LocalState.allUsers local.localUser
+                            in
+                            Ports.showNotification (User.toString senderId users) (RichText.toString users content)
 
                         _ ->
                             Command.none
@@ -539,7 +542,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         |> not
 
                 allUsers =
-                    LocalState.allDiscordUsers2 local.localUser
+                    LocalState.allDiscordUsers local.localUser
             in
             if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch

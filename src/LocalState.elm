@@ -35,9 +35,8 @@ module LocalState exposing
     , addReactionEmojiFrontend
     , addReactionEmojiFrontendHelper
     , addReactionEmojiHelper
-    , allDiscordUsers2
+    , allDiscordUsers
     , allUsers
-    , allUsers2
     , announcementChannel
     , canSendDiscordMessage
     , createChannel
@@ -1399,21 +1398,16 @@ discordAnnouncementChannel guild =
     SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Discord.idFromUInt64 (UInt64.fromInt 0))
 
 
-allUsers : LocalState -> SeqDict (Id UserId) FrontendUser
-allUsers local =
-    allUsers2 local.localUser
-
-
-allUsers2 : LocalUser -> SeqDict (Id UserId) FrontendUser
-allUsers2 localUser =
+allUsers : LocalUser -> SeqDict (Id UserId) FrontendUser
+allUsers localUser =
     SeqDict.insert
         localUser.session.userId
         (User.backendToFrontendForUser localUser.user)
         localUser.otherUsers
 
 
-allDiscordUsers2 : LocalUser -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-allDiscordUsers2 localUser =
+allDiscordUsers : LocalUser -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+allDiscordUsers localUser =
     SeqDict.union
         (SeqDict.map (\_ user -> User.discordCurrentUserToFrontend user) localUser.linkedDiscordUsers)
         localUser.otherDiscordUsers

@@ -1203,7 +1203,7 @@ updateLoaded msg model =
                                                     richText : Nonempty (RichText (Id UserId))
                                                     richText =
                                                         RichText.fromNonemptyString
-                                                            (LocalState.allUsers local)
+                                                            (LocalState.allUsers local.localUser)
                                                             nonempty
                                                 in
                                                 if message.content == richText then
@@ -1241,7 +1241,7 @@ updateLoaded msg model =
                                                     richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                     richText =
                                                         RichText.fromNonemptyString
-                                                            (LocalState.allDiscordUsers2 local.localUser)
+                                                            (LocalState.allDiscordUsers local.localUser)
                                                             nonempty
                                                 in
                                                 if message.content == richText then
@@ -2008,7 +2008,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
 
                         allUsers =
-                            LocalState.allUsers local
+                            LocalState.allUsers local.localUser
                     in
                     ( { loggedIn
                         | filesToUpload =
@@ -2060,7 +2060,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
 
                         allUsers =
-                            LocalState.allUsers local
+                            LocalState.allUsers local.localUser
                     in
                     ( case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
@@ -2868,7 +2868,7 @@ updateLoaded msg model =
                                                     Local_SendMessage
                                                         model.time
                                                         guildOrDmId2
-                                                        (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
+                                                        (RichText.fromNonemptyString (LocalState.allUsers local.localUser) nonempty)
                                                         (case threadRoute of
                                                             ViewThread threadId ->
                                                                 ViewThreadWithMaybeMessage
@@ -2891,7 +2891,7 @@ updateLoaded msg model =
                                                     Local_Discord_SendMessage
                                                         model.time
                                                         guildOrDmId2
-                                                        (RichText.fromNonemptyString (LocalState.allDiscordUsers2 local.localUser) nonempty)
+                                                        (RichText.fromNonemptyString (LocalState.allDiscordUsers local.localUser) nonempty)
                                                         (case threadRoute of
                                                             ViewThread threadId ->
                                                                 ViewThreadWithMaybeMessage
@@ -3036,7 +3036,7 @@ updateLoaded msg model =
                                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                                 { messageIndex = index
                                                                 , text =
-                                                                    RichText.toString (LocalState.allUsers local) message.content
+                                                                    RichText.toString (LocalState.allUsers local.localUser) message.content
                                                                 , attachedFiles =
                                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                                 }
@@ -3123,7 +3123,7 @@ updateLoaded msg model =
                                                                 { messageIndex = index
                                                                 , text =
                                                                     RichText.toString
-                                                                        (LocalState.allDiscordUsers2 local.localUser)
+                                                                        (LocalState.allDiscordUsers local.localUser)
                                                                         message.content
                                                                 , attachedFiles =
                                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
@@ -3471,7 +3471,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString (LocalState.allUsers local) message.content
+                                    ( RichText.toString (LocalState.allUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just
@@ -3482,7 +3482,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         DiscordGuildOrDmId guildOrDmId2 ->
                             case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString (LocalState.allDiscordUsers2 local.localUser) message.content
+                                    ( RichText.toString (LocalState.allDiscordUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just

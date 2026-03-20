@@ -322,7 +322,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , LocalState.messageToString (LocalState.allUsers local) message
+                    , LocalState.messageToString (LocalState.allUsers local.localUser) message
                     )
                         |> Just
 
@@ -339,7 +339,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , LocalState.messageToString (LocalState.allDiscordUsers2 local.localUser) message
+                    , LocalState.messageToString (LocalState.allDiscordUsers local.localUser) message
                     )
                         |> Just
 
