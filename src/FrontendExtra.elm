@@ -207,14 +207,19 @@ layout model attributes child =
                 , case maybeMessageId of
                     Just ( guildOrDmId, threadRoute ) ->
                         case loggedIn.textInputFocus of
-                            Just pingUser ->
+                            Just textInputFocus ->
                                 case
-                                    ( pingUserNameSoFar pingUser.htmlId pingUser.selection guildOrDmId threadRoute loggedIn
-                                    , pingUser.dropdown
+                                    ( pingUserNameSoFar
+                                        textInputFocus.htmlId
+                                        textInputFocus.selection
+                                        guildOrDmId
+                                        threadRoute
+                                        loggedIn
+                                    , textInputFocus.dropdown
                                     )
                                 of
                                     ( Just nameSoFar, Just dropdown ) ->
-                                        if pingUser.htmlId == Pages.Guild.channelTextInputId then
+                                        if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
                                             MessageInput.pingDropdownView
                                                 (Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute ))
                                                 nameSoFar
@@ -224,7 +229,7 @@ layout model attributes child =
                                                 dropdown
                                                 |> Ui.inFront
 
-                                        else if pingUser.htmlId == MessageMenu.editMessageTextInputId then
+                                        else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
                                             MessageInput.pingDropdownView
                                                 (MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute)
                                                 nameSoFar
@@ -3556,11 +3561,19 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                 previous =
                     text |> String.slice 0 selection.start
             in
-            case String.split "@" previous |> Debug.log "abc" |> List.reverse of
-                nameSoFar :: beforeAt :: _ ->
-                    if beforeAt == "" || String.endsWith " " beforeAt || String.endsWith "\n" beforeAt || String.endsWith "\u{000D}" beforeAt then
+            case String.split "@" previous |> List.reverse of
+                nameSoFar :: beforeAt :: rest ->
+                    if
+                        (beforeAt == "")
+                            || String.endsWith " " beforeAt
+                            || String.endsWith "\n" beforeAt
+                            || String.endsWith "\u{000D}" beforeAt
+                    then
                         { nameSoFar = nameSoFar
-                        , index = String.length beforeAt + 1
+                        , index =
+                            String.length beforeAt
+                                + List.foldl (\a count -> String.length a + count + 1) 0 rest
+                                + 1
                         }
                             |> Just
 

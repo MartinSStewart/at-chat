@@ -3,7 +3,6 @@ module MessageInput exposing
     , MsgConfig
     , NameSoFar
     , TextInputFocus
-    , closeDropdown
     , disabledView
     , discordUserDropdownList
     , editView
@@ -51,11 +50,6 @@ type alias MentionUserDropdown =
 
 type alias TextInputFocus =
     { htmlId : HtmlId, selection : Range, dropdown : Maybe MentionUserDropdown }
-
-
-closeDropdown : TextInputFocus -> TextInputFocus
-closeDropdown textInputFocus =
-    { textInputFocus | dropdown = Nothing }
 
 
 type alias NameSoFar =
@@ -637,7 +631,7 @@ pressedPingUser setFocusMsg nameSoFar guildOrDmId channelTextInputId index pingU
                     channelTextInputId
                     nameSoFar.index
                     (nameSoFar.index + String.length nameSoFar.nameSoFar)
-                    name
+                    (name ++ " ")
                 ]
             )
 

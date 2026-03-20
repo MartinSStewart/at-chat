@@ -2546,12 +2546,64 @@ updateLoaded msg model =
         TextInputSelectionChanged htmlId range ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
+                    let
+                        maybeGuildOrDmId : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                        maybeGuildOrDmId =
+                            Route.toGuildOrDmId model.route
+
+                        maybeNameSoFar : Maybe NameSoFar
+                        maybeNameSoFar =
+                            case maybeGuildOrDmId of
+                                Just ( guildOrDmId, threadRoute ) ->
+                                    FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn
+
+                                Nothing ->
+                                    Nothing
+
+                        showDropdown : Bool
+                        showDropdown =
+                            ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
+                                && (case maybeNameSoFar of
+                                        Just nameSoFar ->
+                                            case maybeGuildOrDmId of
+                                                Just ( GuildOrDmId guildOrDmId2, _ ) ->
+                                                    MessageInput.userDropdownList
+                                                        nameSoFar
+                                                        guildOrDmId2
+                                                        (Local.model loggedIn.localState)
+                                                        |> List.isEmpty
+                                                        |> not
+
+                                                Just ( DiscordGuildOrDmId guildOrDmId2, _ ) ->
+                                                    MessageInput.discordUserDropdownList
+                                                        nameSoFar
+                                                        guildOrDmId2
+                                                        (Local.model loggedIn.localState)
+                                                        |> List.isEmpty
+                                                        |> not
+
+                                                Nothing ->
+                                                    False
+
+                                        Nothing ->
+                                            False
+                                   )
+                    in
                     ( { loggedIn
                         | textInputFocus =
                             case loggedIn.textInputFocus of
                                 Just textInputFocus ->
                                     if htmlId == textInputFocus.htmlId then
-                                        Just { textInputFocus | selection = range }
+                                        { textInputFocus
+                                            | selection = range
+                                            , dropdown =
+                                                if showDropdown then
+                                                    textInputFocus.dropdown
+
+                                                else
+                                                    Nothing
+                                        }
+                                            |> Just
 
                                     else
                                         Just { htmlId = htmlId, selection = range, dropdown = Nothing }
@@ -2559,23 +2611,13 @@ updateLoaded msg model =
                                 Nothing ->
                                     Just { htmlId = htmlId, selection = range, dropdown = Nothing }
                       }
-                    , case Route.toGuildOrDmId model.route of
-                        Just ( guildOrDmId, threadRoute ) ->
-                            case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn |> Debug.log "TextInputSelectionChanged" of
-                                Just data ->
-                                    if htmlId == Pages.Guild.channelTextInputId || htmlId == MessageMenu.editMessageTextInputId then
-                                        Dom.getElement htmlId
-                                            |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
-                                            |> Task.attempt (GotPingUserPosition htmlId)
+                    , if showDropdown then
+                        Dom.getElement htmlId
+                            |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                            |> Task.attempt (GotPingUserPosition htmlId)
 
-                                    else
-                                        Command.none
-
-                                Nothing ->
-                                    Command.none
-
-                        Nothing ->
-                            Command.none
+                      else
+                        Command.none
                     )
                 )
                 model
