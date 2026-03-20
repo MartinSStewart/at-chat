@@ -1,7 +1,6 @@
 module MessageMenu exposing
     ( close
     , desktopMenuHeight
-    , editMessageTextInputConfig
     , editMessageTextInputId
     , messageMenuSpeed
     , mobileMenuMaxHeight
@@ -19,10 +18,10 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
-import MessageInput exposing (MsgConfig)
+import MessageInput
 import MyUi
 import Quantity exposing (Quantity, Rate)
 import SeqDict
@@ -243,16 +242,13 @@ viewMobile offset extraOptions loggedIn local model =
                             (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
                             True
                             True
-                            (editMessageTextInputConfig
-                                extraOptions.guildOrDmId
-                                (Id.threadRouteWithoutMessage extraOptions.threadRoute)
-                            )
                             editMessageTextInputId
                             ""
                             edit.text
                             edit.attachedFiles
-                            loggedIn.pingUser
+                            loggedIn.textInputFocus
                             local
+                            |> Ui.map (EditMessage_MessageInputMsg extraOptions.guildOrDmId (Id.threadRouteWithoutMessage extraOptions.threadRoute))
                         ]
 
                     Nothing ->
@@ -308,24 +304,6 @@ view model extraOptions local loggedIn =
             )
 
 
-editMessageTextInputConfig : AnyGuildOrDmId -> ThreadRoute -> MsgConfig FrontendMsg
-editMessageTextInputConfig guildOrDmId threadRoute =
-    { gotPingUserPosition = GotPingUserPositionForEditMessage
-    , textInputGotFocus = TextInputGotFocus
-    , textInputLostFocus = TextInputLostFocus
-    , pressedTextInput = PressedTextInput
-    , typedMessage = TypedEditMessage ( guildOrDmId, threadRoute )
-    , pressedSendMessage = PressedSendEditMessage ( guildOrDmId, threadRoute )
-    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildOrDmId
-    , pressedArrowUpInEmptyInput = FrontendNoOp
-    , pressedPingUser = PressedPingUserForEditMessage ( guildOrDmId, threadRoute )
-    , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
-    , pressedUploadFile = EditMessage_PressedAttachFiles ( guildOrDmId, threadRoute )
-    , target = MessageInput.EditMessage
-    , onPasteFiles = EditMessage_PastedFiles ( guildOrDmId, threadRoute )
-    }
-
-
 editMessageTextInputId : HtmlId
 editMessageTextInputId =
     Dom.id "editMessageTextInput"
@@ -344,7 +322,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , LocalState.messageToString (LocalState.allUsers local) message
+                    , LocalState.messageToString (LocalState.allUsers local.localUser) message
                     )
                         |> Just
 
@@ -361,7 +339,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , LocalState.messageToString (LocalState.allDiscordUsers2 local.localUser) message
+                    , LocalState.messageToString (LocalState.allDiscordUsers local.localUser) message
                     )
                         |> Just
 

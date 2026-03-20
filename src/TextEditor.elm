@@ -27,8 +27,7 @@ import Html.Events
 import Id exposing (Id, UserId)
 import Json.Decode
 import List.Extra
-import MyUi
-import RichText exposing (Range)
+import MyUi exposing (Range)
 import SeqDict exposing (SeqDict)
 import String.Extra
 import String.Nonempty
@@ -151,13 +150,13 @@ update currentUserId msg model local =
                             String.length text - String.length editorState.text
                     in
                     ( model
-                    , if RichText.rangeSize range == 0 && lengthDiff < 0 then
+                    , if MyUi.rangeSize range == 0 && lengthDiff < 0 then
                         Edit_TypedText { range | start = range.start + lengthDiff } ""
                             |> Local_EditChange
                             |> Just
 
                       else
-                        String.slice range.start (range.start + lengthDiff + RichText.rangeSize range) text
+                        String.slice range.start (range.start + lengthDiff + MyUi.rangeSize range) text
                             |> Edit_TypedText range
                             |> Local_EditChange
                             |> Just
@@ -356,7 +355,7 @@ insertTextHelper insertCount removeRange range =
     let
         size : Int
         size =
-            RichText.rangeSize removeRange
+            MyUi.rangeSize removeRange
 
         moveStartBy : Int
         moveStartBy =
@@ -506,13 +505,6 @@ isPress msg =
             False
 
 
-decodeSelection : Json.Decode.Decoder Range
-decodeSelection =
-    Json.Decode.map2 (\start end -> Range (min start end) (max start end))
-        (Json.Decode.at [ "target", "selectionStart" ] Json.Decode.int)
-        (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
-
-
 textarea : LocalState -> Id UserId -> String -> EditorState -> Html Msg
 textarea local currentUserId placeholderText editorState =
     Html.div
@@ -539,7 +531,7 @@ textarea local currentUserId placeholderText editorState =
             , Html.Attributes.style "outline" "none"
             , Html.Events.onInput TypedText
             , Html.Attributes.value editorState.text
-            , Html.Events.on "selectionchange" (Json.Decode.map MovedCursor decodeSelection)
+            , MyUi.onSelectionChanged MovedCursor
             , Dom.idToAttribute inputId
             , Html.Events.preventDefaultOn
                 "keydown"

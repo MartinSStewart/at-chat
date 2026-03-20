@@ -131,13 +131,31 @@ init =
                         }
                       )
                     ]
-            , members = SeqDict.fromList []
+            , members = SeqDict.empty
+
+            --List.range 1 40
+            --    |> List.map (\index -> ( Id.fromInt index, { joinedAt = Time.millisToPosix 0 } ))
+            --    |> SeqDict.fromList
             , owner = Broadcast.adminUserId
             , invites = SeqDict.empty
             }
     in
     ( { users =
-            Nonempty ( Broadcast.adminUserId, adminUser ) []
+            Nonempty
+                ( Broadcast.adminUserId, adminUser )
+                []
+                --(List.range 1 40
+                --    |> List.map
+                --        (\index ->
+                --            ( Id.fromInt index
+                --            , User.init
+                --                (Time.millisToPosix 0)
+                --                (Unsafe.personName ("Steve" ++ String.fromInt index))
+                --                (Unsafe.emailAddress ("steve" ++ String.fromInt index ++ "@email.com"))
+                --                False
+                --            )
+                --        )
+                --)
                 |> NonemptyDict.fromNonemptyList
       , sessions = SeqDict.empty
       , connections = SeqDict.empty

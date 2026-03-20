@@ -3,7 +3,6 @@ module RichText exposing
     , Embed(..)
     , EmbedData
     , Language(..)
-    , Range
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
@@ -15,7 +14,6 @@ module RichText exposing
     , hyperlinks
     , mentionsUser
     , preview
-    , rangeSize
     , removeAttachedFile
     , textInputView
     , toDiscord
@@ -449,20 +447,22 @@ parser users modifiers =
                 [ Parser.succeed identity
                     |. Parser.symbol "@"
                     |= Parser.oneOf
-                        (List.map
-                            (\( userId, user ) ->
-                                Parser.succeed
-                                    (Loop
-                                        { current = Array.empty
-                                        , rest =
-                                            Array.append
-                                                state.rest
-                                                (Array.push (UserMention userId) (parserHelper state))
-                                        }
-                                    )
-                                    |. Parser.symbol (PersonName.toString user.name)
-                            )
-                            (SeqDict.toList users)
+                        ((SeqDict.toList users
+                            |> List.sortBy (\( _, user ) -> PersonName.toString user.name |> String.length |> negate)
+                            |> List.map
+                                (\( userId, user ) ->
+                                    Parser.succeed
+                                        (Loop
+                                            { current = Array.empty
+                                            , rest =
+                                                Array.append
+                                                    state.rest
+                                                    (Array.push (UserMention userId) (parserHelper state))
+                                            }
+                                        )
+                                        |. Parser.symbol (PersonName.toString user.name)
+                                )
+                         )
                             ++ [ Parser.succeed
                                     (Loop
                                         { current = Array.push "@" state.current
@@ -1587,15 +1587,6 @@ fileDownloadView fileData =
             ]
             [ Icons.download ]
         ]
-
-
-type alias Range =
-    { start : Int, end : Int }
-
-
-rangeSize : Range -> Int
-rangeSize range =
-    range.end - range.start
 
 
 textInputView :

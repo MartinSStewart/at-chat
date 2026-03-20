@@ -12,7 +12,6 @@ module Pages.Guild exposing
     , encodeMessageView
     , guildView
     , homePageLoggedInView
-    , messageInputConfig
     , newGuildFormInit
     , threadMessageHtmlId
     , typingDebouncerDelay
@@ -44,7 +43,7 @@ import List.Nonempty
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
-import MessageInput exposing (MentionUserDropdown, MsgConfig)
+import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi
@@ -248,7 +247,7 @@ guildColumn :
 guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 =
     let
         allUsers =
-            LocalState.allUsers2 localUser
+            LocalState.allUsers localUser
     in
     Ui.el
         [ Ui.inFront
@@ -1456,7 +1455,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                     (ChannelName.toString channel.name
                                         ++ " / "
                                         ++ threadPreviewText
-                                            (LocalState.allUsers2 local.localUser)
+                                            (LocalState.allUsers local.localUser)
                                             threadMessageIndex
                                             channel
                                     )
@@ -1535,7 +1534,7 @@ discordChannelView routeData guild loggedIn local model =
                                     (ChannelName.toString channel.name
                                         ++ " / "
                                         ++ threadPreviewText
-                                            (LocalState.allDiscordUsers2 local.localUser)
+                                            (LocalState.allDiscordUsers local.localUser)
                                             threadMessageIndex
                                             channel
                                     )
@@ -1954,7 +1953,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         messageHover2
                                         otherUserIsEditing
                                         local.localUser.session.userId
-                                        (LocalState.allUsers2 local.localUser)
+                                        (LocalState.allUsers local.localUser)
                                         local.localUser
                                         maybeRepliedTo
                                         (SeqDict.get threadId channel.threads)
@@ -1972,9 +1971,9 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         local.localUser.session.userId
-                                        (LocalState.allUsers2 local.localUser)
+                                        (LocalState.allUsers local.localUser)
                                         local
 
                             Nothing ->
@@ -1991,7 +1990,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     messageHover2
                                                     otherUserIsEditing
                                                     local.localUser.session.userId
-                                                    (LocalState.allUsers2 local.localUser)
+                                                    (LocalState.allUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo
                                                     Nothing
@@ -2021,7 +2020,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     messageHover2
                                                     otherUserIsEditing
                                                     local.localUser.session.userId
-                                                    (LocalState.allUsers2 local.localUser)
+                                                    (LocalState.allUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo
                                                     (Just thread)
@@ -2218,7 +2217,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         messageHover2
                                         otherUserIsEditing
                                         currentDiscordUserId
-                                        (LocalState.allDiscordUsers2 local.localUser)
+                                        (LocalState.allDiscordUsers local.localUser)
                                         local.localUser
                                         maybeRepliedTo
                                         (SeqDict.get threadId channel.threads)
@@ -2236,9 +2235,9 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         currentDiscordUserId
-                                        (LocalState.allDiscordUsers2 local.localUser)
+                                        (LocalState.allDiscordUsers local.localUser)
                                         local
 
                             Nothing ->
@@ -2255,7 +2254,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     messageHover2
                                                     otherUserIsEditing
                                                     currentDiscordUserId
-                                                    (LocalState.allDiscordUsers2 local.localUser)
+                                                    (LocalState.allDiscordUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo
                                                     Nothing
@@ -2286,7 +2285,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     messageHover2
                                                     otherUserIsEditing
                                                     currentDiscordUserId
-                                                    (LocalState.allDiscordUsers2 local.localUser)
+                                                    (LocalState.allDiscordUsers local.localUser)
                                                     local.localUser
                                                     maybeRepliedTo
                                                     (Just thread)
@@ -2528,7 +2527,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         highlight
                                         messageHover2
                                         otherUserIsEditing
-                                        (LocalState.allUsers2 local.localUser)
+                                        (LocalState.allUsers local.localUser)
                                         local.localUser.session.userId
                                         local.localUser
                                         maybeRepliedTo
@@ -2546,9 +2545,9 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         maybeRepliedTo
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         local.localUser.session.userId
-                                        (LocalState.allUsers2 local.localUser)
+                                        (LocalState.allUsers local.localUser)
                                         local
 
                             Nothing ->
@@ -2561,7 +2560,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             highlight
                                             messageHover2
                                             otherUserIsEditing
-                                            (LocalState.allUsers2 local.localUser)
+                                            (LocalState.allUsers local.localUser)
                                             local.localUser.session.userId
                                             local.localUser
                                             maybeRepliedTo
@@ -2745,7 +2744,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         highlight
                                         messageHover2
                                         otherUserIsEditing
-                                        (LocalState.allDiscordUsers2 local.localUser)
+                                        (LocalState.allDiscordUsers local.localUser)
                                         currentDiscordUserId
                                         local.localUser
                                         maybeRepliedTo
@@ -2763,9 +2762,9 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         maybeRepliedTo
                                         revealedSpoilers
                                         editing
-                                        loggedIn.pingUser
+                                        loggedIn.textInputFocus
                                         currentDiscordUserId
-                                        (LocalState.allDiscordUsers2 local.localUser)
+                                        (LocalState.allDiscordUsers local.localUser)
                                         local
 
                             Nothing ->
@@ -2778,7 +2777,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                             highlight
                                             messageHover2
                                             otherUserIsEditing
-                                            (LocalState.allDiscordUsers2 local.localUser)
+                                            (LocalState.allDiscordUsers local.localUser)
                                             currentDiscordUserId
                                             local.localUser
                                             maybeRepliedTo
@@ -3012,24 +3011,6 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-messageInputConfig : ( AnyGuildOrDmId, ThreadRoute ) -> MsgConfig FrontendMsg
-messageInputConfig ( guildOrDmId, threadRoute ) =
-    { gotPingUserPosition = GotPingUserPosition
-    , textInputGotFocus = TextInputGotFocus
-    , textInputLostFocus = TextInputLostFocus
-    , pressedTextInput = PressedTextInput
-    , typedMessage = TypedMessage ( guildOrDmId, threadRoute )
-    , pressedSendMessage = PressedSendMessage guildOrDmId threadRoute
-    , pressedArrowInDropdown = PressedArrowInDropdown guildOrDmId
-    , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput ( guildOrDmId, threadRoute )
-    , pressedPingUser = PressedPingUser ( guildOrDmId, threadRoute )
-    , pressedPingDropdownContainer = PressedPingDropdownContainer
-    , pressedUploadFile = PressedAttachFiles ( guildOrDmId, threadRoute )
-    , target = MessageInput.NewMessage
-    , onPasteFiles = PastedFiles ( guildOrDmId, threadRoute )
-    }
-
-
 decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
 decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
@@ -3116,7 +3097,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local
+            LocalState.allUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -3249,7 +3230,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
                 channelTextInputId
                 (case guildOrDmIdNoThread of
                     GuildOrDmId_Guild _ _ ->
@@ -3278,8 +3258,9 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
-                loggedIn.pingUser
+                loggedIn.textInputFocus
                 local
+                |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
         ]
@@ -3320,7 +3301,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
 
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers2 local.localUser
+            LocalState.allDiscordUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -3456,7 +3437,6 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         (Dom.id "messageMenu_channelInput")
                         (replyTo == Nothing)
                         (MyUi.isMobile model)
-                        (messageInputConfig guildOrDmId)
                         channelTextInputId
                         (case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3485,8 +3465,9 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
-                        loggedIn.pingUser
+                        loggedIn.textInputFocus
                         local
+                        |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
                 Err error ->
                     MessageInput.disabledView
@@ -3598,7 +3579,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers local
+            LocalState.allUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -3751,7 +3732,6 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig guildOrDmId)
                 channelTextInputId
                 (case guildOrDmIdNoThread of
                     GuildOrDmId_Guild _ _ ->
@@ -3774,8 +3754,9 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
-                loggedIn.pingUser
+                loggedIn.textInputFocus
                 local
+                |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
         ]
@@ -3801,7 +3782,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
 
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
-            LocalState.allDiscordUsers2 local.localUser
+            LocalState.allDiscordUsers local.localUser
 
         replyTo : Maybe (Id ChannelMessageId)
         replyTo =
@@ -3943,7 +3924,6 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig guildOrDmId)
                 channelTextInputId
                 (case guildOrDmIdNoThread of
                     DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3966,8 +3946,9 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
-                loggedIn.pingUser
+                loggedIn.textInputFocus
                 local
+                |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
         ]
@@ -4023,9 +4004,9 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             Nothing
                             SeqDict.empty
                             editMessage
-                            loggedIn.pingUser
+                            loggedIn.textInputFocus
                             local.localUser.session.userId
-                            (LocalState.allUsers2 local.localUser)
+                            (LocalState.allUsers local.localUser)
                             local
 
                     else
@@ -4038,7 +4019,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn)
                             False
                             local.localUser.session.userId
-                            (LocalState.allUsers2 local.localUser)
+                            (LocalState.allUsers local.localUser)
                             local.localUser
                             Nothing
                             Nothing
@@ -4056,7 +4037,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn)
                         False
                         local.localUser.session.userId
-                        (LocalState.allUsers2 local.localUser)
+                        (LocalState.allUsers local.localUser)
                         local.localUser
                         Nothing
                         Nothing
@@ -4127,9 +4108,9 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             Nothing
                             SeqDict.empty
                             editMessage
-                            loggedIn.pingUser
+                            loggedIn.textInputFocus
                             currentUserId
-                            (LocalState.allDiscordUsers2 local.localUser)
+                            (LocalState.allDiscordUsers local.localUser)
                             local
 
                     else
@@ -4142,7 +4123,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn)
                             False
                             currentUserId
-                            (LocalState.allDiscordUsers2 local.localUser)
+                            (LocalState.allDiscordUsers local.localUser)
                             local.localUser
                             Nothing
                             Nothing
@@ -4160,7 +4141,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn)
                         False
                         currentUserId
-                        (LocalState.allDiscordUsers2 local.localUser)
+                        (LocalState.allDiscordUsers local.localUser)
                         local.localUser
                         Nothing
                         Nothing
@@ -4270,7 +4251,7 @@ messageEditingView :
     -> Maybe (FrontendGenericThread userId)
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> EditMessage
-    -> Maybe MentionUserDropdown
+    -> Maybe TextInputFocus
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
@@ -4334,13 +4315,13 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         (Dom.id "messageMenu_editDesktop")
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig guildOrDmIdNoThread threadRoute)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
                         editing.attachedFiles
                         pingUser
                         local
+                        |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14
@@ -4392,7 +4373,7 @@ threadMessageEditingView :
     -> Maybe ( Id ThreadMessageId, Message ThreadMessageId userId )
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> EditMessage
-    -> Maybe MentionUserDropdown
+    -> Maybe TextInputFocus
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
@@ -4453,13 +4434,13 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         (Dom.id "messageMenu_editDesktop")
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig guildOrDmIdNoThread threadRoute)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
                         editing.attachedFiles
                         pingUser
                         local
+                        |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14
@@ -4524,7 +4505,7 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
         isHovered
         isEditing
         localUser.session.userId
-        (LocalState.allUsers2 localUser)
+        (LocalState.allUsers localUser)
         localUser
         Nothing
         Nothing
@@ -4565,7 +4546,7 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
         isHovered
         isEditing
         currentDiscordUserId
-        (LocalState.allDiscordUsers2 localUser)
+        (LocalState.allDiscordUsers localUser)
         localUser
         Nothing
         Nothing
@@ -4598,7 +4579,7 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
         isHovered
         isEditing
         localUser.session.userId
-        (LocalState.allUsers2 localUser)
+        (LocalState.allUsers localUser)
         localUser
         Nothing
         (Just thread)
@@ -4642,7 +4623,7 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId local
         isHovered
         isEditing
         currentDiscordUserId
-        (LocalState.allDiscordUsers2 localUser)
+        (LocalState.allDiscordUsers localUser)
         localUser
         Nothing
         (Just thread)
@@ -4672,7 +4653,7 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
         highlight
         isHovered
         isEditing
-        (LocalState.allUsers2 localUser)
+        (LocalState.allUsers localUser)
         localUser.session.userId
         localUser
         Nothing
@@ -4703,7 +4684,7 @@ discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUse
         highlight
         isHovered
         isEditing
-        (LocalState.allDiscordUsers2 localUser)
+        (LocalState.allDiscordUsers localUser)
         currentDiscordUserId
         localUser
         Nothing
@@ -5853,7 +5834,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                                     False
 
                         name =
-                            threadPreviewText (LocalState.allUsers2 localUser) threadMessageIndex channel
+                            threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel
                     in
                     Ui.row
                         [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
@@ -5961,7 +5942,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                                     False
 
                         name =
-                            threadPreviewText (LocalState.allDiscordUsers2 localUser) threadMessageIndex channel
+                            threadPreviewText (LocalState.allDiscordUsers localUser) threadMessageIndex channel
                     in
                     Ui.row
                         [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
@@ -6268,7 +6249,7 @@ friendsColumn canScroll2 isMobile openedOtherUserId local =
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            LocalState.allUsers2 local.localUser
+            LocalState.allUsers local.localUser
     in
     channelColumnContainer
         [ Ui.el
@@ -6474,10 +6455,10 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
                              else
                                 ""
                             )
-                                ++ RichText.toString (LocalState.allDiscordUsers2 localUser) a.content
+                                ++ RichText.toString (LocalState.allDiscordUsers localUser) a.content
 
                         UserJoinedMessage _ userId _ ->
-                            User.toString userId (LocalState.allDiscordUsers2 localUser) ++ " joined!"
+                            User.toString userId (LocalState.allDiscordUsers localUser) ++ " joined!"
 
                         DeletedMessage _ ->
                             LocalState.messageDeleted
