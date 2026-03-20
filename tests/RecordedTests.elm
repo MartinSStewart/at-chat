@@ -754,7 +754,7 @@ infoEndpointResponse =
 handleCustomRequest : String -> HttpResponse
 handleCustomRequest url =
     if String.startsWith "https://" url then
-        case String.dropLeft (String.length "https://") url |> String.split "/" of
+        case String.dropLeft 8 url |> String.split "/" of
             [ "discord.com", "api", "v9", "users", "@me" ] ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -1102,7 +1102,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 False
                 discordOp0Ready
                 discordOp0ReadySupplemental
-                (\user -> [])
+                (\_ -> [])
             ]
         , T.start
             "Link Discord account with login to non-existent at-chat account"

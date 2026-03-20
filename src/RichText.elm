@@ -35,7 +35,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyDict
