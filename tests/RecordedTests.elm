@@ -751,6 +751,62 @@ infoEndpointResponse =
     """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
 
+handleCustomRequest : String -> HttpResponse
+handleCustomRequest url =
+    if String.startsWith "https://" url then
+        case String.dropLeft (String.length "https://") url |> String.split "/" of
+            [ "discord.com", "api", "v9", "users", "@me" ] ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
+
+            [ "discord.com", "api", "v9", "channels", _, "typing" ] ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    ""
+
+            [ "discord.com", "api", "v9", "channels", channelId, "messages" ] ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    ("""{
+    "id": "123456789012345678",
+    "channel_id": \""""
+                        ++ channelId
+                        ++ """",
+    "author": {
+        "id": "111222333444555666",
+        "username": "testuser",
+        "discriminator": "0001",
+        "avatar": null,
+        "bot": false
+    },
+    "content": "Hello, world!",
+    "timestamp": "2025-03-21T12:00:00.000Z",
+    "edited_timestamp": null,
+    "tts": false,
+    "mention_everyone": false,
+    "mention_roles": [],
+    "attachments": [],
+    "pinned": false,
+    "type": 0
+}"""
+                    )
+
+            _ ->
+                let
+                    _ =
+                        Debug.log "UnhandledHttpRequest" url
+                in
+                UnhandledHttpRequest
+
+    else
+        let
+            _ =
+                Debug.log "UnhandledHttpRequest" url
+        in
+        UnhandledHttpRequest
+
+
 tests : Dict String Bytes -> String -> String -> Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
     let
@@ -775,16 +831,10 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                             case currentRequest.body of
                                 T.JsonBody json ->
                                     case Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) json of
-                                        Ok "https://discord.com/api/v9/users/@me" ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 200
-                                                , statusText = "OK"
-                                                , headers = Dict.empty
-                                                }
-                                                """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
+                                        Ok url ->
+                                            handleCustomRequest url
 
-                                        error ->
+                                        Err error ->
                                             let
                                                 _ =
                                                     Debug.log "UnhandledHttpRequest" error
@@ -1142,6 +1192,23 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 discordOp0ReadySupplemental
                 (\user ->
                     [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                    , user.input 100 Pages.Guild.channelTextInputId "Hello @purplelite!"
+                    , user.keyDown 100 Pages.Guild.channelTextInputId "Enter" []
+                    , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "@purplelite" ])
+
+                    --, user.custom
+                    --    100
+                    --    Pages.Guild.channelTextInputId
+                    --    "selectionchange"
+                    --    (Json.Encode.object
+                    --        [ ( "target"
+                    --          , Json.Encode.object
+                    --                [ ( "selectionStart", Json.Encode.int 7 )
+                    --                , ( "selectionEnd", Json.Encode.int 7 )
+                    --                ]
+                    --          )
+                    --        ]
+                    --    )
                     ]
                 )
             ]

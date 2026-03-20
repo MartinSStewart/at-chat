@@ -2721,7 +2721,6 @@ updateLoaded msg model =
                                                     guildOrDmId
                                                     threadRoute
                                                     loggedIn
-                                                    |> Debug.log "z"
                                             of
                                                 Just nameSoFar ->
                                                     { textInputFocus

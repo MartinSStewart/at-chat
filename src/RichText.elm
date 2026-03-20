@@ -1590,9 +1590,9 @@ fileDownloadView fileData =
 
 
 textInputView :
-    SeqDict (Id UserId) { a | name : PersonName }
+    SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText userId)
     -> List (Html msg)
 textInputView users attachedFiles nonempty =
     textInputViewHelper
@@ -1617,9 +1617,9 @@ type alias RichTextState =
 
 textInputViewHelper :
     RichTextState
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText userId)
     -> List (Html msg)
 textInputViewHelper state allUsers attachedFiles nonempty =
     List.concatMap

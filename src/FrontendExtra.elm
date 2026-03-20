@@ -213,7 +213,7 @@ layout model attributes child =
                         case loggedIn.textInputFocus of
                             Just textInputFocus ->
                                 case
-                                    ( pingUserNameSoFar2
+                                    ( pingUserNameSoFar
                                         textInputFocus.htmlId
                                         textInputFocus.selection
                                         guildOrDmId
@@ -3524,61 +3524,6 @@ deleteMessage guildOrDmId threadRoute local =
 
 pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
 pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
-    let
-        helper text =
-            let
-                previous : String
-                previous =
-                    text |> String.slice 0 selection.start
-            in
-            case String.split "@" previous |> List.reverse |> Debug.log "d" of
-                nameSoFar :: beforeAt :: rest ->
-                    if
-                        (beforeAt == "" && List.isEmpty rest)
-                            || String.endsWith " " beforeAt
-                            || String.endsWith "\n" beforeAt
-                            || String.endsWith "\u{000D}" beforeAt
-                    then
-                        { nameSoFar = nameSoFar
-                        , index =
-                            String.length beforeAt
-                                + List.foldl (\a count -> String.length a + count + 1) 0 rest
-                                + 1
-                        }
-                            |> Just
-
-                    else
-                        Nothing
-
-                _ ->
-                    Nothing
-    in
-    if selection.start == selection.end |> Debug.log "a" then
-        if Debug.log "htmlId" htmlId == Pages.Guild.channelTextInputId then
-            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
-                Just draft ->
-                    helper (String.Nonempty.toString draft)
-
-                Nothing ->
-                    Nothing
-
-        else if htmlId == MessageMenu.editMessageTextInputId |> Debug.log "b" then
-            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage |> Debug.log "c" of
-                Just edit ->
-                    helper edit.text
-
-                Nothing ->
-                    Nothing
-
-        else
-            Nothing
-
-    else
-        Nothing
-
-
-pingUserNameSoFar2 : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
-pingUserNameSoFar2 htmlId selection guildOrDmId threadRoute loggedIn =
     let
         helper text =
             let

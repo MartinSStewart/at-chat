@@ -23,8 +23,9 @@ import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
 import MyUi
+import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
-import SeqDict
+import SeqDict exposing (SeqDict)
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Font
@@ -237,18 +238,32 @@ viewMobile offset extraOptions loggedIn local model =
             )
             :: (case showEditViewed extraOptions loggedIn of
                     Just edit ->
-                        [ MessageInput.editView
-                            (Dom.id "messageMenu_editMobile")
-                            (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
-                            True
-                            True
-                            editMessageTextInputId
-                            ""
-                            edit.text
-                            edit.attachedFiles
-                            loggedIn.textInputFocus
-                            local
-                            |> Ui.map (EditMessage_MessageInputMsg extraOptions.guildOrDmId (Id.threadRouteWithoutMessage extraOptions.threadRoute))
+                        let
+                            editView : SeqDict userId { b | name : PersonName } -> Element MessageInput.Msg
+                            editView =
+                                MessageInput.editView
+                                    (Dom.id "messageMenu_editMobile")
+                                    (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
+                                    True
+                                    True
+                                    editMessageTextInputId
+                                    ""
+                                    edit.text
+                                    edit.attachedFiles
+                                    loggedIn.textInputFocus
+                        in
+                        [ (case extraOptions.guildOrDmId of
+                            GuildOrDmId _ ->
+                                editView (LocalState.allUsers local.localUser)
+
+                            DiscordGuildOrDmId _ ->
+                                editView (LocalState.allDiscordUsers local.localUser)
+                          )
+                            |> Ui.map
+                                (EditMessage_MessageInputMsg
+                                    extraOptions.guildOrDmId
+                                    (Id.threadRouteWithoutMessage extraOptions.threadRoute)
+                                )
                         ]
 
                     Nothing ->

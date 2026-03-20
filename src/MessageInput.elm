@@ -113,8 +113,16 @@ isPress msg =
             False
 
 
-textarea : Bool -> HtmlId -> String -> String -> SeqDict (Id FileId) a -> Maybe TextInputFocus -> LocalState -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles textInputFocus local =
+textarea :
+    Bool
+    -> HtmlId
+    -> String
+    -> String
+    -> SeqDict (Id FileId) a
+    -> Maybe TextInputFocus
+    -> SeqDict userId { b | name : PersonName }
+    -> Html Msg
+textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -230,11 +238,6 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
             ]
             (case String.Nonempty.fromString text of
                 Just nonempty ->
-                    let
-                        users : SeqDict (Id UserId) FrontendUser
-                        users =
-                            LocalState.allUsers local.localUser
-                    in
                     RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
@@ -324,15 +327,15 @@ editView :
     -> String
     -> SeqDict (Id FileId) a
     -> Maybe TextInputFocus
-    -> LocalState
+    -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -404,15 +407,15 @@ view :
     -> String
     -> SeqDict (Id FileId) a
     -> Maybe TextInputFocus
-    -> LocalState
+    -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }

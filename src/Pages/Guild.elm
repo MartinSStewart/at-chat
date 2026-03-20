@@ -3259,7 +3259,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         SeqDict.empty
                 )
                 loggedIn.textInputFocus
-                local
+                (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -3466,7 +3466,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                 SeqDict.empty
                         )
                         loggedIn.textInputFocus
-                        local
+                        (LocalState.allDiscordUsers local.localUser)
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
                 Err error ->
@@ -3755,7 +3755,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         SeqDict.empty
                 )
                 loggedIn.textInputFocus
-                local
+                (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
@@ -3947,7 +3947,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         SeqDict.empty
                 )
                 loggedIn.textInputFocus
-                local
+                (LocalState.allDiscordUsers local.localUser)
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
@@ -4265,6 +4265,17 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
+
+                messageInput =
+                    MessageInput.view
+                        (Dom.id "messageMenu_editDesktop")
+                        True
+                        False
+                        MessageMenu.editMessageTextInputId
+                        ""
+                        editing.text
+                        editing.attachedFiles
+                        pingUser
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -4311,16 +4322,13 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Nothing ->
                             Ui.noAttr
                     ]
-                    [ MessageInput.view
-                        (Dom.id "messageMenu_editDesktop")
-                        True
-                        False
-                        MessageMenu.editMessageTextInputId
-                        ""
-                        editing.text
-                        editing.attachedFiles
-                        pingUser
-                        local
+                    [ (case guildOrDmIdNoThread of
+                        GuildOrDmId _ ->
+                            messageInput (LocalState.allUsers local.localUser)
+
+                        DiscordGuildOrDmId _ ->
+                            messageInput (LocalState.allDiscordUsers local.localUser)
+                      )
                         |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
@@ -4391,8 +4399,16 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 threadRouteWithMessage =
                     ViewThreadWithMessage threadId messageId
 
-                threadRoute =
-                    ViewThread threadId
+                messageInput =
+                    MessageInput.view
+                        (Dom.id "messageMenu_editDesktop")
+                        True
+                        False
+                        MessageMenu.editMessageTextInputId
+                        ""
+                        editing.text
+                        editing.attachedFiles
+                        pingUser
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -4430,17 +4446,14 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         Nothing ->
                             Ui.noAttr
                     ]
-                    [ MessageInput.view
-                        (Dom.id "messageMenu_editDesktop")
-                        True
-                        False
-                        MessageMenu.editMessageTextInputId
-                        ""
-                        editing.text
-                        editing.attachedFiles
-                        pingUser
-                        local
-                        |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
+                    [ (case guildOrDmIdNoThread of
+                        GuildOrDmId _ ->
+                            messageInput (LocalState.allUsers local.localUser)
+
+                        DiscordGuildOrDmId _ ->
+                            messageInput (LocalState.allDiscordUsers local.localUser)
+                      )
+                        |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread (ViewThread threadId))
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14
