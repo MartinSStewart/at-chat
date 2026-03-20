@@ -3564,7 +3564,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
             case String.split "@" previous |> List.reverse of
                 nameSoFar :: beforeAt :: rest ->
                     if
-                        (beforeAt == "")
+                        (beforeAt == "" && List.isEmpty rest)
                             || String.endsWith " " beforeAt
                             || String.endsWith "\n" beforeAt
                             || String.endsWith "\u{000D}" beforeAt
