@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, pingUserNameSoFar2, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -176,6 +176,10 @@ pendingChangesText localChange =
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
     Ui.Anim.layout
         { options = []
         , toMsg = ElmUiMsg
@@ -209,7 +213,7 @@ layout model attributes child =
                         case loggedIn.textInputFocus of
                             Just textInputFocus ->
                                 case
-                                    ( pingUserNameSoFar
+                                    ( pingUserNameSoFar2
                                         textInputFocus.htmlId
                                         textInputFocus.selection
                                         guildOrDmId
@@ -221,16 +225,18 @@ layout model attributes child =
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
                                             MessageInput.pingDropdownView
+                                                isMobile
                                                 nameSoFar
                                                 guildOrDmId
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
-                                                |> Ui.map (EditMessage_MessageInputMsg guildOrDmId threadRoute)
+                                                |> Ui.map (MessageInputMsg guildOrDmId threadRoute)
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
                                             MessageInput.pingDropdownView
+                                                isMobile
                                                 nameSoFar
                                                 guildOrDmId
                                                 local
@@ -3542,7 +3548,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                     Nothing
     in
     if selection.start == selection.end |> Debug.log "a" then
-        if htmlId == Pages.Guild.channelTextInputId then
+        if Debug.log "htmlId" htmlId == Pages.Guild.channelTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
                 Just draft ->
                     helper (String.Nonempty.toString draft)
@@ -3552,6 +3558,61 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
 
         else if htmlId == MessageMenu.editMessageTextInputId |> Debug.log "b" then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage |> Debug.log "c" of
+                Just edit ->
+                    helper edit.text
+
+                Nothing ->
+                    Nothing
+
+        else
+            Nothing
+
+    else
+        Nothing
+
+
+pingUserNameSoFar2 : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
+pingUserNameSoFar2 htmlId selection guildOrDmId threadRoute loggedIn =
+    let
+        helper text =
+            let
+                previous : String
+                previous =
+                    text |> String.slice 0 selection.start
+            in
+            case String.split "@" previous |> List.reverse of
+                nameSoFar :: beforeAt :: rest ->
+                    if
+                        (beforeAt == "" && List.isEmpty rest)
+                            || String.endsWith " " beforeAt
+                            || String.endsWith "\n" beforeAt
+                            || String.endsWith "\u{000D}" beforeAt
+                    then
+                        { nameSoFar = nameSoFar
+                        , index =
+                            String.length beforeAt
+                                + List.foldl (\a count -> String.length a + count + 1) 0 rest
+                                + 1
+                        }
+                            |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+    in
+    if selection.start == selection.end then
+        if htmlId == Pages.Guild.channelTextInputId then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
+                Just draft ->
+                    helper (String.Nonempty.toString draft)
+
+                Nothing ->
+                    Nothing
+
+        else if htmlId == MessageMenu.editMessageTextInputId then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                 Just edit ->
                     helper edit.text
 

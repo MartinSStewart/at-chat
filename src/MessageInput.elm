@@ -39,6 +39,7 @@ import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
+import Ui.Events
 import Ui.Font
 import User exposing (DiscordFrontendUser, FrontendUser)
 
@@ -536,8 +537,8 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
             ]
 
 
-userDropdownList : NameSoFar -> GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
-userDropdownList nameSoFar guildOrDmId local =
+userDropdownList : Bool -> NameSoFar -> GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList isMobile nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -569,16 +570,20 @@ userDropdownList nameSoFar guildOrDmId local =
                         Nothing
             )
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
-        |> List.take maxDropdownUsers
+        |> List.take (maxDropdownUsers isMobile)
 
 
-maxDropdownUsers : number
-maxDropdownUsers =
-    10
+maxDropdownUsers : Bool -> number
+maxDropdownUsers isMobile =
+    if isMobile then
+        5
+
+    else
+        10
 
 
-discordUserDropdownList : NameSoFar -> DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
-discordUserDropdownList nameSoFar guildOrDmId local =
+discordUserDropdownList : Bool -> NameSoFar -> DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
+discordUserDropdownList isMobile nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
         allUsers =
@@ -615,11 +620,11 @@ discordUserDropdownList nameSoFar guildOrDmId local =
                         Nothing
             )
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
-        |> List.take maxDropdownUsers
+        |> List.take (maxDropdownUsers isMobile)
 
 
-pressedArrowInDropdown : NameSoFar -> AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
-pressedArrowInDropdown nameSoFar guildOrDmId index maybePingUser local =
+pressedArrowInDropdown : Bool -> NameSoFar -> AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
+pressedArrowInDropdown isMobile nameSoFar guildOrDmId index maybePingUser local =
     case maybePingUser of
         Just pingUser ->
             let
@@ -627,10 +632,10 @@ pressedArrowInDropdown nameSoFar guildOrDmId index maybePingUser local =
                 dropdownListLength =
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
-                            userDropdownList nameSoFar guildOrDmId2 local |> List.length
+                            userDropdownList isMobile nameSoFar guildOrDmId2 local |> List.length
 
                         DiscordGuildOrDmId guildOrDmId2 ->
-                            discordUserDropdownList nameSoFar guildOrDmId2 local |> List.length
+                            discordUserDropdownList isMobile nameSoFar guildOrDmId2 local |> List.length
             in
             { pingUser
                 | dropdownIndex =
@@ -651,6 +656,7 @@ pressedArrowInDropdown nameSoFar guildOrDmId index maybePingUser local =
 
 pressedPingUser :
     msg
+    -> Bool
     -> NameSoFar
     -> AnyGuildOrDmId
     -> HtmlId
@@ -659,8 +665,8 @@ pressedPingUser :
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedPingUser setFocusMsg nameSoFar guildOrDmId channelTextInputId index pingUser local inputText =
-    case ( pingUser, selectedUserName nameSoFar guildOrDmId index local ) of
+pressedPingUser setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId index pingUser local inputText =
+    case ( pingUser, selectedUserName isMobile nameSoFar guildOrDmId index local ) of
         ( Just _, Just name ) ->
             ( Nothing
             , inputText
@@ -679,11 +685,11 @@ pressedPingUser setFocusMsg nameSoFar guildOrDmId channelTextInputId index pingU
             ( Nothing, inputText, Command.none )
 
 
-selectedUserName : NameSoFar -> AnyGuildOrDmId -> Int -> LocalState -> Maybe String
-selectedUserName nameSoFar guildOrDmId index local =
+selectedUserName : Bool -> NameSoFar -> AnyGuildOrDmId -> Int -> LocalState -> Maybe String
+selectedUserName isMobile nameSoFar guildOrDmId index local =
     case guildOrDmId of
         GuildOrDmId guildOrDmId2 ->
-            case userDropdownList nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
+            case userDropdownList isMobile nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
                 Just ( _, user ) ->
                     PersonName.toString user.name |> Just
 
@@ -691,7 +697,7 @@ selectedUserName nameSoFar guildOrDmId index local =
                     Nothing
 
         DiscordGuildOrDmId guildOrDmId2 ->
-            case discordUserDropdownList nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
+            case discordUserDropdownList isMobile nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
                 Just ( _, user ) ->
                     PersonName.toString user.name |> Just
 
@@ -700,33 +706,34 @@ selectedUserName nameSoFar guildOrDmId index local =
 
 
 pingDropdownView :
-    NameSoFar
+    Bool
+    -> NameSoFar
     -> AnyGuildOrDmId
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element Msg
-pingDropdownView nameSoFar guildOrDmId localState dropdownButtonId dropdown =
+pingDropdownView isMobile nameSoFar guildOrDmId localState dropdownButtonId dropdown =
     let
         rows : List (Element Msg)
         rows =
             case guildOrDmId of
                 GuildOrDmId guildOrDmId2 ->
                     List.indexedMap
-                        (\index ( _, user ) -> dropdownButton dropdown dropdownButtonId index user.name)
-                        (userDropdownList nameSoFar guildOrDmId2 localState)
+                        (\index ( _, user ) -> dropdownButton isMobile dropdown dropdownButtonId index user.name)
+                        (userDropdownList isMobile nameSoFar guildOrDmId2 localState)
 
                 DiscordGuildOrDmId guildOrDmId2 ->
                     List.indexedMap
-                        (\index ( _, user ) -> dropdownButton dropdown dropdownButtonId index user.name)
-                        (discordUserDropdownList nameSoFar guildOrDmId2 localState)
+                        (\index ( _, user ) -> dropdownButton isMobile dropdown dropdownButtonId index user.name)
+                        (discordUserDropdownList isMobile nameSoFar guildOrDmId2 localState)
 
         headerHeight =
             20
 
         pingDropdownViewHeight : Int
         pingDropdownViewHeight =
-            List.length rows * dropdownButtonHeight + headerHeight
+            List.length rows * dropdownButtonHeight isMobile + headerHeight
     in
     Ui.column
         [ Ui.background MyUi.background2
@@ -753,19 +760,25 @@ pingDropdownView nameSoFar guildOrDmId localState dropdownButtonId dropdown =
         ]
 
 
-dropdownButtonHeight : number
-dropdownButtonHeight =
-    30
+dropdownButtonHeight : Bool -> number
+dropdownButtonHeight isMobile =
+    if isMobile then
+        50
+
+    else
+        30
 
 
-dropdownButton : MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element Msg
-dropdownButton dropdown dropdownButtonId index name =
+dropdownButton : Bool -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element Msg
+dropdownButton isMobile dropdown dropdownButtonId index name =
     MyUi.elButton
         (dropdownButtonId index)
         (PressedPingUser index)
-        [ Ui.paddingXY 8 0
+        [ Ui.Events.onMouseDown (PressedPingUser index)
+        , Ui.paddingXY 8 0
         , Ui.contentCenterY
-        , Ui.height (Ui.px dropdownButtonHeight)
+        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        , Ui.height (Ui.px (dropdownButtonHeight isMobile))
         , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
         , if dropdown.dropdownIndex == index then
             Ui.background MyUi.background3

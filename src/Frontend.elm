@@ -2719,7 +2719,7 @@ updateLoaded msg model =
                                         Just textInputFocus ->
                                             case
                                                 FrontendExtra.pingUserNameSoFar
-                                                    Pages.Guild.channelTextInputId
+                                                    MessageMenu.editMessageTextInputId
                                                     textInputFocus.selection
                                                     guildOrDmId
                                                     threadRoute
@@ -2730,6 +2730,7 @@ updateLoaded msg model =
                                                     { textInputFocus
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
+                                                                (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId
                                                                 index
@@ -2760,7 +2761,7 @@ updateLoaded msg model =
                                     case
                                         ( String.Nonempty.fromString edit.text
                                         , FrontendExtra.pingUserNameSoFar
-                                            Pages.Guild.channelTextInputId
+                                            MessageMenu.editMessageTextInputId
                                             textInputFocus.selection
                                             guildOrDmId
                                             threadRoute
@@ -2772,6 +2773,7 @@ updateLoaded msg model =
                                                 ( pingUser, text2, cmd ) =
                                                     MessageInput.pressedPingUser
                                                         SetFocus
+                                                        (MyUi.isMobile model)
                                                         nameSoFar
                                                         guildOrDmId
                                                         MessageMenu.editMessageTextInputId
@@ -2962,6 +2964,7 @@ updateLoaded msg model =
                                                     { textInputFocus
                                                         | dropdown =
                                                             MessageInput.pressedArrowInDropdown
+                                                                (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId
                                                                 index
@@ -3170,6 +3173,7 @@ updateLoaded msg model =
                                                 ( pingUser, text2, cmd ) =
                                                     MessageInput.pressedPingUser
                                                         SetFocus
+                                                        (MyUi.isMobile model)
                                                         nameSoFar
                                                         guildOrDmId
                                                         Pages.Guild.channelTextInputId
@@ -3219,6 +3223,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
                                     case guildOrDmId of
                                         GuildOrDmId guildOrDmId2 ->
                                             MessageInput.userDropdownList
+                                                (MyUi.isMobile model)
                                                 nameSoFar
                                                 guildOrDmId2
                                                 (Local.model loggedIn.localState)
@@ -3227,6 +3232,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
 
                                         DiscordGuildOrDmId guildOrDmId2 ->
                                             MessageInput.discordUserDropdownList
+                                                (MyUi.isMobile model)
                                                 nameSoFar
                                                 guildOrDmId2
                                                 (Local.model loggedIn.localState)
