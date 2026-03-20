@@ -12,7 +12,6 @@ module Pages.Guild exposing
     , encodeMessageView
     , guildView
     , homePageLoggedInView
-    , messageInputConfig
     , newGuildFormInit
     , threadMessageHtmlId
     , typingDebouncerDelay
@@ -44,7 +43,7 @@ import List.Nonempty
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
-import MessageInput exposing (MentionUserDropdown, MsgConfig, TextInputFocus)
+import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi
@@ -3012,23 +3011,6 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-messageInputConfig : ( AnyGuildOrDmId, ThreadRoute ) -> MsgConfig FrontendMsg
-messageInputConfig ( guildOrDmId, threadRoute ) =
-    { textInputGotFocus = TextInputGotFocus
-    , textInputLostFocus = TextInputLostFocus
-    , pressedTextInput = PressedTextInput
-    , typedMessage = TypedMessage ( guildOrDmId, threadRoute )
-    , pressedSendMessage = PressedSendMessage guildOrDmId threadRoute
-    , pressedArrowInDropdown = PressedArrowInDropdown ( guildOrDmId, threadRoute )
-    , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput ( guildOrDmId, threadRoute )
-    , pressedPingUser = PressedPingUser ( guildOrDmId, threadRoute )
-    , pressedPingDropdownContainer = PressedPingDropdownContainer
-    , pressedUploadFile = PressedAttachFiles ( guildOrDmId, threadRoute )
-    , onPasteFiles = PastedFiles ( guildOrDmId, threadRoute )
-    , onSelectionChanged = TextInputSelectionChanged
-    }
-
-
 decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
 decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
@@ -3248,7 +3230,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
                 channelTextInputId
                 (case guildOrDmIdNoThread of
                     GuildOrDmId_Guild _ _ ->
@@ -3279,6 +3260,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 )
                 loggedIn.textInputFocus
                 local
+                |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
         ]
@@ -3455,7 +3437,6 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         (Dom.id "messageMenu_channelInput")
                         (replyTo == Nothing)
                         (MyUi.isMobile model)
-                        (messageInputConfig guildOrDmId)
                         channelTextInputId
                         (case guildOrDmIdNoThread of
                             DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3486,6 +3467,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         )
                         loggedIn.textInputFocus
                         local
+                        |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
 
                 Err error ->
                     MessageInput.disabledView
@@ -3750,7 +3732,6 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig guildOrDmId)
                 channelTextInputId
                 (case guildOrDmIdNoThread of
                     GuildOrDmId_Guild _ _ ->
@@ -3775,6 +3756,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 )
                 loggedIn.textInputFocus
                 local
+                |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel local.localUser.session.userId model
             ]
         ]
@@ -3942,7 +3924,6 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig guildOrDmId)
                 channelTextInputId
                 (case guildOrDmIdNoThread of
                     DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3967,6 +3948,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 )
                 loggedIn.textInputFocus
                 local
+                |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
         ]
@@ -4333,13 +4315,13 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         (Dom.id "messageMenu_editDesktop")
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig guildOrDmIdNoThread threadRoute)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
                         editing.attachedFiles
                         pingUser
                         local
+                        |> Ui.map (MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14
@@ -4452,13 +4434,13 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         (Dom.id "messageMenu_editDesktop")
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig guildOrDmIdNoThread threadRoute)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
                         editing.attachedFiles
                         pingUser
                         local
+                        |> Ui.map (MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14

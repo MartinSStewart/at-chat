@@ -349,9 +349,6 @@ type FrontendMsg
     | ScrolledToLogSection
     | PressedLink Route
     | PressedTextInput
-    | TypedMessage ( AnyGuildOrDmId, ThreadRoute ) String
-    | PressedSendMessage AnyGuildOrDmId ThreadRoute
-    | PressedAttachFiles ( AnyGuildOrDmId, ThreadRoute )
     | SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
@@ -372,10 +369,8 @@ type FrontendMsg
     | PressedCancelNewGuild
     | DebouncedTyping
     | GotPingUserPosition HtmlId (Result Dom.Error MentionUserDropdown)
-    | PressedPingUser ( AnyGuildOrDmId, ThreadRoute ) Int
     | SetFocus
     | RemoveFocus
-    | PressedArrowInDropdown ( AnyGuildOrDmId, ThreadRoute ) Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
@@ -386,7 +381,6 @@ type FrontendMsg
     | PressedSendEditMessage ( AnyGuildOrDmId, ThreadRoute )
     | PressedArrowInDropdownForEditMessage ( AnyGuildOrDmId, ThreadRoute ) Int
     | PressedPingUserForEditMessage ( AnyGuildOrDmId, ThreadRoute ) Int
-    | PressedArrowUpInEmptyInput ( AnyGuildOrDmId, ThreadRoute )
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
@@ -410,7 +404,6 @@ type FrontendMsg
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
-    | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
     | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool
     | PressedShowUserOption
@@ -429,8 +422,6 @@ type FrontendMsg
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | EditMessage_PastedFiles ( AnyGuildOrDmId, ThreadRoute ) (Nonempty File)
-    | PastedFiles ( AnyGuildOrDmId, ThreadRoute ) (Nonempty File)
-    | TextInputSelectionChanged HtmlId Range
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
     | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String SubscribeData)
@@ -459,6 +450,8 @@ type FrontendMsg
     | PressedAddDomainToWhitelist Bool
     | PressedRemoveDomainFromWhitelist Domain
     | PressedContinueToSite
+    | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
+    | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
 
 
 type ScrollPosition

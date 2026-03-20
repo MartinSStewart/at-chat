@@ -1,11 +1,12 @@
 module MessageInput exposing
     ( MentionUserDropdown
-    , MsgConfig
+    , Msg(..)
     , NameSoFar
     , TextInputFocus
     , disabledView
     , discordUserDropdownList
     , editView
+    , isPress
     , pingDropdownView
     , pressedArrowInDropdown
     , pressedPingUser
@@ -56,26 +57,65 @@ type alias NameSoFar =
     { nameSoFar : String, index : Int }
 
 
-type alias MsgConfig msg =
-    { textInputGotFocus : HtmlId -> msg
-    , textInputLostFocus : HtmlId -> msg
-    , pressedTextInput : msg
-    , typedMessage : String -> msg
-    , pressedSendMessage : msg
-    , pressedArrowInDropdown : Int -> msg
-    , pressedArrowUpInEmptyInput : msg
-    , pressedPingUser : Int -> msg
-    , pressedPingDropdownContainer : msg
-    , pressedUploadFile : msg
-    , onPasteFiles : Nonempty File -> msg
-    , onSelectionChanged : HtmlId -> Range -> msg
-    }
+type Msg
+    = TextInputGotFocus HtmlId
+    | TextInputLostFocus HtmlId
+    | PressedTextInput
+    | TypedMessage String
+    | PressedSendMessage
+    | PressedArrowInDropdown Int
+    | PressedArrowUpInEmptyInput
+    | PressedPingUser Int
+    | PressedPingDropdownContainer
+    | PressedUploadFile
+    | OnPasteFiles (Nonempty File)
+    | OnSelectionChanged HtmlId Range
 
 
-textarea : Bool -> MsgConfig msg -> HtmlId -> String -> String -> SeqDict (Id FileId) a -> Maybe TextInputFocus -> LocalState -> Html msg
-textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles textInputFocus local =
+isPress : Msg -> Bool
+isPress msg =
+    case msg of
+        TextInputGotFocus htmlId ->
+            False
+
+        TextInputLostFocus htmlId ->
+            False
+
+        PressedTextInput ->
+            True
+
+        TypedMessage string ->
+            False
+
+        PressedSendMessage ->
+            True
+
+        PressedArrowInDropdown int ->
+            True
+
+        PressedArrowUpInEmptyInput ->
+            True
+
+        PressedPingUser int ->
+            True
+
+        PressedPingDropdownContainer ->
+            True
+
+        PressedUploadFile ->
+            True
+
+        OnPasteFiles nonempty ->
+            False
+
+        OnSelectionChanged htmlId range ->
+            False
+
+
+textarea : Bool -> HtmlId -> String -> String -> SeqDict (Id FileId) a -> Maybe TextInputFocus -> LocalState -> Html Msg
+textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles textInputFocus local =
     let
-        keyDownNoDropdown : Html.Attribute msg
+        keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
             Html.Events.preventDefaultOn
                 "keydown"
@@ -85,10 +125,10 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                     |> Json.Decode.andThen
                         (\( shiftHeld, key ) ->
                             if key == "ArrowUp" && text == "" then
-                                Json.Decode.succeed ( msgConfig.pressedArrowUpInEmptyInput, True )
+                                Json.Decode.succeed ( PressedArrowUpInEmptyInput, True )
 
                             else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
-                                Json.Decode.succeed ( msgConfig.pressedSendMessage, True )
+                                Json.Decode.succeed ( PressedSendMessage, True )
 
                             else
                                 Json.Decode.fail ""
@@ -118,7 +158,7 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
             , Html.Attributes.style "outline" "none"
-            , Html.Events.onClick msgConfig.pressedTextInput
+            , Html.Events.onClick PressedTextInput
             , Html.Events.preventDefaultOn
                 "paste"
                 (Json.Decode.at
@@ -128,14 +168,14 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                         (\list ->
                             case List.Nonempty.fromList list of
                                 Just nonempty ->
-                                    Json.Decode.succeed ( msgConfig.onPasteFiles nonempty, True )
+                                    Json.Decode.succeed ( OnPasteFiles nonempty, True )
 
                                 Nothing ->
                                     Json.Decode.fail ""
                         )
                 )
-            , Html.Events.onFocus (msgConfig.textInputGotFocus channelTextInputId)
-            , Html.Events.onBlur (msgConfig.textInputLostFocus channelTextInputId)
+            , Html.Events.onFocus (TextInputGotFocus channelTextInputId)
+            , Html.Events.onBlur (TextInputLostFocus channelTextInputId)
             , case textInputFocus of
                 Just textInputFocus2 ->
                     case textInputFocus2.dropdown of
@@ -146,14 +186,14 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                                     (\key ->
                                         case key of
                                             "ArrowDown" ->
-                                                Json.Decode.succeed ( msgConfig.pressedArrowInDropdown (dropdownIndex + 1), True )
+                                                Json.Decode.succeed ( PressedArrowInDropdown (dropdownIndex + 1), True )
 
                                             "ArrowUp" ->
-                                                Json.Decode.succeed ( msgConfig.pressedArrowInDropdown (dropdownIndex - 1), True )
+                                                Json.Decode.succeed ( PressedArrowInDropdown (dropdownIndex - 1), True )
 
                                             "Enter" ->
                                                 Json.Decode.succeed
-                                                    ( msgConfig.pressedPingUser dropdownIndex, True )
+                                                    ( PressedPingUser dropdownIndex, True )
 
                                             _ ->
                                                 Json.Decode.fail ""
@@ -166,8 +206,8 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
 
                 Nothing ->
                     keyDownNoDropdown
-            , Html.Events.onInput msgConfig.typedMessage
-            , MyUi.onSelectionChanged (msgConfig.onSelectionChanged channelTextInputId)
+            , Html.Events.onInput TypedMessage
+            , MyUi.onSelectionChanged (OnSelectionChanged channelTextInputId)
             , Html.Attributes.value text
             ]
             []
@@ -276,21 +316,20 @@ editView :
     -> Int
     -> Bool
     -> Bool
-    -> MsgConfig msg
     -> HtmlId
     -> String
     -> String
     -> SeqDict (Id FileId) a
     -> Maybe TextInputFocus
     -> LocalState
-    -> Element msg
-editView htmlId height roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
+    -> Element Msg
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -313,7 +352,7 @@ editView htmlId height roundTopCorners isMobileKeyboard msgConfig channelTextInp
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_uploadFile"))
-                    msgConfig.pressedUploadFile
+                    PressedUploadFile
                     [ Ui.alignLeft
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -325,7 +364,7 @@ editView htmlId height roundTopCorners isMobileKeyboard msgConfig channelTextInp
                     , Ui.centerY
                     , Html.Events.preventDefaultOn
                         "touchend"
-                        (Json.Decode.succeed ( msgConfig.pressedUploadFile, True ))
+                        (Json.Decode.succeed ( PressedUploadFile, True ))
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.attachment)
@@ -333,7 +372,7 @@ editView htmlId height roundTopCorners isMobileKeyboard msgConfig channelTextInp
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
-                    msgConfig.pressedSendMessage
+                    PressedSendMessage
                     [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -345,7 +384,7 @@ editView htmlId height roundTopCorners isMobileKeyboard msgConfig channelTextInp
                     , Ui.centerY
                     , Html.Events.preventDefaultOn
                         "touchend"
-                        (Json.Decode.succeed ( msgConfig.pressedSendMessage, True ))
+                        (Json.Decode.succeed ( PressedSendMessage, True ))
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.sendMessage)
@@ -357,21 +396,20 @@ view :
     HtmlId
     -> Bool
     -> Bool
-    -> MsgConfig msg
     -> HtmlId
     -> String
     -> String
     -> SeqDict (Id FileId) a
     -> Maybe TextInputFocus
     -> LocalState
-    -> Element msg
-view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
+    -> Element Msg
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser local
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -393,7 +431,7 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_uploadFile"))
-                    msgConfig.pressedUploadFile
+                    PressedUploadFile
                     [ Ui.alignLeft
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -405,7 +443,7 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                     , Ui.centerY
                     , Html.Events.preventDefaultOn
                         "touchend"
-                        (Json.Decode.succeed ( msgConfig.pressedUploadFile, True ))
+                        (Json.Decode.succeed ( PressedUploadFile, True ))
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.attachment)
@@ -413,7 +451,7 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
-                    msgConfig.pressedSendMessage
+                    PressedSendMessage
                     [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -426,7 +464,7 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                     , Html.Events.custom
                         "touchstart"
                         (Json.Decode.succeed
-                            { message = msgConfig.pressedSendMessage
+                            { message = PressedSendMessage
                             , stopPropagation = True
                             , preventDefault = True
                             }
@@ -660,26 +698,25 @@ selectedUserName nameSoFar guildOrDmId index local =
 
 
 pingDropdownView :
-    MsgConfig msg
-    -> NameSoFar
+    NameSoFar
     -> AnyGuildOrDmId
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown
-    -> Element msg
-pingDropdownView msgConfig nameSoFar guildOrDmId localState dropdownButtonId dropdown =
+    -> Element Msg
+pingDropdownView nameSoFar guildOrDmId localState dropdownButtonId dropdown =
     let
-        rows : List (Element msg)
+        rows : List (Element Msg)
         rows =
             case guildOrDmId of
                 GuildOrDmId guildOrDmId2 ->
                     List.indexedMap
-                        (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
+                        (\index ( _, user ) -> dropdownButton dropdown dropdownButtonId index user.name)
                         (userDropdownList nameSoFar guildOrDmId2 localState)
 
                 DiscordGuildOrDmId guildOrDmId2 ->
                     List.indexedMap
-                        (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
+                        (\index ( _, user ) -> dropdownButton dropdown dropdownButtonId index user.name)
                         (discordUserDropdownList nameSoFar guildOrDmId2 localState)
 
         headerHeight =
@@ -691,7 +728,7 @@ pingDropdownView msgConfig nameSoFar guildOrDmId localState dropdownButtonId dro
     in
     Ui.column
         [ Ui.background MyUi.background2
-        , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
+        , MyUi.blockClickPropagation PressedPingDropdownContainer
         , Ui.borderColor MyUi.border1
         , Ui.border 1
         , Ui.Font.color MyUi.font2
@@ -719,11 +756,11 @@ dropdownButtonHeight =
     30
 
 
-dropdownButton : MsgConfig msg -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element msg
-dropdownButton msgConfig dropdown dropdownButtonId index name =
+dropdownButton : MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element Msg
+dropdownButton dropdown dropdownButtonId index name =
     MyUi.elButton
         (dropdownButtonId index)
-        (msgConfig.pressedPingUser index)
+        (PressedPingUser index)
         [ Ui.paddingXY 8 0
         , Ui.contentCenterY
         , Ui.height (Ui.px dropdownButtonHeight)
@@ -739,10 +776,10 @@ dropdownButton msgConfig dropdown dropdownButtonId index name =
                 |> Json.Decode.andThen
                     (\key ->
                         if key == "ArrowDown" then
-                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index + 1))
+                            Json.Decode.succeed (PressedArrowInDropdown (index + 1))
 
                         else if key == "ArrowUp" then
-                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index - 1))
+                            Json.Decode.succeed (PressedArrowInDropdown (index - 1))
 
                         else
                             Json.Decode.fail ""

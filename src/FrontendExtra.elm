@@ -221,22 +221,22 @@ layout model attributes child =
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
                                             MessageInput.pingDropdownView
-                                                (Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute ))
                                                 nameSoFar
                                                 guildOrDmId
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
+                                                |> Ui.map (EditMessage_MessageInputMsg guildOrDmId threadRoute)
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
                                             MessageInput.pingDropdownView
-                                                (MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute)
                                                 nameSoFar
                                                 guildOrDmId
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
+                                                |> Ui.map (EditMessage_MessageInputMsg guildOrDmId threadRoute)
                                                 |> Ui.inFront
 
                                         else
@@ -1074,12 +1074,6 @@ isPressMsg msg =
         PressedLink _ ->
             True
 
-        TypedMessage _ _ ->
-            False
-
-        PressedSendMessage _ _ ->
-            True
-
         NewChannelFormChanged _ _ ->
             False
 
@@ -1131,17 +1125,11 @@ isPressMsg msg =
         GotPingUserPosition _ _ ->
             False
 
-        PressedPingUser _ _ ->
-            True
-
         SetFocus ->
             False
 
         RemoveFocus ->
             False
-
-        PressedArrowInDropdown _ _ ->
-            True
 
         TextInputGotFocus _ ->
             False
@@ -1171,9 +1159,6 @@ isPressMsg msg =
             True
 
         PressedPingUserForEditMessage _ _ ->
-            True
-
-        PressedArrowUpInEmptyInput _ ->
             True
 
         MessageMenu_PressedReply _ ->
@@ -1239,9 +1224,6 @@ isPressMsg msg =
         PressedCancelMessageEdit _ ->
             True
 
-        PressedPingDropdownContainer ->
-            True
-
         PressedEditMessagePingDropdownContainer ->
             True
 
@@ -1269,9 +1251,6 @@ isPressMsg msg =
         OneFrameAfterDragEnd ->
             False
 
-        PressedAttachFiles _ ->
-            True
-
         SelectedFilesToAttach _ _ _ ->
             False
 
@@ -1294,9 +1273,6 @@ isPressMsg msg =
             False
 
         EditMessage_PastedFiles _ _ ->
-            False
-
-        PastedFiles _ _ ->
             False
 
         PressedTextInput ->
@@ -1398,8 +1374,11 @@ isPressMsg msg =
         PressedContinueToSite ->
             True
 
-        TextInputSelectionChanged _ _ ->
-            False
+        EditMessage_MessageInputMsg anyGuildOrDmId threadRoute messageInputMsg ->
+            MessageInput.isPress messageInputMsg
+
+        MessageInputMsg anyGuildOrDmId threadRoute messageInputMsg ->
+            MessageInput.isPress messageInputMsg
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -3561,7 +3540,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                 previous =
                     text |> String.slice 0 selection.start
             in
-            case String.split "@" previous |> List.reverse of
+            case String.split "@" previous |> List.reverse |> Debug.log "d" of
                 nameSoFar :: beforeAt :: rest ->
                     if
                         (beforeAt == "" && List.isEmpty rest)
@@ -3583,7 +3562,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                 _ ->
                     Nothing
     in
-    if selection.start == selection.end then
+    if selection.start == selection.end |> Debug.log "a" then
         if htmlId == Pages.Guild.channelTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
                 Just draft ->
@@ -3592,8 +3571,8 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
                 Nothing ->
                     Nothing
 
-        else if htmlId == MessageMenu.editMessageTextInputId then
-            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
+        else if htmlId == MessageMenu.editMessageTextInputId |> Debug.log "b" then
+            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage |> Debug.log "c" of
                 Just edit ->
                     helper edit.text
 

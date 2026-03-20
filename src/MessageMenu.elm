@@ -1,7 +1,6 @@
 module MessageMenu exposing
     ( close
     , desktopMenuHeight
-    , editMessageTextInputConfig
     , editMessageTextInputId
     , messageMenuSpeed
     , mobileMenuMaxHeight
@@ -22,7 +21,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
-import MessageInput exposing (MsgConfig)
+import MessageInput
 import MyUi
 import Quantity exposing (Quantity, Rate)
 import SeqDict
@@ -243,16 +242,13 @@ viewMobile offset extraOptions loggedIn local model =
                             (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
                             True
                             True
-                            (editMessageTextInputConfig
-                                extraOptions.guildOrDmId
-                                (Id.threadRouteWithoutMessage extraOptions.threadRoute)
-                            )
                             editMessageTextInputId
                             ""
                             edit.text
                             edit.attachedFiles
                             loggedIn.textInputFocus
                             local
+                            |> Ui.map (EditMessage_MessageInputMsg extraOptions.guildOrDmId (Id.threadRouteWithoutMessage extraOptions.threadRoute))
                         ]
 
                     Nothing ->
@@ -306,23 +302,6 @@ view model extraOptions local loggedIn =
                 local
                 model
             )
-
-
-editMessageTextInputConfig : AnyGuildOrDmId -> ThreadRoute -> MsgConfig FrontendMsg
-editMessageTextInputConfig guildOrDmId threadRoute =
-    { textInputGotFocus = TextInputGotFocus
-    , textInputLostFocus = TextInputLostFocus
-    , pressedTextInput = PressedTextInput
-    , typedMessage = TypedEditMessage ( guildOrDmId, threadRoute )
-    , pressedSendMessage = PressedSendEditMessage ( guildOrDmId, threadRoute )
-    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage ( guildOrDmId, threadRoute )
-    , pressedArrowUpInEmptyInput = FrontendNoOp
-    , pressedPingUser = PressedPingUserForEditMessage ( guildOrDmId, threadRoute )
-    , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
-    , pressedUploadFile = EditMessage_PressedAttachFiles ( guildOrDmId, threadRoute )
-    , onPasteFiles = EditMessage_PastedFiles ( guildOrDmId, threadRoute )
-    , onSelectionChanged = TextInputSelectionChanged
-    }
 
 
 editMessageTextInputId : HtmlId
