@@ -1011,7 +1011,7 @@ updateLoaded msg model =
                                                         | textInputFocus = Just { textInputFocus | dropdown = Nothing }
                                                         , showEmojiSelector = EmojiSelectorHidden
                                                       }
-                                                    , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                                                    , Command.none
                                                     )
                                                         |> Just
 

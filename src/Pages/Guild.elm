@@ -4321,7 +4321,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         editing.attachedFiles
                         pingUser
                         local
-                        |> Ui.map (MessageInputMsg guildOrDmIdNoThread threadRoute)
+                        |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14
@@ -4440,7 +4440,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         editing.attachedFiles
                         pingUser
                         local
-                        |> Ui.map (MessageInputMsg guildOrDmIdNoThread threadRoute)
+                        |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
                         [ Ui.Font.size 14
