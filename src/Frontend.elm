@@ -39,7 +39,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
-import MessageInput exposing (NameSoFar)
+import MessageInput
 import MessageMenu
 import MessageView
 import MyUi exposing (Range)
@@ -988,9 +988,6 @@ updateLoaded msg model =
 
         TextInputGotFocus htmlId ->
             textInputGotFocus htmlId model
-
-        TextInputLostFocus htmlId ->
-            textInputLostFocus htmlId model
 
         KeyDown key ->
             case key of

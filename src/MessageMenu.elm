@@ -18,7 +18,7 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput

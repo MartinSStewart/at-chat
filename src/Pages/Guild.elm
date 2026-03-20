@@ -43,7 +43,7 @@ import List.Nonempty
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
-import MessageInput exposing (MentionUserDropdown, TextInputFocus)
+import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi

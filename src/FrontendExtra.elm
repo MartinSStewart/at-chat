@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, pingUserNameSoFar2, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -1143,9 +1143,6 @@ isPressMsg msg =
         TextInputGotFocus _ ->
             False
 
-        TextInputLostFocus _ ->
-            False
-
         KeyDown _ ->
             False
 
@@ -1359,10 +1356,10 @@ isPressMsg msg =
         PressedContinueToSite ->
             True
 
-        EditMessage_MessageInputMsg anyGuildOrDmId threadRoute messageInputMsg ->
+        EditMessage_MessageInputMsg _ _ messageInputMsg ->
             MessageInput.isPress messageInputMsg
 
-        MessageInputMsg anyGuildOrDmId threadRoute messageInputMsg ->
+        MessageInputMsg _ _ messageInputMsg ->
             MessageInput.isPress messageInputMsg
 
 

@@ -76,28 +76,28 @@ type Msg
 isPress : Msg -> Bool
 isPress msg =
     case msg of
-        TextInputGotFocus htmlId ->
+        TextInputGotFocus _ ->
             False
 
-        TextInputLostFocus htmlId ->
+        TextInputLostFocus _ ->
             False
 
         PressedTextInput ->
             True
 
-        TypedMessage string ->
+        TypedMessage _ ->
             False
 
         PressedSendMessage ->
             True
 
-        PressedArrowInDropdown int ->
+        PressedArrowInDropdown _ ->
             True
 
         PressedArrowUpInEmptyInput ->
             True
 
-        PressedPingUser int ->
+        PressedPingUser _ ->
             True
 
         PressedPingDropdownContainer ->
@@ -106,10 +106,10 @@ isPress msg =
         PressedUploadFile ->
             True
 
-        OnPasteFiles nonempty ->
+        OnPasteFiles _ ->
             False
 
-        OnSelectionChanged htmlId range ->
+        OnSelectionChanged _ _ ->
             False
 
 

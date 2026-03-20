@@ -72,7 +72,6 @@ import Maybe exposing (Maybe)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
-import MyUi exposing (Range)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -371,7 +370,6 @@ type FrontendMsg
     | SetFocus
     | RemoveFocus
     | TextInputGotFocus HtmlId
-    | TextInputLostFocus HtmlId
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
