@@ -17,7 +17,6 @@ module MyUi exposing
     , css
     , datestamp
     , datestampDate
-    , decodeSelection
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
