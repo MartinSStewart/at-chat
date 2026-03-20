@@ -47,8 +47,8 @@ setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel T
 setup =
     T.viewerWith tests
         |> T.addBytesFiles (Dict.values fileRequests)
-        |> T.addStringFile "/tests/data/discord-op0-ready.txt"
-        |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.txt"
+        |> T.addStringFile "/tests/data/discord-op0-ready.json"
+        |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
 
 
@@ -691,8 +691,15 @@ discordUserAuth =
     }
 
 
-linkDiscordAndLogin : String -> EmailAddress -> Bool -> String -> String -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-linkDiscordAndLogin name emailAddress isNewAccount discordOp0Ready discordOp0ReadySupplemental =
+linkDiscordAndLogin :
+    String
+    -> EmailAddress
+    -> Bool
+    -> String
+    -> String
+    -> (T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> List (T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+linkDiscordAndLogin name emailAddress isNewAccount discordOp0Ready discordOp0ReadySupplemental continueWith =
     T.connectFrontend
         100
         sessionId0
@@ -731,8 +738,10 @@ linkDiscordAndLogin name emailAddress isNewAccount discordOp0Ready discordOp0Rea
                     , Test.Html.Selector.exactText "at0232"
                     , Test.Html.Selector.exactText "kess"
                     , Test.Html.Selector.exactText "purplelite"
+                    , Test.Html.Selector.exactText "BT"
                     ]
                 )
+            , T.group (continueWith userA)
             ]
         )
 
@@ -1043,12 +1052,29 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 False
                 discordOp0Ready
                 discordOp0ReadySupplemental
+                (\user -> [])
             ]
         , T.start
             "Link Discord account with login to non-existent at-chat account"
             startTime
             normalConfig
-            [ linkDiscordAndLogin "Steve" userEmail True discordOp0Ready discordOp0ReadySupplemental
+            [ linkDiscordAndLogin
+                "Steve"
+                userEmail
+                True
+                discordOp0Ready
+                discordOp0ReadySupplemental
+                (\user ->
+                    [ user.click 100 (Dom.id "guild_showUserOptions")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.exactText "at0232"
+                            , Test.Html.Selector.exactText "a@a.se"
+                            ]
+                        )
+                    ]
+                )
             ]
         , T.start
             "Link Discord account already logged in"
@@ -1059,38 +1085,63 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 sessionId0
                 "/"
                 desktopWindow
-                (\userA -> [ handleLogin firefoxDesktop adminEmail userA ])
-            , T.connectFrontend
-                100
-                sessionId0
-                ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
-                desktopWindow
                 (\adminA ->
-                    [ adminA.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                    , andThenWebsocket
-                        (\connection _ ->
-                            [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
-                        )
-                    , andThenWebsocket
-                        (\connection websocketState ->
-                            case Array.toList websocketState.dataSent |> List.filter isOp2 of
-                                [ _ ] ->
-                                    [ T.websocketSendString 100 connection discordOp0Ready
-                                    , T.websocketSendString 100 connection discordOp0ReadySupplemental
-                                    ]
-
-                                _ ->
-                                    [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
-                        )
+                    [ handleLogin firefoxDesktop adminEmail adminA
+                    , adminA.click 100 (Dom.id "guild_showUserOptions")
                     , adminA.checkView
                         100
-                        (Test.Html.Query.has
-                            [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
-                            , Test.Html.Selector.exactText "at0232"
-                            , Test.Html.Selector.exactText "kess"
-                            , Test.Html.Selector.exactText "purplelite"
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Loading user data" ])
+                    , T.connectFrontend
+                        100
+                        sessionId0
+                        ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
+                        desktopWindow
+                        (\adminB ->
+                            [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                            , adminA.checkView
+                                200
+                                (Test.Html.Query.has [ Test.Html.Selector.exactText "Loading user data" ])
+                            , andThenWebsocket
+                                (\connection _ ->
+                                    [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+                                )
+                            , andThenWebsocket
+                                (\connection websocketState ->
+                                    case Array.toList websocketState.dataSent |> List.filter isOp2 of
+                                        [ _ ] ->
+                                            [ T.websocketSendString 100 connection discordOp0Ready
+                                            , T.websocketSendString 100 connection discordOp0ReadySupplemental
+                                            ]
+
+                                        _ ->
+                                            [ T.checkState 0 (\_ -> Err "Wrong number of Discord connections made") ]
+                                )
+                            , adminB.checkView
+                                100
+                                (Test.Html.Query.has
+                                    [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
+                                    , Test.Html.Selector.exactText "at0232"
+                                    , Test.Html.Selector.exactText "kess"
+                                    , Test.Html.Selector.exactText "purplelite"
+                                    ]
+                                )
                             ]
                         )
+                    ]
+                )
+            ]
+        , T.start
+            "Ping discord user"
+            startTime
+            normalConfig
+            [ linkDiscordAndLogin
+                (PersonName.toString Backend.adminUser.name)
+                adminEmail
+                False
+                discordOp0Ready
+                discordOp0ReadySupplemental
+                (\user ->
+                    [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                     ]
                 )
             ]

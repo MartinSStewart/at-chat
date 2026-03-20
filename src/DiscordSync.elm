@@ -1339,7 +1339,11 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_SupplementalReadyData readySupplementalData ->
-                            ( handleReadySupplementalData readySupplementalData model2, cmds )
+                            let
+                                ( model3, cmd2 ) =
+                                    handleReadySupplementalData readySupplementalData model2
+                            in
+                            ( model3, Command.batch cmd2 :: cmds )
 
                         Discord.UserOutMsg_ChannelCreated channel ->
                             let
@@ -1547,7 +1551,7 @@ handleJoinOrCreateGuild :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleJoinOrCreateGuild discordUserId gatewayGuild model =
-    ( { model | discordGuilds = addDiscordGuild gatewayGuild model.discordGuilds }
+    ( { model | discordGuilds = addDiscordGuild [] gatewayGuild model.discordGuilds }
     , getDiscordGuildData gatewayGuild
         |> Task.map (\( _, guildData ) -> Ok guildData)
         |> Task.onError (\error -> Err error |> Task.succeed)
@@ -1957,38 +1961,48 @@ handleChannelCreated channel model =
             )
 
 
-handleReadySupplementalData : Discord.ReadySupplementalData -> BackendModel -> BackendModel
+handleReadySupplementalData :
+    Discord.ReadySupplementalData
+    -> BackendModel
+    -> ( BackendModel, List (Command BackendOnly ToFrontend BackendMsg) )
 handleReadySupplementalData data model =
-    List.map2
-        (\{ id } mergedMembers ->
-            ( id, mergedMembers )
-        )
-        data.guilds
-        data.mergedMembers
+    List.map2 (\{ id } mergedMembers -> ( id, mergedMembers )) data.guilds data.mergedMembers
         |> List.foldl
-            (\( guildId, mergedMembers ) model2 ->
-                { model2
-                    | discordGuilds =
-                        SeqDict.updateIfExists
-                            guildId
-                            (\guild ->
-                                { guild
-                                    | members =
-                                        List.foldl
-                                            (\mergedMembers2 members ->
-                                                SeqDict.insert
-                                                    mergedMembers2.userId
-                                                    { joinedAt = Just mergedMembers2.joinedAt }
-                                                    members
-                                            )
-                                            guild.members
-                                            mergedMembers
+            (\( guildId, mergedMembers ) ( model2, cmds ) ->
+                case SeqDict.get guildId model2.discordGuilds of
+                    Just guild ->
+                        let
+                            mergedMembers2 : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+                            mergedMembers2 =
+                                List.map
+                                    (\mergedMember ->
+                                        ( mergedMember.userId, { joinedAt = Just mergedMember.joinedAt } )
+                                    )
+                                    mergedMembers
+                                    |> SeqDict.fromList
+                                    |> SeqDict.remove guild.owner
+
+                            model3 =
+                                { model2
+                                    | discordGuilds =
+                                        SeqDict.insert
+                                            guildId
+                                            { guild | members = SeqDict.union mergedMembers2 guild.members }
+                                            model2.discordGuilds
                                 }
-                            )
-                            model2.discordGuilds
-                }
+                        in
+                        ( model3
+                        , Broadcast.toDiscordGuild
+                            guildId
+                            (Server_UpdateDiscordMembers guildId mergedMembers2 |> ServerChange)
+                            model3
+                            :: cmds
+                        )
+
+                    Nothing ->
+                        ( model2, cmds )
             )
-            model
+            ( model, [] )
 
 
 handleReadyData : Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -2010,7 +2024,26 @@ handleReadyData readyData model =
             Discord.userToPartialUser readyData.user :: readyData.users
     in
     ( { model
-        | discordGuilds = List.foldl addDiscordGuild model.discordGuilds readyData.guilds
+        | discordGuilds =
+            List.foldl
+                (\guild ( mergedMembers, guilds ) ->
+                    case mergedMembers of
+                        head :: rest ->
+                            ( rest, addDiscordGuild head guild guilds )
+
+                        [] ->
+                            ( [], addDiscordGuild [] guild guilds )
+                )
+                ( case readyData.mergedMembers of
+                    Included members2 ->
+                        members2
+
+                    Missing ->
+                        []
+                , model.discordGuilds
+                )
+                readyData.guilds
+                |> Tuple.second
         , discordUsers = List.foldl addDiscordUserData model.discordUsers discordUsers
       }
     , Command.batch
@@ -2040,8 +2073,8 @@ handleReadyData readyData model =
     )
 
 
-addDiscordGuild : Discord.GatewayGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-addDiscordGuild guild discordGuilds =
+addDiscordGuild : List Discord.MergedMember -> Discord.GatewayGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+addDiscordGuild members guild discordGuilds =
     SeqDict.update
         guild.properties.id
         (\maybe ->
@@ -2050,6 +2083,12 @@ addDiscordGuild guild discordGuilds =
                     { existingGuild
                         | name = GuildName.fromStringLossy guild.properties.name
                         , owner = guild.properties.ownerId
+                        , members =
+                            List.foldl
+                                (\member dict -> SeqDict.insert member.userId { joinedAt = Just member.joinedAt } dict)
+                                existingGuild.members
+                                members
+                                |> SeqDict.remove guild.properties.ownerId
                     }
                         |> Just
 
@@ -2057,7 +2096,10 @@ addDiscordGuild guild discordGuilds =
                     { name = GuildName.fromStringLossy guild.properties.name
                     , icon = Nothing
                     , channels = SeqDict.empty -- Gets filled after LinkDiscordUserStep2 is triggered
-                    , members = SeqDict.empty -- Gets filled in via the websocket connection
+                    , members =
+                        List.map (\member -> ( member.userId, { joinedAt = Just member.joinedAt } )) members
+                            |> SeqDict.fromList
+                            |> SeqDict.remove guild.properties.ownerId
                     , owner = guild.properties.ownerId
                     }
                         |> Just

@@ -3048,6 +3048,15 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
+                Server_UpdateDiscordMembers guildId members ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | members = SeqDict.union members guild.members })
+                                local.discordGuilds
+                    }
+
 
 guildSendMessage :
     Id GuildId
