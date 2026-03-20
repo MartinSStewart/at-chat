@@ -1152,18 +1152,6 @@ isPressMsg msg =
         PressedEmojiSelectorEmoji _ ->
             True
 
-        TypedEditMessage _ _ ->
-            False
-
-        PressedSendEditMessage _ ->
-            True
-
-        PressedArrowInDropdownForEditMessage _ _ ->
-            True
-
-        PressedPingUserForEditMessage _ _ ->
-            True
-
         MessageMenu_PressedReply _ ->
             True
 
@@ -1227,9 +1215,6 @@ isPressMsg msg =
         PressedCancelMessageEdit _ ->
             True
 
-        PressedEditMessagePingDropdownContainer ->
-            True
-
         CheckMessageAltPress _ _ _ _ ->
             False
 
@@ -1266,20 +1251,11 @@ isPressMsg msg =
         EditMessage_PressedDeleteAttachedFile _ _ ->
             True
 
-        EditMessage_PressedAttachFiles _ ->
-            True
-
         EditMessage_SelectedFilesToAttach _ _ _ ->
             False
 
         EditMessage_GotFileHashName _ _ _ _ ->
             False
-
-        EditMessage_PastedFiles _ _ ->
-            False
-
-        PressedTextInput ->
-            True
 
         GotTimezone _ ->
             False

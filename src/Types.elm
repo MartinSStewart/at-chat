@@ -348,7 +348,6 @@ type FrontendMsg
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
-    | PressedTextInput
     | SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
@@ -377,10 +376,6 @@ type FrontendMsg
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
     | PressedEmojiSelectorEmoji Emoji
-    | TypedEditMessage ( AnyGuildOrDmId, ThreadRoute ) String
-    | PressedSendEditMessage ( AnyGuildOrDmId, ThreadRoute )
-    | PressedArrowInDropdownForEditMessage ( AnyGuildOrDmId, ThreadRoute ) Int
-    | PressedPingUserForEditMessage ( AnyGuildOrDmId, ThreadRoute ) Int
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
@@ -404,7 +399,6 @@ type FrontendMsg
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
-    | PressedEditMessagePingDropdownContainer
     | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool
     | PressedShowUserOption
     | PressedCloseUserOptions
@@ -418,10 +412,8 @@ type FrontendMsg
     | PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | EditMessage_PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | EditMessage_PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
-    | EditMessage_PressedAttachFiles ( AnyGuildOrDmId, ThreadRoute )
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
-    | EditMessage_PastedFiles ( AnyGuildOrDmId, ThreadRoute ) (Nonempty File)
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
     | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String SubscribeData)

@@ -1107,276 +1107,6 @@ updateLoaded msg model =
                 )
                 model
 
-        TypedEditMessage ( guildOrDmId, threadRoute ) text ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
-                        Just edit ->
-                            let
-                                oldTypingDebouncer : Bool
-                                oldTypingDebouncer =
-                                    loggedIn.typingDebouncer
-
-                                loggedIn2 : LoggedIn2
-                                loggedIn2 =
-                                    { loggedIn
-                                        | editMessage =
-                                            SeqDict.insert
-                                                ( guildOrDmId, threadRoute )
-                                                { edit | text = text }
-                                                loggedIn.editMessage
-                                        , typingDebouncer = False
-                                    }
-                            in
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (if oldTypingDebouncer then
-                                    --Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
-                                    Local_MemberEditTyping
-                                        model.time
-                                        guildOrDmId
-                                        (case threadRoute of
-                                            ViewThread threadId ->
-                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
-
-                                            NoThread ->
-                                                NoThreadWithMessage edit.messageIndex
-                                        )
-                                        |> Just
-
-                                 else
-                                    Nothing
-                                )
-                                { loggedIn2
-                                    | messageHover =
-                                        case loggedIn2.messageHover of
-                                            NoMessageHover ->
-                                                loggedIn2.messageHover
-
-                                            MessageHover _ _ ->
-                                                loggedIn2.messageHover
-
-                                            MessageMenu extraOptions ->
-                                                { extraOptions
-                                                    | mobileMode =
-                                                        MessageMenu.mobileMenuMaxHeight
-                                                            extraOptions
-                                                            (Local.model loggedIn2.localState)
-                                                            model
-                                                            |> MessageMenuFixed
-                                                }
-                                                    |> MessageMenu
-                                }
-                                (Process.sleep (Duration.seconds 1)
-                                    |> Task.perform (\() -> DebouncedTyping)
-                                )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
-        PressedSendEditMessage ( guildOrDmId, threadRoute ) ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
-                        Just edit ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (case guildOrDmId of
-                                    GuildOrDmId guildOrDmId2 ->
-                                        case
-                                            ( String.Nonempty.fromString edit.text
-                                            , LocalState.guildOrDmIdToMessage
-                                                guildOrDmId2
-                                                (Id.threadRouteWithMessage edit.messageIndex threadRoute)
-                                                local
-                                            )
-                                        of
-                                            ( Just nonempty, Just ( message, _ ) ) ->
-                                                let
-                                                    richText : Nonempty (RichText (Id UserId))
-                                                    richText =
-                                                        RichText.fromNonemptyString
-                                                            (LocalState.allUsers local.localUser)
-                                                            nonempty
-                                                in
-                                                if message.content == richText then
-                                                    Nothing
-
-                                                else
-                                                    Local_SendEditMessage
-                                                        model.time
-                                                        guildOrDmId2
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
-
-                                                            NoThread ->
-                                                                NoThreadWithMessage edit.messageIndex
-                                                        )
-                                                        richText
-                                                        (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                                        |> Just
-
-                                            _ ->
-                                                Nothing
-
-                                    DiscordGuildOrDmId guildOrDmId2 ->
-                                        case
-                                            ( String.Nonempty.fromString edit.text
-                                            , LocalState.discordGuildOrDmIdToMessage
-                                                guildOrDmId2
-                                                (Id.threadRouteWithMessage edit.messageIndex threadRoute)
-                                                local
-                                            )
-                                        of
-                                            ( Just nonempty, Just ( message, _ ) ) ->
-                                                let
-                                                    richText : Nonempty (RichText (Discord.Id Discord.UserId))
-                                                    richText =
-                                                        RichText.fromNonemptyString
-                                                            (LocalState.allDiscordUsers local.localUser)
-                                                            nonempty
-                                                in
-                                                if message.content == richText then
-                                                    Nothing
-
-                                                else
-                                                    case guildOrDmId2 of
-                                                        DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
-                                                            Local_Discord_SendEditGuildMessage
-                                                                model.time
-                                                                currentUserId
-                                                                guildId
-                                                                channelId
-                                                                (case threadRoute of
-                                                                    ViewThread threadId ->
-                                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
-
-                                                                    NoThread ->
-                                                                        NoThreadWithMessage edit.messageIndex
-                                                                )
-                                                                richText
-                                                                |> Just
-
-                                                        DiscordGuildOrDmId_Dm data ->
-                                                            Local_Discord_SendEditDmMessage
-                                                                model.time
-                                                                data
-                                                                edit.messageIndex
-                                                                richText
-                                                                |> Just
-
-                                            _ ->
-                                                Nothing
-                                )
-                                (if MyUi.isMobile model then
-                                    MessageMenu.close model loggedIn
-
-                                 else
-                                    { loggedIn
-                                        | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
-                                    }
-                                )
-                                (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
-        PressedArrowInDropdownForEditMessage ( guildOrDmId, threadRoute ) index ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | textInputFocus =
-                            case loggedIn.textInputFocus of
-                                Just textInputFocus ->
-                                    case
-                                        FrontendExtra.pingUserNameSoFar
-                                            Pages.Guild.channelTextInputId
-                                            textInputFocus.selection
-                                            guildOrDmId
-                                            threadRoute
-                                            loggedIn
-                                            |> Debug.log "z"
-                                    of
-                                        Just nameSoFar ->
-                                            { textInputFocus
-                                                | dropdown =
-                                                    MessageInput.pressedArrowInDropdown
-                                                        nameSoFar
-                                                        guildOrDmId
-                                                        index
-                                                        textInputFocus.dropdown
-                                                        (Local.model loggedIn.localState)
-                                            }
-                                                |> Just
-
-                                        Nothing ->
-                                            loggedIn.textInputFocus
-
-                                Nothing ->
-                                    loggedIn.textInputFocus
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
-        PressedPingUserForEditMessage ( guildOrDmId, threadRoute ) dropdownIndex ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage, loggedIn.textInputFocus ) of
-                        ( Just edit, Just textInputFocus ) ->
-                            case
-                                ( String.Nonempty.fromString edit.text
-                                , FrontendExtra.pingUserNameSoFar
-                                    Pages.Guild.channelTextInputId
-                                    textInputFocus.selection
-                                    guildOrDmId
-                                    threadRoute
-                                    loggedIn
-                                )
-                            of
-                                ( Just nonempty, Just nameSoFar ) ->
-                                    let
-                                        ( pingUser, text2, cmd ) =
-                                            MessageInput.pressedPingUser
-                                                SetFocus
-                                                nameSoFar
-                                                guildOrDmId
-                                                MessageMenu.editMessageTextInputId
-                                                dropdownIndex
-                                                textInputFocus.dropdown
-                                                (Local.model loggedIn.localState)
-                                                nonempty
-                                    in
-                                    ( { loggedIn
-                                        | textInputFocus = Just { textInputFocus | dropdown = pingUser }
-                                        , editMessage =
-                                            SeqDict.insert
-                                                ( guildOrDmId, threadRoute )
-                                                { edit | text = String.Nonempty.toString text2 }
-                                                loggedIn.editMessage
-                                      }
-                                    , cmd
-                                    )
-
-                                _ ->
-                                    ( loggedIn, Command.none )
-
-                        _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
         MessageMenu_PressedReply threadRoute ->
             case Route.toGuildOrDmId model.route of
                 Just ( guildOrDmId, _ ) ->
@@ -1846,9 +1576,6 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedEditMessagePingDropdownContainer ->
-            ( model, FrontendExtra.setFocus model MessageMenu.editMessageTextInputId )
-
         CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter ->
             case model.drag of
                 DragStart dragStart _ ->
@@ -2096,9 +1823,6 @@ updateLoaded msg model =
                 )
                 model
 
-        EditMessage_PressedAttachFiles guildOrDmId ->
-            ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach guildOrDmId) )
-
         EditMessage_SelectedFilesToAttach guildOrDmId file files ->
             editMessage_gotFiles guildOrDmId (Nonempty file files) model
 
@@ -2128,12 +1852,6 @@ updateLoaded msg model =
                     )
                 )
                 model
-
-        EditMessage_PastedFiles guildOrDmId files ->
-            editMessage_gotFiles guildOrDmId files model
-
-        PressedTextInput ->
-            ( { model | virtualKeyboardOpen = True }, Command.none )
 
         FileUploadProgress guildOrDmId fileId progress ->
             FrontendExtra.updateLoggedIn
@@ -2797,8 +2515,301 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | externalLinkWarning = Nothing }, Command.none ))
                 model
 
-        EditMessage_MessageInputMsg anyGuildOrDmId threadRoute messageInputMsg ->
-            Debug.todo ""
+        EditMessage_MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
+            case messageInputMsg of
+                MessageInput.TextInputGotFocus htmlId ->
+                    textInputGotFocus htmlId model
+
+                MessageInput.TextInputLostFocus htmlId ->
+                    textInputLostFocus htmlId model
+
+                MessageInput.PressedTextInput ->
+                    ( { model | virtualKeyboardOpen = True }, Command.none )
+
+                MessageInput.TypedMessage text ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
+                                Just edit ->
+                                    let
+                                        oldTypingDebouncer : Bool
+                                        oldTypingDebouncer =
+                                            loggedIn.typingDebouncer
+
+                                        loggedIn2 : LoggedIn2
+                                        loggedIn2 =
+                                            { loggedIn
+                                                | editMessage =
+                                                    SeqDict.insert
+                                                        ( guildOrDmId, threadRoute )
+                                                        { edit | text = text }
+                                                        loggedIn.editMessage
+                                                , typingDebouncer = False
+                                            }
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (if oldTypingDebouncer then
+                                            --Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
+                                            Local_MemberEditTyping
+                                                model.time
+                                                guildOrDmId
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                    NoThread ->
+                                                        NoThreadWithMessage edit.messageIndex
+                                                )
+                                                |> Just
+
+                                         else
+                                            Nothing
+                                        )
+                                        { loggedIn2
+                                            | messageHover =
+                                                case loggedIn2.messageHover of
+                                                    NoMessageHover ->
+                                                        loggedIn2.messageHover
+
+                                                    MessageHover _ _ ->
+                                                        loggedIn2.messageHover
+
+                                                    MessageMenu extraOptions ->
+                                                        { extraOptions
+                                                            | mobileMode =
+                                                                MessageMenu.mobileMenuMaxHeight
+                                                                    extraOptions
+                                                                    (Local.model loggedIn2.localState)
+                                                                    model
+                                                                    |> MessageMenuFixed
+                                                        }
+                                                            |> MessageMenu
+                                        }
+                                        (Process.sleep (Duration.seconds 1)
+                                            |> Task.perform (\() -> DebouncedTyping)
+                                        )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                MessageInput.PressedSendMessage ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
+                                Just edit ->
+                                    let
+                                        local : LocalState
+                                        local =
+                                            Local.model loggedIn.localState
+                                    in
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (case guildOrDmId of
+                                            GuildOrDmId guildOrDmId2 ->
+                                                case
+                                                    ( String.Nonempty.fromString edit.text
+                                                    , LocalState.guildOrDmIdToMessage
+                                                        guildOrDmId2
+                                                        (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                        local
+                                                    )
+                                                of
+                                                    ( Just nonempty, Just ( message, _ ) ) ->
+                                                        let
+                                                            richText : Nonempty (RichText (Id UserId))
+                                                            richText =
+                                                                RichText.fromNonemptyString
+                                                                    (LocalState.allUsers local.localUser)
+                                                                    nonempty
+                                                        in
+                                                        if message.content == richText then
+                                                            Nothing
+
+                                                        else
+                                                            Local_SendEditMessage
+                                                                model.time
+                                                                guildOrDmId2
+                                                                (case threadRoute of
+                                                                    ViewThread threadId ->
+                                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                                    NoThread ->
+                                                                        NoThreadWithMessage edit.messageIndex
+                                                                )
+                                                                richText
+                                                                (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                                                |> Just
+
+                                                    _ ->
+                                                        Nothing
+
+                                            DiscordGuildOrDmId guildOrDmId2 ->
+                                                case
+                                                    ( String.Nonempty.fromString edit.text
+                                                    , LocalState.discordGuildOrDmIdToMessage
+                                                        guildOrDmId2
+                                                        (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                        local
+                                                    )
+                                                of
+                                                    ( Just nonempty, Just ( message, _ ) ) ->
+                                                        let
+                                                            richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                            richText =
+                                                                RichText.fromNonemptyString
+                                                                    (LocalState.allDiscordUsers local.localUser)
+                                                                    nonempty
+                                                        in
+                                                        if message.content == richText then
+                                                            Nothing
+
+                                                        else
+                                                            case guildOrDmId2 of
+                                                                DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
+                                                                    Local_Discord_SendEditGuildMessage
+                                                                        model.time
+                                                                        currentUserId
+                                                                        guildId
+                                                                        channelId
+                                                                        (case threadRoute of
+                                                                            ViewThread threadId ->
+                                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                                            NoThread ->
+                                                                                NoThreadWithMessage edit.messageIndex
+                                                                        )
+                                                                        richText
+                                                                        |> Just
+
+                                                                DiscordGuildOrDmId_Dm data ->
+                                                                    Local_Discord_SendEditDmMessage
+                                                                        model.time
+                                                                        data
+                                                                        edit.messageIndex
+                                                                        richText
+                                                                        |> Just
+
+                                                    _ ->
+                                                        Nothing
+                                        )
+                                        (if MyUi.isMobile model then
+                                            MessageMenu.close model loggedIn
+
+                                         else
+                                            { loggedIn
+                                                | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
+                                            }
+                                        )
+                                        (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                MessageInput.PressedArrowInDropdown index ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | textInputFocus =
+                                    case loggedIn.textInputFocus of
+                                        Just textInputFocus ->
+                                            case
+                                                FrontendExtra.pingUserNameSoFar
+                                                    Pages.Guild.channelTextInputId
+                                                    textInputFocus.selection
+                                                    guildOrDmId
+                                                    threadRoute
+                                                    loggedIn
+                                                    |> Debug.log "z"
+                                            of
+                                                Just nameSoFar ->
+                                                    { textInputFocus
+                                                        | dropdown =
+                                                            MessageInput.pressedArrowInDropdown
+                                                                nameSoFar
+                                                                guildOrDmId
+                                                                index
+                                                                textInputFocus.dropdown
+                                                                (Local.model loggedIn.localState)
+                                                    }
+                                                        |> Just
+
+                                                Nothing ->
+                                                    loggedIn.textInputFocus
+
+                                        Nothing ->
+                                            loggedIn.textInputFocus
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                MessageInput.PressedArrowUpInEmptyInput ->
+                    ( model, Command.none )
+
+                MessageInput.PressedPingUser dropdownIndex ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage, loggedIn.textInputFocus ) of
+                                ( Just edit, Just textInputFocus ) ->
+                                    case
+                                        ( String.Nonempty.fromString edit.text
+                                        , FrontendExtra.pingUserNameSoFar
+                                            Pages.Guild.channelTextInputId
+                                            textInputFocus.selection
+                                            guildOrDmId
+                                            threadRoute
+                                            loggedIn
+                                        )
+                                    of
+                                        ( Just nonempty, Just nameSoFar ) ->
+                                            let
+                                                ( pingUser, text2, cmd ) =
+                                                    MessageInput.pressedPingUser
+                                                        SetFocus
+                                                        nameSoFar
+                                                        guildOrDmId
+                                                        MessageMenu.editMessageTextInputId
+                                                        dropdownIndex
+                                                        textInputFocus.dropdown
+                                                        (Local.model loggedIn.localState)
+                                                        nonempty
+                                            in
+                                            ( { loggedIn
+                                                | textInputFocus = Just { textInputFocus | dropdown = pingUser }
+                                                , editMessage =
+                                                    SeqDict.insert
+                                                        ( guildOrDmId, threadRoute )
+                                                        { edit | text = String.Nonempty.toString text2 }
+                                                        loggedIn.editMessage
+                                              }
+                                            , cmd
+                                            )
+
+                                        _ ->
+                                            ( loggedIn, Command.none )
+
+                                _ ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                MessageInput.PressedPingDropdownContainer ->
+                    ( model, FrontendExtra.setFocus model MessageMenu.editMessageTextInputId )
+
+                MessageInput.PressedUploadFile ->
+                    ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach ( guildOrDmId, threadRoute )) )
+
+                MessageInput.OnPasteFiles files ->
+                    editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
+
+                MessageInput.OnSelectionChanged htmlId range ->
+                    messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
 
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
@@ -3192,87 +3203,75 @@ updateLoaded msg model =
                     gotFiles guildOrDmId threadRoute files model
 
                 MessageInput.OnSelectionChanged htmlId range ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                showDropdown : Bool
-                                showDropdown =
-                                    ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
-                                        && (case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
-                                                Just nameSoFar ->
-                                                    case guildOrDmId of
-                                                        GuildOrDmId guildOrDmId2 ->
-                                                            MessageInput.userDropdownList
-                                                                nameSoFar
-                                                                guildOrDmId2
-                                                                (Local.model loggedIn.localState)
-                                                                |> List.isEmpty
-                                                                |> not
-
-                                                        DiscordGuildOrDmId guildOrDmId2 ->
-                                                            MessageInput.discordUserDropdownList
-                                                                nameSoFar
-                                                                guildOrDmId2
-                                                                (Local.model loggedIn.localState)
-                                                                |> List.isEmpty
-                                                                |> not
-
-                                                Nothing ->
-                                                    False
-                                           )
-                            in
-                            ( { loggedIn
-                                | textInputFocus =
-                                    case loggedIn.textInputFocus of
-                                        Just textInputFocus ->
-                                            if htmlId == textInputFocus.htmlId then
-                                                { textInputFocus
-                                                    | selection = range
-                                                    , dropdown =
-                                                        if showDropdown then
-                                                            textInputFocus.dropdown
-
-                                                        else
-                                                            Nothing
-                                                }
-                                                    |> Just
-
-                                            else
-                                                Just { htmlId = htmlId, selection = range, dropdown = Nothing }
-
-                                        Nothing ->
-                                            Just { htmlId = htmlId, selection = range, dropdown = Nothing }
-                              }
-                            , if showDropdown then
-                                Dom.getElement htmlId
-                                    |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
-                                    |> Task.attempt (GotPingUserPosition htmlId)
-
-                              else
-                                Command.none
-                            )
-                        )
-                        model
+                    messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
 
 
+messageInputSelectionChanged : AnyGuildOrDmId -> ThreadRoute -> HtmlId -> Range -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            let
+                showDropdown : Bool
+                showDropdown =
+                    ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
+                        && (case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
+                                Just nameSoFar ->
+                                    case guildOrDmId of
+                                        GuildOrDmId guildOrDmId2 ->
+                                            MessageInput.userDropdownList
+                                                nameSoFar
+                                                guildOrDmId2
+                                                (Local.model loggedIn.localState)
+                                                |> List.isEmpty
+                                                |> not
 
---messageInputConfig : ( AnyGuildOrDmId, ThreadRoute ) -> MsgConfig FrontendMsg
---messageInputConfig ( guildOrDmId, threadRoute ) =
---    { textInputGotFocus = TextInputGotFocus
---    , textInputLostFocus = TextInputLostFocus
---    , pressedTextInput = PressedTextInput
---    , typedMessage = TypedMessage ( guildOrDmId, threadRoute )
---    , pressedSendMessage = PressedSendMessage guildOrDmId threadRoute
---    , pressedArrowInDropdown = PressedArrowInDropdown ( guildOrDmId, threadRoute )
---    , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput ( guildOrDmId, threadRoute )
---    , pressedPingUser = PressedPingUser ( guildOrDmId, threadRoute )
---    , pressedPingDropdownContainer = PressedPingDropdownContainer
---    , pressedUploadFile = PressedAttachFiles ( guildOrDmId, threadRoute )
---    , onPasteFiles = PastedFiles ( guildOrDmId, threadRoute )
---    , onSelectionChanged = TextInputSelectionChanged
---    }
+                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                            MessageInput.discordUserDropdownList
+                                                nameSoFar
+                                                guildOrDmId2
+                                                (Local.model loggedIn.localState)
+                                                |> List.isEmpty
+                                                |> not
+
+                                Nothing ->
+                                    False
+                           )
+            in
+            ( { loggedIn
+                | textInputFocus =
+                    case loggedIn.textInputFocus of
+                        Just textInputFocus ->
+                            if htmlId == textInputFocus.htmlId then
+                                { textInputFocus
+                                    | selection = range
+                                    , dropdown =
+                                        if showDropdown then
+                                            textInputFocus.dropdown
+
+                                        else
+                                            Nothing
+                                }
+                                    |> Just
+
+                            else
+                                Just { htmlId = htmlId, selection = range, dropdown = Nothing }
+
+                        Nothing ->
+                            Just { htmlId = htmlId, selection = range, dropdown = Nothing }
+              }
+            , if showDropdown then
+                Dom.getElement htmlId
+                    |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                    |> Task.attempt (GotPingUserPosition htmlId)
+
+              else
+                Command.none
+            )
+        )
+        model
 
 
+textInputGotFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 textInputGotFocus htmlId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -3294,6 +3293,7 @@ textInputGotFocus htmlId model =
         model
 
 
+textInputLostFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 textInputLostFocus htmlId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
