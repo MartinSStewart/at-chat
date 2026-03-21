@@ -9,7 +9,6 @@ module Types exposing
     , EditMessage
     , EmojiSelector(..)
     , ExportState
-    , ExportStep(..)
     , FrontendModel(..)
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
@@ -42,7 +41,7 @@ module Types exposing
 import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
-import Bytes
+import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -78,7 +77,7 @@ import MessageView
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
-import Pages.Admin exposing (AdminChange, InitAdminData)
+import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
@@ -551,7 +550,7 @@ type BackendMsg
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
-    | ExportBackendStep ClientId ExportStep
+    | ExportBackendStep ClientId ExportSubset ExportState
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
@@ -570,21 +569,16 @@ type BackendMsg
 
 
 type alias ExportState =
-    { baseModel : Bytes.Bytes
+    { baseModel : Bytes
     , remainingGuilds : List ( Id GuildId, LocalState.BackendGuild )
-    , encodedGuilds : List Bytes.Bytes
+    , encodedGuilds : List Bytes
     , remainingDmChannels : List ( DmChannelId, DmChannel.DmChannel )
-    , encodedDmChannels : List Bytes.Bytes
+    , encodedDmChannels : List Bytes
     , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild )
-    , encodedDiscordGuilds : List Bytes.Bytes
+    , encodedDiscordGuilds : List Bytes
     , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DmChannel.DiscordDmChannel )
-    , encodedDiscordDmChannels : List Bytes.Bytes
+    , encodedDiscordDmChannels : List Bytes
     }
-
-
-type ExportStep
-    = ExportEncodeBaseModel
-    | ExportEncodeNext ExportState
 
 
 type LoginResult

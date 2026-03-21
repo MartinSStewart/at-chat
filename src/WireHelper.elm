@@ -10,7 +10,6 @@ module WireHelper exposing
     , encodeDiscordGuild
     , encodeDmChannel
     , encodeGuild
-    , streamedExportVersion
     )
 
 {-| These functions are in a separate module because Intellij flags w3\_\* functions as missing and that's annoying to look at while doing other stuff.
@@ -36,13 +35,6 @@ encodeBackendModel =
 decodeBackendModel : Decoder BackendModel
 decodeBackendModel =
     Types.w3_decode_BackendModel
-
-
-{-| Version byte used to distinguish streamed export format from legacy format.
--}
-streamedExportVersion : Int
-streamedExportVersion =
-    1
 
 
 encodeGuild : ( Id GuildId, LocalState.BackendGuild ) -> Encoder

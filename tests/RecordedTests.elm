@@ -291,6 +291,11 @@ userEmail =
     Unsafe.emailAddress "user@mail.com"
 
 
+joeEmail : EmailAddress
+joeEmail =
+    Unsafe.emailAddress "joe@hotmail.com"
+
+
 enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 enableNotifications isMobile user =
     [ user.click 100 (Dom.id "guild_showUserOptions")
@@ -696,17 +701,18 @@ discordUserAuth =
 
 
 linkDiscordAndLogin :
-    String
+    SessionId
+    -> String
     -> EmailAddress
     -> Bool
     -> String
     -> String
     -> (T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> List (T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-linkDiscordAndLogin name emailAddress isNewAccount discordOp0Ready discordOp0ReadySupplemental continueWith =
+linkDiscordAndLogin sessionId name emailAddress isNewAccount discordOp0Ready discordOp0ReadySupplemental continueWith =
     T.connectFrontend
         100
-        sessionId0
+        sessionId
         ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth)
         desktopWindow
         (\userA ->
@@ -1101,6 +1107,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             startTime
             normalConfig
             [ linkDiscordAndLogin
+                sessionId0
                 (PersonName.toString Backend.adminUser.name)
                 adminEmail
                 False
@@ -1113,6 +1120,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             startTime
             normalConfig
             [ linkDiscordAndLogin
+                sessionId0
                 "Steve"
                 userEmail
                 True
@@ -1189,6 +1197,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             startTime
             normalConfig
             [ linkDiscordAndLogin
+                sessionId0
                 (PersonName.toString Backend.adminUser.name)
                 adminEmail
                 False
@@ -1977,6 +1986,14 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
         [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
                 [ writeMessage admin "Hello export test!"
+                , linkDiscordAndLogin
+                    (Lamdera.sessionIdFromString "JoeSession")
+                    "Joe"
+                    joeEmail
+                    True
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                    (\_ -> [])
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_expandSectionButton_Export/Import")
@@ -1986,6 +2003,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                         [ admin.click 100 (Dom.id "admin_exportBackendButton")
                         , admin.click 100 (Dom.id "admin_expandSectionButton_Guilds")
                         , admin.click 100 (Dom.id "admin_expandSectionButton_Users")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Discord guilds")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Discord DM channels")
                         , T.andThen
                             100
                             (\data ->
@@ -2011,6 +2030,13 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                                 deleteGuildActions
                                     ++ deleteUserActions
                                     ++ [ admin.click 100 (Dom.id "admin_saveUserChangesButton") ]
+                                    ++ [ admin.click 100 (Dom.id "Admin_deleteDiscordGuildButton_705745250815311942")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_185574444641550336")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_222087308516524036")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_1215077285749858324")
+                                       ]
+                                    |> T.collapsableGroup "Delete stuff"
+                                    |> List.singleton
                             )
                         , admin.click 300 (Dom.id "admin_importBackendButton")
                         , admin.checkView

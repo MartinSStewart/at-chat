@@ -3,6 +3,7 @@ module Pages.Admin exposing
     , EditedBackendUser
     , EditingCell
     , ExportProgress(..)
+    , ExportSubset(..)
     , ImportBackendStatus(..)
     , InitAdminData
     , Model
@@ -126,14 +127,17 @@ type Msg
 
 
 type ToBackend
-    = ExportBackendRequest
-    | ExportSubsetBackendRequest
+    = ExportBackendRequest ExportSubset
     | ImportBackendRequest Bytes
 
 
+type ExportSubset
+    = ExportSubset
+    | ExportAll
+
+
 type ToFrontend
-    = ExportBackendResponse Bytes
-    | ExportSubsetBackendResponse Bytes
+    = ExportBackendResponse ExportSubset Bytes
     | ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportProgress
 
@@ -992,10 +996,10 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, NoOutMsg )
 
         PressedExportBackend ->
-            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend ExportBackendRequest, NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportAll), NoOutMsg )
 
         PressedExportSubsetBackend ->
-            ( model, Lamdera.sendToBackend ExportSubsetBackendRequest, NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportSubset), NoOutMsg )
 
         PressedImportBackend ->
             case model.importBackendStatus of
@@ -1160,11 +1164,19 @@ updateUserTable updateFunc model =
 updateFromBackend : ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 updateFromBackend toFrontend model =
     case toFrontend of
-        ExportBackendResponse bytes ->
-            ( { model | exportProgress = Nothing }, Effect.File.Download.bytes "backend-export.bin" "application/octet-stream" bytes )
+        ExportBackendResponse isPartial bytes ->
+            ( { model | exportProgress = Nothing }
+            , Effect.File.Download.bytes
+                (case isPartial of
+                    ExportAll ->
+                        "backend-export.bin"
 
-        ExportSubsetBackendResponse bytes ->
-            ( model, Effect.File.Download.bytes "backend-export-subset.bin" "application/octet-stream" bytes )
+                    ExportSubset ->
+                        "backend-export-subset.bin"
+                )
+                "application/octet-stream"
+                bytes
+            )
 
         ExportBackendProgress progress ->
             ( { model | exportProgress = Just progress }, Command.none )
@@ -1396,6 +1408,10 @@ exportSection user model =
                 (Dom.id "admin_exportBackendButton")
                 PressedExportBackend
                 (Ui.text "Export backend")
+            , MyUi.simpleButton
+                (Dom.id "admin_exportSubsetBackendButton")
+                PressedExportSubsetBackend
+                (Ui.text "Export subset")
             , case model.exportProgress of
                 Nothing ->
                     Ui.none
@@ -1403,10 +1419,6 @@ exportSection user model =
                 Just progress ->
                     exportProgressText progress |> Ui.text
             ]
-        , MyUi.simpleButton
-            (Dom.id "admin_exportSubsetBackendButton")
-            PressedExportSubsetBackend
-            (Ui.text "Export subset")
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton
