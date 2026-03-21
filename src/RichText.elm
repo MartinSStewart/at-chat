@@ -149,7 +149,7 @@ removeAttachedFile fileId list =
                     else
                         Just richText
 
-                EscapedChar char ->
+                EscapedChar _ ->
                     Just richText
         )
         (List.Nonempty.toList list)
@@ -194,7 +194,7 @@ hyperlinks nonempty =
                 AttachedFile _ ->
                     []
 
-                EscapedChar char ->
+                EscapedChar _ ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -460,12 +460,12 @@ type alias LoopState userId =
 
 escapableChars : Set Char
 escapableChars =
-    Set.fromList [ '\\', '*', '_', '~', '|', '`', '@', '~' ]
+    Set.fromList [ '\\', '*', '_', '|', '`', '@', '~' ]
 
 
 discordEscapableChars : Set Char
 discordEscapableChars =
-    Set.fromList [ '\\', '*', '~', '>', '`', '~', '@' ]
+    Set.fromList [ '\\', '*', '>', '`', '~', '@' ]
 
 
 parser : SeqDict userId { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText userId))
@@ -933,7 +933,7 @@ mentionsUserHelper set nonempty =
                 AttachedFile _ ->
                     set2
 
-                EscapedChar char ->
+                EscapedChar _ ->
                     set2
         )
         set
