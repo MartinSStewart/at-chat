@@ -4744,6 +4744,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         , dmChannels = SeqDict.empty
                         , discordGuilds = SeqDict.empty
                         , discordDmChannels = SeqDict.empty
+                        , exportState = Nothing
                     }
 
                 partialList : List a -> List a
