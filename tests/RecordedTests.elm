@@ -22,11 +22,12 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id)
+import Id exposing (ChannelMessageId, GuildId, Id, UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
 import LoginForm
+import NonemptyDict
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
@@ -1983,8 +1984,33 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                     100
                     (\beforeExportData ->
                         [ admin.click 100 (Dom.id "admin_exportBackendButton")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Guilds")
+                        , T.andThen
+                            100
+                            (\data ->
+                                let
+                                    deleteGuildActions =
+                                        SeqDict.keys data.backend.guilds
+                                            |> List.map
+                                                (\guildId ->
+                                                    admin.click 100 (Dom.id ("Admin_deleteGuildButton_" ++ Id.toString guildId))
+                                                )
 
-                        -- Add here admin actions here to delete all guilds and users (excluding admin)
+                                    deleteUserActions =
+                                        NonemptyDict.toList data.backend.users
+                                            |> List.filterMap
+                                                (\( userId, backendUser ) ->
+                                                    if backendUser.isAdmin then
+                                                        Nothing
+
+                                                    else
+                                                        Just (admin.click 100 (Dom.id ("Admin_deleteUserButton_a_" ++ Id.toString userId ++ "_")))
+                                                )
+                                in
+                                deleteGuildActions
+                                    ++ deleteUserActions
+                                    ++ [ admin.click 100 (Dom.id "admin_saveUserChangesButton") ]
+                            )
                         , admin.click 300 (Dom.id "admin_importBackendButton")
                         , admin.checkView
                             500
