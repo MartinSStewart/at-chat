@@ -1957,45 +1957,55 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             (handleNormalHttpRequests (\_ -> Nothing))
             handlePortToJs
             (\requestData ->
-                UploadFile
-                    (T.uploadBytesFile
-                        "backend-export.bin"
-                        "application/octet-stream"
-                        (Bytes.Encode.encode (WireHelper.encodeBackendModel requestData.data.backend))
-                        startTime
-                    )
+                case requestData.data.downloads of
+                    [ backup ] ->
+                        case backup.content of
+                            T.BytesFile bytes ->
+                                UploadFile
+                                    (T.uploadBytesFile backup.filename backup.mimeType bytes startTime)
+
+                            T.StringFile _ ->
+                                UnhandledFileUpload
+
+                    _ ->
+                        UnhandledFileUpload
             )
             handleMultiFileUpload
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
-            (\admin _ ->
+            (\admin user ->
                 [ writeMessage admin "Hello export test!"
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_expandSectionButton_Export/Import")
-                , admin.click 100 (Dom.id "admin_exportBackendButton")
-                , T.checkState
-                    500
-                    (\data ->
-                        if SeqDict.size data.backend.guilds >= 1 then
-                            Ok ()
-
-                        else
-                            Err "Expected at least one guild in backend after export"
-                    )
-                , admin.click 100 (Dom.id "admin_importBackendButton")
-                , admin.checkView
-                    500
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Imported!" ])
-                , T.checkState
+                , T.andThen
                     100
-                    (\data ->
-                        if SeqDict.size data.backend.guilds >= 1 then
-                            Ok ()
+                    (\beforeExportData ->
+                        [ admin.click 100 (Dom.id "admin_exportBackendButton")
 
-                        else
-                            Err "Expected at least one guild in backend after import"
+                        -- Add here admin actions here to delete all guilds and users (excluding admin)
+                        , admin.click 300 (Dom.id "admin_importBackendButton")
+                        , admin.checkView
+                            500
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Imported!" ])
+                        , T.checkState
+                            100
+                            (\afterImportData ->
+                                if
+                                    (beforeExportData.backend.guilds == afterImportData.backend.guilds)
+                                        && (beforeExportData.backend.dmChannels == afterImportData.backend.dmChannels)
+                                        && (beforeExportData.backend.discordGuilds == afterImportData.backend.discordGuilds)
+                                        && (beforeExportData.backend.discordDmChannels == afterImportData.backend.discordDmChannels)
+                                        && (beforeExportData.backend.users == afterImportData.backend.users)
+                                        && (beforeExportData.backend.discordUsers == afterImportData.backend.discordUsers)
+                                then
+                                    Ok ()
+
+                                else
+                                    Err "Expected at least one guild in backend after import"
+                            )
+                        ]
                     )
                 ]
             )
