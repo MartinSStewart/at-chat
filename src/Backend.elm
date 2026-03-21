@@ -4910,17 +4910,17 @@ handleExportBackendStep clientId isPartial exportState model =
                                     )
 
 
-assembleStreamedExport : ExportState -> Bytes.Bytes
+assembleStreamedExport : ExportState -> Bytes
 assembleStreamedExport state =
     let
-        encodeLengthPrefixed : Bytes.Bytes -> Bytes.Encode.Encoder
+        encodeLengthPrefixed : Bytes -> Bytes.Encode.Encoder
         encodeLengthPrefixed bytes =
             Bytes.Encode.sequence
                 [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width bytes)
                 , Bytes.Encode.bytes bytes
                 ]
 
-        encodeItemList : List Bytes.Bytes -> Bytes.Encode.Encoder
+        encodeItemList : List Bytes -> Bytes.Encode.Encoder
         encodeItemList items =
             Bytes.Encode.sequence
                 (Bytes.Encode.unsignedInt32 Bytes.BE (List.length items)

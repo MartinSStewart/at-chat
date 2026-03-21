@@ -4,8 +4,6 @@ import Array
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
-import Bytes.Decode
-import Bytes.Encode
 import Codec
 import Coord
 import Dict exposing (Dict)
@@ -22,7 +20,7 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelMessageId, GuildId, Id, UserId)
+import Id exposing (ChannelMessageId, Id)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -44,7 +42,6 @@ import Unsafe
 import Url exposing (Url)
 import User
 import VisibleMessages
-import WireHelper
 
 
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
@@ -1984,7 +1981,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
-            (\admin user ->
+            (\admin _ ->
                 [ writeMessage admin "Hello export test!"
                 , linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
@@ -2029,8 +2026,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                                 in
                                 deleteGuildActions
                                     ++ deleteUserActions
-                                    ++ [ admin.click 100 (Dom.id "admin_saveUserChangesButton") ]
-                                    ++ [ admin.click 100 (Dom.id "Admin_deleteDiscordGuildButton_705745250815311942")
+                                    ++ [ admin.click 100 (Dom.id "admin_saveUserChangesButton")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordGuildButton_705745250815311942")
                                        , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_185574444641550336")
                                        , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_222087308516524036")
                                        , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_1215077285749858324")

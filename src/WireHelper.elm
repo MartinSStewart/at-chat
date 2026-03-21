@@ -1,10 +1,5 @@
 module WireHelper exposing
-    ( decodeBackendModel
-    , decodeDiscordDmChannel
-    , decodeDiscordGuild
-    , decodeDmChannel
-    , decodeGuild
-    , decodeStreamedBackendModel
+    ( decodeStreamedBackendModel
     , encodeBackendModel
     , encodeDiscordDmChannel
     , encodeDiscordGuild
@@ -23,7 +18,7 @@ import DmChannel
 import Id exposing (GuildId, Id)
 import Lamdera.Wire3
 import LocalState
-import SeqDict exposing (SeqDict)
+import SeqDict
 import Types exposing (BackendModel)
 
 

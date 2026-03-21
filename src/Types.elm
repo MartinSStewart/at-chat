@@ -570,13 +570,13 @@ type BackendMsg
 
 type alias ExportState =
     { baseModel : Bytes
-    , remainingGuilds : List ( Id GuildId, LocalState.BackendGuild )
+    , remainingGuilds : List ( Id GuildId, BackendGuild )
     , encodedGuilds : List Bytes
-    , remainingDmChannels : List ( DmChannelId, DmChannel.DmChannel )
+    , remainingDmChannels : List ( DmChannelId, DmChannel )
     , encodedDmChannels : List Bytes
-    , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild )
+    , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, DiscordBackendGuild )
     , encodedDiscordGuilds : List Bytes
-    , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DmChannel.DiscordDmChannel )
+    , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel )
     , encodedDiscordDmChannels : List Bytes
     }
 
