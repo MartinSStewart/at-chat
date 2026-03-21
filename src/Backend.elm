@@ -209,6 +209,7 @@ init =
       , discordAttachments = SeqDict.empty
       , loadingDiscordChannels = SeqDict.empty
       , signupsEnabled = True
+      , exportState = Nothing
       }
     , Command.none
     )
@@ -246,6 +247,12 @@ subscriptions model =
             )
             (SeqDict.toList model.discordUsers)
             |> Subscription.batch
+        , case model.exportState of
+            Just _ ->
+                Time.every (Duration.milliseconds 30) (\_ -> ExportBackendStep)
+
+            Nothing ->
+                Subscription.none
         ]
 
 
@@ -1204,8 +1211,13 @@ update msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        ExportBackendStep clientId isPartial exportStep ->
-            handleExportBackendStep clientId isPartial exportStep model
+        ExportBackendStep ->
+            case model.exportState of
+                Just exportState ->
+                    handleExportBackendStep exportState model
+
+                Nothing ->
+                    ( model, Command.none )
 
         DiscordGotDataForJoinedOrCreatedGuild discordUserId guildId time result ->
             case ( result, SeqDict.get guildId model.discordGuilds ) of
@@ -4742,9 +4754,9 @@ updateFromFrontendAdmin clientId toBackend model =
 
                         ExportAll ->
                             list
-
-                exportState : ExportState
-                exportState =
+            in
+            ( { model
+                | exportState =
                     { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
                     , remainingGuilds = SeqDict.toList model.guilds |> partialList
                     , encodedGuilds = []
@@ -4754,15 +4766,14 @@ updateFromFrontendAdmin clientId toBackend model =
                     , encodedDiscordGuilds = []
                     , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels |> partialList
                     , encodedDiscordDmChannels = []
+                    , exportSubset = isPartial
+                    , clientId = clientId
                     }
-            in
-            ( model
-            , Command.batch
-                [ Pages.Admin.ExportBackendProgress Pages.Admin.ExportStarting
-                    |> AdminToFrontend
-                    |> Lamdera.sendToFrontend clientId
-                , Task.perform (\() -> ExportBackendStep clientId isPartial exportState) (Task.succeed ())
-                ]
+                        |> Just
+              }
+            , Pages.Admin.ExportBackendProgress Pages.Admin.ExportStarting
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend clientId
             )
 
         Pages.Admin.ImportBackendRequest bytes ->
@@ -4778,18 +4789,15 @@ updateFromFrontendAdmin clientId toBackend model =
                     )
 
 
-handleExportBackendStep : ClientId -> ExportSubset -> ExportState -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleExportBackendStep clientId isPartial exportState model =
+handleExportBackendStep : ExportState -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleExportBackendStep exportState model =
     let
         send : Pages.Admin.ExportProgress -> ExportState -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
         send progress newState =
-            ( model
-            , Command.batch
-                [ Pages.Admin.ExportBackendProgress progress
-                    |> AdminToFrontend
-                    |> Lamdera.sendToFrontend clientId
-                , Task.perform (\() -> ExportBackendStep clientId isPartial newState) (Task.succeed ())
-                ]
+            ( { model | exportState = Just newState }
+            , Pages.Admin.ExportBackendProgress progress
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend exportState.clientId
             )
     in
     case exportState.remainingGuilds of
@@ -4883,11 +4891,11 @@ handleExportBackendStep clientId isPartial exportState model =
                                                     :: List.map encodeLengthPrefixed (List.reverse items)
                                                 )
                                     in
-                                    ( model
+                                    ( { model | exportState = Nothing }
                                     , Command.batch
                                         [ Pages.Admin.ExportBackendProgress Pages.Admin.ExportingFinalStep
                                             |> AdminToFrontend
-                                            |> Lamdera.sendToFrontend clientId
+                                            |> Lamdera.sendToFrontend exportState.clientId
                                         , Bytes.Encode.encode
                                             (Bytes.Encode.sequence
                                                 [ encodeLengthPrefixed exportState.baseModel
@@ -4897,9 +4905,9 @@ handleExportBackendStep clientId isPartial exportState model =
                                                 , encodeItemList exportState.encodedDiscordDmChannels
                                                 ]
                                             )
-                                            |> Pages.Admin.ExportBackendResponse isPartial
+                                            |> Pages.Admin.ExportBackendResponse exportState.exportSubset
                                             |> AdminToFrontend
-                                            |> Lamdera.sendToFrontend clientId
+                                            |> Lamdera.sendToFrontend exportState.clientId
                                         ]
                                     )
 

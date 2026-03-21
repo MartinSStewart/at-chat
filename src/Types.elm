@@ -298,6 +298,7 @@ type alias BackendModel =
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
     , signupsEnabled : Bool
+    , exportState : Maybe ExportState
     }
 
 
@@ -550,7 +551,7 @@ type BackendMsg
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
-    | ExportBackendStep ClientId ExportSubset ExportState
+    | ExportBackendStep
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
@@ -578,6 +579,8 @@ type alias ExportState =
     , encodedDiscordGuilds : List Bytes
     , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel )
     , encodedDiscordDmChannels : List Bytes
+    , exportSubset : ExportSubset
+    , clientId : ClientId
     }
 
 
