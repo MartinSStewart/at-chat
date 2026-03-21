@@ -83,6 +83,12 @@ basicFormattingTests =
                                 []
                             )
                         ]
+        , Test.test "escaped characters" <|
+            \_ ->
+                fromDiscordHelper "\\*Bullet point 1\n\\*Bullet point 2"
+                    |> Expect.equal
+                        [ NormalText '*' "Bullet point 1\n*Bullet point 2"
+                        ]
         ]
 
 

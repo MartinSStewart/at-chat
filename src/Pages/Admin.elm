@@ -2,6 +2,8 @@ module Pages.Admin exposing
     ( AdminChange(..)
     , EditedBackendUser
     , EditingCell
+    , ExportProgress(..)
+    , ExportSubset(..)
     , ImportBackendStatus(..)
     , InitAdminData
     , Model
@@ -125,15 +127,28 @@ type Msg
 
 
 type ToBackend
-    = ExportBackendRequest
-    | ExportSubsetBackendRequest
+    = ExportBackendRequest ExportSubset
     | ImportBackendRequest Bytes
 
 
+type ExportSubset
+    = ExportSubset
+    | ExportAll
+
+
 type ToFrontend
-    = ExportBackendResponse Bytes
-    | ExportSubsetBackendResponse Bytes
+    = ExportBackendResponse ExportSubset Bytes
     | ImportBackendResponse (Result () ())
+    | ExportBackendProgress ExportProgress
+
+
+type ExportProgress
+    = ExportStarting
+    | ExportingGuilds { encoded : Int, total : Int }
+    | ExportingDmChannels { encoded : Int, total : Int }
+    | ExportingDiscordGuilds { encoded : Int, total : Int }
+    | ExportingDiscordDmChannels { encoded : Int, total : Int }
+    | ExportingFinalStep
 
 
 type alias Model =
@@ -147,6 +162,7 @@ type alias Model =
     , openRouterKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
+    , exportProgress : Maybe ExportProgress
     }
 
 
@@ -258,6 +274,7 @@ initForUser =
     , openRouterKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
+    , exportProgress = Nothing
     }
 
 
@@ -279,6 +296,7 @@ initForAdmin { highlightLog } =
     , openRouterKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
+    , exportProgress = Nothing
     }
 
 
@@ -978,10 +996,10 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, NoOutMsg )
 
         PressedExportBackend ->
-            ( model, Lamdera.sendToBackend ExportBackendRequest, NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportAll), NoOutMsg )
 
         PressedExportSubsetBackend ->
-            ( model, Lamdera.sendToBackend ExportSubsetBackendRequest, NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportSubset), NoOutMsg )
 
         PressedImportBackend ->
             case model.importBackendStatus of
@@ -1146,11 +1164,22 @@ updateUserTable updateFunc model =
 updateFromBackend : ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 updateFromBackend toFrontend model =
     case toFrontend of
-        ExportBackendResponse bytes ->
-            ( model, Effect.File.Download.bytes "backend-export.bin" "application/octet-stream" bytes )
+        ExportBackendResponse isPartial bytes ->
+            ( { model | exportProgress = Nothing }
+            , Effect.File.Download.bytes
+                (case isPartial of
+                    ExportAll ->
+                        "backend-export.bin"
 
-        ExportSubsetBackendResponse bytes ->
-            ( model, Effect.File.Download.bytes "backend-export-subset.bin" "application/octet-stream" bytes )
+                    ExportSubset ->
+                        "backend-export-subset.bin"
+                )
+                "application/octet-stream"
+                bytes
+            )
+
+        ExportBackendProgress progress ->
+            ( { model | exportProgress = Just progress }, Command.none )
 
         ImportBackendResponse result ->
             case result of
@@ -1345,20 +1374,51 @@ connectionsSection timezone user adminData =
         ]
 
 
+exportProgressText : ExportProgress -> String
+exportProgressText progress =
+    case progress of
+        ExportStarting ->
+            "Starting export..."
+
+        ExportingGuilds { encoded, total } ->
+            "Encoding guilds " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
+
+        ExportingDmChannels { encoded, total } ->
+            "Encoding DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
+
+        ExportingDiscordGuilds { encoded, total } ->
+            "Encoding Discord guilds " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
+
+        ExportingDiscordDmChannels { encoded, total } ->
+            "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
+
+        ExportingFinalStep ->
+            "Assembling export..."
+
+
 exportSection : BackendUser -> Model -> Element Msg
 exportSection user model =
     section
         8
         user.expandedSections
         ExportSection
-        [ MyUi.simpleButton
-            (Dom.id "admin_exportBackendButton")
-            PressedExportBackend
-            (Ui.text "Export backend")
-        , MyUi.simpleButton
-            (Dom.id "admin_exportSubsetBackendButton")
-            PressedExportSubsetBackend
-            (Ui.text "Export subset")
+        [ Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_exportBackendButton")
+                PressedExportBackend
+                (Ui.text "Export backend")
+            , MyUi.simpleButton
+                (Dom.id "admin_exportSubsetBackendButton")
+                PressedExportSubsetBackend
+                (Ui.text "Export subset")
+            , case model.exportProgress of
+                Nothing ->
+                    Ui.none
+
+                Just progress ->
+                    exportProgressText progress |> Ui.text
+            ]
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton

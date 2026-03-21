@@ -2,13 +2,16 @@ module RichText exposing
     ( Domain(..)
     , Embed(..)
     , EmbedData
+    , EscapedChar(..)
     , Language(..)
+    , Modifiers(..)
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
     , attachedFileSuffix
     , domainToString
     , emptyEmbed
+    , escapedCharToString
     , fromDiscord
     , fromNonemptyString
     , hyperlinks
@@ -25,6 +28,7 @@ module RichText exposing
 
 import Array exposing (Array)
 import Coord
+import Dict exposing (Dict)
 import Discord
 import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -62,7 +66,44 @@ type RichText userId
     | InlineCode Char String
     | CodeBlock Language String
     | AttachedFile (Id FileId)
-    | EscapedChar Char
+    | EscapedChar EscapedChar
+
+
+type EscapedChar
+    = EscapedModifier Modifiers
+    | EscapedSquareBracket
+    | EscapedBackslash
+    | EscapedBacktick
+    | EscapedAtSymbol
+
+
+allEscapedChars : List EscapedChar
+allEscapedChars =
+    [ EscapedSquareBracket
+    , EscapedBackslash
+    , EscapedBacktick
+    , EscapedAtSymbol
+    ]
+        ++ List.map EscapedModifier allModifiers
+
+
+escapedCharToString : EscapedChar -> String
+escapedCharToString escaped =
+    case escaped of
+        EscapedModifier modifiers ->
+            modifierToSymbol modifiers |> String.Nonempty.toString
+
+        EscapedSquareBracket ->
+            "["
+
+        EscapedBackslash ->
+            "\\"
+
+        EscapedBacktick ->
+            "`"
+
+        EscapedAtSymbol ->
+            "@"
 
 
 type Language
@@ -253,7 +294,7 @@ toStringWithGetter userToString users nonempty =
                     attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
 
                 EscapedChar char ->
-                    "\\" ++ String.fromChar char
+                    "\\" ++ escapedCharToString char
         )
         nonempty
         |> List.Nonempty.toList
@@ -313,7 +354,7 @@ toString users nonempty =
                     attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
 
                 EscapedChar char ->
-                    "\\" ++ String.fromChar char
+                    "\\" ++ escapedCharToString char
         )
         nonempty
         |> List.Nonempty.toList
@@ -458,14 +499,14 @@ type alias LoopState userId =
     { current : Array String, rest : Array (RichText userId) }
 
 
-escapableChars : Set Char
-escapableChars =
-    Set.fromList [ '\\', '*', '_', '|', '`', '@', '~' ]
+charToEscaped : Dict String EscapedChar
+charToEscaped =
+    List.map (\escaped -> ( escapedCharToString escaped, escaped )) allEscapedChars |> Dict.fromList
 
 
-discordEscapableChars : Set Char
+discordEscapableChars : Set String
 discordEscapableChars =
-    Set.fromList [ '\\', '*', '>', '`', '~', '@' ]
+    Set.fromList [ "\\", "*", ">", "`", "~", "@" ]
 
 
 parser : SeqDict userId { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText userId))
@@ -476,24 +517,15 @@ parser users modifiers =
             Parser.oneOf
                 [ Parser.succeed
                     (\text ->
-                        case String.toList text of
-                            char :: _ ->
-                                if Set.member char escapableChars then
-                                    Loop
-                                        { current = Array.empty
-                                        , rest =
-                                            Array.append
-                                                state.rest
-                                                (Array.push
-                                                    (EscapedChar char)
-                                                    (parserHelper state)
-                                                )
-                                        }
+                        case Dict.get text charToEscaped of
+                            Just escaped ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append state.rest (Array.push (EscapedChar escaped) (parserHelper state))
+                                    }
 
-                                else
-                                    Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
-
-                            [] ->
+                            Nothing ->
                                 Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
                     )
                     |. Parser.symbol "\\"
@@ -1323,7 +1355,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                             ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
 
                 EscapedChar char ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (String.fromChar char) ] )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -1813,7 +1845,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                     ]
 
                 EscapedChar char ->
-                    [ formatText "\\", Html.text (String.fromChar char) ]
+                    [ formatText "\\", Html.text (escapedCharToString char) ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -1989,20 +2021,11 @@ discordParser modifiers =
             Parser.oneOf
                 [ Parser.succeed
                     (\text ->
-                        case String.toList text of
-                            char :: _ ->
-                                if Set.member char discordEscapableChars then
-                                    Loop
-                                        { current = Array.empty
-                                        , rest =
-                                            Array.append state.rest (Array.push (EscapedChar char) (parserHelper state))
-                                        }
+                        if Set.member text discordEscapableChars then
+                            Loop { current = Array.push text state.current, rest = state.rest }
 
-                                else
-                                    Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
-
-                            [] ->
-                                Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
+                        else
+                            Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
                     )
                     |. Parser.symbol "\\"
                     |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
@@ -2181,7 +2204,7 @@ toDiscord content =
                     Discord.Markdown.text ""
 
                 EscapedChar char ->
-                    Discord.Markdown.text (String.fromChar char)
+                    Discord.Markdown.text (escapedCharToString char)
         )
         (List.Nonempty.toList content)
 
