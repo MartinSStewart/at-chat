@@ -4,6 +4,8 @@ import Array
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
+import Bytes.Decode
+import Bytes.Encode
 import Codec
 import Coord
 import Dict exposing (Dict)
@@ -41,6 +43,7 @@ import Unsafe
 import Url exposing (Url)
 import User
 import VisibleMessages
+import WireHelper
 
 
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
@@ -1942,6 +1945,58 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                 , tab1.focus 17 (Dom.id "channel_textinput")
                 , tab1.blur 3994 (Dom.id "channel_textinput")
                 , tab1.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unable to reach the server." ])
+                ]
+            )
+        ]
+    , T.start
+        "Export and import backend round-trip"
+        startTime
+        (T.Config
+            Frontend.app_
+            Backend.app_
+            (handleNormalHttpRequests (\_ -> Nothing))
+            handlePortToJs
+            (\requestData ->
+                UploadFile
+                    (T.uploadBytesFile
+                        "backend-export.bin"
+                        "application/octet-stream"
+                        (Bytes.Encode.encode (WireHelper.encodeBackendModel requestData.data.backend))
+                        startTime
+                    )
+            )
+            handleMultiFileUpload
+            domain
+        )
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin _ ->
+                [ writeMessage admin "Hello export test!"
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_Export/Import")
+                , admin.click 100 (Dom.id "admin_exportBackendButton")
+                , T.checkState
+                    500
+                    (\data ->
+                        if SeqDict.size data.backend.guilds >= 1 then
+                            Ok ()
+
+                        else
+                            Err "Expected at least one guild in backend after export"
+                    )
+                , admin.click 100 (Dom.id "admin_importBackendButton")
+                , admin.checkView
+                    500
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Imported!" ])
+                , T.checkState
+                    100
+                    (\data ->
+                        if SeqDict.size data.backend.guilds >= 1 then
+                            Ok ()
+
+                        else
+                            Err "Expected at least one guild in backend after import"
+                    )
                 ]
             )
         ]
