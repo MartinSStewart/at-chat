@@ -1985,6 +1985,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                     (\beforeExportData ->
                         [ admin.click 100 (Dom.id "admin_exportBackendButton")
                         , admin.click 100 (Dom.id "admin_expandSectionButton_Guilds")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Users")
                         , T.andThen
                             100
                             (\data ->
