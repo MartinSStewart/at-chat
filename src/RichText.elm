@@ -2,13 +2,16 @@ module RichText exposing
     ( Domain(..)
     , Embed(..)
     , EmbedData
+    , EscapedChar(..)
     , Language(..)
+    , Modifiers(..)
     , RichText(..)
     , RichTextState
     , attachedFilePrefix
     , attachedFileSuffix
     , domainToString
     , emptyEmbed
+    , escapedCharToString
     , fromDiscord
     , fromNonemptyString
     , hyperlinks

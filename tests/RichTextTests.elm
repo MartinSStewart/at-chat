@@ -4,7 +4,7 @@ import Expect
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
-import RichText exposing (RichText(..))
+import RichText exposing (EscapedChar(..), Modifiers(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -167,6 +167,29 @@ test =
                             (NormalText 'G' "o to ")
                             [ Spoiler (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [])
                             , NormalText '.' " Click on the sign up."
+                            ]
+                        )
+        , Test.test "Escape characters" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '\\' "*Bullet point 1\n\\*Bullet point 2")
+                    |> Expect.equal
+                        (Nonempty
+                            (EscapedChar (EscapedModifier IsBold))
+                            [ NormalText 'B' "ullet point 1\n"
+                            , EscapedChar (EscapedModifier IsBold)
+                            , NormalText 'B' "ullet point 2"
+                            ]
+                        )
+        , Test.test "Escape characters 2" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '\\' "**Bullet point 1*\n\\*Bullet point 2")
+                    |> Expect.equal
+                        (Nonempty
+                            (EscapedChar (EscapedModifier IsBold))
+                            [ Bold (Nonempty (NormalText 'B' "ullet point 1") [])
+                            , NormalText '\n' ""
+                            , EscapedChar (EscapedModifier IsBold)
+                            , NormalText 'B' "ullet point 2"
                             ]
                         )
 
