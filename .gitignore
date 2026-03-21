@@ -7,3 +7,4 @@ elm-pkg-js/test-gen.js
 endpoint.json
 rust-server/target/
 tests/var/lib/atchat/
+index.html
