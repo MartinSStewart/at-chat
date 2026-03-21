@@ -1472,29 +1472,21 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserOutMsg_GuildMemberRemoveEvent guildId user ->
-                            let
-                                ( model3, cmd2 ) =
-                                    case SeqDict.get guildId model2.discordGuilds of
-                                        Just guild ->
-                                            ( { model2
-                                                | discordUsers =
-                                                    addDiscordUserData
-                                                        (Discord.userToPartialUser user)
-                                                        model2.discordUsers
-                                                , discordGuilds =
-                                                    SeqDict.insert
-                                                        guildId
-                                                        { guild | members = SeqDict.remove user.id guild.members }
-                                                        model2.discordGuilds
-                                              }
-                                            , getUserAvatars model2.discordUsers [ user ]
-                                            )
+                        Discord.UserOutMsg_GuildMemberRemoveEvent guildId userId ->
+                            ( case SeqDict.get guildId model2.discordGuilds of
+                                Just guild ->
+                                    { model2
+                                        | discordGuilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild | members = SeqDict.remove userId guild.members }
+                                                model2.discordGuilds
+                                    }
 
-                                        Nothing ->
-                                            ( model2, Command.none )
-                            in
-                            ( model3, cmd2 :: cmds )
+                                Nothing ->
+                                    model2
+                            , cmds
+                            )
 
                         Discord.UserOutMsg_GuildMemberUpdateEvent guildMemberUpdate ->
                             let

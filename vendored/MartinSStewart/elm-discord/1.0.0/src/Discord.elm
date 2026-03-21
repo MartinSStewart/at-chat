@@ -4705,7 +4705,7 @@ decodeDispatchEvent eventName =
             JD.field "d"
                 (JD.succeed DispatchBot_GuildMemberRemoveEvent
                     |> JD.andMap (JD.field "guild_id" decodeId)
-                    |> JD.andMap (JD.field "user" decodeUser)
+                    |> JD.andMap (JD.at [ "user", "id" ] decodeId)
                 )
 
         "GUILD_MEMBER_UPDATE" ->
@@ -4803,7 +4803,7 @@ decodeDispatchUserEvent eventName =
             JD.field "d"
                 (JD.succeed DispatchUser_GuildMemberRemoveEvent
                     |> JD.andMap (JD.field "guild_id" decodeId)
-                    |> JD.andMap (JD.field "user" decodeUser)
+                    |> JD.andMap (JD.at [ "user", "id" ] decodeId)
                 )
 
         "GUILD_MEMBER_UPDATE" ->
@@ -5060,7 +5060,7 @@ type OpDispatchBotEvent
     | DispatchBot_MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
     | DispatchBot_MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
     | DispatchBot_GuildMemberAddEvent (Id GuildId) GuildMember
-    | DispatchBot_GuildMemberRemoveEvent (Id GuildId) User
+    | DispatchBot_GuildMemberRemoveEvent (Id GuildId) (Id UserId)
     | DispatchBot_GuildMemberUpdateEvent GuildMemberUpdate
     | DispatchBot_ThreadCreatedOrUserAddedToThreadEvent Channel
     | DispatchBot_MessageReactionAdd ReactionAdd
@@ -5079,7 +5079,7 @@ type OpDispatchUserEvent
     | DispatchUser_MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
     | DispatchUser_MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
     | DispatchUser_GuildMemberAddEvent (Id GuildId) GuildMember
-    | DispatchUser_GuildMemberRemoveEvent (Id GuildId) User
+    | DispatchUser_GuildMemberRemoveEvent (Id GuildId) (Id UserId)
     | DispatchUser_GuildMemberUpdateEvent GuildMemberUpdate
     | DispatchUser_ThreadCreatedOrUserAddedToThreadEvent Channel
     | DispatchUser_MessageReactionAdd ReactionAdd
@@ -5750,6 +5750,7 @@ type OutMsg connection
     | AllReactionsRemoved ReactionRemoveAll
     | ReactionsRemoveForEmoji ReactionRemoveEmoji
     | TypingStarted TypingStart
+    | GuildMemberRemoved (Id GuildId) (Id UserId)
 
 
 type UserOutMsg connection
@@ -5776,7 +5777,7 @@ type UserOutMsg connection
     | UserOutMsg_PresenceUpdate Presence
     | UserOutMsg_EmbeddedActivityUpdateV2 EmbeddedActivityUpdateV2
     | UserOutMsg_GuildMemberAddEvent (Id GuildId) GuildMember
-    | UserOutMsg_GuildMemberRemoveEvent (Id GuildId) User
+    | UserOutMsg_GuildMemberRemoveEvent (Id GuildId) (Id UserId)
     | UserOutMsg_GuildMemberUpdateEvent GuildMemberUpdate
     | UserOutMsg_VoiceStateUpdate VoiceStateUpdate
     | UserOutMsg_JoinedOrCreatedGuild GatewayGuild
@@ -5956,10 +5957,8 @@ handleGateway authToken intents response model =
                             , []
                             )
 
-                        DispatchBot_GuildMemberRemoveEvent guildId user ->
-                            ( model
-                            , []
-                            )
+                        DispatchBot_GuildMemberRemoveEvent guildId userId ->
+                            ( model, [ GuildMemberRemoved guildId userId ] )
 
                         DispatchBot_GuildMemberUpdateEvent _ ->
                             ( model, [] )
@@ -6081,8 +6080,8 @@ handleUserGateway authToken intents response model =
                         DispatchUser_GuildMemberAddEvent guildId guildMember ->
                             ( model, [ UserOutMsg_GuildMemberAddEvent guildId guildMember ] )
 
-                        DispatchUser_GuildMemberRemoveEvent guildId user ->
-                            ( model, [ UserOutMsg_GuildMemberRemoveEvent guildId user ] )
+                        DispatchUser_GuildMemberRemoveEvent guildId userId ->
+                            ( model, [ UserOutMsg_GuildMemberRemoveEvent guildId userId ] )
 
                         DispatchUser_GuildMemberUpdateEvent guildMemberUpdate ->
                             ( model, [ UserOutMsg_GuildMemberUpdateEvent guildMemberUpdate ] )
