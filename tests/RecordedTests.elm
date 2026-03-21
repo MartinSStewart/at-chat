@@ -1981,8 +1981,10 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
-            (\admin _ ->
+            (\admin user ->
                 [ writeMessage admin "Hello export test!"
+                , user.click 100 (Dom.id "guild_openDm_0")
+                , writeMessage user "Hello!"
                 , linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
                     "Joe"

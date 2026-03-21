@@ -4780,26 +4780,9 @@ updateFromFrontendAdmin clientId toBackend model =
 
 handleExportBackendStep : ClientId -> ExportSubset -> ExportState -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleExportBackendStep clientId isPartial exportState model =
-    case exportState.remainingGuilds of
-        entry :: rest ->
-            let
-                encoded : Bytes
-                encoded =
-                    Bytes.Encode.encode (WireHelper.encodeGuild entry)
-
-                newState =
-                    { exportState
-                        | remainingGuilds = rest
-                        , encodedGuilds = encoded :: exportState.encodedGuilds
-                    }
-
-                totalGuilds =
-                    List.length newState.encodedGuilds + List.length rest
-
-                progress : Pages.Admin.ExportProgress
-                progress =
-                    Pages.Admin.ExportingGuilds { encoded = List.length newState.encodedGuilds, total = totalGuilds }
-            in
+    let
+        send : Pages.Admin.ExportProgress -> ExportState -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        send progress newState =
             ( model
             , Command.batch
                 [ Pages.Admin.ExportBackendProgress progress
@@ -4808,134 +4791,117 @@ handleExportBackendStep clientId isPartial exportState model =
                 , Task.perform (\() -> ExportBackendStep clientId isPartial newState) (Task.succeed ())
                 ]
             )
+    in
+    case exportState.remainingGuilds of
+        entry :: rest ->
+            let
+                encodedCount : Int
+                encodedCount =
+                    List.length exportState.encodedGuilds
+            in
+            send
+                (Pages.Admin.ExportingGuilds
+                    { encoded = encodedCount + 1
+                    , total = encodedCount + List.length exportState.remainingGuilds
+                    }
+                )
+                { exportState
+                    | remainingGuilds = rest
+                    , encodedGuilds = Bytes.Encode.encode (WireHelper.encodeGuild entry) :: exportState.encodedGuilds
+                }
 
         [] ->
             case exportState.remainingDmChannels of
                 entry :: rest ->
                     let
-                        encoded =
-                            Bytes.Encode.encode (WireHelper.encodeDmChannel entry)
-
-                        newState =
-                            { exportState
-                                | remainingDmChannels = rest
-                                , encodedDmChannels = encoded :: exportState.encodedDmChannels
-                            }
-
-                        totalDm =
-                            List.length newState.encodedDmChannels + List.length rest
-
-                        progress =
-                            Pages.Admin.ExportingDmChannels { encoded = List.length newState.encodedDmChannels, total = totalDm }
+                        encodedCount : Int
+                        encodedCount =
+                            List.length exportState.encodedDmChannels
                     in
-                    ( model
-                    , Command.batch
-                        [ Pages.Admin.ExportBackendProgress progress
-                            |> AdminToFrontend
-                            |> Lamdera.sendToFrontend clientId
-                        , Task.perform (\() -> ExportBackendStep clientId isPartial newState) (Task.succeed ())
-                        ]
-                    )
+                    send
+                        (Pages.Admin.ExportingDmChannels
+                            { encoded = encodedCount + 1
+                            , total = encodedCount + List.length exportState.remainingDmChannels
+                            }
+                        )
+                        { exportState
+                            | remainingDmChannels = rest
+                            , encodedDmChannels = Bytes.Encode.encode (WireHelper.encodeDmChannel entry) :: exportState.encodedDmChannels
+                        }
 
                 [] ->
                     case exportState.remainingDiscordGuilds of
                         entry :: rest ->
                             let
-                                encoded =
-                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuild entry)
-
-                                newState =
-                                    { exportState
-                                        | remainingDiscordGuilds = rest
-                                        , encodedDiscordGuilds = encoded :: exportState.encodedDiscordGuilds
-                                    }
-
-                                totalDg =
-                                    List.length newState.encodedDiscordGuilds + List.length rest
-
-                                progress =
-                                    Pages.Admin.ExportingDiscordGuilds { encoded = List.length newState.encodedDiscordGuilds, total = totalDg }
+                                encodedCount : Int
+                                encodedCount =
+                                    List.length exportState.encodedDiscordGuilds
                             in
-                            ( model
-                            , Command.batch
-                                [ Pages.Admin.ExportBackendProgress progress
-                                    |> AdminToFrontend
-                                    |> Lamdera.sendToFrontend clientId
-                                , Task.perform (\() -> ExportBackendStep clientId isPartial newState) (Task.succeed ())
-                                ]
-                            )
+                            send
+                                (Pages.Admin.ExportingDiscordGuilds
+                                    { encoded = encodedCount + 1
+                                    , total = encodedCount + List.length exportState.remainingDiscordGuilds
+                                    }
+                                )
+                                { exportState
+                                    | remainingDiscordGuilds = rest
+                                    , encodedDiscordGuilds = Bytes.Encode.encode (WireHelper.encodeDiscordGuild entry) :: exportState.encodedDiscordGuilds
+                                }
 
                         [] ->
                             case exportState.remainingDiscordDmChannels of
                                 entry :: rest ->
                                     let
-                                        encoded =
-                                            Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry)
-
-                                        newState =
-                                            { exportState
-                                                | remainingDiscordDmChannels = rest
-                                                , encodedDiscordDmChannels = encoded :: exportState.encodedDiscordDmChannels
-                                            }
-
-                                        totalDdm =
-                                            List.length newState.encodedDiscordDmChannels + List.length rest
-
-                                        progress =
-                                            Pages.Admin.ExportingDiscordDmChannels { encoded = List.length newState.encodedDiscordDmChannels, total = totalDdm }
+                                        encodedCount : Int
+                                        encodedCount =
+                                            List.length exportState.encodedDiscordDmChannels
                                     in
-                                    ( model
-                                    , Command.batch
-                                        [ Pages.Admin.ExportBackendProgress progress
-                                            |> AdminToFrontend
-                                            |> Lamdera.sendToFrontend clientId
-                                        , Task.perform (\() -> ExportBackendStep clientId isPartial newState) (Task.succeed ())
-                                        ]
-                                    )
+                                    send
+                                        (Pages.Admin.ExportingDiscordDmChannels
+                                            { encoded = encodedCount + 1
+                                            , total = encodedCount + List.length exportState.remainingDiscordDmChannels
+                                            }
+                                        )
+                                        { exportState
+                                            | remainingDiscordDmChannels = rest
+                                            , encodedDiscordDmChannels = Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry) :: exportState.encodedDiscordDmChannels
+                                        }
 
                                 [] ->
                                     let
-                                        finalBytes =
-                                            assembleStreamedExport exportState
+                                        encodeLengthPrefixed : Bytes -> Bytes.Encode.Encoder
+                                        encodeLengthPrefixed bytes =
+                                            Bytes.Encode.sequence
+                                                [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width bytes)
+                                                , Bytes.Encode.bytes bytes
+                                                ]
+
+                                        encodeItemList : List Bytes -> Bytes.Encode.Encoder
+                                        encodeItemList items =
+                                            Bytes.Encode.sequence
+                                                (Bytes.Encode.unsignedInt32 Bytes.BE (List.length items)
+                                                    :: List.map encodeLengthPrefixed (List.reverse items)
+                                                )
                                     in
                                     ( model
                                     , Command.batch
                                         [ Pages.Admin.ExportBackendProgress Pages.Admin.ExportingFinalStep
                                             |> AdminToFrontend
                                             |> Lamdera.sendToFrontend clientId
-                                        , Pages.Admin.ExportBackendResponse isPartial finalBytes
+                                        , Bytes.Encode.encode
+                                            (Bytes.Encode.sequence
+                                                [ encodeLengthPrefixed exportState.baseModel
+                                                , encodeItemList exportState.encodedGuilds
+                                                , encodeItemList exportState.encodedDmChannels
+                                                , encodeItemList exportState.encodedDiscordGuilds
+                                                , encodeItemList exportState.encodedDiscordDmChannels
+                                                ]
+                                            )
+                                            |> Pages.Admin.ExportBackendResponse isPartial
                                             |> AdminToFrontend
                                             |> Lamdera.sendToFrontend clientId
                                         ]
                                     )
-
-
-assembleStreamedExport : ExportState -> Bytes
-assembleStreamedExport state =
-    let
-        encodeLengthPrefixed : Bytes -> Bytes.Encode.Encoder
-        encodeLengthPrefixed bytes =
-            Bytes.Encode.sequence
-                [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width bytes)
-                , Bytes.Encode.bytes bytes
-                ]
-
-        encodeItemList : List Bytes -> Bytes.Encode.Encoder
-        encodeItemList items =
-            Bytes.Encode.sequence
-                (Bytes.Encode.unsignedInt32 Bytes.BE (List.length items)
-                    :: List.map encodeLengthPrefixed (List.reverse items)
-                )
-    in
-    Bytes.Encode.encode
-        (Bytes.Encode.sequence
-            [ encodeLengthPrefixed state.baseModel
-            , encodeItemList state.encodedGuilds
-            , encodeItemList state.encodedDmChannels
-            , encodeItemList state.encodedDiscordGuilds
-            , encodeItemList state.encodedDiscordDmChannels
-            ]
-        )
 
 
 asUser :
