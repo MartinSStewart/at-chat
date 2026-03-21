@@ -44,6 +44,7 @@ import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Set exposing (Set)
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..), Url)
@@ -61,6 +62,7 @@ type RichText userId
     | InlineCode Char String
     | CodeBlock Language String
     | AttachedFile (Id FileId)
+    | EscapedChar Char
 
 
 type Language
@@ -146,6 +148,9 @@ removeAttachedFile fileId list =
 
                     else
                         Just richText
+
+                EscapedChar char ->
+                    Just richText
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -187,6 +192,9 @@ hyperlinks nonempty =
                     []
 
                 AttachedFile _ ->
+                    []
+
+                EscapedChar char ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -243,6 +251,9 @@ toStringWithGetter userToString users nonempty =
 
                 AttachedFile fileId ->
                     attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
+
+                EscapedChar char ->
+                    "\\" ++ String.fromChar char
         )
         nonempty
         |> List.Nonempty.toList
@@ -300,6 +311,9 @@ toString users nonempty =
 
                 AttachedFile fileId ->
                     attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
+
+                EscapedChar char ->
+                    "\\" ++ String.fromChar char
         )
         nonempty
         |> List.Nonempty.toList
@@ -365,6 +379,9 @@ normalize nonempty =
 
                 AttachedFile fileId ->
                     List.Nonempty.cons (AttachedFile fileId) nonempty2
+
+                EscapedChar char ->
+                    List.Nonempty.cons (EscapedChar char) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -400,6 +417,9 @@ normalize nonempty =
 
                 AttachedFile fileId ->
                     AttachedFile fileId
+
+                EscapedChar char ->
+                    EscapedChar char
             )
             []
         )
@@ -438,13 +458,47 @@ type alias LoopState userId =
     { current : Array String, rest : Array (RichText userId) }
 
 
+escapableChars : Set Char
+escapableChars =
+    Set.fromList [ '\\', '*', '_', '~', '|', '`', '@', '~' ]
+
+
+discordEscapableChars : Set Char
+discordEscapableChars =
+    Set.fromList [ '\\', '*', '~', '>', '`', '~', '@' ]
+
+
 parser : SeqDict userId { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText userId))
 parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
         (\state ->
             Parser.oneOf
-                [ Parser.succeed identity
+                [ Parser.succeed
+                    (\text ->
+                        case String.toList text of
+                            char :: _ ->
+                                if Set.member char escapableChars then
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push
+                                                    (EscapedChar char)
+                                                    (parserHelper state)
+                                                )
+                                        }
+
+                                else
+                                    Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
+
+                            [] ->
+                                Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
+                    )
+                    |. Parser.symbol "\\"
+                    |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
+                , Parser.succeed identity
                     |. Parser.symbol "@"
                     |= Parser.oneOf
                         ((SeqDict.toList users
@@ -672,7 +726,7 @@ allModifiers =
 
 stopOnChar : SeqSet Char
 stopOnChar =
-    [ '[', '@', 'h', '`' ]
+    [ '[', '@', 'h', '`', '\\' ]
         ++ List.map
             (\modifier -> modifierToSymbol modifier |> String.Nonempty.head)
             allModifiers
@@ -877,6 +931,9 @@ mentionsUserHelper set nonempty =
                     set2
 
                 AttachedFile _ ->
+                    set2
+
+                EscapedChar char ->
                     set2
         )
         set
@@ -1264,6 +1321,9 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
 
                         Nothing ->
                             ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
+
+                EscapedChar char ->
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (String.fromChar char) ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -1751,6 +1811,9 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                       else
                         Html.text text
                     ]
+
+                EscapedChar char ->
+                    [ formatText "\\", Html.text (String.fromChar char) ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -1925,6 +1988,25 @@ discordParser modifiers =
         (\state ->
             Parser.oneOf
                 [ Parser.succeed
+                    (\text ->
+                        case String.toList text of
+                            char :: _ ->
+                                if Set.member char discordEscapableChars then
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append state.rest (Array.push (EscapedChar char) (parserHelper state))
+                                        }
+
+                                else
+                                    Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
+
+                            [] ->
+                                Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
+                    )
+                    |. Parser.symbol "\\"
+                    |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
+                , Parser.succeed
                     (\digits ->
                         case UInt64.fromString digits of
                             Just discordUserId ->
@@ -2043,7 +2125,7 @@ discordParser modifiers =
 
 discordStopOnChar : SeqSet Char
 discordStopOnChar =
-    [ '<', 'h', '`' ]
+    [ '<', 'h', '`', '\\' ]
         ++ List.map
             (\modifier -> discordModifierToSymbol modifier |> String.Nonempty.head)
             allDiscordModifiers
@@ -2097,6 +2179,9 @@ toDiscord content =
 
                 AttachedFile _ ->
                     Discord.Markdown.text ""
+
+                EscapedChar char ->
+                    Discord.Markdown.text (String.fromChar char)
         )
         (List.Nonempty.toList content)
 

@@ -464,6 +464,9 @@ richTextToMessage previousText previousList nonempty =
 
                 RichText.AttachedFile _ ->
                     ( currentText, list )
+
+                RichText.EscapedChar char ->
+                    ( currentText ++ "\\" ++ String.fromChar char, list )
         )
         ( previousText, previousList )
         (List.Nonempty.toList nonempty)
