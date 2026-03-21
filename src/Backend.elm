@@ -9,6 +9,7 @@ import Array exposing (Array)
 import Array.Extra
 import BackendExtra
 import Broadcast
+import Bytes
 import Bytes.Decode
 import Bytes.Encode
 import ChannelDescription
@@ -56,7 +57,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportState, ExportStep(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -1202,6 +1203,9 @@ update msg model =
 
                 Nothing ->
                     ( model, Command.none )
+
+        ExportBackendStep clientId exportStep ->
+            handleExportBackendStep clientId exportStep model
 
         DiscordGotDataForJoinedOrCreatedGuild discordUserId guildId time result ->
             case ( result, SeqDict.get guildId model.discordGuilds ) of
@@ -4721,9 +4725,12 @@ updateFromFrontendAdmin clientId toBackend model =
     case toBackend of
         Pages.Admin.ExportBackendRequest ->
             ( model
-            , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (WireHelper.encodeBackendModel model))
-                |> AdminToFrontend
-                |> Lamdera.sendToFrontend clientId
+            , Command.batch
+                [ Pages.Admin.ExportBackendProgress Pages.Admin.ExportStarting
+                    |> AdminToFrontend
+                    |> Lamdera.sendToFrontend clientId
+                , Task.perform (\() -> ExportBackendStep clientId ExportEncodeBaseModel) (Task.succeed ())
+                ]
             )
 
         Pages.Admin.ExportSubsetBackendRequest ->
@@ -4741,7 +4748,7 @@ updateFromFrontendAdmin clientId toBackend model =
             )
 
         Pages.Admin.ImportBackendRequest bytes ->
-            case Bytes.Decode.decode WireHelper.decodeBackendModel bytes of
+            case decodeExportedBackendModel bytes of
                 Just model2 ->
                     ( model2
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
@@ -4751,6 +4758,239 @@ updateFromFrontendAdmin clientId toBackend model =
                     ( model
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
                     )
+
+
+{-| Try decoding the streamed format first (version byte = 1), then fall back to legacy format.
+-}
+decodeExportedBackendModel : Bytes.Bytes -> Maybe BackendModel
+decodeExportedBackendModel bytes =
+    let
+        tryStreamed =
+            Bytes.Decode.decode
+                (Bytes.Decode.unsignedInt8
+                    |> Bytes.Decode.andThen
+                        (\version ->
+                            if version == WireHelper.streamedExportVersion then
+                                WireHelper.decodeStreamedBackendModel
+
+                            else
+                                Bytes.Decode.fail
+                        )
+                )
+                bytes
+    in
+    case tryStreamed of
+        Just model2 ->
+            Just model2
+
+        Nothing ->
+            Bytes.Decode.decode WireHelper.decodeBackendModel bytes
+
+
+handleExportBackendStep : ClientId -> ExportStep -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleExportBackendStep clientId step model =
+    case step of
+        ExportEncodeBaseModel ->
+            let
+                baseModel =
+                    { model
+                        | guilds = SeqDict.empty
+                        , dmChannels = SeqDict.empty
+                        , discordGuilds = SeqDict.empty
+                        , discordDmChannels = SeqDict.empty
+                    }
+
+                baseBytes =
+                    Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
+
+                exportState : ExportState
+                exportState =
+                    { baseModel = baseBytes
+                    , remainingGuilds = SeqDict.toList model.guilds
+                    , encodedGuilds = []
+                    , remainingDmChannels = SeqDict.toList model.dmChannels
+                    , encodedDmChannels = []
+                    , remainingDiscordGuilds = SeqDict.toList model.discordGuilds
+                    , encodedDiscordGuilds = []
+                    , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels
+                    , encodedDiscordDmChannels = []
+                    }
+
+                totalGuilds =
+                    SeqDict.size model.guilds
+
+                progress =
+                    if totalGuilds > 0 then
+                        Pages.Admin.ExportingGuilds { encoded = 0, total = totalGuilds }
+
+                    else
+                        Pages.Admin.ExportingDmChannels { encoded = 0, total = SeqDict.size model.dmChannels }
+            in
+            ( model
+            , Command.batch
+                [ Pages.Admin.ExportBackendProgress progress
+                    |> AdminToFrontend
+                    |> Lamdera.sendToFrontend clientId
+                , Task.perform (\() -> ExportBackendStep clientId (ExportEncodeNext exportState)) (Task.succeed ())
+                ]
+            )
+
+        ExportEncodeNext exportState ->
+            case exportState.remainingGuilds of
+                entry :: rest ->
+                    let
+                        encoded =
+                            Bytes.Encode.encode (WireHelper.encodeGuild entry)
+
+                        newState =
+                            { exportState
+                                | remainingGuilds = rest
+                                , encodedGuilds = encoded :: exportState.encodedGuilds
+                            }
+
+                        totalGuilds =
+                            List.length newState.encodedGuilds + List.length rest
+
+                        progress =
+                            Pages.Admin.ExportingGuilds { encoded = List.length newState.encodedGuilds, total = totalGuilds }
+                    in
+                    ( model
+                    , Command.batch
+                        [ Pages.Admin.ExportBackendProgress progress
+                            |> AdminToFrontend
+                            |> Lamdera.sendToFrontend clientId
+                        , Task.perform (\() -> ExportBackendStep clientId (ExportEncodeNext newState)) (Task.succeed ())
+                        ]
+                    )
+
+                [] ->
+                    case exportState.remainingDmChannels of
+                        entry :: rest ->
+                            let
+                                encoded =
+                                    Bytes.Encode.encode (WireHelper.encodeDmChannel entry)
+
+                                newState =
+                                    { exportState
+                                        | remainingDmChannels = rest
+                                        , encodedDmChannels = encoded :: exportState.encodedDmChannels
+                                    }
+
+                                totalDm =
+                                    List.length newState.encodedDmChannels + List.length rest
+
+                                progress =
+                                    Pages.Admin.ExportingDmChannels { encoded = List.length newState.encodedDmChannels, total = totalDm }
+                            in
+                            ( model
+                            , Command.batch
+                                [ Pages.Admin.ExportBackendProgress progress
+                                    |> AdminToFrontend
+                                    |> Lamdera.sendToFrontend clientId
+                                , Task.perform (\() -> ExportBackendStep clientId (ExportEncodeNext newState)) (Task.succeed ())
+                                ]
+                            )
+
+                        [] ->
+                            case exportState.remainingDiscordGuilds of
+                                entry :: rest ->
+                                    let
+                                        encoded =
+                                            Bytes.Encode.encode (WireHelper.encodeDiscordGuild entry)
+
+                                        newState =
+                                            { exportState
+                                                | remainingDiscordGuilds = rest
+                                                , encodedDiscordGuilds = encoded :: exportState.encodedDiscordGuilds
+                                            }
+
+                                        totalDg =
+                                            List.length newState.encodedDiscordGuilds + List.length rest
+
+                                        progress =
+                                            Pages.Admin.ExportingDiscordGuilds { encoded = List.length newState.encodedDiscordGuilds, total = totalDg }
+                                    in
+                                    ( model
+                                    , Command.batch
+                                        [ Pages.Admin.ExportBackendProgress progress
+                                            |> AdminToFrontend
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Task.perform (\() -> ExportBackendStep clientId (ExportEncodeNext newState)) (Task.succeed ())
+                                        ]
+                                    )
+
+                                [] ->
+                                    case exportState.remainingDiscordDmChannels of
+                                        entry :: rest ->
+                                            let
+                                                encoded =
+                                                    Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry)
+
+                                                newState =
+                                                    { exportState
+                                                        | remainingDiscordDmChannels = rest
+                                                        , encodedDiscordDmChannels = encoded :: exportState.encodedDiscordDmChannels
+                                                    }
+
+                                                totalDdm =
+                                                    List.length newState.encodedDiscordDmChannels + List.length rest
+
+                                                progress =
+                                                    Pages.Admin.ExportingDiscordDmChannels { encoded = List.length newState.encodedDiscordDmChannels, total = totalDdm }
+                                            in
+                                            ( model
+                                            , Command.batch
+                                                [ Pages.Admin.ExportBackendProgress progress
+                                                    |> AdminToFrontend
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Task.perform (\() -> ExportBackendStep clientId (ExportEncodeNext newState)) (Task.succeed ())
+                                                ]
+                                            )
+
+                                        [] ->
+                                            let
+                                                finalBytes =
+                                                    assembleStreamedExport exportState
+                                            in
+                                            ( model
+                                            , Command.batch
+                                                [ Pages.Admin.ExportBackendProgress Pages.Admin.ExportingFinalStep
+                                                    |> AdminToFrontend
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Pages.Admin.ExportBackendResponse finalBytes
+                                                    |> AdminToFrontend
+                                                    |> Lamdera.sendToFrontend clientId
+                                                ]
+                                            )
+
+
+assembleStreamedExport : ExportState -> Bytes.Bytes
+assembleStreamedExport state =
+    let
+        encodeLengthPrefixed : Bytes.Bytes -> Bytes.Encode.Encoder
+        encodeLengthPrefixed bytes =
+            Bytes.Encode.sequence
+                [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width bytes)
+                , Bytes.Encode.bytes bytes
+                ]
+
+        encodeItemList : List Bytes.Bytes -> Bytes.Encode.Encoder
+        encodeItemList items =
+            Bytes.Encode.sequence
+                (Bytes.Encode.unsignedInt32 Bytes.BE (List.length items)
+                    :: List.map encodeLengthPrefixed (List.reverse items)
+                )
+    in
+    Bytes.Encode.encode
+        (Bytes.Encode.sequence
+            [ Bytes.Encode.unsignedInt8 WireHelper.streamedExportVersion
+            , encodeLengthPrefixed state.baseModel
+            , encodeItemList state.encodedGuilds
+            , encodeItemList state.encodedDmChannels
+            , encodeItemList state.encodedDiscordGuilds
+            , encodeItemList state.encodedDiscordDmChannels
+            ]
+        )
 
 
 asUser :

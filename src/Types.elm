@@ -8,6 +8,8 @@ module Types exposing
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
+    , ExportState
+    , ExportStep(..)
     , FrontendModel(..)
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
@@ -40,6 +42,7 @@ module Types exposing
 import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
+import Bytes
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -548,6 +551,7 @@ type BackendMsg
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
+    | ExportBackendStep ClientId ExportStep
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotTimeForFailedToParseDiscordWebsocket (Maybe String) String Time.Posix
@@ -563,6 +567,24 @@ type BackendMsg
             Discord.HttpError
             { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
         )
+
+
+type alias ExportState =
+    { baseModel : Bytes.Bytes
+    , remainingGuilds : List ( Id GuildId, LocalState.BackendGuild )
+    , encodedGuilds : List Bytes.Bytes
+    , remainingDmChannels : List ( DmChannelId, DmChannel.DmChannel )
+    , encodedDmChannels : List Bytes.Bytes
+    , remainingDiscordGuilds : List ( Discord.Id Discord.GuildId, LocalState.DiscordBackendGuild )
+    , encodedDiscordGuilds : List Bytes.Bytes
+    , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DmChannel.DiscordDmChannel )
+    , encodedDiscordDmChannels : List Bytes.Bytes
+    }
+
+
+type ExportStep
+    = ExportEncodeBaseModel
+    | ExportEncodeNext ExportState
 
 
 type LoginResult
