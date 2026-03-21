@@ -62,6 +62,7 @@ module MyUi exposing
     , textLinkColorOnDarkBackground
     , timeElapsedView
     , timestamp
+    , touchPress
     , userLabelHtml
     , white
     , widthAttr

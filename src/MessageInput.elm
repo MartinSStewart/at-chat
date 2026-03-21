@@ -778,6 +778,7 @@ dropdownButton isMobile dropdown dropdownButtonId index name =
         (dropdownButtonId index)
         (PressedPingUser index)
         [ Ui.Events.onMouseDown (PressedPingUser index)
+        , MyUi.touchPress (PressedPingUser index)
         , Ui.paddingXY 8 0
         , Ui.contentCenterY
         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
