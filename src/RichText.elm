@@ -77,8 +77,8 @@ type EscapedChar
     | EscapedAtSymbol
 
 
-allEscapedChars : List EscapedChar
-allEscapedChars =
+escapedChars : List EscapedChar
+escapedChars =
     [ EscapedSquareBracket
     , EscapedBackslash
     , EscapedBacktick
@@ -501,7 +501,7 @@ type alias LoopState userId =
 
 charToEscaped : Dict String EscapedChar
 charToEscaped =
-    List.map (\escaped -> ( escapedCharToString escaped, escaped )) allEscapedChars |> Dict.fromList
+    List.map (\escaped -> ( escapedCharToString escaped, escaped )) escapedChars |> Dict.fromList
 
 
 discordEscapableChars : Set String
