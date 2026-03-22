@@ -60,6 +60,7 @@ module MyUi exposing
     , simpleButton
     , textLinkColor
     , textLinkColorOnDarkBackground
+    , timeElapsedShort
     , timeElapsedView
     , timestamp
     , touchPress
@@ -318,6 +319,46 @@ timeElapsed now event =
 
                     else
                         "1\u{00A0}minute" ++ suffix
+
+
+timeElapsedShort : Time.Posix -> Time.Posix -> String
+timeElapsedShort now event =
+    let
+        difference : Duration
+        difference =
+            Duration.from event now |> Quantity.abs
+
+        months =
+            Duration.inDays difference / 30 |> floor
+    in
+    if months >= 3 then
+        String.fromInt months ++ "mnth"
+
+    else
+        let
+            days =
+                Duration.inDays difference |> round
+        in
+        if days > 1 then
+            String.fromInt days ++ "d"
+
+        else
+            let
+                hours =
+                    Duration.inHours difference |> floor
+            in
+            if hours > 6 then
+                String.fromInt hours ++ "h"
+
+            else if Duration.inHours difference >= 1.2 then
+                removeTrailing0s 1 (Duration.inHours difference) ++ "h"
+
+            else
+                let
+                    minutes =
+                        Duration.inMinutes difference |> round
+                in
+                String.fromInt minutes ++ "m"
 
 
 removeTrailing0s : Int -> Float -> String

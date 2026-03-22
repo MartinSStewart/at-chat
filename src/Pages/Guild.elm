@@ -516,7 +516,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy True model local
-                            , friendsColumn (canScroll model.drag) True maybeOtherUserId local
+                            , friendsColumn (canScroll model.drag) True model.time maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -532,7 +532,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy False model local
-                            , friendsColumn (canScroll model.drag) False maybeOtherUserId local
+                            , friendsColumn (canScroll model.drag) False model.time maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -6259,8 +6259,8 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData loc
         ]
 
 
-friendsColumn : Bool -> Bool -> DmChannelSelection -> LocalState -> Element FrontendMsg
-friendsColumn canScroll2 isMobile openedOtherUserId local =
+friendsColumn : Bool -> Bool -> Time.Posix -> DmChannelSelection -> LocalState -> Element FrontendMsg
+friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -6301,6 +6301,7 @@ friendsColumn canScroll2 isMobile openedOtherUserId local =
                                 Time.millisToPosix 0
                         , friendLabel
                             isMobile
+                            currentTime
                             (case openedOtherUserId of
                                 SelectedDmChannel a _ ->
                                     a == otherUserId
@@ -6374,6 +6375,7 @@ friendsColumn canScroll2 isMobile openedOtherUserId local =
 
 friendLabel :
     Bool
+    -> Time.Posix
     -> Bool
     -> Id UserId
     -> Id UserId
@@ -6382,7 +6384,7 @@ friendLabel :
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> MessageState ChannelMessageId (Id UserId)
     -> Element FrontendMsg
-friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers message =
+friendLabel isMobile time isSelected currentUserId otherUserId name icon allUsers message =
     let
         messagePreview : String
         messagePreview =
@@ -6429,7 +6431,18 @@ friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers mes
         , Ui.column
             []
             [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString name))
-            , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+            , Ui.row
+                [ Ui.Font.size 13, Ui.spacing 4 ]
+                [ Ui.el [] (Ui.text messagePreview)
+                , case message of
+                    MessageLoaded message2 ->
+                        MyUi.timeElapsedShort time (Message.createdAt message2)
+                            |> Ui.text
+                            |> Ui.el [ Ui.alignRight, Ui.Font.italic ]
+
+                    MessageUnloaded ->
+                        Ui.none
+                ]
             ]
         ]
 
