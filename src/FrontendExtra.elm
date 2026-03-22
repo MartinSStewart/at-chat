@@ -28,6 +28,7 @@ import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import LoginForm
+import MembersAndOwner
 import Message exposing (ChangeAttachments(..), MessageState)
 import MessageInput exposing (NameSoFar)
 import MessageMenu
@@ -2475,7 +2476,7 @@ changeUpdate localMsg local =
                                     { localUser
                                         | otherUsers =
                                             SeqDict.insert
-                                                ok.guild.owner
+                                                (MembersAndOwner.owner ok.guild.membersAndOwner)
                                                 ok.owner
                                                 localUser.otherUsers
                                                 |> SeqDict.union ok.members
@@ -3053,7 +3054,7 @@ changeUpdate localMsg local =
                         | discordGuilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (\guild -> { guild | members = SeqDict.union members guild.members })
+                                (\guild -> { guild | membersAndOwner = members })
                                 local.discordGuilds
                     }
 

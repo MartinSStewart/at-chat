@@ -41,6 +41,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), Guild
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
+import MembersAndOwner exposing (IsMember(..))
 import NonemptyDict
 import PersonName
 import RichText exposing (RichText)
@@ -101,7 +102,7 @@ guildConnections guildId model =
                         (\( _, clientIds ) -> List.Nonempty.toList clientIds)
                         (userConnections member model)
                 )
-                (guild.owner :: SeqDict.keys guild.members)
+                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
 
         Nothing ->
             []
@@ -122,7 +123,7 @@ discordGuildConnections guildId model =
                         _ ->
                             []
                 )
-                (guild.owner :: SeqDict.keys guild.members)
+                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
 
         Nothing ->
             []
@@ -804,11 +805,12 @@ toEveryoneWhoCanSeeUser :
 toEveryoneWhoCanSeeUser clientId userId change model =
     SeqDict.foldl
         (\_ guild state ->
-            if LocalState.isGuildMemberOrOwner userId guild then
-                guild.owner :: SeqDict.keys guild.members |> List.foldl SeqSet.insert state
+            case MembersAndOwner.isMember userId guild.membersAndOwner of
+                IsNotMember ->
+                    state
 
-            else
-                state
+                _ ->
+                    MembersAndOwner.membersAndOwner guild.membersAndOwner |> List.foldl SeqSet.insert state
         )
         SeqSet.empty
         model.guilds
@@ -824,11 +826,12 @@ toEveryoneWhoCanSeeUserIncludingUser :
 toEveryoneWhoCanSeeUserIncludingUser userId change model =
     SeqDict.foldl
         (\_ guild state ->
-            if LocalState.isGuildMemberOrOwner userId guild then
-                guild.owner :: SeqDict.keys guild.members |> List.foldl SeqSet.insert state
+            case MembersAndOwner.isMember userId guild.membersAndOwner of
+                IsNotMember ->
+                    state
 
-            else
-                state
+                _ ->
+                    MembersAndOwner.membersAndOwner guild.membersAndOwner |> List.foldl SeqSet.insert state
         )
         SeqSet.empty
         model.guilds

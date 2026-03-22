@@ -46,6 +46,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
+import MembersAndOwner
 import Message
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (InitAdminData)
@@ -538,8 +539,8 @@ discordGuildToFrontendForUser :
     -> Maybe DiscordFrontendGuild
 discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
     if
-        SeqDict.member guild.owner linkedDiscordUsers
-            || not (SeqDict.isEmpty (SeqDict.intersect guild.members linkedDiscordUsers))
+        SeqDict.member (MembersAndOwner.owner guild.membersAndOwner) linkedDiscordUsers
+            || not (SeqDict.isEmpty (SeqDict.intersect (MembersAndOwner.members guild.membersAndOwner) linkedDiscordUsers))
     then
         discordGuildToFrontend requestMessagesFor guild |> Just
 
@@ -572,8 +573,7 @@ discordGuildToFrontend requestMessagesFor guild =
                     channel
             )
             guild.channels
-    , members = guild.members
-    , owner = guild.owner
+    , membersAndOwner = guild.membersAndOwner
     }
 
 
@@ -704,8 +704,7 @@ adminData model lastLogPageViewed =
                             }
                         )
                         guild.channels
-                , members = guild.members
-                , owner = guild.owner
+                , membersAndOwner = guild.membersAndOwner
                 }
             )
             model.discordGuilds
@@ -721,8 +720,8 @@ adminData model lastLogPageViewed =
                             }
                         )
                         guild.channels
-                , memberCount = SeqDict.size guild.members
-                , owner = guild.owner
+                , memberCount = SeqDict.size (MembersAndOwner.members guild.membersAndOwner)
+                , owner = MembersAndOwner.owner guild.membersAndOwner
                 }
             )
             model.guilds
@@ -820,7 +819,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     LocalState.usersMentionedOrRepliedToBackend
                         threadRouteWithMaybeReplyTo
                         text
-                        (guild.owner :: SeqDict.keys guild.members)
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                         channel2
 
                 users2 : NonemptyDict (Id UserId) BackendUser
@@ -900,7 +899,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     channelId
                     threadRouteNoReply
                     text
-                    (guild.owner :: SeqDict.keys guild.members)
+                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                     model
                 , embedCmds
                 ]

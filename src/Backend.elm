@@ -41,6 +41,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log
 import LoginForm
+import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict
 import OneToOne
@@ -132,12 +133,11 @@ init =
                         }
                       )
                     ]
-            , members = SeqDict.empty
+            , membersAndOwner = MembersAndOwner.init SeqDict.empty Broadcast.adminUserId
 
             --List.range 1 40
             --    |> List.map (\index -> ( Id.fromInt index, { joinedAt = Time.millisToPosix 0 } ))
             --    |> SeqDict.fromList
-            , owner = Broadcast.adminUserId
             , invites = SeqDict.empty
             }
     in
@@ -1277,24 +1277,9 @@ addDiscordGuildData discordUserId data guild =
             )
             guild.channels
             data.channels
-    , members =
-        if discordUserId == data.guild.properties.ownerId then
-            guild.members
-
-        else
-            -- Make sure the current user is included in the guild they loaded
-            SeqDict.update
-                discordUserId
-                (\maybe ->
-                    case maybe of
-                        Just _ ->
-                            maybe
-
-                        Nothing ->
-                            Just { joinedAt = Nothing }
-                )
-                guild.members
-    , owner = data.guild.properties.ownerId
+    , membersAndOwner =
+        MembersAndOwner.addMember discordUserId { joinedAt = Nothing } guild.membersAndOwner
+            |> Result.withDefault guild.membersAndOwner
     }
 
 
@@ -4262,7 +4247,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                             )
                             modelWithoutUser
                         , case
-                            ( NonemptyDict.get guild2.owner model2.users
+                            ( NonemptyDict.get (MembersAndOwner.owner guild2.membersAndOwner) model2.users
                             , LocalState.guildToFrontendForUser
                                 (Just ( LocalState.announcementChannel guild2, NoThread ))
                                 session.userId
@@ -4279,7 +4264,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                                             NonemptyDict.get userId2 model2.users
                                                 |> Maybe.map User.backendToFrontendForUser
                                         )
-                                        guild2.members
+                                        (MembersAndOwner.members guild2.membersAndOwner)
                                 }
                                     |> Ok
                                     |> Server_YouJoinedGuildByInvite
@@ -5139,12 +5124,16 @@ asGuildOwner model sessionId guildId func =
     asGuildMember model
         sessionId
         guildId
-        (\{ userId } user guild ->
-            if userId == guild.owner then
-                func userId user guild
+        (\session user guild ->
+            case MembersAndOwner.isMember session.userId guild.membersAndOwner of
+                IsOwner ->
+                    func session.userId user guild
 
-            else
-                ( model, Command.none )
+                IsMember ->
+                    ( model, Command.none )
+
+                IsNotMember ->
+                    ( model, Command.none )
         )
 
 

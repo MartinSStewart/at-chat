@@ -71,6 +71,7 @@ import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGu
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
+import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
@@ -704,7 +705,7 @@ type ServerChange
     | Server_GotDiscordDmMessageEmbed (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) ( Url, Result () EmbedData )
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
-    | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
+    | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
 
 
 type LocalChange

@@ -46,6 +46,7 @@ import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -98,18 +99,12 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                                         LocalState.removeReactionEmoji emoji reaction.userId threadRoute channel
                                                     )
                                                     guild.channels
-                                            , members =
-                                                SeqDict.update
+                                            , membersAndOwner =
+                                                MembersAndOwner.addMember
                                                     reaction.userId
-                                                    (\maybe ->
-                                                        case maybe of
-                                                            Just _ ->
-                                                                maybe
-
-                                                            Nothing ->
-                                                                Just { joinedAt = Nothing }
-                                                    )
-                                                    guild.members
+                                                    { joinedAt = Nothing }
+                                                    guild.membersAndOwner
+                                                    |> Result.withDefault guild.membersAndOwner
                                         }
                                         model.discordGuilds
                               }
@@ -966,7 +961,7 @@ handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model 
                                 LocalState.usersMentionedOrRepliedToBackend
                                     threadRoute
                                     richText
-                                    (guild.owner :: SeqDict.keys guild.members)
+                                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                     channel
 
                             guildOrDmId : DiscordGuildOrDmId
@@ -1029,18 +1024,12 @@ handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model 
                                             discordGuildId
                                             { guild
                                                 | channels = SeqDict.insert channelId channel4 guild.channels
-                                                , members =
-                                                    SeqDict.update
+                                                , membersAndOwner =
+                                                    MembersAndOwner.addMember
                                                         discordMessage.author.id
-                                                        (\maybe ->
-                                                            case maybe of
-                                                                Just _ ->
-                                                                    maybe
-
-                                                                Nothing ->
-                                                                    Just { joinedAt = Nothing }
-                                                        )
-                                                        guild.members
+                                                        { joinedAt = Nothing }
+                                                        guild.membersAndOwner
+                                                        |> Result.withDefault guild.membersAndOwner
                                             }
                                             model.discordGuilds
                                     , discordUsers =
@@ -1115,7 +1104,7 @@ handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model 
                                         channelId
                                         threadRouteNoReply
                                         richText
-                                        (guild.owner :: SeqDict.keys guild.members)
+                                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                         model
                                     , embedCmds
                                     ]
@@ -1371,18 +1360,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                             SeqDict.insert
                                                                 guildId
                                                                 { guild
-                                                                    | members =
-                                                                        SeqDict.update
+                                                                    | membersAndOwner =
+                                                                        MembersAndOwner.addMember
                                                                             presence.userId
-                                                                            (\maybe ->
-                                                                                case maybe of
-                                                                                    Just _ ->
-                                                                                        maybe
-
-                                                                                    Nothing ->
-                                                                                        Just { joinedAt = Nothing }
-                                                                            )
-                                                                            guild.members
+                                                                            { joinedAt = Nothing }
+                                                                            guild.membersAndOwner
+                                                                            |> Result.withDefault guild.membersAndOwner
                                                                 }
                                                                 model2.discordGuilds
                                                       }
@@ -1414,11 +1397,11 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                                 (Discord.userToPartialUser member.user)
                                                                                 dict
                                                                             , { guild2
-                                                                                | members =
-                                                                                    SeqDict.insert
+                                                                                | membersAndOwner =
+                                                                                    MembersAndOwner.addOrUpdateMember
                                                                                         participant.userId
                                                                                         { joinedAt = Just member.joinedAt }
-                                                                                        guild2.members
+                                                                                        guild.membersAndOwner
                                                                               }
                                                                             , member.user :: users
                                                                             )
@@ -1479,7 +1462,10 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         | discordGuilds =
                                             SeqDict.insert
                                                 guildId
-                                                { guild | members = SeqDict.remove userId guild.members }
+                                                { guild
+                                                    | membersAndOwner =
+                                                        MembersAndOwner.removeMember userId guild.membersAndOwner
+                                                }
                                                 model2.discordGuilds
                                     }
 
@@ -1633,11 +1619,11 @@ handleGuildMemberUpdate guildId guildMember model2 =
                     SeqDict.insert
                         guildId
                         { guild
-                            | members =
-                                SeqDict.insert
+                            | membersAndOwner =
+                                MembersAndOwner.addOrUpdateMember
                                     guildMember.user.id
                                     { joinedAt = Just guildMember.joinedAt }
-                                    guild.members
+                                    guild.membersAndOwner
                         }
                         model2.discordGuilds
               }
@@ -1964,22 +1950,25 @@ handleReadySupplementalData data model =
                 case SeqDict.get guildId model2.discordGuilds of
                     Just guild ->
                         let
-                            mergedMembers2 : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+                            mergedMembers2 : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
                             mergedMembers2 =
-                                List.map
-                                    (\mergedMember ->
-                                        ( mergedMember.userId, { joinedAt = Just mergedMember.joinedAt } )
+                                List.foldl
+                                    (\mergedMember state ->
+                                        MembersAndOwner.addOrUpdateMember
+                                            mergedMember.userId
+                                            { joinedAt = Just mergedMember.joinedAt }
+                                            state
                                     )
+                                    guild.membersAndOwner
                                     mergedMembers
-                                    |> SeqDict.fromList
-                                    |> SeqDict.remove guild.owner
 
+                            model3 : BackendModel
                             model3 =
                                 { model2
                                     | discordGuilds =
                                         SeqDict.insert
                                             guildId
-                                            { guild | members = SeqDict.union mergedMembers2 guild.members }
+                                            { guild | membersAndOwner = mergedMembers2 }
                                             model2.discordGuilds
                                 }
                         in
@@ -2074,13 +2063,16 @@ addDiscordGuild members guild discordGuilds =
                 Just existingGuild ->
                     { existingGuild
                         | name = GuildName.fromStringLossy guild.properties.name
-                        , owner = guild.properties.ownerId
-                        , members =
+                        , membersAndOwner =
                             List.foldl
-                                (\member dict -> SeqDict.insert member.userId { joinedAt = Just member.joinedAt } dict)
-                                existingGuild.members
+                                (\member dict ->
+                                    MembersAndOwner.addOrUpdateMember
+                                        member.userId
+                                        { joinedAt = Just member.joinedAt }
+                                        dict
+                                )
+                                existingGuild.membersAndOwner
                                 members
-                                |> SeqDict.remove guild.properties.ownerId
                     }
                         |> Just
 
@@ -2088,11 +2080,12 @@ addDiscordGuild members guild discordGuilds =
                     { name = GuildName.fromStringLossy guild.properties.name
                     , icon = Nothing
                     , channels = SeqDict.empty -- Gets filled after LinkDiscordUserStep2 is triggered
-                    , members =
-                        List.map (\member -> ( member.userId, { joinedAt = Just member.joinedAt } )) members
-                            |> SeqDict.fromList
-                            |> SeqDict.remove guild.properties.ownerId
-                    , owner = guild.properties.ownerId
+                    , membersAndOwner =
+                        MembersAndOwner.init
+                            (List.map (\member -> ( member.userId, { joinedAt = Just member.joinedAt } )) members
+                                |> SeqDict.fromList
+                            )
+                            guild.properties.ownerId
                     }
                         |> Just
         )
@@ -2349,23 +2342,15 @@ handleListGuildMembersResponse chunkData model =
                 chunkData.guildId
                 (\guild ->
                     { guild
-                        | members =
+                        | membersAndOwner =
                             List.foldl
                                 (\member guildMembers ->
-                                    SeqDict.update
+                                    MembersAndOwner.addOrUpdateMember
                                         member.user.id
-                                        (\maybe ->
-                                            case maybe of
-                                                Just _ ->
-                                                    maybe
-
-                                                Nothing ->
-                                                    { joinedAt = Just member.joinedAt }
-                                                        |> Just
-                                        )
+                                        { joinedAt = Just member.joinedAt }
                                         guildMembers
                                 )
-                                guild.members
+                                guild.membersAndOwner
                                 chunkData.members
                     }
                 )
