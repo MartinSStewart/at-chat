@@ -909,17 +909,23 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                                                 , statusText = "OK"
                                                 , headers = Dict.empty
                                                 }
-                                                ([ Just ( "og:title", "Title for " ++ embedUrl )
-                                                 , if String.startsWith "https://elm.camp" embedUrl then
-                                                    Just ( "og:image", "https://elm.camp/logo-26.png" )
+                                                (Json.Encode.object
+                                                    [ ( "title", Json.Encode.string ("Title for " ++ embedUrl) )
+                                                    , if String.startsWith "https://elm.camp" embedUrl then
+                                                        ( "image"
+                                                        , Json.Encode.object
+                                                            [ ( "url", Json.Encode.string "https://elm.camp/logo-26.png" )
+                                                            , ( "width", Json.Encode.int 1080 )
+                                                            , ( "height", Json.Encode.int 1080 )
+                                                            , ( "format", Json.Encode.string "Png" )
+                                                            ]
+                                                        )
 
-                                                   else
-                                                    Nothing
-                                                 , Just ( "og:description", "Description for " ++ embedUrl )
-                                                 ]
-                                                    |> List.filterMap identity
-                                                    |> Dict.fromList
-                                                    |> Json.Encode.dict identity Json.Encode.string
+                                                      else
+                                                        ( "image", Json.Encode.null )
+                                                    , ( "description", Json.Encode.string ("Description for " ++ embedUrl) )
+                                                    , ( "created_at", Json.Encode.null )
+                                                    ]
                                                     |> Json.Encode.encode 0
                                                 )
 
