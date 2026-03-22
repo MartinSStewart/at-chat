@@ -48,3 +48,6 @@ jobs:
 
       - name: End-to-end tests
         run: npm run end-to-end-tests
+
+      - name: Elm review
+        run: npm run elm-review

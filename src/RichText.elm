@@ -2004,17 +2004,6 @@ type DiscordModifiers
     | DiscordIsSpoilered
 
 
-allDiscordModifiers : List DiscordModifiers
-allDiscordModifiers =
-    [ DiscordIsBold
-    , DiscordIsItalic
-    , DiscordIsItalic2
-    , DiscordIsUnderlined
-    , DiscordIsStrikethrough
-    , DiscordIsSpoilered
-    ]
-
-
 discordModifierToSymbol : DiscordModifiers -> NonemptyString
 discordModifierToSymbol modifier =
     case modifier of
