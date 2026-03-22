@@ -1,11 +1,16 @@
-module Scroll exposing (smoothScroll, toBottomOfChannel, toBottomOfChannelSmooth)
+module Scroll exposing
+    ( smoothScroll
+    , toBottomOfChannel
+    , toBottomOfChannelIfAtBottom
+    , toBottomOfChannelSmooth
+    )
 
 import Ease
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Command exposing (Command, FrontendOnly)
+import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task exposing (Task)
 import Pages.Guild
-import Types exposing (FrontendMsg(..))
+import Types exposing (FrontendMsg(..), ScrollPosition(..))
 
 
 smoothScroll : HtmlId -> Task FrontendOnly Dom.Error ()
@@ -57,6 +62,19 @@ smoothScrollY stepsLeft x startY endY =
 toBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
 toBottomOfChannel =
     Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> SetScrollToBottom)
+
+
+toBottomOfChannelIfAtBottom : ScrollPosition -> Command FrontendOnly toMsg FrontendMsg
+toBottomOfChannelIfAtBottom position =
+    case position of
+        ScrolledToBottom ->
+            toBottomOfChannel
+
+        ScrolledToTop ->
+            Command.none
+
+        ScrolledToMiddle ->
+            Command.none
 
 
 toBottomOfChannelSmooth : Command FrontendOnly toMsg FrontendMsg

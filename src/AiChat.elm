@@ -608,7 +608,7 @@ update msg model =
                         , sendMessageWith = ok.sendMessageWith
                         , responseCounter = ok.responseCounter
                       }
-                    , Command.none
+                    , scrollToBottom
                     )
 
                 Err _ ->
