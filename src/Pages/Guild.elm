@@ -6447,7 +6447,7 @@ friendLabelMessagePreview time messagePreview message =
             MessageLoaded message2 ->
                 MyUi.timeElapsedShort time (Message.createdAt message2)
                     |> Ui.text
-                    |> Ui.el [ Ui.alignRight, Ui.Font.italic ]
+                    |> Ui.el [ Ui.alignRight, Ui.Font.italic, Ui.opacity 0.7 ]
 
             MessageUnloaded ->
                 Ui.none

@@ -350,7 +350,7 @@ timeElapsedShort now event =
             if hours > 6 then
                 String.fromInt hours ++ "h"
 
-            else if Duration.inHours difference >= 1.2 then
+            else if Duration.inHours difference >= 1.5 then
                 removeTrailing0s 1 (Duration.inHours difference) ++ "h"
 
             else
