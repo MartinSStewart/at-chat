@@ -1401,7 +1401,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                                                     MembersAndOwner.addOrUpdateMember
                                                                                         participant.userId
                                                                                         { joinedAt = Just member.joinedAt }
-                                                                                        guild.membersAndOwner
+                                                                                        guild2.membersAndOwner
                                                                               }
                                                                             , member.user :: users
                                                                             )

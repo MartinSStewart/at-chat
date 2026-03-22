@@ -1,4 +1,15 @@
-module MembersAndOwner exposing (IsMember(..), MembersAndOwner, addMember, addOrUpdateMember, init, isMember, members, membersAndOwner, owner, removeMember)
+module MembersAndOwner exposing
+    ( IsMember(..)
+    , MembersAndOwner
+    , addMember
+    , addOrUpdateMember
+    , init
+    , isMember
+    , members
+    , membersAndOwner
+    , owner
+    , removeMember
+    )
 
 import SeqDict exposing (SeqDict)
 
@@ -46,7 +57,7 @@ membersAndOwner (MembersAndOwner members2 ownerId) =
 
 
 members : MembersAndOwner userId a -> SeqDict userId a
-members (MembersAndOwner members2 ownerId) =
+members (MembersAndOwner members2 _) =
     members2
 
 
