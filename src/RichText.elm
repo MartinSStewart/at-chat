@@ -1,7 +1,5 @@
 module RichText exposing
     ( Domain(..)
-    , Embed(..)
-    , EmbedData
     , EscapedChar(..)
     , Language(..)
     , Modifiers(..)
@@ -10,7 +8,6 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , domainToString
-    , emptyEmbed
     , escapedCharToString
     , fromDiscord
     , fromNonemptyString
@@ -27,12 +24,13 @@ module RichText exposing
     )
 
 import Array exposing (Array)
-import Coord
+import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Discord
 import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
+import Embed exposing (Embed(..), EmbedData)
 import FileName
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
@@ -109,28 +107,6 @@ escapedCharToString escaped =
 type Language
     = Language NonemptyString
     | NoLanguage
-
-
-type Embed
-    = EmbedLoading
-    | EmbedLoaded EmbedData
-
-
-emptyEmbed : EmbedData
-emptyEmbed =
-    { title = Nothing
-    , image = Nothing
-    , content = Nothing
-    , createdAt = Nothing
-    }
-
-
-type alias EmbedData =
-    { title : Maybe String
-    , image : Maybe String
-    , content : Maybe String
-    , createdAt : Maybe Time.Posix
-    }
 
 
 normalTextFromString : String -> Maybe (RichText userId)
@@ -1014,6 +990,11 @@ domainToString (Domain domain) =
     domain
 
 
+type ShowLargeContent
+    = ShowLargeContent Int
+    | NoLargeContent
+
+
 view :
     HtmlId
     -> Int
@@ -1028,7 +1009,7 @@ view :
     -> List (Html msg)
 view htmlIdPrefix containerWidth onPressLink domainWhitelist onPressSpoiler revealedSpoilers users attachedFiles embeds nonempty =
     viewHelper
-        (Just containerWidth)
+        (ShowLargeContent containerWidth)
         (Just ( htmlIdPrefix, onPressSpoiler ))
         onPressLink
         domainWhitelist
@@ -1053,7 +1034,7 @@ preview :
     -> List (Html msg)
 preview onPressLink domainWhitelist revealedSpoilers users attachedFiles nonempty =
     viewHelper
-        Nothing
+        NoLargeContent
         Nothing
         onPressLink
         domainWhitelist
@@ -1082,7 +1063,7 @@ normalTextView text state =
 
 
 viewHelper :
-    Maybe Int
+    ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
     -> (Url -> msg)
     -> SeqSet Domain
@@ -1095,7 +1076,7 @@ viewHelper :
     -> Int
     -> Nonempty (RichText userId)
     -> ( Int, Int, List (Html msg) )
-viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
+viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
     List.foldl
         (\item ( spoilerIndex2, embedIndex2, currentList ) ->
             case item of
@@ -1112,7 +1093,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                     let
                         ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
-                                containerWidth
+                                showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
                                 domainWhitelist
@@ -1131,7 +1112,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                     let
                         ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
-                                containerWidth
+                                showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
                                 domainWhitelist
@@ -1150,7 +1131,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                     let
                         ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
-                                containerWidth
+                                showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
                                 domainWhitelist
@@ -1169,7 +1150,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                     let
                         ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
-                                containerWidth
+                                showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
                                 domainWhitelist
@@ -1192,7 +1173,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
                         ( _, embedIndex3, list ) =
                             viewHelper
-                                containerWidth
+                                showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
                                 domainWhitelist
@@ -1264,14 +1245,15 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                         embedLoadingView onPressLink domainWhitelist data
 
                                     Just (EmbedLoaded embed) ->
-                                        if embed == emptyEmbed then
-                                            inlineEmbedView containerWidth onPressLink domainWhitelist data
+                                        case ( embed == Embed.empty, showLargeContent ) of
+                                            ( False, ShowLargeContent containerWidth ) ->
+                                                embedView onPressLink containerWidth domainWhitelist data embed
 
-                                        else
-                                            embedView onPressLink domainWhitelist data embed
+                                            _ ->
+                                                inlineEmbedView showLargeContent onPressLink domainWhitelist data
 
                                     Nothing ->
-                                        inlineEmbedView containerWidth onPressLink domainWhitelist data
+                                        inlineEmbedView showLargeContent onPressLink domainWhitelist data
                            ]
                     )
 
@@ -1296,8 +1278,8 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                     )
 
                 CodeBlock _ text ->
-                    case containerWidth of
-                        Just _ ->
+                    case showLargeContent of
+                        ShowLargeContent _ ->
                             ( spoilerIndex2
                             , embedIndex2
                             , currentList
@@ -1312,12 +1294,12 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                    ]
                             )
 
-                        Nothing ->
+                        NoLargeContent ->
                             ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text "<...>" ] )
 
                 AttachedFile fileId ->
-                    case containerWidth of
-                        Just containerWidth2 ->
+                    case showLargeContent of
+                        ShowLargeContent containerWidth2 ->
                             ( spoilerIndex2
                             , embedIndex2
                             , case SeqDict.get fileId attachedFiles of
@@ -1335,36 +1317,21 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                                                 fileData.contentType
                                                                 fileData.fileHash
 
-                                                        w =
-                                                            Coord.xRaw imageSize
-
-                                                        h =
-                                                            Coord.yRaw imageSize
-
-                                                        aspect =
-                                                            toFloat h / toFloat w
-
-                                                        w2 =
-                                                            min w containerWidth2
-
-                                                        h2 =
-                                                            min (FileStatus.imageMaxHeight / 2) (toFloat w2 * aspect)
-
-                                                        w3 =
-                                                            h2 / aspect
+                                                        ( width, height ) =
+                                                            actualImageSize FileStatus.imageMaxHeight containerWidth2 imageSize
                                                     in
                                                     Html.a
                                                         [ Html.Attributes.href fileUrl
                                                         , Html.Attributes.target "_blank"
                                                         , Html.Attributes.rel "noreferrer"
-                                                        , Html.Attributes.style "width" (String.fromInt (round w3) ++ "px")
+                                                        , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
                                                         , Html.Attributes.style "display" "block"
                                                         ]
                                                         [ Html.img
                                                             [ Html.Attributes.src thumbnailUrl
                                                             , Html.Attributes.style "display" "block"
-                                                            , Html.Attributes.width (round w3)
-                                                            , Html.Attributes.height (round h2)
+                                                            , Html.Attributes.width (round width)
+                                                            , Html.Attributes.height (round height)
                                                             ]
                                                             []
                                                         ]
@@ -1377,7 +1344,7 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
                                     currentList ++ normalTextView (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) state
                             )
 
-                        Nothing ->
+                        NoLargeContent ->
                             ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
 
                 EscapedChar char ->
@@ -1387,24 +1354,39 @@ viewHelper containerWidth maybePressedSpoiler onPressLink domainWhitelist spoile
         (List.Nonempty.toList nonempty)
 
 
+embedContainerMaxWidth : number
+embedContainerMaxWidth =
+    432
+
+
+embedContainerLeftBorderWidth : number
+embedContainerLeftBorderWidth =
+    4
+
+
+embedContainerPaddingX : number
+embedContainerPaddingX =
+    12
+
+
 embedContainer : List (Html msg) -> Html msg
 embedContainer contents =
     Html.div
         [ Html.Attributes.style "display" "flex"
-        , Html.Attributes.style "max-width" "432px"
+        , Html.Attributes.style "max-width" (String.fromInt embedContainerMaxWidth ++ "px")
         , Html.Attributes.style "margin-top" "4px"
         , Html.Attributes.style "border-radius" "4px"
         , Html.Attributes.style "overflow" "hidden"
         ]
         [ Html.div
-            [ Html.Attributes.style "width" "4px"
+            [ Html.Attributes.style "width" (String.fromInt embedContainerLeftBorderWidth ++ "px")
             , Html.Attributes.style "flex-shrink" "0"
             , Html.Attributes.style "background-color" "rgb(80,120,200)"
             ]
             []
         , Html.div
             [ Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
-            , Html.Attributes.style "padding" "8px 12px"
+            , Html.Attributes.style "padding" ("8px " ++ String.fromInt embedContainerPaddingX ++ "px")
             , Html.Attributes.style "min-width" "0"
             , Html.Attributes.style "flex" "1"
             ]
@@ -1433,8 +1415,8 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             content
 
 
-embedView : (Url -> msg) -> SeqSet Domain -> Url -> EmbedData -> Html msg
-embedView onPressLink domainWhitelist url embed =
+embedView : (Url -> msg) -> Int -> SeqSet Domain -> Url -> EmbedData -> Html msg
+embedView onPressLink containerWidth domainWhitelist url embed =
     embedContainer
         (List.filterMap
             identity
@@ -1459,7 +1441,7 @@ embedView onPressLink domainWhitelist url embed =
 
                 Nothing ->
                     Nothing
-            , case embed.content of
+            , case embed.description of
                 Just content ->
                     Html.div
                         [ Html.Attributes.style "font-size" "13px"
@@ -1476,11 +1458,19 @@ embedView onPressLink domainWhitelist url embed =
                 Nothing ->
                     Nothing
             , case embed.image of
-                Just image ->
+                Just imageData ->
+                    let
+                        insideWidth : Int
+                        insideWidth =
+                            min embedContainerMaxWidth containerWidth - embedContainerLeftBorderWidth - embedContainerPaddingX * 2
+
+                        ( width, height ) =
+                            actualImageSize FileStatus.imageMaxHeight insideWidth imageData.imageSize
+                    in
                     Html.img
-                        [ Html.Attributes.src image
-                        , Html.Attributes.style "max-width" "100%"
-                        , Html.Attributes.style "max-height" "300px"
+                        [ Html.Attributes.src imageData.url
+                        , Html.Attributes.style "width" (String.fromFloat width ++ "px")
+                        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
                         , Html.Attributes.style "border-radius" "4px"
                         , Html.Attributes.style "margin-top" "8px"
                         , Html.Attributes.style "display" "block"
@@ -1505,6 +1495,27 @@ embedView onPressLink domainWhitelist url embed =
             , smallHyperlink onPressLink domainWhitelist url |> Just
             ]
         )
+
+
+actualImageSize : Float -> Int -> Coord units -> ( Float, Float )
+actualImageSize maxImageHeight containerWidth2 imageSize =
+    let
+        w =
+            Coord.xRaw imageSize
+
+        h =
+            Coord.yRaw imageSize
+
+        aspect =
+            toFloat h / toFloat w
+
+        w2 =
+            min w containerWidth2
+
+        h2 =
+            min (maxImageHeight / 2) (toFloat w2 * aspect)
+    in
+    ( h2 / aspect, h2 )
 
 
 embedLoadingView : (Url -> msg) -> SeqSet Domain -> Url -> Html msg
@@ -1612,21 +1623,30 @@ formatPosix time =
     MyUi.datestamp time
 
 
-inlineEmbedView : Maybe Int -> (Url -> msg) -> SeqSet Domain -> Url -> Html msg
-inlineEmbedView containerWidth onPressUrl domainWhitelist url =
+inlineEmbedView : ShowLargeContent -> (Url -> msg) -> SeqSet Domain -> Url -> Html msg
+inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
     let
         path : String
         path =
             url.path
                 |> urlAddPrefixed "?" url.query
                 |> urlAddPrefixed "#" url.fragment
+
+        width : Int
+        width =
+            case showLargeContent of
+                ShowLargeContent containerWidth ->
+                    containerWidth
+
+                NoLargeContent ->
+                    600
     in
     buttonOrA
         onPressUrl
         domainWhitelist
         url
         [ Html.Attributes.style "display" "inline-block"
-        , Html.Attributes.style "max-width" (String.fromInt (min 600 (Maybe.withDefault 600 containerWidth - 4)) ++ "px")
+        , Html.Attributes.style "max-width" (String.fromInt (min 600 (width - 4)) ++ "px")
         , Html.Attributes.style "border-radius" "4px"
         , Html.Attributes.style "overflow" "hidden"
         , Html.Attributes.style "text-overflow" "ellipsis"

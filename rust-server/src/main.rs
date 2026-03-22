@@ -10,16 +10,16 @@ use axum::{
     routing::post,
 };
 
+use chrono;
 use http::HeaderMap;
 use image::metadata::Orientation;
-use image::{self, GenericImageView, ImageReader};
+use image::{self, GenericImageView, ImageFormat, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
 use std::str::FromStr;
-use std::time::Duration;
 use web_push::SubscriptionInfo;
-use webpage::{HTML, Webpage, WebpageOptions};
+use webpage::{Webpage, WebpageOptions};
 mod content_types;
 
 #[tokio::main]
@@ -73,8 +73,8 @@ fn thumbnail_filepath(hash: &str) -> String {
 async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
     let mut options = WebpageOptions::default();
 
-    options.useragent =
-        String::from("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
+    // options.useragent =
+    //     String::from("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
 
     let info = Webpage::from_url(&url, options).expect("Could not read from URL");
 
@@ -90,9 +90,69 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         _ => info,
     };
 
+    let image = match info2.html.meta.get("og:image") {
+        Some(url) => match reqwest::get(url).await {
+            Ok(response) => match response.bytes().await {
+                Ok(bytes) => {
+                    let reader = ImageReader::new(std::io::Cursor::new(&bytes));
+
+                    match reader
+                        .with_guessed_format()
+                        .map(|a| (a.format(), a.decode()))
+                    {
+                        Ok((Some(format), Ok(image))) => {
+                            let (width, height) = image.dimensions();
+
+                            Some(ImageData {
+                                url: url.clone(),
+                                width,
+                                height,
+                                format: match format {
+                                    ImageFormat::Png => Some(String::from("Png")),
+                                    ImageFormat::Jpeg => Some(String::from("Jpeg")),
+                                    ImageFormat::Gif => Some(String::from("Gif")),
+                                    ImageFormat::WebP => Some(String::from("WebP")),
+                                    ImageFormat::Pnm => Some(String::from("Pnm")),
+                                    ImageFormat::Tiff => Some(String::from("Tiff")),
+                                    ImageFormat::Tga => Some(String::from("Tga")),
+                                    ImageFormat::Dds => Some(String::from("Dds")),
+                                    ImageFormat::Bmp => Some(String::from("Bmp")),
+                                    ImageFormat::Ico => Some(String::from("Ico")),
+                                    ImageFormat::Hdr => Some(String::from("Hdr")),
+                                    ImageFormat::OpenExr => Some(String::from("OpenExr")),
+                                    ImageFormat::Farbfeld => Some(String::from("Farbfeld")),
+                                    ImageFormat::Avif => Some(String::from("Avif")),
+                                    ImageFormat::Qoi => Some(String::from("Qoi")),
+                                    _ => None,
+                                },
+                            })
+                        }
+                        _ => None,
+                    }
+                }
+                Err(_) => None,
+            },
+            Err(_) => None,
+        },
+        None => None,
+    };
+
+    let response = EmbedResponse {
+        title: info2.html.meta.get("og:title").map(|a| a.clone()),
+        description: info2.html.meta.get("og:description").map(|a| a.clone()),
+        image: image,
+        created_at: match info2.html.meta.get("article:published_time") {
+            Some(text) => match chrono::DateTime::parse_from_rfc3339(text) {
+                Ok(date) => Some(date.timestamp()),
+                Err(_) => None,
+            },
+            None => None,
+        },
+    };
+
     response_with_headers(
         StatusCode::OK,
-        serde_json::to_string(&info2.html.meta).unwrap(),
+        serde_json::to_string::<EmbedResponse>(&response).unwrap(),
     )
 }
 
@@ -827,6 +887,22 @@ pub struct PushNotification {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmbedRequest {
     pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EmbedResponse {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub image: Option<ImageData>,
+    pub created_at: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImageData {
+    pub url: String,
+    pub width: u32,
+    pub height: u32,
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

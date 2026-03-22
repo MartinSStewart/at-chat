@@ -170,7 +170,7 @@ embedExamples whitelistedDomains =
             [ EmbedLoaded
                 { title = Nothing
                 , image = Nothing
-                , content = Just "Content of this embedded link"
+                , description = Just "Content of this embedded link"
                 , createdAt = Nothing
                 }
             ]

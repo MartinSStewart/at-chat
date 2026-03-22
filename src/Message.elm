@@ -16,18 +16,15 @@ module Message exposing
     )
 
 import Array exposing (Array)
-import Dict
 import Effect.Command as Command exposing (Command)
 import Effect.Http as Http
+import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id)
-import Iso8601
-import Json.Decode
-import Json.Encode
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
-import RichText exposing (Embed(..), EmbedData, RichText)
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Time
@@ -90,14 +87,7 @@ userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
         |> UserTextMessage
     , SeqSet.fromList hyperlinks
         |> SeqSet.toList
-        |> List.map
-            (\url ->
-                Http.post
-                    { url = FileStatus.domain ++ "/file/embed"
-                    , body = Json.Encode.object [ ( "url", Json.Encode.string (Url.toString url) ) ] |> Http.jsonBody
-                    , expect = Http.expectJson (Tuple.pair url) decodeEmbedData
-                    }
-            )
+        |> List.map Embed.request
         |> Command.batch
     )
 
@@ -120,14 +110,14 @@ editUserTextMessage time newContent attachedFiles data =
             List.indexedMap
                 (\index link ->
                     case Array.get index data.embeds of
-                        Just (RichText.EmbedLoaded embed) ->
+                        Just (EmbedLoaded embed) ->
                             ( link, embed )
 
-                        Just RichText.EmbedLoading ->
-                            ( link, RichText.emptyEmbed )
+                        Just EmbedLoading ->
+                            ( link, Embed.empty )
 
                         Nothing ->
-                            ( link, RichText.emptyEmbed )
+                            ( link, Embed.empty )
                 )
                 (RichText.hyperlinks data.content)
                 |> SeqDict.fromList
@@ -147,8 +137,8 @@ editUserTextMessage time newContent attachedFiles data =
                 |> List.map
                     (\url ->
                         SeqDict.get url oldUrls
-                            |> Maybe.withDefault RichText.emptyEmbed
-                            |> RichText.EmbedLoaded
+                            |> Maybe.withDefault Embed.empty
+                            |> EmbedLoaded
                     )
                 |> Array.fromList
     }
@@ -173,7 +163,7 @@ addEmbed ( url, result ) message =
                                                     EmbedLoaded embed
 
                                                 Err _ ->
-                                                    EmbedLoaded RichText.emptyEmbed
+                                                    EmbedLoaded Embed.empty
                                             )
                                             array
 
@@ -188,25 +178,6 @@ addEmbed ( url, result ) message =
 
         DeletedMessage _ ->
             message
-
-
-decodeEmbedData : Json.Decode.Decoder EmbedData
-decodeEmbedData =
-    Json.Decode.map
-        (\dict ->
-            { title = Dict.get "og:title" dict
-            , image = Dict.get "og:image" dict
-            , content = Dict.get "og:description" dict
-            , createdAt =
-                case Dict.get "article:published_time" dict of
-                    Just time ->
-                        Iso8601.toTime time |> Result.toMaybe
-
-                    Nothing ->
-                        Nothing
-            }
-        )
-        (Json.Decode.dict Json.Decode.string)
 
 
 type MessageState messageId userId
