@@ -21,7 +21,8 @@ import Array exposing (Array)
 import Array.Extra
 import Bitwise
 import ChannelName
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
@@ -524,7 +525,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     , Ui.background MyUi.background1
                     ]
                     [ Ui.column
-                        [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+                        [ Ui.height Ui.fill, Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize)) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy False model local
@@ -737,7 +738,7 @@ conversationWidth model =
     else
         Coord.xRaw model.windowSize
             - ((GuildIcon.fullWidth + 1)
-                + channelColumnWidth
+                + channelColumnWidth model.windowSize
                 + memberColumnWidth
                 + User.profileImageSize
                 + (messagePaddingX * 2)
@@ -746,9 +747,14 @@ conversationWidth model =
               )
 
 
-channelColumnWidth : number
-channelColumnWidth =
-    241
+channelColumnWidth : Coord CssPixels -> Int
+channelColumnWidth windowSize =
+    clamp 200 300 (toFloat (Coord.xRaw windowSize) * 0.2 |> round)
+
+
+channelAndGuildColumnWidth : Coord CssPixels -> Int
+channelAndGuildColumnWidth windowSize =
+    channelColumnWidth windowSize + 58
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
@@ -846,7 +852,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px 300)
+                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -902,7 +908,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px 300)
+                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1030,7 +1036,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px 300)
+                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1098,7 +1104,7 @@ guildErrorPage error local model =
             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
             [ Ui.column
                 [ Ui.height Ui.fill
-                , Ui.width (Ui.px 300)
+                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
                 ]
                 [ Ui.row
                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
