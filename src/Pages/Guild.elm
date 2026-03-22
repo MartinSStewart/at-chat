@@ -6335,8 +6335,9 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                         MessageUnloaded ->
                             Time.millisToPosix 0
                     , if isMobile then
-                        Ui.Lazy.lazy5
+                        Ui.Lazy.lazy6
                             discordFriendLabelMobile
+                            currentTime
                             (case openedOtherUserId of
                                 SelectedDiscordDmChannel routeData ->
                                     routeData.channelId == channelId
@@ -6350,8 +6351,9 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                             message
 
                       else
-                        Ui.Lazy.lazy5
+                        Ui.Lazy.lazy6
                             discordFriendLabelNotMobile
+                            currentTime
                             (case openedOtherUserId of
                                 SelectedDiscordDmChannel routeData ->
                                     routeData.channelId == channelId
@@ -6431,53 +6433,61 @@ friendLabel isMobile time isSelected currentUserId otherUserId name icon allUser
         , Ui.column
             []
             [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString name))
-            , Ui.row
-                [ Ui.Font.size 13, Ui.spacing 4 ]
-                [ Ui.el [] (Ui.text messagePreview)
-                , case message of
-                    MessageLoaded message2 ->
-                        MyUi.timeElapsedShort time (Message.createdAt message2)
-                            |> Ui.text
-                            |> Ui.el [ Ui.alignRight, Ui.Font.italic ]
-
-                    MessageUnloaded ->
-                        Ui.none
-                ]
+            , friendLabelMessagePreview time messagePreview message
             ]
         ]
 
 
+friendLabelMessagePreview : Time.Posix -> String -> MessageState messageId userId -> Element msg
+friendLabelMessagePreview time messagePreview message =
+    Ui.row
+        [ Ui.Font.size 13, Ui.spacing 4 ]
+        [ Ui.el [] (Ui.text messagePreview)
+        , case message of
+            MessageLoaded message2 ->
+                MyUi.timeElapsedShort time (Message.createdAt message2)
+                    |> Ui.text
+                    |> Ui.el [ Ui.alignRight, Ui.Font.italic ]
+
+            MessageUnloaded ->
+                Ui.none
+        ]
+
+
 discordFriendLabelMobile :
-    Bool
-    -> Discord.Id Discord.PrivateChannelId
-    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
-    -> LocalUser
-    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
-    -> Element FrontendMsg
-discordFriendLabelMobile isSelected dmChannelId members localUser message =
-    discordFriendLabel True isSelected dmChannelId members localUser message
-
-
-discordFriendLabelNotMobile :
-    Bool
-    -> Discord.Id Discord.PrivateChannelId
-    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
-    -> LocalUser
-    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
-    -> Element FrontendMsg
-discordFriendLabelNotMobile isSelected dmChannelId members localUser message =
-    discordFriendLabel False isSelected dmChannelId members localUser message
-
-
-discordFriendLabel :
-    Bool
+    Time.Posix
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
     -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     -> LocalUser
     -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
-discordFriendLabel isMobile isSelected dmChannelId members localUser message =
+discordFriendLabelMobile time isSelected dmChannelId members localUser message =
+    discordFriendLabel True time isSelected dmChannelId members localUser message
+
+
+discordFriendLabelNotMobile :
+    Time.Posix
+    -> Bool
+    -> Discord.Id Discord.PrivateChannelId
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    -> LocalUser
+    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
+    -> Element FrontendMsg
+discordFriendLabelNotMobile time isSelected dmChannelId members localUser message =
+    discordFriendLabel False time isSelected dmChannelId members localUser message
+
+
+discordFriendLabel :
+    Bool
+    -> Time.Posix
+    -> Bool
+    -> Discord.Id Discord.PrivateChannelId
+    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    -> LocalUser
+    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
+    -> Element FrontendMsg
+discordFriendLabel isMobile time isSelected dmChannelId members localUser message =
     let
         _ =
             Debug.log "rerender discord friendLabel" ()
@@ -6557,7 +6567,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
                                 , Ui.column
                                     []
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
-                                    , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+                                    , friendLabelMessagePreview time messagePreview message
                                     ]
                                 ]
 
