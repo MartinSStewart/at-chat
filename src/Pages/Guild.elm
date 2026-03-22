@@ -6594,7 +6594,7 @@ discordFriendLabel isMobile time isSelected dmChannelId members localUser messag
                                 |> String.join ", "
                                 |> Ui.text
                                 |> Ui.el [ Ui.Font.bold ]
-                            , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+                            , friendLabelMessagePreview time messagePreview message
                             ]
                         ]
                 )
