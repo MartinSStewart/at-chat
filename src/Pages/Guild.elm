@@ -946,7 +946,7 @@ discordGuildView model routeData loggedIn local =
         ( Nothing, Nothing ) ->
             case ( SeqDict.get routeData.guildId local.discordGuilds, SeqDict.get routeData.currentDiscordUserId local.localUser.linkedDiscordUsers ) of
                 ( Just guild, Just currentDiscordUser ) ->
-                    if MembersAndOwner.isMember routeData.currentDiscordUserId guild.membersAndOwner /= IsNotMember then
+                    if MembersAndOwner.isMember routeData.currentDiscordUserId guild.membersAndOwner == IsNotMember then
                         guildErrorPage
                             ("Selected Discord user ("
                                 ++ PersonName.toString currentDiscordUser.name
