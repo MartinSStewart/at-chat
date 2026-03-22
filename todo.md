@@ -5,3 +5,4 @@
 * Fix channel view not starting scrolled to the bottom
 * Fix ping user dropdown appearing too low on mobile
 * Fix context menu getting cut off if opened too low on screen
+* Typing indicator not appearing for Discord guilds
