@@ -1,6 +1,6 @@
 module MembersAndOwner exposing
     ( IsMember(..)
-    , MembersAndOwner
+    , MembersAndOwner(..)
     , addMember
     , addOrUpdateMember
     , init
@@ -14,6 +14,8 @@ module MembersAndOwner exposing
 import SeqDict exposing (SeqDict)
 
 
+{-| OpaqueVariants
+-}
 type MembersAndOwner userId a
     = MembersAndOwner (SeqDict userId a) userId
 
