@@ -2147,12 +2147,12 @@ updateLoaded msg model =
                                             -- Move the menu up if it's too close to the bottom of the screen
                                             if Coord.yRaw clickedAt + menuHeight + 60 > Coord.yRaw model.windowSize then
                                                 Coord.plus
-                                                    (Coord.xy (-MessageMenu.width - 8) (-8 - menuHeight))
+                                                    (Coord.xy -MessageMenu.width menuHeight)
                                                     clickedAt
 
                                             else
                                                 Coord.plus
-                                                    (Coord.xy (-MessageMenu.width - 8) -8)
+                                                    (Coord.xy -MessageMenu.width 0)
                                                     clickedAt
                                         , guildOrDmId = guildOrDmId
                                         , threadRoute = threadRoute

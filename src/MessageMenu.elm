@@ -28,12 +28,13 @@ import Quantity exposing (Quantity, Rate)
 import SeqDict exposing (SeqDict)
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Font
 
 
 width : number
 width =
-    200
+    216
 
 
 close : LoadedFrontend -> LoggedIn2 -> LoggedIn2
@@ -122,12 +123,24 @@ desktopMenuHeight :
     -> LoadedFrontend
     -> Int
 desktopMenuHeight extraOptions local model =
-    let
-        itemCount =
-            menuItems False extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.position local model
-                |> List.length
-    in
-    itemCount * buttonHeight False + 2
+    menuItems False extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.position local model
+        |> List.length
+        |> desktopMenuHeightHelper
+
+
+desktopMenuHeightHelper : Int -> Int
+desktopMenuHeightHelper itemCount =
+    itemCount * buttonHeight False + 2 + desktopMenuPaddingTop + desktopMenuPaddingBottom
+
+
+desktopMenuPaddingTop : number
+desktopMenuPaddingTop =
+    8
+
+
+desktopMenuPaddingBottom : number
+desktopMenuPaddingBottom =
+    16
 
 
 topPadding : number
@@ -295,10 +308,34 @@ view model extraOptions local loggedIn =
             Ui.none
 
     else
+        let
+            menuItems2 : List (Element FrontendMsg)
+            menuItems2 =
+                menuItems
+                    False
+                    extraOptions.guildOrDmId
+                    extraOptions.threadRoute
+                    extraOptions.isThreadStarter
+                    extraOptions.position
+                    local
+                    model
+
+            height : Int
+            height =
+                desktopMenuHeightHelper (List.length menuItems2)
+
+            y =
+                Coord.yRaw extraOptions.position
+        in
         Ui.column
             [ Ui.move
                 { x = Coord.xRaw extraOptions.position
-                , y = Coord.yRaw extraOptions.position
+                , y =
+                    if height + y > Coord.yRaw model.windowSize then
+                        y - height
+
+                    else
+                        y
                 , z = 0
                 }
             , Ui.background MyUi.background1
@@ -306,17 +343,10 @@ view model extraOptions local loggedIn =
             , Ui.borderColor MyUi.border1
             , Ui.width (Ui.px width)
             , Ui.rounded 8
+            , Ui.paddingWith { left = 8, right = 8, top = desktopMenuPaddingTop, bottom = desktopMenuPaddingBottom }
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems
-                False
-                extraOptions.guildOrDmId
-                extraOptions.threadRoute
-                extraOptions.isThreadStarter
-                extraOptions.position
-                local
-                model
-            )
+            menuItems2
 
 
 editMessageTextInputId : HtmlId
@@ -494,6 +524,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 )
                 (PressedCopyText text)
                 |> Just
+            , if canEditAndDelete && not isMobile then
+                Ui.el
+                    [ Ui.height (Ui.px (buttonHeight False))
+                    , Ui.contentCenterY
+                    , Ui.paddingXY 8 0
+                    ]
+                    (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
+                    |> Just
+
+              else
+                Nothing
             , if canEditAndDelete then
                 Ui.el
                     [ Ui.Font.color MyUi.errorColor ]
@@ -524,6 +565,8 @@ button isMobile htmlId icon text msg =
         , Ui.contentCenterY
         , Ui.paddingXY 8 0
         , buttonHeight isMobile |> Ui.px |> Ui.height
+        , Ui.attrIf isMobile (Ui.Font.size 14)
+        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
