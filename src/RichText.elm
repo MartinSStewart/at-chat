@@ -68,29 +68,33 @@ type RichText userId
 
 
 type EscapedChar
-    = EscapedModifier Modifiers
-    | EscapedSquareBracket
+    = EscapedSquareBracket
     | EscapedBackslash
     | EscapedBacktick
     | EscapedAtSymbol
+    | EscapedBold
+    | EscapedItalic
+      -- We don't include EscapedUnderline because it has the same start character as EscapedItalic
+    | EscapedStrikethrough
+    | EscapedSpoilered
 
 
-escapedChars : List EscapedChar
-escapedChars =
+allEscapedChars : List EscapedChar
+allEscapedChars =
     [ EscapedSquareBracket
     , EscapedBackslash
     , EscapedBacktick
     , EscapedAtSymbol
+    , EscapedBold
+    , EscapedItalic
+    , EscapedStrikethrough
+    , EscapedSpoilered
     ]
-        ++ List.map EscapedModifier allModifiers
 
 
 escapedCharToString : EscapedChar -> String
 escapedCharToString escaped =
     case escaped of
-        EscapedModifier modifiers ->
-            modifierToSymbol modifiers |> String.Nonempty.toString
-
         EscapedSquareBracket ->
             "["
 
@@ -102,6 +106,18 @@ escapedCharToString escaped =
 
         EscapedAtSymbol ->
             "@"
+
+        EscapedBold ->
+            "*"
+
+        EscapedItalic ->
+            "_"
+
+        EscapedStrikethrough ->
+            "~"
+
+        EscapedSpoilered ->
+            "|"
 
 
 type Language
@@ -477,7 +493,7 @@ type alias LoopState userId =
 
 charToEscaped : Dict String EscapedChar
 charToEscaped =
-    List.map (\escaped -> ( escapedCharToString escaped, escaped )) escapedChars |> Dict.fromList
+    List.map (\escaped -> ( escapedCharToString escaped, escaped )) allEscapedChars |> Dict.fromList
 
 
 discordEscapableChars : Set String
@@ -755,16 +771,6 @@ attachedFilePrefix =
 attachedFileSuffix : String
 attachedFileSuffix =
     "]"
-
-
-allModifiers : List Modifiers
-allModifiers =
-    [ IsBold
-    , IsItalic
-    , IsUnderlined
-    , IsStrikethrough
-    , IsSpoilered
-    ]
 
 
 codeBlockParser : Parser ( Language, String )

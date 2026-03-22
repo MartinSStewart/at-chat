@@ -4,7 +4,7 @@ import Expect
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
-import RichText exposing (EscapedChar(..), Language(..), Modifiers(..), RichText(..))
+import RichText exposing (EscapedChar(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -174,9 +174,9 @@ test =
                 RichText.fromNonemptyString users (NonemptyString '\\' "*Bullet point 1\n\\*Bullet point 2")
                     |> Expect.equal
                         (Nonempty
-                            (EscapedChar (EscapedModifier IsBold))
+                            (EscapedChar EscapedBold)
                             [ NormalText 'B' "ullet point 1\n"
-                            , EscapedChar (EscapedModifier IsBold)
+                            , EscapedChar EscapedBold
                             , NormalText 'B' "ullet point 2"
                             ]
                         )
@@ -185,10 +185,10 @@ test =
                 RichText.fromNonemptyString users (NonemptyString '\\' "**Bullet point 1*\n\\*Bullet point 2")
                     |> Expect.equal
                         (Nonempty
-                            (EscapedChar (EscapedModifier IsBold))
+                            (EscapedChar EscapedBold)
                             [ Bold (Nonempty (NormalText 'B' "ullet point 1") [])
                             , NormalText '\n' ""
-                            , EscapedChar (EscapedModifier IsBold)
+                            , EscapedChar EscapedBold
                             , NormalText 'B' "ullet point 2"
                             ]
                         )
@@ -331,12 +331,12 @@ test =
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '\\' "_hello")
                     |> Expect.equal
-                        (Nonempty (EscapedChar (EscapedModifier IsItalic)) [ NormalText 'h' "ello" ])
+                        (Nonempty (EscapedChar EscapedItalic) [ NormalText 'h' "ello" ])
         , Test.test "escape strikethrough" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '\\' "~hello")
                     |> Expect.equal
-                        (Nonempty (EscapedChar (EscapedModifier IsStrikethrough)) [ NormalText 'h' "ello" ])
+                        (Nonempty (EscapedChar EscapedStrikethrough) [ NormalText 'h' "ello" ])
         , Test.test "backslash before non-special char" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '\\' "nhello")
@@ -440,13 +440,13 @@ test =
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '\\' "*abc")
                     |> Expect.equal
-                        (Nonempty (EscapedChar (EscapedModifier IsBold)) [ NormalText 'a' "bc" ])
+                        (Nonempty (EscapedChar EscapedBold) [ NormalText 'a' "bc" ])
         , Test.test "multiple escapes in a row" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '\\' "*\\*")
                     |> Expect.equal
-                        (Nonempty (EscapedChar (EscapedModifier IsBold))
-                            [ EscapedChar (EscapedModifier IsBold) ]
+                        (Nonempty (EscapedChar EscapedBold)
+                            [ EscapedChar EscapedBold ]
                         )
         , Test.test "bold with spaces inside" <|
             \_ ->
