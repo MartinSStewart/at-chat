@@ -53,6 +53,7 @@ import Json.Decode
 import List.Nonempty
 import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
+import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -1705,6 +1706,14 @@ discordGuildsSection user adminData =
                             channelCount : Int
                             channelCount =
                                 SeqDict.size guild.channels
+
+                            owner : Discord.Id Discord.UserId
+                            owner =
+                                MembersAndOwner.owner guild.membersAndOwner
+
+                            members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+                            members =
+                                MembersAndOwner.members guild.membersAndOwner
                         in
                         Ui.column
                             [ Ui.spacing 4 ]
@@ -1723,15 +1732,15 @@ discordGuildsSection user adminData =
                                 , Ui.row
                                     [ Ui.spacing 8 ]
                                     [ Ui.text "Owner:"
-                                    , case SeqDict.get guild.owner adminData.discordUsers of
+                                    , case SeqDict.get owner adminData.discordUsers of
                                         Just discordUser ->
                                             discordUserLabel discordUser
 
                                         Nothing ->
-                                            Ui.text (Discord.idToString guild.owner)
+                                            Ui.text (Discord.idToString owner)
                                     ]
                                 , Ui.text ("Channels: " ++ String.fromInt channelCount)
-                                , Ui.text ("Members: " ++ String.fromInt (SeqDict.size guild.members))
+                                , Ui.text ("Members: " ++ String.fromInt (SeqDict.size members))
                                 , MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
                                 ]
                             , if isExpanded then
@@ -1750,7 +1759,7 @@ discordGuildsSection user adminData =
                                                 )
                                                 adminData.discordUsers
                                             )
-                                            (SeqDict.insert guild.owner { joinedAt = Nothing } guild.members)
+                                            (SeqDict.insert owner { joinedAt = Nothing } members)
                                             |> SeqDict.keys
                                             |> List.head
                                 in

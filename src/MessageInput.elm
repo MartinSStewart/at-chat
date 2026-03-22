@@ -30,6 +30,7 @@ import Json.Decode.Extra
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
+import MembersAndOwner
 import MyUi exposing (Range)
 import NonemptyDict
 import PersonName exposing (PersonName)
@@ -551,7 +552,7 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
         GuildOrDmId_Guild guildId _ ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
-                    guild.owner :: SeqDict.keys guild.members
+                    MembersAndOwner.membersAndOwner guild.membersAndOwner
 
                 Nothing ->
                     []
@@ -596,7 +597,7 @@ discordUserDropdownList isMobile nameSoFar guildOrDmId local =
         DiscordGuildOrDmId_Guild _ guildId _ ->
             case SeqDict.get guildId local.discordGuilds of
                 Just guild ->
-                    guild.owner :: SeqDict.keys guild.members
+                    MembersAndOwner.membersAndOwner guild.membersAndOwner
 
                 Nothing ->
                     []

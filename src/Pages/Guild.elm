@@ -43,6 +43,7 @@ import List.Extra
 import List.Nonempty
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
+import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
@@ -362,7 +363,9 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                             maybeDiscordUserId : Maybe ( Discord.Id Discord.UserId, User.DiscordFrontendCurrentUser )
                             maybeDiscordUserId =
                                 SeqDict.filter
-                                    (\linkedUserId _ -> SeqDict.member linkedUserId guild.members || linkedUserId == guild.owner)
+                                    (\linkedUserId _ ->
+                                        MembersAndOwner.isMember linkedUserId guild.membersAndOwner /= IsNotMember
+                                    )
                                     localUser.linkedDiscordUsers
                                     |> SeqDict.toList
                                     |> List.head
@@ -795,12 +798,11 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy4
+                                    Ui.Lazy.lazy3
                                         memberColumnMobile
                                         canScroll2
                                         local.localUser
-                                        guild.owner
-                                        guild.members
+                                        guild.membersAndOwner
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
@@ -879,7 +881,7 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy3 memberColumnNotMobile local.localUser guild.owner guild.members
+                            , Ui.Lazy.lazy2 memberColumnNotMobile local.localUser guild.membersAndOwner
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -944,7 +946,7 @@ discordGuildView model routeData loggedIn local =
         ( Nothing, Nothing ) ->
             case ( SeqDict.get routeData.guildId local.discordGuilds, SeqDict.get routeData.currentDiscordUserId local.localUser.linkedDiscordUsers ) of
                 ( Just guild, Just currentDiscordUser ) ->
-                    if not (SeqDict.member routeData.currentDiscordUserId guild.members || routeData.currentDiscordUserId == guild.owner) then
+                    if MembersAndOwner.isMember routeData.currentDiscordUserId guild.membersAndOwner == IsNotMember then
                         guildErrorPage
                             ("Selected Discord user ("
                                 ++ PersonName.toString currentDiscordUser.name
@@ -979,13 +981,12 @@ discordGuildView model routeData loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy5
+                                    Ui.Lazy.lazy4
                                         discordMemberColumnMobile
                                         canScroll2
                                         local.localUser
                                         routeData.currentDiscordUserId
-                                        guild.owner
-                                        guild.members
+                                        guild.membersAndOwner
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
@@ -1062,12 +1063,11 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy4
+                            , Ui.Lazy.lazy3
                                 discordMemberColumnNotMobile
                                 local.localUser
                                 routeData.currentDiscordUserId
-                                guild.owner
-                                guild.members
+                                guild.membersAndOwner
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -1128,11 +1128,15 @@ memberColumnWidth =
     200
 
 
-memberColumnNotMobile : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
-memberColumnNotMobile localUser guildOwner guildMembers =
+memberColumnNotMobile : LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnNotMobile localUser membersAndOwner =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
+
+        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+        members =
+            MembersAndOwner.members membersAndOwner
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -1146,18 +1150,14 @@ memberColumnNotMobile localUser guildOwner guildMembers =
         [ Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.text "Owner"
-            , memberLabel False localUser guildOwner
+            , memberLabel False localUser (MembersAndOwner.owner membersAndOwner)
             ]
         , Ui.column
             [ Ui.paddingXY 8 4 ]
-            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
             , Ui.column
                 [ Ui.height Ui.fill ]
-                (SeqDict.foldr
-                    (\userId _ list -> memberLabel False localUser userId :: list)
-                    []
-                    guildMembers
-                )
+                (SeqDict.foldr (\userId _ list -> memberLabel False localUser userId :: list) [] members)
             ]
         ]
 
@@ -1165,13 +1165,16 @@ memberColumnNotMobile localUser guildOwner guildMembers =
 discordMemberColumnNotMobile :
     LocalUser
     -> Discord.Id Discord.UserId
-    -> Discord.Id Discord.UserId
-    -> SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg
-discordMemberColumnNotMobile localUser currentDiscordUserId guildOwner guildMembers =
+discordMemberColumnNotMobile localUser currentDiscordUserId membersAndOwner =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
+
+        members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+        members =
+            MembersAndOwner.members membersAndOwner
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -1185,24 +1188,28 @@ discordMemberColumnNotMobile localUser currentDiscordUserId guildOwner guildMemb
         [ Ui.column
             [ Ui.paddingXY 8 4 ]
             [ Ui.text "Owner"
-            , discordMemberLabel False localUser currentDiscordUserId guildOwner
-            , Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+            , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner membersAndOwner)
+            , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
                     (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
                     []
-                    guildMembers
+                    members
                 )
             ]
         ]
 
 
-memberColumnMobile : Bool -> LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
-memberColumnMobile canScroll2 localUser guildOwner guildMembers =
+memberColumnMobile : Bool -> LocalUser -> MembersAndOwner (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnMobile canScroll2 localUser membersAndOwner =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
+
+        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+        members =
+            MembersAndOwner.members membersAndOwner
     in
     Ui.column
         [ Ui.height Ui.fill ]
@@ -1229,18 +1236,14 @@ memberColumnMobile canScroll2 localUser guildOwner guildMembers =
             [ Ui.column
                 [ Ui.paddingXY 8 4 ]
                 [ Ui.text "Owner"
-                , memberLabel True localUser guildOwner
+                , memberLabel True localUser (MembersAndOwner.owner membersAndOwner)
                 ]
             , Ui.column
                 [ Ui.paddingXY 8 4 ]
-                [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+                [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
                 , Ui.column
                     [ Ui.height Ui.fill ]
-                    (SeqDict.foldr
-                        (\userId _ list -> memberLabel True localUser userId :: list)
-                        []
-                        guildMembers
-                    )
+                    (SeqDict.foldr (\userId _ list -> memberLabel True localUser userId :: list) [] members)
                 ]
             ]
         ]
@@ -1250,13 +1253,16 @@ discordMemberColumnMobile :
     Bool
     -> LocalUser
     -> Discord.Id Discord.UserId
-    -> Discord.Id Discord.UserId
-    -> SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    -> MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     -> Element FrontendMsg
-discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildOwner guildMembers =
+discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOwner =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
+
+        members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+        members =
+            MembersAndOwner.members membersAndOwner
     in
     Ui.column
         [ Ui.height Ui.fill ]
@@ -1285,15 +1291,15 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildOwner g
                 [ Ui.column
                     [ Ui.paddingXY 8 4 ]
                     [ Ui.text "Owner"
-                    , discordMemberLabel False localUser currentDiscordUserId guildOwner
+                    , discordMemberLabel False localUser currentDiscordUserId (MembersAndOwner.owner membersAndOwner)
                     ]
-                , Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+                , Ui.text ("Members (" ++ String.fromInt (SeqDict.size members) ++ ")")
                 , Ui.column
                     [ Ui.height Ui.fill ]
                     (SeqDict.foldr
                         (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId :: list)
                         []
-                        guildMembers
+                        members
                     )
                 ]
             ]
@@ -5585,30 +5591,31 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
 
         newChannelButton : Element FrontendMsg
         newChannelButton =
-            if localUser.session.userId == guild.owner then
-                let
-                    isSelected =
-                        channelRoute == NewChannelRoute
-                in
-                rowLinkButton
-                    (Dom.id "guild_newChannel")
-                    (GuildRoute guildId NewChannelRoute)
-                    [ Ui.paddingXY 4 8
-                    , Ui.Font.color MyUi.font3
-                    , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-                    , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-                    , if isSelected then
-                        Ui.Font.color MyUi.font1
+            case MembersAndOwner.isMember localUser.session.userId guild.membersAndOwner of
+                IsOwner ->
+                    let
+                        isSelected =
+                            channelRoute == NewChannelRoute
+                    in
+                    rowLinkButton
+                        (Dom.id "guild_newChannel")
+                        (GuildRoute guildId NewChannelRoute)
+                        [ Ui.paddingXY 4 8
+                        , Ui.Font.color MyUi.font3
+                        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+                        , if isSelected then
+                            Ui.Font.color MyUi.font1
 
-                      else
-                        Ui.Font.color MyUi.font3
-                    ]
-                    [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
-                    , Ui.text " Add new channel"
-                    ]
+                          else
+                            Ui.Font.color MyUi.font3
+                        ]
+                        [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
+                        , Ui.text " Add new channel"
+                        ]
 
-            else
-                Ui.none
+                _ ->
+                    Ui.none
     in
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)

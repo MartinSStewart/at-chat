@@ -78,7 +78,6 @@ module LocalState exposing
     , guildToFrontendForUser
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
-    , isGuildMemberOrOwner
     , loadingDiscordChannelMap
     , markAllChannelsAsViewed
     , memberIsEditTypingBackend
@@ -119,6 +118,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
+import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (ChangeAttachments, Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -179,8 +179,7 @@ type alias BackendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) BackendChannel
-    , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-    , owner : Id UserId
+    , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
@@ -189,8 +188,7 @@ type alias DiscordBackendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
-    , members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    , owner : Discord.Id Discord.UserId
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     }
 
 
@@ -200,8 +198,7 @@ type alias FrontendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) FrontendChannel
-    , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-    , owner : Id UserId
+    , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
@@ -210,49 +207,43 @@ type alias DiscordFrontendGuild =
     { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
-    , members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    , owner : Discord.Id Discord.UserId
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     }
-
-
-isGuildMemberOrOwner : userId -> { a | owner : userId, members : SeqDict userId { joinedAt : Time.Posix } } -> Bool
-isGuildMemberOrOwner userId guild =
-    userId == guild.owner || SeqDict.member userId guild.members
 
 
 guildToFrontendForUser : Maybe ( Id ChannelId, ThreadRoute ) -> Id UserId -> BackendGuild -> Maybe FrontendGuild
 guildToFrontendForUser requestMessagesFor userId guild =
-    if isGuildMemberOrOwner userId guild then
-        { createdAt = guild.createdAt
-        , createdBy = guild.createdBy
-        , name = guild.name
-        , icon = guild.icon
-        , channels =
-            SeqDict.filterMap
-                (\channelId channel ->
-                    channelToFrontend
-                        (case requestMessagesFor of
-                            Just ( channelIdB, threadRoute ) ->
-                                if channelId == channelIdB then
-                                    Just threadRoute
+    case MembersAndOwner.isMember userId guild.membersAndOwner of
+        IsNotMember ->
+            Nothing
 
-                                else
+        _ ->
+            { createdAt = guild.createdAt
+            , createdBy = guild.createdBy
+            , name = guild.name
+            , icon = guild.icon
+            , channels =
+                SeqDict.filterMap
+                    (\channelId channel ->
+                        channelToFrontend
+                            (case requestMessagesFor of
+                                Just ( channelIdB, threadRoute ) ->
+                                    if channelId == channelIdB then
+                                        Just threadRoute
+
+                                    else
+                                        Nothing
+
+                                _ ->
                                     Nothing
-
-                            _ ->
-                                Nothing
-                        )
-                        channel
-                )
-                guild.channels
-        , members = guild.members
-        , owner = guild.owner
-        , invites = guild.invites
-        }
-            |> Just
-
-    else
-        Nothing
+                            )
+                            channel
+                    )
+                    guild.channels
+            , membersAndOwner = guild.membersAndOwner
+            , invites = guild.invites
+            }
+                |> Just
 
 
 guildToFrontend : Maybe ( Id ChannelId, ThreadRoute ) -> BackendGuild -> FrontendGuild
@@ -279,8 +270,7 @@ guildToFrontend requestMessagesFor guild =
                     channel
             )
             guild.channels
-    , members = guild.members
-    , owner = guild.owner
+    , membersAndOwner = guild.membersAndOwner
     , invites = guild.invites
     }
 
@@ -586,8 +576,7 @@ type alias AdminData_GuildChannel =
 type alias AdminData_DiscordGuild =
     { name : GuildName
     , channels : SeqDict (Discord.Id Discord.ChannelId) AdminData_DiscordChannel
-    , members : SeqDict (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    , owner : Discord.Id Discord.UserId
+    , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     }
 
 
@@ -966,8 +955,7 @@ createGuild time userId guildName =
                 }
               )
             ]
-    , members = SeqDict.empty
-    , owner = userId
+    , membersAndOwner = MembersAndOwner.init SeqDict.empty userId
     , invites = SeqDict.empty
     }
 
@@ -1351,39 +1339,41 @@ addInvite inviteId userId time guild =
 
 addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
 addMemberBackend time userId guild =
-    if guild.owner == userId || SeqDict.member userId guild.members then
-        Err ()
+    case MembersAndOwner.addMember userId { joinedAt = time } guild.membersAndOwner of
+        Ok membersAndOwner ->
+            { guild
+                | membersAndOwner = membersAndOwner
+                , channels =
+                    SeqDict.updateIfExists
+                        (announcementChannel guild)
+                        (\channel ->
+                            createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty) channel
+                                |> Tuple.second
+                        )
+                        guild.channels
+            }
+                |> Ok
 
-    else
-        { guild
-            | members = SeqDict.insert userId { joinedAt = time } guild.members
-            , channels =
-                SeqDict.updateIfExists
-                    (announcementChannel guild)
-                    (\channel ->
-                        createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty) channel
-                            |> Tuple.second
-                    )
-                    guild.channels
-        }
-            |> Ok
+        Err () ->
+            Err ()
 
 
 addMemberFrontend : Time.Posix -> Id UserId -> FrontendGuild -> Result () FrontendGuild
 addMemberFrontend time userId guild =
-    if guild.owner == userId || SeqDict.member userId guild.members then
-        Err ()
+    case MembersAndOwner.addMember userId { joinedAt = time } guild.membersAndOwner of
+        Ok membersAndOwner ->
+            { guild
+                | membersAndOwner = membersAndOwner
+                , channels =
+                    SeqDict.updateIfExists
+                        (announcementChannel guild)
+                        (createChannelMessageFrontend (UserJoinedMessage time userId SeqDict.empty))
+                        guild.channels
+            }
+                |> Ok
 
-    else
-        { guild
-            | members = SeqDict.insert userId { joinedAt = time } guild.members
-            , channels =
-                SeqDict.updateIfExists
-                    (announcementChannel guild)
-                    (createChannelMessageFrontend (UserJoinedMessage time userId SeqDict.empty))
-                    guild.channels
-        }
-            |> Ok
+        Err () ->
+            Err ()
 
 
 announcementChannel : { a | channels : SeqDict (Id ChannelId) b } -> Id ChannelId
