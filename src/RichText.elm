@@ -645,7 +645,42 @@ parser users modifiers =
                                 |> Loop
                         )
                 , Parser.chompIf (\_ -> True)
-                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char stopOnChar)))
+                    |> Parser.andThen
+                        (\_ ->
+                            Parser.chompWhile
+                                (\char ->
+                                    case char of
+                                        '[' ->
+                                            False
+
+                                        '@' ->
+                                            False
+
+                                        'h' ->
+                                            False
+
+                                        '`' ->
+                                            False
+
+                                        '\\' ->
+                                            False
+
+                                        '*' ->
+                                            False
+
+                                        '_' ->
+                                            False
+
+                                        '~' ->
+                                            False
+
+                                        '|' ->
+                                            False
+
+                                        _ ->
+                                            True
+                                )
+                        )
                     |> Parser.getChompedString
                     |> Parser.map
                         (\a ->
@@ -754,15 +789,6 @@ allModifiers =
     , IsStrikethrough
     , IsSpoilered
     ]
-
-
-stopOnChar : SeqSet Char
-stopOnChar =
-    [ '[', '@', 'h', '`', '\\' ]
-        ++ List.map
-            (\modifier -> modifierToSymbol modifier |> String.Nonempty.head)
-            allModifiers
-        |> SeqSet.fromList
 
 
 codeBlockParser : Parser ( Language, String )
@@ -2132,7 +2158,39 @@ discordParser modifiers =
                                 |> Loop
                         )
                 , Parser.chompIf (\_ -> True)
-                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char discordStopOnChar)))
+                    |> Parser.andThen
+                        (\_ ->
+                            Parser.chompWhile
+                                (\char ->
+                                    case char of
+                                        '<' ->
+                                            False
+
+                                        'h' ->
+                                            False
+
+                                        '`' ->
+                                            False
+
+                                        '\\' ->
+                                            False
+
+                                        '*' ->
+                                            False
+
+                                        '_' ->
+                                            False
+
+                                        '~' ->
+                                            False
+
+                                        '|' ->
+                                            False
+
+                                        _ ->
+                                            True
+                                )
+                        )
                     |> Parser.getChompedString
                     |> Parser.map
                         (\a ->
@@ -2144,15 +2202,6 @@ discordParser modifiers =
                 , Parser.map (\() -> discordBailOut state modifiers) Parser.end
                 ]
         )
-
-
-discordStopOnChar : SeqSet Char
-discordStopOnChar =
-    [ '<', 'h', '`', '\\' ]
-        ++ List.map
-            (\modifier -> discordModifierToSymbol modifier |> String.Nonempty.head)
-            allDiscordModifiers
-        |> SeqSet.fromList
 
 
 toDiscord :
