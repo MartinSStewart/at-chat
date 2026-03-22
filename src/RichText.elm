@@ -1465,7 +1465,7 @@ embedView onPressLink containerWidth domainWhitelist url embed =
                             min embedContainerMaxWidth containerWidth - embedContainerLeftBorderWidth - embedContainerPaddingX * 2
 
                         ( width, height ) =
-                            actualImageSize FileStatus.imageMaxHeight insideWidth imageData.imageSize
+                            actualImageSize embedImageMaxHeight insideWidth imageData.imageSize
                     in
                     Html.img
                         [ Html.Attributes.src imageData.url
@@ -1495,6 +1495,11 @@ embedView onPressLink containerWidth domainWhitelist url embed =
             , smallHyperlink onPressLink domainWhitelist url |> Just
             ]
         )
+
+
+embedImageMaxHeight : number
+embedImageMaxHeight =
+    500
 
 
 actualImageSize : Float -> Int -> Coord units -> ( Float, Float )

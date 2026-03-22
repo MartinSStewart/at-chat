@@ -71,7 +71,7 @@ decodeEmbedData : Json.Decode.Decoder EmbedData
 decodeEmbedData =
     Json.Decode.map4 EmbedData
         (Json.Decode.field "title" (Json.Decode.nullable Json.Decode.string))
-        (Json.Decode.field "image" (Json.Decode.nullable imageDataDecoder))
+        (Json.Decode.field "image" (Json.Decode.nullable decodeImageData))
         (Json.Decode.field "description" (Json.Decode.nullable Json.Decode.string))
         (Json.Decode.field "created_at" (Json.Decode.nullable decodeTime))
 
@@ -81,17 +81,17 @@ decodeTime =
     Json.Decode.map Time.millisToPosix Json.Decode.int
 
 
-imageDataDecoder : Json.Decode.Decoder EmbedImageData
-imageDataDecoder =
+decodeImageData : Json.Decode.Decoder EmbedImageData
+decodeImageData =
     Json.Decode.map4 (\url width height format -> EmbedImageData url (Coord.xy width height) format)
         (Json.Decode.field "url" Json.Decode.string)
         (Json.Decode.field "width" Json.Decode.int)
         (Json.Decode.field "height" Json.Decode.int)
-        (Json.Decode.field "format" (Json.Decode.nullable imageFormatDecoder))
+        (Json.Decode.field "format" (Json.Decode.nullable decodeImageFormat))
 
 
-imageFormatDecoder : Json.Decode.Decoder EmbedImageFormat
-imageFormatDecoder =
+decodeImageFormat : Json.Decode.Decoder EmbedImageFormat
+decodeImageFormat =
     Json.Decode.string
         |> Json.Decode.andThen
             (\str ->

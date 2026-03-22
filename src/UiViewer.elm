@@ -6,18 +6,20 @@ Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 
 import Array
 import BackendExtra
+import Coord
 import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
+import Embed exposing (Embed(..))
 import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log exposing (Log)
 import MyUi
 import Postmark
-import RichText exposing (Domain, Embed(..))
+import RichText exposing (Domain)
 import SeqDict
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
@@ -178,21 +180,21 @@ embedExamples whitelistedDomains =
             (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
             [ EmbedLoaded
                 { title = Just "Title of this embed"
-                , image = Just "/android-chrome-512x512.png"
-                , content = Just "Content of this embedded link"
+                , image = Just { url = "/android-chrome-512x512.png", imageSize = Coord.xy 512 512, format = Just Embed.Png }
+                , description = Just "Content of this embedded link"
                 , createdAt = Just (Time.millisToPosix 0)
                 }
             ]
         , message
             (NonemptyString 'C' ("heck out this cool link! " ++ url ++ " Cool huh?"))
-            [ EmbedLoaded RichText.emptyEmbed
+            [ EmbedLoaded Embed.empty
             ]
         , message
             (NonemptyString 'C' ("heck out this cool link! " ++ shortUrl ++ " Cool huh?"))
-            [ EmbedLoaded RichText.emptyEmbed
+            [ EmbedLoaded Embed.empty
             ]
         , message
             (NonemptyString 'C' "heck out this cool link! http://town-collab.app/ Cool huh?")
-            [ EmbedLoaded RichText.emptyEmbed
+            [ EmbedLoaded Embed.empty
             ]
         ]
