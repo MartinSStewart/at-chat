@@ -238,6 +238,7 @@ type alias CachedEmojiData =
 
 type alias EmojiData =
     { skinVariations : SeqDict SkinTone String
+    , shortNames : List String
     }
 
 
@@ -394,14 +395,25 @@ selector model emojiData =
                     Nothing ->
                         Ui.none
                 , Ui.row
-                    [ Ui.height (Ui.px 40), Ui.contentCenterY ]
-                    [ case model.emojiHovered of
+                    [ Ui.height (Ui.px 50), Ui.contentCenterY ]
+                    (case model.emojiHovered of
                         Just emoji ->
-                            emojiWithSkinTone model.selectedSkinTone emoji emojiData2 |> Ui.text
+                            [ emojiWithSkinTone model.selectedSkinTone emoji emojiData2 |> Ui.text
+                            , case SeqDict.get emoji emojiData2.emojis of
+                                Just emoji2 ->
+                                    String.join
+                                        " "
+                                        (List.map (\name -> ":" ++ name ++ ":") emoji2.shortNames)
+                                        |> Ui.text
+                                        |> Ui.el [ Ui.Font.size 16 ]
+
+                                Nothing ->
+                                    Ui.none
+                            ]
 
                         Nothing ->
-                            Ui.none
-                    ]
+                            []
+                    )
                 ]
                 |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
@@ -441,7 +453,8 @@ requestEmojiData gotEmojiData =
                                         (\emoji dict ->
                                             SeqDict.insert
                                                 (UnicodeEmoji emoji.emoji)
-                                                { skinVariations =
+                                                { shortNames = emoji.shortNames
+                                                , skinVariations =
                                                     case emoji.skinVariations of
                                                         Just skinVariations ->
                                                             List.filterMap
