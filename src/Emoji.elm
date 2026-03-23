@@ -11,6 +11,7 @@ import List.Extra
 import MyUi
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 
@@ -297,12 +298,16 @@ skinToneView selectedSkinTone =
                 (PressedSkinTone skinTone)
                 [ Ui.width (Ui.px emojiWidth)
                 , Ui.contentCenterX
-                , Ui.attrIf (selectedSkinTone == skinTone) (Ui.background MyUi.white)
+                , if selectedSkinTone == skinTone then
+                    Ui.opacity 1
+
+                  else
+                    Ui.opacity 0.3
                 ]
                 (Ui.text text)
         )
         (Nothing :: List.map Just allSkinTones)
-        |> Ui.row [ Ui.alignRight, Ui.paddingXY 20 0 ]
+        |> Ui.row [ Ui.alignRight ]
 
 
 emojiWidth : number
@@ -310,8 +315,12 @@ emojiWidth =
     40
 
 
-selector : Model -> Maybe CachedEmojiData -> Element Msg
-selector model emojiData =
+emojiHeight =
+    50
+
+
+selector : Bool -> Model -> Maybe CachedEmojiData -> Element Msg
+selector isMobile model emojiData =
     let
         columns =
             16
@@ -321,15 +330,17 @@ selector model emojiData =
             Ui.column
                 [ Ui.width (Ui.px (columns * emojiWidth + 21))
                 , Ui.height (Ui.px 400)
-                , Ui.background MyUi.background1
+                , Ui.background MyUi.background2
                 , Ui.border 1
-                , Ui.borderColor MyUi.border1
+                , Ui.borderColor MyUi.highlightedBorder
+                , Ui.rounded 8
                 , Ui.Font.size 32
                 , MyUi.blockClickPropagation PressedContainer
                 , Ui.heightMin 0
+                , Ui.clip
                 ]
                 [ Ui.row
-                    []
+                    [ MyUi.noShrinking ]
                     (List.filterMap
                         (\category ->
                             case category of
@@ -340,28 +351,21 @@ selector model emojiData =
                                     MyUi.elButton
                                         (categoryButtonId category)
                                         (PressedCategory category)
-                                        []
+                                        [ Ui.Font.center
+                                        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+                                        , Ui.attrIf (category == model.selectedCategory) (Ui.background MyUi.background3)
+                                        ]
                                         (Ui.text (representativeEmoji model.selectedSkinTone category))
                                         |> Just
                         )
                         allCategories
                     )
-                , Ui.row
-                    []
-                    [ Ui.el [ Ui.Font.size 24 ] (Ui.text (categoryToString model.selectedCategory))
-                    , case model.selectedCategory of
-                        PeopleAndBody ->
-                            skinToneView model.selectedSkinTone
-
-                        _ ->
-                            Ui.none
-                    ]
                 , case SeqDict.get model.selectedCategory emojiData2.categories of
                     Just emojis ->
                         List.map
                             (\emojiRow ->
                                 Ui.row
-                                    [ Ui.height (Ui.px 34) ]
+                                    [ Ui.height (Ui.px emojiHeight) ]
                                     (List.map
                                         (\emoji ->
                                             let
@@ -382,7 +386,7 @@ selector model emojiData =
                                                 , Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
                                                 , Ui.attrIf
                                                     (model.emojiHovered == Just emoji)
-                                                    (Ui.background MyUi.white)
+                                                    (Ui.background MyUi.hoverHighlight)
                                                 ]
                                                 (Ui.text emoji2)
                                         )
@@ -390,29 +394,44 @@ selector model emojiData =
                                     )
                             )
                             (List.Extra.greedyGroupsOf columns emojis)
-                            |> Ui.column [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background2 ]
+                            |> Ui.column [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3 ]
 
                     Nothing ->
                         Ui.none
                 , Ui.row
-                    [ Ui.height (Ui.px 50), Ui.contentCenterY ]
-                    (case model.emojiHovered of
+                    [ Ui.height (Ui.px emojiHeight)
+                    , Ui.contentCenterY
+                    , Ui.spacing 8
+                    , MyUi.noShrinking
+                    , Ui.paddingXY 8 0
+                    ]
+                    ((case model.emojiHovered of
                         Just emoji ->
-                            [ emojiWithSkinTone model.selectedSkinTone emoji emojiData2 |> Ui.text
-                            , case SeqDict.get emoji emojiData2.emojis of
-                                Just emoji2 ->
-                                    String.join
-                                        " "
-                                        (List.map (\name -> ":" ++ name ++ ":") emoji2.shortNames)
-                                        |> Ui.text
-                                        |> Ui.el [ Ui.Font.size 16 ]
+                            Ui.text (emojiWithSkinTone model.selectedSkinTone emoji emojiData2)
+                                :: (case SeqDict.get emoji emojiData2.emojis of
+                                        Just emoji2 ->
+                                            List.map
+                                                (\name ->
+                                                    Ui.el
+                                                        [ Ui.Font.size 16, Ui.width Ui.shrink ]
+                                                        (Ui.text (":" ++ name ++ ":"))
+                                                )
+                                                emoji2.shortNames
 
-                                Nothing ->
-                                    Ui.none
-                            ]
+                                        Nothing ->
+                                            []
+                                   )
 
                         Nothing ->
                             []
+                     )
+                        ++ (case model.selectedCategory of
+                                PeopleAndBody ->
+                                    [ skinToneView model.selectedSkinTone ]
+
+                                _ ->
+                                    []
+                           )
                     )
                 ]
                 |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
