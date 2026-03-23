@@ -29,7 +29,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji(..), EmojiData)
+import Emoji exposing (CachedEmojiData, Emoji(..))
 import Env
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -3114,7 +3114,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront (Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg)
+                    Ui.inFront (Emoji.selector loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg)
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3318,7 +3318,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3596,7 +3596,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3799,7 +3799,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]

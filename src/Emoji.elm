@@ -1,6 +1,7 @@
-module Emoji exposing (Emoji(..), EmojiData, EmojiResponse, Msg(..), fromDiscord, isPressed, requestEmojiData, selector, toString, view)
+module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiResponse, Model, Msg(..), fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
 
 import Codec exposing (Codec)
+import Dict exposing (Dict)
 import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
@@ -10,6 +11,7 @@ import List.Extra
 import MyUi
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
+import Ui.Events
 import Ui.Font
 
 
@@ -90,32 +92,165 @@ categoryToString category =
             "Travel & Places"
 
 
+representativeEmoji : Maybe SkinTone -> Category -> String
+representativeEmoji skinTone category =
+    case category of
+        Activities ->
+            "🎉"
+
+        AnimalsAndNature ->
+            "🐟"
+
+        Components ->
+            "C"
+
+        Flags ->
+            "🚩"
+
+        FoodAndDrink ->
+            "🥦"
+
+        Objects ->
+            "🔬"
+
+        PeopleAndBody ->
+            case skinTone of
+                Nothing ->
+                    "👍"
+
+                Just SkinTone1 ->
+                    "👍🏻"
+
+                Just SkinTone2 ->
+                    "👍🏼"
+
+                Just SkinTone3 ->
+                    "👍🏽"
+
+                Just SkinTone4 ->
+                    "👍🏾"
+
+                Just SkinTone5 ->
+                    "👍🏿"
+
+        SmileysAndEmotion ->
+            "🙂"
+
+        Symbols ->
+            "⬇️"
+
+        TravelAndPlaces ->
+            "🚆"
+
+
 allCategories : List Category
 allCategories =
-    [ Activities
+    [ SmileysAndEmotion
+    , Activities
     , AnimalsAndNature
-    , Components
     , Flags
     , FoodAndDrink
     , Objects
     , PeopleAndBody
-    , SmileysAndEmotion
     , Symbols
     , TravelAndPlaces
+    , Components
     ]
 
 
+type SkinTone
+    = SkinTone1
+    | SkinTone2
+    | SkinTone3
+    | SkinTone4
+    | SkinTone5
+
+
+skinToneToString : SkinTone -> String
+skinToneToString skinTone =
+    case skinTone of
+        SkinTone1 ->
+            "🏻"
+
+        SkinTone2 ->
+            "🏼"
+
+        SkinTone3 ->
+            "🏽"
+
+        SkinTone4 ->
+            "🏽"
+
+        SkinTone5 ->
+            "🏿"
+
+
+stringToSkinTone : String -> Maybe SkinTone
+stringToSkinTone text =
+    case text of
+        "1F3FB" ->
+            Just SkinTone1
+
+        "1F3FC" ->
+            Just SkinTone2
+
+        "1F3FD" ->
+            Just SkinTone3
+
+        "1F3FE" ->
+            Just SkinTone4
+
+        "1F3FF" ->
+            Just SkinTone5
+
+        _ ->
+            Nothing
+
+
+allSkinTones : List SkinTone
+allSkinTones =
+    [ SkinTone1
+    , SkinTone2
+    , SkinTone3
+    , SkinTone4
+    , SkinTone5
+    ]
+
+
+type alias Model =
+    { selectedCategory : Category
+    , selectedSkinTone : Maybe SkinTone
+    , emojiHovered : Maybe Emoji
+    }
+
+
+selectorInit : Model
+selectorInit =
+    { selectedCategory = SmileysAndEmotion
+    , selectedSkinTone = Nothing
+    , emojiHovered = Nothing
+    }
+
+
+type alias CachedEmojiData =
+    { emojis : SeqDict Emoji EmojiData, categories : SeqDict Category (List Emoji) }
+
+
 type alias EmojiData =
-    { categories : SeqDict Category (List String) }
+    { skinVariations : SeqDict SkinTone String
+    }
 
 
 type alias EmojiResponse =
-    { char : String, shortNames : List String, category : Category }
+    { emoji : String, shortNames : List String, category : Category, skinVariations : Maybe (Dict String String) }
 
 
 type Msg
     = PressedContainer
+    | PressedCategory Category
     | PressedSelectorEmoji Emoji
+    | PressedSkinTone (Maybe SkinTone)
+    | MouseEnteredEmoji Emoji
 
 
 isPressed : Msg -> Bool
@@ -127,61 +262,170 @@ isPressed msg =
         PressedSelectorEmoji emoji ->
             True
 
+        PressedCategory category ->
+            True
 
-selector : Maybe EmojiData -> Element Msg
-selector emojiData =
+        PressedSkinTone maybeSkinTone ->
+            True
+
+        MouseEnteredEmoji string ->
+            False
+
+
+categoryButtonId : Category -> Dom.HtmlId
+categoryButtonId category =
+    Dom.id ("emoji_category_" ++ categoryToString category)
+
+
+skinToneView : Maybe SkinTone -> Element Msg
+skinToneView selectedSkinTone =
+    List.map
+        (\skinTone ->
+            let
+                text : String
+                text =
+                    case skinTone of
+                        Just skinTone2 ->
+                            skinToneToString skinTone2
+
+                        Nothing ->
+                            "🟨"
+            in
+            MyUi.elButton
+                (Dom.id ("guild_skinToneSelector_" ++ text))
+                (PressedSkinTone skinTone)
+                [ Ui.width (Ui.px emojiWidth)
+                , Ui.contentCenterX
+                , Ui.attrIf (selectedSkinTone == skinTone) (Ui.background MyUi.white)
+                ]
+                (Ui.text text)
+        )
+        (Nothing :: List.map Just allSkinTones)
+        |> Ui.row [ Ui.alignRight, Ui.paddingXY 20 0 ]
+
+
+emojiWidth : number
+emojiWidth =
+    40
+
+
+selector : Model -> Maybe CachedEmojiData -> Element Msg
+selector model emojiData =
     let
         columns =
             16
     in
-    Ui.column
-        [ Ui.width (Ui.px (columns * 32 + 21))
-        , Ui.height (Ui.px 400)
-        , Ui.scrollable
-        , Ui.background MyUi.background1
-        , Ui.border 1
-        , Ui.borderColor MyUi.border1
-        , Ui.Font.size 24
-        , MyUi.blockClickPropagation PressedContainer
-        ]
-        (case emojiData of
-            Just emojiData2 ->
-                List.map
-                    (\( category, emojis ) ->
-                        Ui.text (categoryToString category)
-                            :: List.map
-                                (\emojiRow ->
-                                    Ui.row
-                                        [ Ui.height (Ui.px 34) ]
-                                        (List.map
-                                            (\emoji ->
-                                                let
-                                                    emojiText =
-                                                        emoji
-                                                in
-                                                MyUi.elButton
-                                                    (Dom.id ("guild_emojiSelector_" ++ emojiText))
-                                                    (PressedSelectorEmoji (UnicodeEmoji emojiText))
-                                                    [ Ui.width (Ui.px 32)
-                                                    , Ui.contentCenterX
-                                                    ]
-                                                    (Ui.text emojiText)
-                                            )
-                                            emojiRow
-                                        )
-                                )
-                                (List.Extra.greedyGroupsOf columns emojis)
-                            |> Ui.column []
+    case emojiData of
+        Just emojiData2 ->
+            Ui.column
+                [ Ui.width (Ui.px (columns * emojiWidth + 21))
+                , Ui.height (Ui.px 400)
+                , Ui.background MyUi.background1
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.Font.size 32
+                , MyUi.blockClickPropagation PressedContainer
+                , Ui.heightMin 0
+                ]
+                [ Ui.row
+                    []
+                    (List.filterMap
+                        (\category ->
+                            case category of
+                                Components ->
+                                    Nothing
+
+                                _ ->
+                                    MyUi.elButton
+                                        (categoryButtonId category)
+                                        (PressedCategory category)
+                                        []
+                                        (Ui.text (representativeEmoji model.selectedSkinTone category))
+                                        |> Just
+                        )
+                        allCategories
                     )
-                    (SeqDict.toList emojiData2.categories)
+                , Ui.row
+                    []
+                    [ Ui.el [ Ui.Font.size 24 ] (Ui.text (categoryToString model.selectedCategory))
+                    , case model.selectedCategory of
+                        PeopleAndBody ->
+                            skinToneView model.selectedSkinTone
 
-            Nothing ->
-                [ Ui.text "Emojis didn't load for some reason" ]
-        )
-        |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
+                        _ ->
+                            Ui.none
+                    ]
+                , case SeqDict.get model.selectedCategory emojiData2.categories of
+                    Just emojis ->
+                        List.map
+                            (\emojiRow ->
+                                Ui.row
+                                    [ Ui.height (Ui.px 34) ]
+                                    (List.map
+                                        (\emoji ->
+                                            let
+                                                emoji2 : String
+                                                emoji2 =
+                                                    case model.selectedCategory of
+                                                        PeopleAndBody ->
+                                                            emojiWithSkinTone model.selectedSkinTone emoji emojiData2
+
+                                                        _ ->
+                                                            toString emoji
+                                            in
+                                            MyUi.elButton
+                                                (Dom.id ("guild_emojiSelector_" ++ emoji2))
+                                                (PressedSelectorEmoji emoji)
+                                                [ Ui.width (Ui.px emojiWidth)
+                                                , Ui.contentCenterX
+                                                , Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
+                                                , Ui.attrIf
+                                                    (model.emojiHovered == Just emoji)
+                                                    (Ui.background MyUi.white)
+                                                ]
+                                                (Ui.text emoji2)
+                                        )
+                                        emojiRow
+                                    )
+                            )
+                            (List.Extra.greedyGroupsOf columns emojis)
+                            |> Ui.column [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background2 ]
+
+                    Nothing ->
+                        Ui.none
+                , Ui.row
+                    [ Ui.height (Ui.px 40), Ui.contentCenterY ]
+                    [ case model.emojiHovered of
+                        Just emoji ->
+                            emojiWithSkinTone model.selectedSkinTone emoji emojiData2 |> Ui.text
+
+                        Nothing ->
+                            Ui.none
+                    ]
+                ]
+                |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
+
+        Nothing ->
+            Ui.text "Emojis didn't load for some reason"
 
 
-requestEmojiData : (Result Http.Error EmojiData -> msg) -> Command restriction toFrontend msg
+emojiWithSkinTone : Maybe SkinTone -> Emoji -> CachedEmojiData -> String
+emojiWithSkinTone maybeSkinTone emoji emojiData2 =
+    case maybeSkinTone of
+        Just skinTone ->
+            case SeqDict.get emoji emojiData2.emojis of
+                Just emojiData3 ->
+                    SeqDict.get skinTone emojiData3.skinVariations
+                        |> Maybe.withDefault (toString emoji)
+
+                Nothing ->
+                    toString emoji
+
+        Nothing ->
+            toString emoji
+
+
+requestEmojiData : (Result Http.Error CachedEmojiData -> msg) -> Command restriction toFrontend msg
 requestEmojiData gotEmojiData =
     Http.get
         { url = "/emoji.json"
@@ -190,16 +434,50 @@ requestEmojiData gotEmojiData =
                 (\result ->
                     (case result of
                         Ok ok ->
-                            { categories =
-                                List.foldl
-                                    (\emoji dict ->
-                                        SeqDict.update
-                                            emoji.category
-                                            (\maybe -> Maybe.withDefault [] maybe |> (::) emoji.char |> Just)
-                                            dict
-                                    )
-                                    SeqDict.empty
-                                    ok
+                            let
+                                emojiData : SeqDict Emoji EmojiData
+                                emojiData =
+                                    List.foldl
+                                        (\emoji dict ->
+                                            SeqDict.insert
+                                                (UnicodeEmoji emoji.emoji)
+                                                { skinVariations =
+                                                    case emoji.skinVariations of
+                                                        Just skinVariations ->
+                                                            List.filterMap
+                                                                (\( key, value ) ->
+                                                                    case stringToSkinTone key of
+                                                                        Just skinTone ->
+                                                                            Just ( skinTone, value )
+
+                                                                        Nothing ->
+                                                                            Nothing
+                                                                )
+                                                                (Dict.toList skinVariations)
+                                                                |> SeqDict.fromList
+
+                                                        Nothing ->
+                                                            SeqDict.empty
+                                                }
+                                                dict
+                                        )
+                                        SeqDict.empty
+                                        ok
+
+                                categories : SeqDict Category (List Emoji)
+                                categories =
+                                    List.foldl
+                                        (\emoji dict ->
+                                            SeqDict.update
+                                                emoji.category
+                                                (\maybe -> UnicodeEmoji emoji.emoji :: Maybe.withDefault [] maybe |> Just)
+                                                dict
+                                        )
+                                        (allCategories |> List.map (\category -> ( category, [] )) |> SeqDict.fromList)
+                                        ok
+                            in
+                            { emojis = emojiData
+                            , categories = categories
                             }
                                 |> Ok
 
@@ -215,9 +493,17 @@ requestEmojiData gotEmojiData =
 emojiResponseCodec : Codec EmojiResponse
 emojiResponseCodec =
     Codec.object EmojiResponse
-        |> Codec.field "unified" .char charCodeCodec
+        |> Codec.field "unified" .emoji charCodeCodec
         |> Codec.field "short_names" .shortNames (Codec.list Codec.string)
         |> Codec.field "category" .category categoryCodec
+        |> Codec.optionalField "skin_variations" .skinVariations (Codec.dict skinVariationCodec)
+        |> Codec.buildObject
+
+
+skinVariationCodec : Codec String
+skinVariationCodec =
+    Codec.object identity
+        |> Codec.field "unified" identity charCodeCodec
         |> Codec.buildObject
 
 

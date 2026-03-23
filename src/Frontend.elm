@@ -23,7 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji
+import Emoji exposing (Category(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -382,6 +382,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , profilePictureEditor = ImageEditor.init
             , externalLinkWarning = Nothing
             , emojiData = Nothing
+            , emojiSelector = Emoji.selectorInit
             }
     in
     ( loggedIn
@@ -1111,6 +1112,45 @@ updateLoaded msg model =
 
                 Emoji.PressedContainer ->
                     ( model, Command.none )
+
+                Emoji.PressedCategory category ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | selectedCategory = category } }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                Emoji.PressedSkinTone skinTone ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | selectedSkinTone = skinTone } }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                Emoji.MouseEnteredEmoji emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            , Command.none
+                            )
+                        )
+                        model
 
         MessageMenu_PressedReply threadRoute ->
             case Route.toGuildOrDmId model.route of
