@@ -356,16 +356,21 @@ toString users nonempty =
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
 fromNonemptyString users string =
-    case Parser.run (parser users []) (String.Nonempty.toString string) of
-        Ok ok ->
-            case List.Nonempty.fromList (Array.toList ok) of
-                Just nonempty ->
-                    normalize nonempty
+    let
+        source =
+            String.Nonempty.toString string
 
-                Nothing ->
-                    Nonempty (normalTextFromNonempty string) []
+        len =
+            String.length source
 
-        Err _ ->
+        result =
+            parseLoop source 0 len users [] "" []
+    in
+    case List.Nonempty.fromList result.nodes of
+        Just nonempty ->
+            normalize nonempty
+
+        Nothing ->
             Nonempty (normalTextFromNonempty string) []
 
 
@@ -488,10 +493,6 @@ modifierToSymbol modifier =
             NonemptyString '|' "|"
 
 
-type alias LoopState userId =
-    { current : Array String, rest : Array (RichText userId) }
-
-
 charToEscaped : Dict String EscapedChar
 charToEscaped =
     List.map (\escaped -> ( escapedCharToString escaped, escaped )) allEscapedChars |> Dict.fromList
@@ -500,268 +501,6 @@ charToEscaped =
 discordEscapableChars : Set String
 discordEscapableChars =
     Set.fromList [ "\\", "*", ">", "`", "~", "@" ]
-
-
-parser : SeqDict userId { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText userId))
-parser users modifiers =
-    Parser.loop
-        { current = Array.empty, rest = Array.empty }
-        (\state ->
-            Parser.oneOf
-                [ Parser.succeed
-                    (\text ->
-                        case Dict.get text charToEscaped of
-                            Just escaped ->
-                                Loop
-                                    { current = Array.empty
-                                    , rest =
-                                        Array.append state.rest (Array.push (EscapedChar escaped) (parserHelper state))
-                                    }
-
-                            Nothing ->
-                                Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
-                    )
-                    |. Parser.symbol "\\"
-                    |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
-                , Parser.succeed identity
-                    |. Parser.symbol "@"
-                    |= Parser.oneOf
-                        ((SeqDict.toList users
-                            |> List.sortBy (\( _, user ) -> PersonName.toString user.name |> String.length |> negate)
-                            |> List.map
-                                (\( userId, user ) ->
-                                    Parser.succeed
-                                        (Loop
-                                            { current = Array.empty
-                                            , rest =
-                                                Array.append
-                                                    state.rest
-                                                    (Array.push (UserMention userId) (parserHelper state))
-                                            }
-                                        )
-                                        |. Parser.symbol (PersonName.toString user.name)
-                                )
-                         )
-                            ++ [ Parser.succeed
-                                    (Loop
-                                        { current = Array.push "@" state.current
-                                        , rest = state.rest
-                                        }
-                                    )
-                               ]
-                        )
-                , modifierHelper users True IsBold Bold state modifiers
-                , modifierHelper users False IsUnderlined Underline state modifiers
-                , modifierHelper users False IsItalic Italic state modifiers
-                , modifierHelper users False IsStrikethrough Strikethrough state modifiers
-                , modifierHelper users False IsSpoilered Spoiler state modifiers
-                , Parser.succeed
-                    (\( language, text ) ->
-                        case String.Nonempty.fromString text of
-                            Just _ ->
-                                Loop
-                                    { current = Array.empty
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push
-                                                (CodeBlock language text)
-                                                (parserHelper state)
-                                            )
-                                    }
-
-                            Nothing ->
-                                Loop
-                                    { current = Array.push "``````" state.current
-                                    , rest = state.rest
-                                    }
-                    )
-                    |= codeBlockParser
-                    |> Parser.backtrackable
-                , Parser.succeed
-                    (\text ->
-                        case String.Nonempty.fromString text of
-                            Just a ->
-                                Loop
-                                    { current = Array.empty
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push
-                                                (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
-                                                (parserHelper state)
-                                            )
-                                    }
-
-                            Nothing ->
-                                Loop
-                                    { current = Array.push "``" state.current
-                                    , rest = state.rest
-                                    }
-                    )
-                    |. Parser.symbol "`"
-                    |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
-                    |. Parser.symbol "`"
-                    |> Parser.backtrackable
-                , urlParser
-                    |> Parser.map
-                        (\{ hyperlink, trailing } ->
-                            (case hyperlink of
-                                Ok hyperlink2 ->
-                                    { current = Array.fromList [ trailing ]
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push (Hyperlink hyperlink2) (parserHelper state))
-                                    }
-
-                                Err text ->
-                                    { current = Array.push (text ++ trailing) state.current
-                                    , rest = state.rest
-                                    }
-                            )
-                                |> Loop
-                        )
-                , Parser.succeed identity
-                    |. Parser.symbol attachedFilePrefix
-                    |= Parser.int
-                    |. Parser.symbol attachedFileSuffix
-                    |> Parser.backtrackable
-                    |> Parser.map
-                        (\int ->
-                            { current = Array.empty
-                            , rest =
-                                Array.append
-                                    state.rest
-                                    (Array.push (AttachedFile (Id.fromInt int)) (parserHelper state))
-                            }
-                                |> Loop
-                        )
-                , Parser.chompIf (\_ -> True)
-                    |> Parser.andThen
-                        (\_ ->
-                            Parser.chompWhile
-                                (\char ->
-                                    case char of
-                                        '[' ->
-                                            False
-
-                                        '@' ->
-                                            False
-
-                                        'h' ->
-                                            False
-
-                                        '`' ->
-                                            False
-
-                                        '\\' ->
-                                            False
-
-                                        '*' ->
-                                            False
-
-                                        '_' ->
-                                            False
-
-                                        '~' ->
-                                            False
-
-                                        '|' ->
-                                            False
-
-                                        _ ->
-                                            True
-                                )
-                        )
-                    |> Parser.getChompedString
-                    |> Parser.map
-                        (\a ->
-                            Loop
-                                { current = Array.push a state.current
-                                , rest = state.rest
-                                }
-                        )
-                , Parser.map (\() -> bailOut state modifiers) Parser.end
-                ]
-        )
-
-
-urlParser : Parser { hyperlink : Result String Url, trailing : String }
-urlParser =
-    Parser.succeed
-        (\protocol url ->
-            let
-                urlLength : Int
-                urlLength =
-                    String.length url
-
-                ( index, _ ) =
-                    String.foldr
-                        (\char (( index2, stop ) as state) ->
-                            if stop then
-                                state
-
-                            else if char == '.' || char == ')' || char == ',' || char == '"' then
-                                ( index2 - 1, False )
-
-                            else
-                                ( index2, True )
-                        )
-                        ( urlLength, False )
-                        url
-
-                urlText : String
-                urlText =
-                    (case protocol of
-                        Http ->
-                            "http://"
-
-                        Https ->
-                            "https://"
-                    )
-                        ++ String.slice 0 index url
-            in
-            { hyperlink =
-                case Url.fromString urlText of
-                    Just url2 ->
-                        let
-                            url3 =
-                                { url2 | protocol = protocol }
-
-                            urlNoPath =
-                                { url3 | path = "" }
-                        in
-                        -- This is a hack to get the url decode to exactly match the user's input
-                        -- Otherwise what the user is typing will get out of sync in the case they type http://google.com?query and it gets decoded to http://google.com/?query
-                        if Url.toString urlNoPath == urlText then
-                            Ok urlNoPath
-
-                        else
-                            Ok url3
-
-                    Nothing ->
-                        Err urlText
-            , trailing = String.slice index urlLength url
-            }
-        )
-        |= Parser.oneOf
-            [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
-            , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
-            ]
-        |= (Parser.chompWhile
-                (\char ->
-                    (char /= ' ')
-                        && (char /= '\n')
-                        && (char /= '\t')
-                        && (char /= '<')
-                        {- The | char (along with _ and *) should be allowed in urls and only included in trailing if there's a modifier that uses them.
-                           That's complicated though so for now just having | to catch the common case of spoilering a url is good enough)
-                        -}
-                        && (char /= '|')
-                )
-                |> Parser.getChompedString
-           )
 
 
 attachedFilePrefix : String
@@ -774,161 +513,569 @@ attachedFileSuffix =
     "]"
 
 
-codeBlockParser : Parser ( Language, String )
-codeBlockParser =
-    Parser.succeed
-        (\text ->
-            case String.split "\n" text of
-                [ single ] ->
-                    ( NoLanguage, single )
+flushText : String -> List (RichText userId) -> List (RichText userId)
+flushText text revNodes =
+    case String.uncons text of
+        Just ( char, rest ) ->
+            NormalText char rest :: revNodes
 
-                head :: rest ->
-                    if String.contains " " head then
-                        ( NoLanguage, text )
-
-                    else
-                        case String.Nonempty.fromString head of
-                            Just nonempty ->
-                                ( Language nonempty, String.join "\n" rest )
-
-                            Nothing ->
-                                ( NoLanguage, text )
-
-                [] ->
-                    ( NoLanguage, "" )
-        )
-        |. Parser.symbol "```"
-        |= Parser.loop
-            []
-            (\list ->
-                Parser.oneOf
-                    [ Parser.succeed (Done (List.reverse list |> String.concat))
-                        |. Parser.symbol "```"
-                    , Parser.succeed (\char -> Loop (char :: list))
-                        |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
-                    ]
-            )
+        Nothing ->
+            revNodes
 
 
-bailOut : LoopState userId -> List Modifiers -> Step state (Array (RichText userId))
-bailOut state modifiers =
-    Array.append
-        (case modifiers of
+finalizeResult : String -> List (RichText userId) -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
+finalizeResult accText revNodes modifiers =
+    let
+        flushed =
+            flushText accText revNodes
+
+        finalNodes =
+            List.reverse flushed
+    in
+    { nodes =
+        case modifiers of
             head :: _ ->
                 let
                     (NonemptyString char rest) =
                         modifierToSymbol head
                 in
-                Array.fromList [ NormalText char rest ]
+                NormalText char rest :: finalNodes
 
             [] ->
-                Array.empty
-        )
-        (Array.append state.rest (parserHelper state))
-        |> Done
+                finalNodes
+    , nextIndex = -1
+    }
 
 
-getRemainingText : Parser String
-getRemainingText =
-    Parser.succeed String.dropLeft
-        |= Parser.getOffset
-        |= Parser.getSource
-
-
-modifierHelper :
-    SeqDict userId { a | name : PersonName }
-    -> Bool
-    -> Modifiers
-    -> (Nonempty (RichText userId) -> RichText userId)
-    -> LoopState userId
-    -> List Modifiers
-    -> Parser (Step (LoopState userId) (Array (RichText userId)))
-modifierHelper users noTrailingWhitespace modifier container state modifiers =
+closeModifier : Int -> String -> List (RichText userId) -> (Nonempty (RichText userId) -> RichText userId) -> NonemptyString -> { nodes : List (RichText userId), nextIndex : Int }
+closeModifier afterSymbol accText revNodes container symbol =
     let
-        symbol : NonemptyString
-        symbol =
-            modifierToSymbol modifier
+        flushed =
+            flushText accText revNodes
 
-        symbolText =
-            String.Nonempty.toString symbol
+        finalNodes =
+            List.reverse flushed
     in
-    if List.head modifiers == Just modifier then
-        Parser.map
-            (\() ->
-                case
-                    Array.append state.rest (parserHelper state)
-                        |> Array.toList
-                        |> List.Nonempty.fromList
-                of
-                    Just nonempty ->
-                        Done (Array.fromList [ container nonempty ])
-
-                    Nothing ->
-                        NormalText (String.Nonempty.head symbol) (String.Nonempty.tail symbol)
-                            |> List.singleton
-                            |> Array.fromList
-                            |> Done
-            )
-            (Parser.symbol symbolText)
-
-    else if List.member modifier modifiers then
-        getRemainingText
-            |> Parser.andThen
-                (\remainingText ->
-                    if String.startsWith symbolText remainingText then
-                        bailOut state modifiers |> Parser.succeed
-
-                    else
-                        Parser.backtrackable (Parser.problem "")
-                )
-
-    else
-        Parser.succeed identity
-            |. Parser.symbol symbolText
-            |= Parser.oneOf
-                [ if noTrailingWhitespace then
-                    getRemainingText
-                        |> Parser.andThen
-                            (\remainingText ->
-                                if
-                                    String.startsWith symbolText remainingText
-                                        || String.startsWith " " remainingText
-                                then
-                                    Parser.backtrackable (Parser.problem "")
-
-                                else
-                                    Parser.map
-                                        (\a ->
-                                            Loop
-                                                { current = Array.empty
-                                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
-                                                }
-                                        )
-                                        (parser users (modifier :: modifiers))
-                            )
-
-                  else
-                    Parser.map
-                        (\a ->
-                            Loop
-                                { current = Array.empty
-                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
-                                }
-                        )
-                        (parser users (modifier :: modifiers))
-                , Loop { current = Array.push symbolText state.current, rest = state.rest }
-                    |> Parser.succeed
-                ]
-
-
-parserHelper : LoopState userId -> Array (RichText userId)
-parserHelper state =
-    case state.current |> Array.toList |> String.concat |> normalTextFromString of
-        Just a ->
-            Array.fromList [ a ]
+    case List.Nonempty.fromList finalNodes of
+        Just nonempty ->
+            { nodes = [ container nonempty ], nextIndex = afterSymbol }
 
         Nothing ->
-            Array.empty
+            { nodes = [ NormalText (String.Nonempty.head symbol) (String.Nonempty.tail symbol) ]
+            , nextIndex = afterSymbol
+            }
+
+
+parseInner : String -> Int -> Int -> SeqDict userId { a | name : PersonName } -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
+parseInner source index len users modifiers =
+    parseLoop source index len users modifiers "" []
+
+
+parseLoop :
+    String
+    -> Int
+    -> Int
+    -> SeqDict userId { a | name : PersonName }
+    -> List Modifiers
+    -> String
+    -> List (RichText userId)
+    -> { nodes : List (RichText userId), nextIndex : Int }
+parseLoop source index len users modifiers accText revNodes =
+    if index >= len then
+        finalizeResult accText revNodes modifiers
+
+    else
+        let
+            c1 =
+                String.slice index (index + 1) source
+        in
+        if c1 == "\\" then
+            let
+                afterBackslash =
+                    index + 1
+            in
+            if afterBackslash < len then
+                let
+                    nextChar =
+                        String.slice afterBackslash (afterBackslash + 1) source
+                in
+                case Dict.get nextChar charToEscaped of
+                    Just escaped ->
+                        parseLoop source (afterBackslash + 1) len users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+
+                    Nothing ->
+                        parseLoop source (afterBackslash + 1) len users modifiers (accText ++ "\\" ++ nextChar) revNodes
+
+            else
+                parseLoop source afterBackslash len users modifiers (accText ++ "\\") revNodes
+
+        else if c1 == "@" then
+            let
+                afterAt =
+                    index + 1
+
+                remaining =
+                    String.slice afterAt len source
+            in
+            case tryMatchUser users remaining of
+                Just ( userId, matchLen ) ->
+                    parseLoop source (afterAt + matchLen) len users modifiers "" (UserMention userId :: flushText accText revNodes)
+
+                Nothing ->
+                    parseLoop source afterAt len users modifiers (accText ++ "@") revNodes
+
+        else if c1 == "*" then
+            let
+                afterSymbol =
+                    index + 1
+            in
+            if List.head modifiers == Just IsBold then
+                closeModifier afterSymbol accText revNodes Bold (modifierToSymbol IsBold)
+
+            else if List.member IsBold modifiers then
+                finalizeResult accText revNodes modifiers
+
+            else
+                let
+                    nextChar =
+                        String.slice afterSymbol (afterSymbol + 1) source
+                in
+                if nextChar == "*" || nextChar == " " then
+                    parseLoop source afterSymbol len users modifiers (accText ++ "*") revNodes
+
+                else
+                    let
+                        flushed =
+                            flushText accText revNodes
+
+                        inner =
+                            parseInner source afterSymbol len users (IsBold :: modifiers)
+
+                        newRevNodes =
+                            List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                    in
+                    parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+
+        else if c1 == "_" then
+            if String.slice index (index + 2) source == "__" then
+                let
+                    afterSymbol =
+                        index + 2
+                in
+                if List.head modifiers == Just IsUnderlined then
+                    closeModifier afterSymbol accText revNodes Underline (modifierToSymbol IsUnderlined)
+
+                else if List.member IsUnderlined modifiers then
+                    finalizeResult accText revNodes modifiers
+
+                else
+                    let
+                        flushed =
+                            flushText accText revNodes
+
+                        inner =
+                            parseInner source afterSymbol len users (IsUnderlined :: modifiers)
+
+                        newRevNodes =
+                            List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                    in
+                    parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+
+            else
+                let
+                    afterSymbol =
+                        index + 1
+                in
+                if List.head modifiers == Just IsItalic then
+                    closeModifier afterSymbol accText revNodes Italic (modifierToSymbol IsItalic)
+
+                else if List.member IsItalic modifiers then
+                    finalizeResult accText revNodes modifiers
+
+                else
+                    let
+                        flushed =
+                            flushText accText revNodes
+
+                        inner =
+                            parseInner source afterSymbol len users (IsItalic :: modifiers)
+
+                        newRevNodes =
+                            List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                    in
+                    parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+
+        else if c1 == "~" then
+            if String.slice index (index + 2) source == "~~" then
+                let
+                    afterSymbol =
+                        index + 2
+                in
+                if List.head modifiers == Just IsStrikethrough then
+                    closeModifier afterSymbol accText revNodes Strikethrough (modifierToSymbol IsStrikethrough)
+
+                else if List.member IsStrikethrough modifiers then
+                    finalizeResult accText revNodes modifiers
+
+                else
+                    let
+                        flushed =
+                            flushText accText revNodes
+
+                        inner =
+                            parseInner source afterSymbol len users (IsStrikethrough :: modifiers)
+
+                        newRevNodes =
+                            List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                    in
+                    parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+
+            else
+                parseLoop source (index + 1) len users modifiers (accText ++ "~") revNodes
+
+        else if c1 == "|" then
+            if String.slice index (index + 2) source == "||" then
+                let
+                    afterSymbol =
+                        index + 2
+                in
+                if List.head modifiers == Just IsSpoilered then
+                    closeModifier afterSymbol accText revNodes Spoiler (modifierToSymbol IsSpoilered)
+
+                else if List.member IsSpoilered modifiers then
+                    finalizeResult accText revNodes modifiers
+
+                else
+                    let
+                        flushed =
+                            flushText accText revNodes
+
+                        inner =
+                            parseInner source afterSymbol len users (IsSpoilered :: modifiers)
+
+                        newRevNodes =
+                            List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                    in
+                    parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+
+            else
+                parseLoop source (index + 1) len users modifiers (accText ++ "|") revNodes
+
+        else if c1 == "`" then
+            if String.slice index (index + 3) source == "```" then
+                case findSubstring source (index + 3) len "```" of
+                    Just closeIndex ->
+                        let
+                            content =
+                                String.slice (index + 3) closeIndex source
+
+                            ( language, codeContent ) =
+                                parseCodeBlockContent content
+                        in
+                        case String.Nonempty.fromString codeContent of
+                            Just _ ->
+                                parseLoop source (closeIndex + 3) len users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+
+                            Nothing ->
+                                parseLoop source (closeIndex + 3) len users modifiers (accText ++ "``````") revNodes
+
+                    Nothing ->
+                        -- No closing ```, try inline code
+                        case findSingleBacktick source (index + 1) len of
+                            Just closeIndex ->
+                                let
+                                    content =
+                                        String.slice (index + 1) closeIndex source
+                                in
+                                case String.Nonempty.fromString content of
+                                    Just a ->
+                                        parseLoop source (closeIndex + 1) len users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+
+                                    Nothing ->
+                                        parseLoop source (closeIndex + 1) len users modifiers (accText ++ "``") revNodes
+
+                            Nothing ->
+                                parseLoop source (index + 1) len users modifiers (accText ++ "`") revNodes
+
+            else
+                case findSingleBacktick source (index + 1) len of
+                    Just closeIndex ->
+                        let
+                            content =
+                                String.slice (index + 1) closeIndex source
+                        in
+                        case String.Nonempty.fromString content of
+                            Just a ->
+                                parseLoop source (closeIndex + 1) len users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+
+                            Nothing ->
+                                parseLoop source (closeIndex + 1) len users modifiers (accText ++ "``") revNodes
+
+                    Nothing ->
+                        parseLoop source (index + 1) len users modifiers (accText ++ "`") revNodes
+
+        else if c1 == "h" then
+            if String.slice index (index + 8) source == "https://" then
+                let
+                    protocolEnd =
+                        index + 8
+
+                    urlEnd =
+                        skipUrlChars source protocolEnd len
+
+                    urlBody =
+                        String.slice protocolEnd urlEnd source
+
+                    result =
+                        parseUrlBody Https urlBody
+                in
+                case result.hyperlink of
+                    Ok url ->
+                        parseLoop source urlEnd len users modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
+
+                    Err errText ->
+                        parseLoop source urlEnd len users modifiers (accText ++ errText ++ result.trailing) revNodes
+
+            else if String.slice index (index + 7) source == "http://" then
+                let
+                    protocolEnd =
+                        index + 7
+
+                    urlEnd =
+                        skipUrlChars source protocolEnd len
+
+                    urlBody =
+                        String.slice protocolEnd urlEnd source
+
+                    result =
+                        parseUrlBody Http urlBody
+                in
+                case result.hyperlink of
+                    Ok url ->
+                        parseLoop source urlEnd len users modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
+
+                    Err errText ->
+                        parseLoop source urlEnd len users modifiers (accText ++ errText ++ result.trailing) revNodes
+
+            else
+                let
+                    nextIndex =
+                        skipNormalChars source (index + 1) len
+                in
+                parseLoop source nextIndex len users modifiers (accText ++ String.slice index nextIndex source) revNodes
+
+        else if c1 == "[" then
+            if String.slice index (index + 2) source == "[!" then
+                case parseFileId source (index + 2) len of
+                    Just ( fileId, nextIndex ) ->
+                        parseLoop source nextIndex len users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
+
+                    Nothing ->
+                        parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
+
+            else
+                parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
+
+        else
+            let
+                nextIndex =
+                    skipNormalChars source (index + 1) len
+            in
+            parseLoop source nextIndex len users modifiers (accText ++ String.slice index nextIndex source) revNodes
+
+
+tryMatchUser : SeqDict userId { a | name : PersonName } -> String -> Maybe ( userId, Int )
+tryMatchUser users remaining =
+    SeqDict.toList users
+        |> List.sortBy (\( _, user ) -> PersonName.toString user.name |> String.length |> negate)
+        |> List.filterMap
+            (\( userId, user ) ->
+                let
+                    name =
+                        PersonName.toString user.name
+                in
+                if String.startsWith name remaining then
+                    Just ( userId, String.length name )
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
+parseUrlBody : Protocol -> String -> { hyperlink : Result String Url, trailing : String }
+parseUrlBody protocol urlBody =
+    let
+        urlBodyLen =
+            String.length urlBody
+
+        ( trimIdx, _ ) =
+            String.foldr
+                (\char ( idx, stop ) ->
+                    if stop then
+                        ( idx, True )
+
+                    else if char == '.' || char == ')' || char == ',' || char == '"' then
+                        ( idx - 1, False )
+
+                    else
+                        ( idx, True )
+                )
+                ( urlBodyLen, False )
+                urlBody
+
+        protocolStr =
+            case protocol of
+                Http ->
+                    "http://"
+
+                Https ->
+                    "https://"
+
+        urlText =
+            protocolStr ++ String.slice 0 trimIdx urlBody
+
+        trailing =
+            String.slice trimIdx urlBodyLen urlBody
+    in
+    case Url.fromString urlText of
+        Just url ->
+            let
+                url2 =
+                    { url | protocol = protocol }
+
+                urlNoPath =
+                    { url2 | path = "" }
+            in
+            -- This is a hack to get the url decode to exactly match the user's input
+            -- Otherwise what the user is typing will get out of sync in the case they type http://google.com?query and it gets decoded to http://google.com/?query
+            if Url.toString urlNoPath == urlText then
+                { hyperlink = Ok urlNoPath, trailing = trailing }
+
+            else
+                { hyperlink = Ok url2, trailing = trailing }
+
+        Nothing ->
+            { hyperlink = Err urlText, trailing = trailing }
+
+
+skipUrlChars : String -> Int -> Int -> Int
+skipUrlChars source index len =
+    if index >= len then
+        index
+
+    else
+        let
+            c =
+                String.slice index (index + 1) source
+        in
+        if c == " " || c == "\n" || c == "\t" || c == "<" || c == "|" then
+            index
+
+        else
+            skipUrlChars source (index + 1) len
+
+
+parseCodeBlockContent : String -> ( Language, String )
+parseCodeBlockContent text =
+    case String.split "\n" text of
+        [ single ] ->
+            ( NoLanguage, single )
+
+        head :: rest ->
+            if String.contains " " head then
+                ( NoLanguage, text )
+
+            else
+                case String.Nonempty.fromString head of
+                    Just nonempty ->
+                        ( Language nonempty, String.join "\n" rest )
+
+                    Nothing ->
+                        ( NoLanguage, text )
+
+        [] ->
+            ( NoLanguage, "" )
+
+
+findSubstring : String -> Int -> Int -> String -> Maybe Int
+findSubstring source index len target =
+    let
+        targetLen =
+            String.length target
+    in
+    if index + targetLen > len then
+        Nothing
+
+    else if String.slice index (index + targetLen) source == target then
+        Just index
+
+    else
+        findSubstring source (index + 1) len target
+
+
+findSingleBacktick : String -> Int -> Int -> Maybe Int
+findSingleBacktick source index len =
+    if index >= len then
+        Nothing
+
+    else if String.slice index (index + 1) source == "`" then
+        Just index
+
+    else
+        findSingleBacktick source (index + 1) len
+
+
+parseFileId : String -> Int -> Int -> Maybe ( Int, Int )
+parseFileId source index len =
+    let
+        digitEnd =
+            skipDigits source index len
+    in
+    if digitEnd > index && digitEnd < len && String.slice digitEnd (digitEnd + 1) source == "]" then
+        case String.toInt (String.slice index digitEnd source) of
+            Just n ->
+                Just ( n, digitEnd + 1 )
+
+            Nothing ->
+                Nothing
+
+    else
+        Nothing
+
+
+skipDigits : String -> Int -> Int -> Int
+skipDigits source index len =
+    if index >= len then
+        index
+
+    else
+        let
+            c =
+                String.slice index (index + 1) source
+        in
+        if c >= "0" && c <= "9" then
+            skipDigits source (index + 1) len
+
+        else
+            index
+
+
+skipNormalChars : String -> Int -> Int -> Int
+skipNormalChars source index len =
+    if index >= len then
+        index
+
+    else
+        let
+            c =
+                String.slice index (index + 1) source
+        in
+        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" then
+            index
+
+        else
+            skipNormalChars source (index + 1) len
 
 
 mentionsUser : Nonempty (RichText userId) -> SeqSet userId
@@ -2106,6 +2253,135 @@ discordModifierToSymbol modifier =
 
         DiscordIsSpoilered ->
             NonemptyString '|' "|"
+
+
+type alias LoopState userId =
+    { current : Array String, rest : Array (RichText userId) }
+
+
+parserHelper : LoopState userId -> Array (RichText userId)
+parserHelper state =
+    case state.current |> Array.toList |> String.concat |> normalTextFromString of
+        Just a ->
+            Array.fromList [ a ]
+
+        Nothing ->
+            Array.empty
+
+
+getRemainingText : Parser String
+getRemainingText =
+    Parser.succeed String.dropLeft
+        |= Parser.getOffset
+        |= Parser.getSource
+
+
+urlParser : Parser { hyperlink : Result String Url, trailing : String }
+urlParser =
+    Parser.succeed
+        (\protocol url ->
+            let
+                urlLength : Int
+                urlLength =
+                    String.length url
+
+                ( urlTrimIndex, _ ) =
+                    String.foldr
+                        (\char (( index2, stop ) as loopState) ->
+                            if stop then
+                                loopState
+
+                            else if char == '.' || char == ')' || char == ',' || char == '"' then
+                                ( index2 - 1, False )
+
+                            else
+                                ( index2, True )
+                        )
+                        ( urlLength, False )
+                        url
+
+                urlText : String
+                urlText =
+                    (case protocol of
+                        Http ->
+                            "http://"
+
+                        Https ->
+                            "https://"
+                    )
+                        ++ String.slice 0 urlTrimIndex url
+            in
+            { hyperlink =
+                case Url.fromString urlText of
+                    Just url2 ->
+                        let
+                            url3 =
+                                { url2 | protocol = protocol }
+
+                            urlNoPath =
+                                { url3 | path = "" }
+                        in
+                        if Url.toString urlNoPath == urlText then
+                            Ok urlNoPath
+
+                        else
+                            Ok url3
+
+                    Nothing ->
+                        Err urlText
+            , trailing = String.slice urlTrimIndex urlLength url
+            }
+        )
+        |= Parser.oneOf
+            [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
+            , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
+            ]
+        |= (Parser.chompWhile
+                (\char ->
+                    (char /= ' ')
+                        && (char /= '\n')
+                        && (char /= '\t')
+                        && (char /= '<')
+                        && (char /= '|')
+                )
+                |> Parser.getChompedString
+           )
+
+
+codeBlockParser : Parser ( Language, String )
+codeBlockParser =
+    Parser.succeed
+        (\text ->
+            case String.split "\n" text of
+                [ single ] ->
+                    ( NoLanguage, single )
+
+                head :: rest ->
+                    if String.contains " " head then
+                        ( NoLanguage, text )
+
+                    else
+                        case String.Nonempty.fromString head of
+                            Just nonempty ->
+                                ( Language nonempty, String.join "\n" rest )
+
+                            Nothing ->
+                                ( NoLanguage, text )
+
+                [] ->
+                    ( NoLanguage, "" )
+        )
+        |. Parser.symbol "```"
+        |= Parser.loop
+            []
+            (\list ->
+                Parser.oneOf
+                    [ Parser.succeed (Done (List.reverse list |> String.concat))
+                        |. Parser.symbol "```"
+                    , Parser.succeed (\char -> Loop (char :: list))
+                        |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
+                    ]
+            )
 
 
 {-| <https://discord.com/developers/docs/reference#message-formatting>
