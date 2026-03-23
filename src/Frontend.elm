@@ -23,6 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
+import Emoji
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -308,6 +309,7 @@ initLoadedFrontend loading time userAgent loginResult =
 
             Err _ ->
                 Command.none
+        , Emoji.requestEmojiData GotEmojiData
         ]
     )
 
@@ -379,6 +381,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , textEditor = TextEditor.init
             , profilePictureEditor = ImageEditor.init
             , externalLinkWarning = Nothing
+            , emojiData = Nothing
             }
     in
     ( loggedIn
@@ -1088,21 +1091,26 @@ updateLoaded msg model =
         MessageMenu_PressedEditMessage guildOrDmId threadRoute ->
             pressedEditMessage guildOrDmId threadRoute model
 
-        PressedEmojiSelectorEmoji emoji ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.showEmojiSelector of
-                        EmojiSelectorHidden ->
-                            ( loggedIn, Command.none )
+        EmojiSelectorMsg emojiMsg ->
+            case emojiMsg of
+                Emoji.PressedSelectorEmoji emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case loggedIn.showEmojiSelector of
+                                EmojiSelectorHidden ->
+                                    ( loggedIn, Command.none )
 
-                        EmojiSelectorForReaction guildOrDmId threadRoute ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
-                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                Command.none
-                )
-                model
+                                EmojiSelectorForReaction guildOrDmId threadRoute ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                        Command.none
+                        )
+                        model
+
+                Emoji.PressedContainer ->
+                    ( model, Command.none )
 
         MessageMenu_PressedReply threadRoute ->
             case Route.toGuildOrDmId model.route of
@@ -1540,9 +1548,6 @@ updateLoaded msg model =
                     )
                 )
                 model
-
-        PressedReactionEmojiContainer ->
-            ( model, Command.none )
 
         MessageMenu_PressedDeleteMessage guildOrDmId messageIndex ->
             FrontendExtra.updateLoggedIn
@@ -3204,6 +3209,20 @@ updateLoaded msg model =
 
                 MessageInput.OnSelectionChanged htmlId range ->
                     messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
+
+        GotEmojiData result ->
+            case result of
+                Ok emojiData ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn -> ( { loggedIn | emojiData = Just emojiData }, Command.none ))
+                        model
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "emoji error" error
+                    in
+                    ( model, Command.none )
 
 
 messageInputSelectionChanged : AnyGuildOrDmId -> ThreadRoute -> HtmlId -> Range -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

@@ -61,7 +61,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiData)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
@@ -191,6 +191,7 @@ type alias LoggedIn2 =
     , textEditor : TextEditor.Model
     , profilePictureEditor : ImageEditor.Model
     , externalLinkWarning : Maybe Url
+    , emojiData : Maybe EmojiData
     }
 
 
@@ -378,7 +379,7 @@ type FrontendMsg
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
-    | PressedEmojiSelectorEmoji Emoji
+    | EmojiSelectorMsg Emoji.Msg
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
@@ -396,7 +397,6 @@ type FrontendMsg
     | PressedShowMembers
     | UserScrolled AnyGuildOrDmId ThreadRoute ScrollPosition
     | PressedBody
-    | PressedReactionEmojiContainer
     | MessageMenu_PressedDeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | ScrolledToMessage
     | MessageMenu_PressedClose
@@ -447,6 +447,7 @@ type FrontendMsg
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
+    | GotEmojiData (Result Http.Error Emoji.EmojiData)
 
 
 type ScrollPosition

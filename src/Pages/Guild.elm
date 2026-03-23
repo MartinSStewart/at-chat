@@ -24,11 +24,12 @@ import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Date exposing (Date)
+import Dict
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji(..), EmojiData)
 import Env
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -1737,44 +1738,6 @@ channelTextInputId =
     "channel_textinput" |> Dom.id
 
 
-emojiSelector : Element FrontendMsg
-emojiSelector =
-    Ui.column
-        [ Ui.width (Ui.px (8 * 32 + 21))
-        , Ui.height (Ui.px 400)
-        , Ui.scrollable
-        , Ui.background MyUi.background1
-        , Ui.border 1
-        , Ui.borderColor MyUi.border1
-        , Ui.Font.size 24
-        , MyUi.blockClickPropagation PressedReactionEmojiContainer
-        ]
-        (List.map
-            (\emojiRow ->
-                Ui.row
-                    [ Ui.height (Ui.px 34) ]
-                    (List.map
-                        (\emoji ->
-                            let
-                                emojiText =
-                                    Emoji.toString emoji
-                            in
-                            MyUi.elButton
-                                (Dom.id ("guild_emojiSelector_" ++ emojiText))
-                                (PressedEmojiSelectorEmoji emoji)
-                                [ Ui.width (Ui.px 32)
-                                , Ui.contentCenterX
-                                ]
-                                (Ui.text emojiText)
-                        )
-                        emojiRow
-                    )
-            )
-            (List.Extra.greedyGroupsOf 8 Emoji.emojis)
-        )
-        |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
-
-
 messageHover : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
 messageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
@@ -3151,7 +3114,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+                    Ui.inFront (Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg)
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3355,7 +3318,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+                    Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3633,7 +3596,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+                    Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3836,7 +3799,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+                    Emoji.selector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]

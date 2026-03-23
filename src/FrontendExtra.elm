@@ -1153,8 +1153,8 @@ isPressMsg msg =
         MessageMenu_PressedEditMessage _ _ ->
             True
 
-        PressedEmojiSelectorEmoji _ ->
-            True
+        EmojiSelectorMsg emojiMsg ->
+            Emoji.isPressed emojiMsg
 
         MessageMenu_PressedReply _ ->
             True
@@ -1199,9 +1199,6 @@ isPressMsg msg =
             False
 
         PressedBody ->
-            True
-
-        PressedReactionEmojiContainer ->
             True
 
         MessageMenu_PressedDeleteMessage _ _ ->
@@ -1362,6 +1359,9 @@ isPressMsg msg =
 
         MessageInputMsg _ _ messageInputMsg ->
             MessageInput.isPress messageInputMsg
+
+        GotEmojiData result ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
