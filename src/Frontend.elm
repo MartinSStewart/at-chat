@@ -3313,16 +3313,21 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
         (\loggedIn ->
             ( { loggedIn
                 | showEmojiSelector =
-                    case loggedIn.previousTextInputFocus of
-                        Just textInputFocus ->
-                            if textInputFocus.htmlId == textInputId then
-                                emojiSelector (Just textInputFocus.selection)
+                    case loggedIn.showEmojiSelector of
+                        EmojiSelectorHidden ->
+                            case loggedIn.previousTextInputFocus of
+                                Just textInputFocus ->
+                                    if textInputFocus.htmlId == textInputId then
+                                        emojiSelector (Just textInputFocus.selection)
 
-                            else
-                                emojiSelector Nothing
+                                    else
+                                        emojiSelector Nothing
 
-                        Nothing ->
-                            emojiSelector Nothing
+                                Nothing ->
+                                    emojiSelector Nothing
+
+                        _ ->
+                            EmojiSelectorHidden
               }
             , Command.none
             )
