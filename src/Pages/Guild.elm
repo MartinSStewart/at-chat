@@ -24,12 +24,11 @@ import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Date exposing (Date)
-import Dict
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (CachedEmojiData, Emoji(..))
+import Emoji exposing (Emoji)
 import Env
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))

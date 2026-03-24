@@ -23,7 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Category(..), Emoji)
+import Emoji exposing (Emoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -502,7 +502,7 @@ update msg model =
                                         }
                                             |> Loaded
 
-                                    NotLoggedIn record ->
+                                    NotLoggedIn _ ->
                                         Loaded loaded2
                             )
 
@@ -2888,9 +2888,6 @@ updateLoaded msg model =
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector MessageMenu.editMessageTextInputId EmojiSelectorForEditMessage model
 
-                MessageInput.NoOp ->
-                    ( model, Command.none )
-
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
                 MessageInput.TextInputGotFocus htmlId ->
@@ -3294,9 +3291,6 @@ updateLoaded msg model =
 
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
-
-                MessageInput.NoOp ->
-                    ( model, Command.none )
 
         GotEmojiData result ->
             case result of

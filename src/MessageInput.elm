@@ -82,7 +82,6 @@ type Msg
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
     | OnSelectionChanged HtmlId Range
-    | NoOp
 
 
 isPress : Msg -> Bool
@@ -125,9 +124,6 @@ isPress msg =
             False
 
         OnSelectionChanged _ _ ->
-            False
-
-        NoOp ->
             False
 
 

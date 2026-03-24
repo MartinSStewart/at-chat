@@ -1365,7 +1365,7 @@ isPressMsg msg =
         MessageInputMsg _ _ messageInputMsg ->
             MessageInput.isPress messageInputMsg
 
-        GotEmojiData result ->
+        GotEmojiData _ ->
             False
 
 

@@ -1,4 +1,4 @@
-module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiResponse, Model, Msg(..), SkinTone, emojiWithSkinTone, fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
+module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiData, EmojiResponse, Model, Msg(..), SkinTone, emojiWithSkinTone, fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
 
 import Array exposing (Array)
 import Codec exposing (Codec)
@@ -30,7 +30,7 @@ toString emoji =
             text
 
 
-view : Emoji -> Ui.Element msg
+view : Emoji -> Element msg
 view emoji =
     case emoji of
         UnicodeEmoji text ->
@@ -265,16 +265,16 @@ isPressed msg =
         PressedContainer ->
             True
 
-        PressedSelectEmoji emoji ->
+        PressedSelectEmoji _ ->
             True
 
-        PressedCategory category ->
+        PressedCategory _ ->
             True
 
-        PressedSkinTone maybeSkinTone ->
+        PressedSkinTone _ ->
             True
 
-        MouseEnteredEmoji string ->
+        MouseEnteredEmoji _ ->
             False
 
 
@@ -374,8 +374,8 @@ selector isMobile model emojiData =
                                     (List.map
                                         (\emoji ->
                                             let
-                                                emoji2 : String
-                                                emoji2 =
+                                                text : String
+                                                text =
                                                     case model.selectedCategory of
                                                         PeopleAndBody ->
                                                             emojiWithSkinTone model.selectedSkinTone emoji emojiData2
@@ -384,14 +384,14 @@ selector isMobile model emojiData =
                                                             toString emoji
                                             in
                                             MyUi.elButton
-                                                (Dom.id ("guild_emojiSelector_" ++ emoji2))
+                                                (Dom.id ("guild_emojiSelector_" ++ text))
                                                 (PressedSelectEmoji emoji)
                                                 [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
                                                 , Ui.attrIf
                                                     (model.emojiHovered == Just emoji)
                                                     (Ui.background MyUi.hoverHighlight)
                                                 ]
-                                                (Ui.text emoji2)
+                                                (Ui.text text)
                                         )
                                         emojiRow
                                     )

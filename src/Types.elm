@@ -453,7 +453,7 @@ type FrontendMsg
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
-    | GotEmojiData (Result Http.Error Emoji.CachedEmojiData)
+    | GotEmojiData (Result Http.Error CachedEmojiData)
 
 
 type ScrollPosition
