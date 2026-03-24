@@ -2894,7 +2894,7 @@ updateLoaded msg model =
                         (EmojiSelectorForEditMessage (Coord.xy (round ok.element.x) (round ok.element.y)))
                         model
 
-                Err error ->
+                Err _ ->
                     ( model, Command.none )
 
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->

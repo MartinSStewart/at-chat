@@ -175,10 +175,10 @@ pendingChangesText localChange =
         Local_SetDomainWhitelist _ _ ->
             "Whitelist domain"
 
-        Local_SetEmojiCategory category ->
+        Local_SetEmojiCategory _ ->
             "Selected emoji category"
 
-        Local_SetEmojiSkinTone maybeSkinTone ->
+        Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
 
 
@@ -1374,7 +1374,7 @@ isPressMsg msg =
         GotEmojiData _ ->
             False
 
-        GotEditMessageTextInputPositionForEmojiSelector result ->
+        GotEditMessageTextInputPositionForEmojiSelector _ ->
             False
 
 

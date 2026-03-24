@@ -3344,10 +3344,6 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
-
-        emojiConfig : EmojiConfig
-        emojiConfig =
-            local.localUser.user.emojiConfig
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3621,10 +3617,6 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
-
-        emojiConfig : EmojiConfig
-        emojiConfig =
-            local.localUser.user.emojiConfig
     in
     Ui.column
         [ Ui.height Ui.fill

@@ -34,14 +34,14 @@ module User exposing
     , toString
     )
 
-import Array exposing (Array)
+import Array
 import Base64
 import Codec exposing (Codec)
 import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), Emoji, EmojiConfig, SkinTone)
+import Emoji exposing (Category(..), EmojiConfig, SkinTone)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
@@ -89,7 +89,7 @@ type alias BackendUser =
     }
 
 
-setEmojiCategory : Emoji.Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 setEmojiCategory category user =
     let
         emojiConfig =
