@@ -13,6 +13,7 @@ module Emoji exposing
     , isPressed
     , requestEmojiData
     , selector
+    , selectorHeight
     , selectorInit
     , toString
     , view
@@ -350,6 +351,11 @@ paddingRight =
     21
 
 
+selectorHeight : number
+selectorHeight =
+    400
+
+
 selector : Bool -> Coord CssPixels -> Model -> EmojiConfig -> Maybe CachedEmojiData -> Element Msg
 selector isMobile windowSize model userData emojiData =
     let
@@ -365,7 +371,7 @@ selector isMobile windowSize model userData emojiData =
 
                   else
                     Ui.width (Ui.px (columns * emojiWidth + paddingRight))
-                , Ui.height (Ui.px 400)
+                , Ui.height (Ui.px selectorHeight)
                 , Ui.background MyUi.background2
                 , Ui.border 1
                 , Ui.borderColor MyUi.highlightedBorder
@@ -476,15 +482,6 @@ selector isMobile windowSize model userData emojiData =
                            )
                     )
                 ]
-                |> Ui.el
-                    [ Ui.alignBottom
-                    , Ui.paddingXY 8 0
-                    , if isMobile then
-                        Ui.width Ui.fill
-
-                      else
-                        Ui.width Ui.shrink
-                    ]
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"

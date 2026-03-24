@@ -1374,6 +1374,9 @@ isPressMsg msg =
         GotEmojiData _ ->
             False
 
+        GotEditMessageTextInputPositionForEmojiSelector result ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

@@ -1131,7 +1131,7 @@ updateLoaded msg model =
                                 EmojiSelectorForMessage maybeSelection ->
                                     insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji model loggedIn
 
-                                EmojiSelectorForEditMessage maybeSelection ->
+                                EmojiSelectorForEditMessage _ maybeSelection ->
                                     insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji model loggedIn
                         )
                         model
@@ -2881,7 +2881,21 @@ updateLoaded msg model =
                     messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
 
                 MessageInput.PressedOpenEmojiSelector ->
-                    pressedOpenEmojiSelector MessageMenu.editMessageTextInputId EmojiSelectorForEditMessage model
+                    ( model
+                    , Dom.getElement MessageMenu.editMessageTextInputId
+                        |> Task.attempt GotEditMessageTextInputPositionForEmojiSelector
+                    )
+
+        GotEditMessageTextInputPositionForEmojiSelector result ->
+            case result of
+                Ok ok ->
+                    pressedOpenEmojiSelector
+                        MessageMenu.editMessageTextInputId
+                        (EmojiSelectorForEditMessage (Coord.xy (round ok.element.x) (round ok.element.y)))
+                        model
+
+                Err error ->
+                    ( model, Command.none )
 
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
@@ -3717,7 +3731,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                         EmojiSelectorForMessage _ ->
                             EmojiSelectorHidden
 
-                        EmojiSelectorForEditMessage _ ->
+                        EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
                 , messageHover =
                     case loggedIn.messageHover of

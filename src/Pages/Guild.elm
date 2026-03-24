@@ -3063,13 +3063,57 @@ emojiSelector isMobile local loggedIn model =
             Ui.noAttr
 
         EmojiSelectorForReaction _ _ ->
-            Ui.inFront (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData |> Ui.map EmojiSelectorMsg)
+            Ui.inFront
+                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                    |> Ui.el
+                        [ Ui.alignBottom
+                        , Ui.paddingXY 8 0
+                        , if isMobile then
+                            Ui.width Ui.fill
+
+                          else
+                            Ui.width Ui.shrink
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
 
         EmojiSelectorForMessage _ ->
-            Ui.inFront (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData |> Ui.map EmojiSelectorMsg)
+            Ui.inFront
+                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                    |> Ui.el
+                        [ Ui.alignBottom
+                        , Ui.paddingXY 8 0
+                        , if isMobile then
+                            Ui.width Ui.fill
 
-        EmojiSelectorForEditMessage _ ->
-            Ui.inFront (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData |> Ui.map EmojiSelectorMsg)
+                          else
+                            Ui.width Ui.shrink
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
+
+        EmojiSelectorForEditMessage position _ ->
+            let
+                y =
+                    Coord.yRaw position - Emoji.selectorHeight - channelHeaderHeight
+            in
+            Ui.inFront
+                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                    |> Ui.el
+                        [ Ui.paddingXY 8 0
+                        , Ui.move
+                            { x = 0
+                            , y =
+                                if y < 0 then
+                                    Coord.yRaw position
+
+                                else
+                                    y
+                            , z = 0
+                            }
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
 
 
 conversationView :

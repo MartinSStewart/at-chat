@@ -270,7 +270,7 @@ type EmojiSelector
     = EmojiSelectorHidden
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
     | EmojiSelectorForMessage (Maybe Range)
-    | EmojiSelectorForEditMessage (Maybe Range)
+    | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
 
 
 type alias BackendModel =
@@ -454,6 +454,7 @@ type FrontendMsg
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
+    | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
 
 
 type ScrollPosition
