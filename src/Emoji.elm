@@ -1,5 +1,6 @@
-module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiResponse, Model, Msg(..), fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
+module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiResponse, Model, Msg(..), SkinTone, fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
 
+import Array exposing (Array)
 import Codec exposing (Codec)
 import Dict exposing (Dict)
 import Discord
@@ -234,7 +235,10 @@ selectorInit =
 
 
 type alias CachedEmojiData =
-    { emojis : SeqDict Emoji EmojiData, categories : SeqDict Category (List Emoji) }
+    { emojis : SeqDict Emoji EmojiData
+    , categories : SeqDict Category (List Emoji)
+    , shortNames : Array { shortName : String, emoji : Emoji }
+    }
 
 
 type alias EmojiData =
@@ -509,6 +513,15 @@ requestEmojiData gotEmojiData =
                             in
                             { emojis = emojiData
                             , categories = categories
+                            , shortNames =
+                                List.concatMap
+                                    (\emoji ->
+                                        List.map
+                                            (\shortName -> { shortName = shortName, emoji = UnicodeEmoji emoji.emoji })
+                                            emoji.shortNames
+                                    )
+                                    ok
+                                    |> Array.fromList
                             }
                                 |> Ok
 

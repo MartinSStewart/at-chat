@@ -40,7 +40,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
-import MessageInput
+import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
 import MyUi exposing (Range)
@@ -2802,6 +2802,7 @@ updateLoaded msg model =
                                                                 guildOrDmId
                                                                 index
                                                                 textInputFocus.dropdown
+                                                                loggedIn.emojiData
                                                                 (Local.model loggedIn.localState)
                                                     }
                                                         |> Just
@@ -2821,7 +2822,7 @@ updateLoaded msg model =
                 MessageInput.PressedArrowUpInEmptyInput ->
                     ( model, Command.none )
 
-                MessageInput.PressedPingUser dropdownIndex ->
+                MessageInput.PressedDropdownItem dropdownIndex ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage, loggedIn.textInputFocus ) of
@@ -2839,7 +2840,7 @@ updateLoaded msg model =
                                         ( Just nonempty, Just nameSoFar ) ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedPingUser
+                                                    MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         nameSoFar
@@ -2847,6 +2848,8 @@ updateLoaded msg model =
                                                         MessageMenu.editMessageTextInputId
                                                         dropdownIndex
                                                         textInputFocus.dropdown
+                                                        loggedIn.emojiSelector.selectedSkinTone
+                                                        loggedIn.emojiData
                                                         (Local.model loggedIn.localState)
                                                         nonempty
                                             in
@@ -3044,6 +3047,7 @@ updateLoaded msg model =
                                                                 guildOrDmId
                                                                 index
                                                                 textInputFocus.dropdown
+                                                                loggedIn.emojiData
                                                                 (Local.model loggedIn.localState)
                                                     }
                                                         |> Just
@@ -3231,7 +3235,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedPingUser index ->
+                MessageInput.PressedDropdownItem index ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts, loggedIn.textInputFocus ) of
@@ -3247,7 +3251,7 @@ updateLoaded msg model =
                                         Just nameSoFar ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedPingUser
+                                                    MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         nameSoFar
@@ -3255,6 +3259,8 @@ updateLoaded msg model =
                                                         Pages.Guild.channelTextInputId
                                                         index
                                                         textInputFocus.dropdown
+                                                        loggedIn.emojiSelector.selectedSkinTone
+                                                        loggedIn.emojiData
                                                         (Local.model loggedIn.localState)
                                                         text
                                             in
@@ -3356,7 +3362,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
                 showDropdown =
                     ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
                         && (case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
-                                Just nameSoFar ->
+                                Just (NameSoFar nameSoFar) ->
                                     case guildOrDmId of
                                         GuildOrDmId guildOrDmId2 ->
                                             MessageInput.userDropdownList
@@ -3375,6 +3381,16 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
                                                 (Local.model loggedIn.localState)
                                                 |> List.isEmpty
                                                 |> not
+
+                                Just (EmojiSoFar emojiSoFar) ->
+                                    case loggedIn.emojiData of
+                                        Just emojiData2 ->
+                                            MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
+                                                |> List.isEmpty
+                                                |> not
+
+                                        Nothing ->
+                                            False
 
                                 Nothing ->
                                     False

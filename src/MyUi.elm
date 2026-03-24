@@ -328,11 +328,11 @@ timeElapsedShort now event =
         difference =
             Duration.from event now |> Quantity.abs
 
-        months =
-            Duration.inDays difference / 30 |> floor
+        years =
+            Duration.inDays difference / 365 |> floor
     in
-    if months >= 3 then
-        String.fromInt months ++ "mnth"
+    if years >= 1 then
+        String.fromInt years ++ "y"
 
     else
         let

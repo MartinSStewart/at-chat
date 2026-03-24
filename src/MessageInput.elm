@@ -1,24 +1,28 @@
 module MessageInput exposing
     ( MentionUserDropdown
     , Msg(..)
-    , NameSoFar
+    , NameSoFar(..)
+    , NameSoFarData
     , TextInputFocus
     , disabledView
     , discordUserDropdownList
     , editView
+    , emojiDropdownList
     , isPress
     , pingDropdownView
     , pressedArrowInDropdown
-    , pressedPingUser
+    , pressedDropdownItem
     , userDropdownList
     , view
     )
 
+import Array
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
+import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
 import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
@@ -55,7 +59,12 @@ type alias TextInputFocus =
     { htmlId : HtmlId, selection : Range, dropdown : Maybe MentionUserDropdown }
 
 
-type alias NameSoFar =
+type NameSoFar
+    = NameSoFar NameSoFarData
+    | EmojiSoFar NameSoFarData
+
+
+type alias NameSoFarData =
     { nameSoFar : String, index : Int }
 
 
@@ -67,7 +76,7 @@ type Msg
     | PressedSendMessage
     | PressedArrowInDropdown Int
     | PressedArrowUpInEmptyInput
-    | PressedPingUser Int
+    | PressedDropdownItem Int
     | PressedPingDropdownContainer
     | PressedUploadFile
     | PressedOpenEmojiSelector
@@ -100,7 +109,7 @@ isPress msg =
         PressedArrowUpInEmptyInput ->
             True
 
-        PressedPingUser _ ->
+        PressedDropdownItem _ ->
             True
 
         PressedPingDropdownContainer ->
@@ -211,7 +220,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
 
                                             "Enter" ->
                                                 Json.Decode.succeed
-                                                    ( PressedPingUser dropdownIndex, True )
+                                                    ( PressedDropdownItem dropdownIndex, True )
 
                                             _ ->
                                                 Json.Decode.fail ""
@@ -558,7 +567,7 @@ disabledView roundTopCorners placeholderText text attachedFiles local =
             ]
 
 
-userDropdownList : Bool -> NameSoFar -> GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList : Bool -> NameSoFarData -> GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
 userDropdownList isMobile nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
@@ -575,7 +584,11 @@ userDropdownList isMobile nameSoFar guildOrDmId local =
                     []
 
         GuildOrDmId_Dm otherUserId ->
-            [ local.localUser.session.userId, otherUserId ]
+            if local.localUser.session.userId == otherUserId then
+                [ otherUserId ]
+
+            else
+                [ local.localUser.session.userId, otherUserId ]
     )
         |> List.filterMap
             (\userId ->
@@ -603,7 +616,23 @@ maxDropdownUsers isMobile =
         10
 
 
-discordUserDropdownList : Bool -> NameSoFar -> DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
+emojiDropdownList : Bool -> NameSoFarData -> CachedEmojiData -> List Emoji
+emojiDropdownList isMobile nameSoFar emojiData =
+    let
+        substring =
+            String.toLower nameSoFar.nameSoFar
+    in
+    if String.length substring > 2 then
+        Array.filter (\item -> String.contains substring item.shortName) emojiData.shortNames
+            |> Array.toList
+            |> List.map .emoji
+            |> List.take (maxDropdownUsers isMobile)
+
+    else
+        []
+
+
+discordUserDropdownList : Bool -> NameSoFarData -> DiscordGuildOrDmId -> LocalState -> List ( Discord.Id Discord.UserId, DiscordFrontendUser )
 discordUserDropdownList isMobile nameSoFar guildOrDmId local =
     let
         allUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
@@ -644,38 +673,56 @@ discordUserDropdownList isMobile nameSoFar guildOrDmId local =
         |> List.take (maxDropdownUsers isMobile)
 
 
-pressedArrowInDropdown : Bool -> NameSoFar -> AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
-pressedArrowInDropdown isMobile nameSoFar guildOrDmId index maybePingUser local =
+pressedArrowInDropdown :
+    Bool
+    -> NameSoFar
+    -> AnyGuildOrDmId
+    -> Int
+    -> Maybe MentionUserDropdown
+    -> Maybe CachedEmojiData
+    -> LocalState
+    -> Maybe MentionUserDropdown
+pressedArrowInDropdown isMobile nameSoFar guildOrDmId index maybePingUser emojiData local =
     case maybePingUser of
         Just pingUser ->
             let
-                dropdownListLength : Int
-                dropdownListLength =
+                helper : Int -> Maybe MentionUserDropdown
+                helper dropdownListLength =
+                    { pingUser
+                        | dropdownIndex =
+                            if index < 0 then
+                                dropdownListLength - 1
+
+                            else if index >= dropdownListLength then
+                                0
+
+                            else
+                                index
+                    }
+                        |> Just
+            in
+            case nameSoFar of
+                NameSoFar nameSoFarData ->
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
-                            userDropdownList isMobile nameSoFar guildOrDmId2 local |> List.length
+                            userDropdownList isMobile nameSoFarData guildOrDmId2 local |> List.length |> helper
 
                         DiscordGuildOrDmId guildOrDmId2 ->
-                            discordUserDropdownList isMobile nameSoFar guildOrDmId2 local |> List.length
-            in
-            { pingUser
-                | dropdownIndex =
-                    if index < 0 then
-                        dropdownListLength - 1
+                            discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local |> List.length |> helper
 
-                    else if index >= dropdownListLength then
-                        0
+                EmojiSoFar emojiSoFar ->
+                    case emojiData of
+                        Just emojiData2 ->
+                            emojiDropdownList isMobile emojiSoFar emojiData2 |> List.length |> helper
 
-                    else
-                        index
-            }
-                |> Just
+                        Nothing ->
+                            Nothing
 
         Nothing ->
             Nothing
 
 
-pressedPingUser :
+pressedDropdownItem :
     msg
     -> Bool
     -> NameSoFar
@@ -683,22 +730,76 @@ pressedPingUser :
     -> HtmlId
     -> Int
     -> Maybe MentionUserDropdown
+    -> Maybe SkinTone
+    -> Maybe CachedEmojiData
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedPingUser setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId index pingUser local inputText =
-    case ( pingUser, selectedUserName isMobile nameSoFar guildOrDmId index local ) of
-        ( Just _, Just name ) ->
+pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId dropdownIndex pingUser emojiSkinTone emojiData local inputText =
+    let
+        maybeTextToInsert : Maybe ( Range, String )
+        maybeTextToInsert =
+            case nameSoFar of
+                NameSoFar nameSoFarData ->
+                    case guildOrDmId of
+                        GuildOrDmId guildOrDmId2 ->
+                            case
+                                userDropdownList isMobile nameSoFarData guildOrDmId2 local
+                                    |> List.Extra.getAt dropdownIndex
+                            of
+                                Just ( _, user ) ->
+                                    ( { start = nameSoFarData.index
+                                      , end = nameSoFarData.index + String.length nameSoFarData.nameSoFar
+                                      }
+                                    , PersonName.toString user.name
+                                    )
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
+
+                        DiscordGuildOrDmId guildOrDmId2 ->
+                            case
+                                discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local
+                                    |> List.Extra.getAt dropdownIndex
+                            of
+                                Just ( _, user ) ->
+                                    ( { start = nameSoFarData.index
+                                      , end = nameSoFarData.index + String.length nameSoFarData.nameSoFar
+                                      }
+                                    , PersonName.toString user.name
+                                    )
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
+
+                EmojiSoFar emojiSoFar ->
+                    case emojiData of
+                        Just emojiData2 ->
+                            case emojiDropdownList isMobile emojiSoFar emojiData2 |> List.Extra.getAt dropdownIndex of
+                                Just emoji ->
+                                    ( { start = emojiSoFar.index
+                                      , end = emojiSoFar.index + String.length emojiSoFar.nameSoFar
+                                      }
+                                    , Emoji.toString emoji
+                                    )
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
+
+                        Nothing ->
+                            Nothing
+    in
+    case ( pingUser, maybeTextToInsert ) of
+        ( Just _, Just ( { start, end }, textToInsert ) ) ->
             ( Nothing
             , inputText
             , Command.batch
                 [ Dom.focus channelTextInputId
                     |> Task.attempt (\_ -> setFocusMsg)
-                , Ports.execCommand
-                    channelTextInputId
-                    nameSoFar.index
-                    (nameSoFar.index + String.length nameSoFar.nameSoFar)
-                    (name ++ " ")
+                , Ports.execCommand channelTextInputId start end (textToInsert ++ " ")
                 ]
             )
 
@@ -706,55 +807,85 @@ pressedPingUser setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId in
             ( Nothing, inputText, Command.none )
 
 
-selectedUserName : Bool -> NameSoFar -> AnyGuildOrDmId -> Int -> LocalState -> Maybe String
-selectedUserName isMobile nameSoFar guildOrDmId index local =
-    case guildOrDmId of
-        GuildOrDmId guildOrDmId2 ->
-            case userDropdownList isMobile nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
-                Just ( _, user ) ->
-                    PersonName.toString user.name |> Just
-
-                Nothing ->
-                    Nothing
-
-        DiscordGuildOrDmId guildOrDmId2 ->
-            case discordUserDropdownList isMobile nameSoFar guildOrDmId2 local |> List.Extra.getAt index of
-                Just ( _, user ) ->
-                    PersonName.toString user.name |> Just
-
-                Nothing ->
-                    Nothing
-
-
 pingDropdownView :
     Bool
     -> NameSoFar
     -> AnyGuildOrDmId
+    -> Maybe SkinTone
+    -> Maybe CachedEmojiData
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element Msg
-pingDropdownView isMobile nameSoFar guildOrDmId localState dropdownButtonId dropdown =
+pingDropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dropdownButtonId dropdown =
+    case nameSoFar of
+        NameSoFar nameSoFarData ->
+            let
+                rows : List (Element Msg)
+                rows =
+                    case guildOrDmId of
+                        GuildOrDmId guildOrDmId2 ->
+                            List.indexedMap
+                                (\index ( _, user ) ->
+                                    dropdownButton
+                                        isMobile
+                                        dropdown
+                                        dropdownButtonId
+                                        index
+                                        (Ui.text (PersonName.toString user.name))
+                                )
+                                (userDropdownList isMobile nameSoFarData guildOrDmId2 localState)
+
+                        DiscordGuildOrDmId guildOrDmId2 ->
+                            List.indexedMap
+                                (\index ( _, user ) ->
+                                    dropdownButton
+                                        isMobile
+                                        dropdown
+                                        dropdownButtonId
+                                        index
+                                        (Ui.text (PersonName.toString user.name))
+                                )
+                                (discordUserDropdownList isMobile nameSoFarData guildOrDmId2 localState)
+
+                pingDropdownViewHeight : Int
+                pingDropdownViewHeight =
+                    List.length rows * dropdownButtonHeight isMobile
+            in
+            dropdownContainer dropdown pingDropdownViewHeight rows
+
+        EmojiSoFar emojiSoFar ->
+            case emojiData of
+                Just emojiData2 ->
+                    let
+                        rows =
+                            List.indexedMap
+                                (\index emoji ->
+                                    dropdownButton
+                                        isMobile
+                                        dropdown
+                                        dropdownButtonId
+                                        index
+                                        (Ui.text (Emoji.toString emoji))
+                                )
+                                (emojiDropdownList isMobile emojiSoFar emojiData2)
+
+                        pingDropdownViewHeight : Int
+                        pingDropdownViewHeight =
+                            List.length rows * dropdownButtonHeight isMobile
+                    in
+                    dropdownContainer dropdown pingDropdownViewHeight rows
+
+                Nothing ->
+                    dropdownContainer dropdown 40 [ Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Loading emojis...") ]
+
+
+dropdownContainer : MentionUserDropdown -> Int -> List (Element Msg) -> Element Msg
+dropdownContainer dropdown contentHeight content =
     let
-        rows : List (Element Msg)
-        rows =
-            case guildOrDmId of
-                GuildOrDmId guildOrDmId2 ->
-                    List.indexedMap
-                        (\index ( _, user ) -> dropdownButton isMobile dropdown dropdownButtonId index user.name)
-                        (userDropdownList isMobile nameSoFar guildOrDmId2 localState)
-
-                DiscordGuildOrDmId guildOrDmId2 ->
-                    List.indexedMap
-                        (\index ( _, user ) -> dropdownButton isMobile dropdown dropdownButtonId index user.name)
-                        (discordUserDropdownList isMobile nameSoFar guildOrDmId2 localState)
-
+        headerHeight : number
         headerHeight =
             20
-
-        pingDropdownViewHeight : Int
-        pingDropdownViewHeight =
-            List.length rows * dropdownButtonHeight isMobile + headerHeight
     in
     Ui.column
         [ Ui.background MyUi.background2
@@ -764,11 +895,11 @@ pingDropdownView isMobile nameSoFar guildOrDmId localState dropdownButtonId drop
         , Ui.Font.color MyUi.font2
         , Ui.move
             { x = round dropdown.inputElement.x
-            , y = round (dropdown.inputElement.y - toFloat pingDropdownViewHeight + 1)
+            , y = round (dropdown.inputElement.y - (toFloat contentHeight + headerHeight) + 1)
             , z = 0
             }
         , Ui.width (Ui.px (round dropdown.inputElement.width))
-        , Ui.height (Ui.px pingDropdownViewHeight)
+        , Ui.height (Ui.px (contentHeight + headerHeight))
         , Ui.clip
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
 
@@ -777,7 +908,7 @@ pingDropdownView isMobile nameSoFar guildOrDmId localState dropdownButtonId drop
         [ Ui.el
             [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 0, Ui.height (Ui.px headerHeight) ]
             (Ui.text "Mention a user:")
-        , Ui.column [] rows
+        , Ui.column [] content
         ]
 
 
@@ -790,13 +921,13 @@ dropdownButtonHeight isMobile =
         30
 
 
-dropdownButton : Bool -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element Msg
-dropdownButton isMobile dropdown dropdownButtonId index name =
+dropdownButton : Bool -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> Element Msg -> Element Msg
+dropdownButton isMobile dropdown dropdownButtonId index content =
     MyUi.elButton
         (dropdownButtonId index)
-        (PressedPingUser index)
-        [ Ui.Events.onMouseDown (PressedPingUser index)
-        , MyUi.touchPress (PressedPingUser index)
+        (PressedDropdownItem index)
+        [ Ui.Events.onMouseDown (PressedDropdownItem index)
+        , MyUi.touchPress (PressedDropdownItem index)
         , Ui.paddingXY 8 0
         , Ui.contentCenterY
         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
@@ -824,4 +955,4 @@ dropdownButton isMobile dropdown dropdownButtonId index name =
             )
             |> Ui.htmlAttribute
         ]
-        (Ui.text (PersonName.toString name))
+        content

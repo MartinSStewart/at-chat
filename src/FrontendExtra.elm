@@ -30,13 +30,14 @@ import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, 
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), MessageState)
-import MessageInput exposing (NameSoFar)
+import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
 import MyUi exposing (Range)
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
+import PersonName
 import Ports
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -229,6 +230,8 @@ layout model attributes child =
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
+                                                loggedIn.emojiSelector.selectedSkinTone
+                                                loggedIn.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
@@ -240,6 +243,8 @@ layout model attributes child =
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
+                                                loggedIn.emojiSelector.selectedSkinTone
+                                                loggedIn.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
@@ -3526,39 +3531,62 @@ deleteMessage guildOrDmId threadRoute local =
 pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
 pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
     let
-        helper text =
-            let
-                previous : String
-                previous =
-                    text |> String.slice 0 selection.start
-            in
-            case String.split "@" previous |> List.reverse of
-                nameSoFar :: beforeAt :: rest ->
-                    if
-                        (beforeAt == "" && List.isEmpty rest)
-                            || String.endsWith " " beforeAt
-                            || String.endsWith "\n" beforeAt
-                            || String.endsWith "\u{000D}" beforeAt
-                    then
-                        { nameSoFar = nameSoFar
-                        , index =
-                            String.length beforeAt
-                                + List.foldl (\a count -> String.length a + count + 1) 0 rest
-                                + 1
-                        }
-                            |> Just
+        isValidStart : Int -> String -> Bool
+        isValidStart index text =
+            if index <= 0 then
+                True
 
-                    else
-                        Nothing
+            else
+                case String.slice (index - 1) index text of
+                    " " ->
+                        True
 
-                _ ->
-                    Nothing
+                    "\n" ->
+                        True
+
+                    "\u{000D}" ->
+                        True
+
+                    _ ->
+                        False
+
+        helper : Int -> String -> Maybe NameSoFar
+        helper index text =
+            if PersonName.maxLength < selection.start - index || index <= 0 then
+                Nothing
+
+            else
+                case String.slice (index - 1) index text of
+                    "@" ->
+                        if isValidStart (index - 1) text then
+                            { nameSoFar = String.slice index selection.start text
+                            , index = index
+                            }
+                                |> NameSoFar
+                                |> Just
+
+                        else
+                            Nothing
+
+                    ":" ->
+                        if isValidStart (index - 1) text then
+                            { nameSoFar = String.slice index selection.start text
+                            , index = index
+                            }
+                                |> EmojiSoFar
+                                |> Just
+
+                        else
+                            Nothing
+
+                    _ ->
+                        helper (index - 1) text
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
                 Just draft ->
-                    helper (String.Nonempty.toString draft)
+                    helper selection.start (String.Nonempty.toString draft)
 
                 Nothing ->
                     Nothing
@@ -3566,7 +3594,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         else if htmlId == MessageMenu.editMessageTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                 Just edit ->
-                    helper edit.text
+                    helper selection.start edit.text
 
                 Nothing ->
                     Nothing
