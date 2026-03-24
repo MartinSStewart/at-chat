@@ -232,7 +232,7 @@ layout model attributes child =
                                 of
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
-                                            MessageInput.pingDropdownView
+                                            MessageInput.dropdownView
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
@@ -245,7 +245,7 @@ layout model attributes child =
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
-                                            MessageInput.pingDropdownView
+                                            MessageInput.dropdownView
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId

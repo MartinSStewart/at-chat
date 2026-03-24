@@ -6,10 +6,10 @@ module MessageInput exposing
     , TextInputFocus
     , disabledView
     , discordUserDropdownList
+    , dropdownView
     , editView
     , emojiDropdownList
     , isPress
-    , pingDropdownView
     , pressedArrowInDropdown
     , pressedDropdownItem
     , userDropdownList
@@ -802,7 +802,7 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
             ( Nothing, inputText, Command.none )
 
 
-pingDropdownView :
+dropdownView :
     Bool
     -> NameSoFar
     -> AnyGuildOrDmId
@@ -812,7 +812,7 @@ pingDropdownView :
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element Msg
-pingDropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dropdownButtonId dropdown =
+dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dropdownButtonId dropdown =
     case nameSoFar of
         NameSoFar nameSoFarData ->
             let
@@ -861,7 +861,21 @@ pingDropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dr
                                         dropdown
                                         dropdownButtonId
                                         index
-                                        (Ui.text (Emoji.emojiWithSkinTone skinTone emoji emojiData2))
+                                        (Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ Ui.el
+                                                [ Ui.Font.size 24, Ui.width Ui.shrink ]
+                                                (Ui.text (Emoji.emojiWithSkinTone skinTone emoji emojiData2))
+                                            , case SeqDict.get emoji emojiData2.emojis of
+                                                Just emoji2 ->
+                                                    Ui.row
+                                                        [ Ui.spacing 8 ]
+                                                        (List.map (\shortName -> Ui.text (":" ++ shortName ++ ":")) emoji2.shortNames)
+
+                                                Nothing ->
+                                                    Ui.none
+                                            ]
+                                        )
                                 )
                                 (emojiDropdownList isMobile emojiSoFar emojiData2)
 
