@@ -76,6 +76,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MyUi exposing (Range)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -176,6 +177,8 @@ type alias LoggedIn2 =
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
     , textInputFocus : Maybe TextInputFocus
+    , -- Lasts until mouseUp
+      previousTextInputFocus : Maybe TextInputFocus
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
@@ -266,6 +269,8 @@ type alias EditMessage =
 type EmojiSelector
     = EmojiSelectorHidden
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
+    | EmojiSelectorForMessage (Maybe Range)
+    | EmojiSelectorForEditMessage (Maybe Range)
 
 
 type alias BackendModel =

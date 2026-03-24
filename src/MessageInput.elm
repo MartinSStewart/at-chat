@@ -70,8 +70,10 @@ type Msg
     | PressedPingUser Int
     | PressedPingDropdownContainer
     | PressedUploadFile
+    | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
     | OnSelectionChanged HtmlId Range
+    | NoOp
 
 
 isPress : Msg -> Bool
@@ -107,10 +109,16 @@ isPress msg =
         PressedUploadFile ->
             True
 
+        PressedOpenEmojiSelector ->
+            True
+
         OnPasteFiles _ ->
             False
 
         OnSelectionChanged _ _ ->
+            False
+
+        NoOp ->
             False
 
 
@@ -355,26 +363,11 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
             , Ui.background MyUi.background2
             ]
         |> Ui.el
-            [ Ui.paddingWith { left = 40, right = 36, top = 0, bottom = 0 }
+            [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
-                (MyUi.elButton
-                    (Dom.id (htmlIdPrefix ++ "_uploadFile"))
-                    PressedUploadFile
-                    [ Ui.alignLeft
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 4
-                    , Ui.paddingXY 6 0
-                    , Ui.height (Ui.px 38)
-                    , Ui.background MyUi.buttonBackground
-                    , Ui.move { x = 2, y = 0, z = 0 }
-                    , Ui.contentCenterY
-                    , Ui.centerY
-                    , Html.Events.preventDefaultOn
-                        "touchend"
-                        (Json.Decode.succeed ( PressedUploadFile, True ))
-                        |> Ui.htmlAttribute
-                    ]
-                    (Ui.html Icons.attachment)
+                (Ui.row
+                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
             , Ui.inFront
                 (MyUi.elButton
@@ -434,26 +427,11 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
             , Ui.background MyUi.background2
             ]
         |> Ui.el
-            [ Ui.paddingWith { left = 40, right = 36, top = 0, bottom = 0 }
+            [ Ui.paddingWith { left = 80, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
-                (MyUi.elButton
-                    (Dom.id (htmlIdPrefix ++ "_uploadFile"))
-                    PressedUploadFile
-                    [ Ui.alignLeft
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 4
-                    , Ui.paddingXY 6 0
-                    , Ui.height (Ui.px 38)
-                    , Ui.background MyUi.buttonBackground
-                    , Ui.move { x = 2, y = 0, z = 0 }
-                    , Ui.contentCenterY
-                    , Ui.centerY
-                    , Html.Events.preventDefaultOn
-                        "touchend"
-                        (Json.Decode.succeed ( PressedUploadFile, True ))
-                        |> Ui.htmlAttribute
-                    ]
-                    (Ui.html Icons.attachment)
+                (Ui.row
+                    [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
+                    [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
             , Ui.inFront
                 (MyUi.elButton
@@ -481,6 +459,45 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     (Ui.html Icons.sendMessage)
                 )
             ]
+
+
+attachmentButton : String -> Element Msg
+attachmentButton htmlIdPrefix =
+    MyUi.elButton
+        (Dom.id (htmlIdPrefix ++ "_uploadFile"))
+        PressedUploadFile
+        [ Ui.rounded 4
+        , Ui.paddingXY 6 0
+        , Ui.height (Ui.px 40)
+        , Ui.background MyUi.buttonBackground
+        , Ui.contentCenterY
+        , Ui.centerY
+        , Html.Events.preventDefaultOn
+            "touchend"
+            (Json.Decode.succeed ( PressedUploadFile, True ))
+            |> Ui.htmlAttribute
+        ]
+        (Ui.html Icons.attachment)
+
+
+showEmojiSelectorButton : String -> Element Msg
+showEmojiSelectorButton htmlIdPrefix =
+    Ui.el
+        [ Ui.rounded 4
+        , Ui.id (htmlIdPrefix ++ "_uploadFile")
+        , Ui.pointer
+        , Ui.paddingXY 6 0
+        , Ui.height (Ui.px 40)
+        , Ui.background MyUi.buttonBackground
+        , Ui.contentCenterY
+        , Ui.centerY
+        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+        , Html.Events.preventDefaultOn
+            "touchend"
+            (Json.Decode.succeed ( PressedOpenEmojiSelector, True ))
+            |> Ui.htmlAttribute
+        ]
+        (Ui.html Icons.smile)
 
 
 disabledView :

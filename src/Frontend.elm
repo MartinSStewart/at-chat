@@ -23,7 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Category(..))
+import Emoji exposing (Category(..), Emoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -360,6 +360,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
             , textInputFocus = Nothing
+            , previousTextInputFocus = Nothing
             , messageHover = NoMessageHover
             , showEmojiSelector = EmojiSelectorHidden
             , editMessage = SeqDict.empty
@@ -1094,7 +1095,7 @@ updateLoaded msg model =
 
         EmojiSelectorMsg emojiMsg ->
             case emojiMsg of
-                Emoji.PressedSelectorEmoji emoji ->
+                Emoji.PressedSelectEmoji emoji ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case loggedIn.showEmojiSelector of
@@ -1107,6 +1108,12 @@ updateLoaded msg model =
                                         (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
                                         { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                         Command.none
+
+                                EmojiSelectorForMessage maybeSelection ->
+                                    insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji loggedIn
+
+                                EmojiSelectorForEditMessage maybeSelection ->
+                                    insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji loggedIn
                         )
                         model
 
@@ -2854,6 +2861,12 @@ updateLoaded msg model =
                 MessageInput.OnSelectionChanged htmlId range ->
                     messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
 
+                MessageInput.PressedOpenEmojiSelector ->
+                    pressedOpenEmojiSelector MessageMenu.editMessageTextInputId EmojiSelectorForEditMessage model
+
+                MessageInput.NoOp ->
+                    ( model, Command.none )
+
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
                 MessageInput.TextInputGotFocus htmlId ->
@@ -3250,6 +3263,12 @@ updateLoaded msg model =
                 MessageInput.OnSelectionChanged htmlId range ->
                     messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
 
+                MessageInput.PressedOpenEmojiSelector ->
+                    pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
+
+                MessageInput.NoOp ->
+                    ( model, Command.none )
+
         GotEmojiData result ->
             case result of
                 Ok emojiData ->
@@ -3263,6 +3282,41 @@ updateLoaded msg model =
                             Debug.log "emoji error" error
                     in
                     ( model, Command.none )
+
+
+pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedOpenEmojiSelector textInputId emojiSelector model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | showEmojiSelector =
+                    case loggedIn.textInputFocus of
+                        Just textInputFocus ->
+                            if textInputFocus.htmlId == textInputId then
+                                emojiSelector (Just textInputFocus.selection)
+
+                            else
+                                emojiSelector Nothing
+
+                        Nothing ->
+                            emojiSelector Nothing
+              }
+            , Command.none
+            )
+        )
+        model
+
+
+insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
+insertEmoji inputId maybeSelection emoji loggedIn =
+    ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+    , case maybeSelection of
+        Just { start, end } ->
+            Ports.execCommand inputId start end (Emoji.toString emoji ++ " ")
+
+        Nothing ->
+            Ports.execCommand inputId 99999 99999 (Emoji.toString emoji ++ " ")
+    )
 
 
 messageInputSelectionChanged : AnyGuildOrDmId -> ThreadRoute -> HtmlId -> Range -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3609,6 +3663,12 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorForReaction guildOrDmId messageIndex
 
                         EmojiSelectorForReaction _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForMessage _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForEditMessage _ ->
                             EmojiSelectorHidden
                 , messageHover =
                     case loggedIn.messageHover of

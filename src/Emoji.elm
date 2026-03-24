@@ -250,7 +250,7 @@ type alias EmojiResponse =
 type Msg
     = PressedContainer
     | PressedCategory Category
-    | PressedSelectorEmoji Emoji
+    | PressedSelectEmoji Emoji
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji Emoji
 
@@ -261,7 +261,7 @@ isPressed msg =
         PressedContainer ->
             True
 
-        PressedSelectorEmoji emoji ->
+        PressedSelectEmoji emoji ->
             True
 
         PressedCategory category ->
@@ -315,6 +315,7 @@ emojiWidth =
     40
 
 
+emojiHeight : number
 emojiHeight =
     50
 
@@ -365,7 +366,7 @@ selector isMobile model emojiData =
                         List.map
                             (\emojiRow ->
                                 Ui.row
-                                    [ Ui.height (Ui.px emojiHeight) ]
+                                    [ Ui.height (Ui.px emojiHeight), Ui.width Ui.shrink ]
                                     (List.map
                                         (\emoji ->
                                             let
@@ -380,10 +381,8 @@ selector isMobile model emojiData =
                                             in
                                             MyUi.elButton
                                                 (Dom.id ("guild_emojiSelector_" ++ emoji2))
-                                                (PressedSelectorEmoji emoji)
-                                                [ Ui.width (Ui.px emojiWidth)
-                                                , Ui.contentCenterX
-                                                , Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
+                                                (PressedSelectEmoji emoji)
+                                                [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
                                                 , Ui.attrIf
                                                     (model.emojiHovered == Just emoji)
                                                     (Ui.background MyUi.hoverHighlight)
