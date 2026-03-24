@@ -5,3 +5,5 @@
 * Fix ping user dropdown appearing too low on mobile
 * Typing indicator not appearing for Discord guilds
 * Changing tabs and then returning to a channel causes it to unload all old messages
+* Fix end-to-end-tests runner so that it loads /compact-emoji.json
+* Add search to emoji picker
