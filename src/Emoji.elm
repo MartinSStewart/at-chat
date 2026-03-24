@@ -1,4 +1,21 @@
-module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiData, EmojiResponse, Model, Msg(..), SkinTone, emojiWithSkinTone, fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
+module Emoji exposing
+    ( CachedEmojiData
+    , Category(..)
+    , Emoji(..)
+    , EmojiData
+    , EmojiResponse
+    , Model
+    , Msg(..)
+    , SkinTone
+    , emojiWithSkinTone
+    , fromDiscord
+    , isPressed
+    , requestEmojiData
+    , selector
+    , selectorInit
+    , toString
+    , view
+    )
 
 import Array exposing (Array)
 import Codec exposing (Codec)
@@ -462,13 +479,15 @@ emojiWithSkinTone maybeSkinTone emoji emojiData2 =
 requestEmojiData : (Result Http.Error CachedEmojiData -> msg) -> Command restriction toFrontend msg
 requestEmojiData gotEmojiData =
     Http.get
-        { url = "/emoji.json"
+        { url = "/compact-emoji.json"
         , expect =
             Http.expectJson
                 (\result ->
                     (case result of
                         Ok ok ->
                             let
+                                --_ =
+                                --    Debug.log "" (Codec.encodeToString 0 (Codec.list emojiResponseCodec) ok)
                                 emojiData : SeqDict Emoji EmojiData
                                 emojiData =
                                     List.foldl

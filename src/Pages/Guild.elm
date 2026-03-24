@@ -3113,13 +3113,13 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg)
+                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg)
 
                 EmojiSelectorForMessage _ ->
-                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg)
+                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg)
 
                 EmojiSelectorForEditMessage _ ->
-                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg)
+                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg)
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3323,13 +3323,13 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
 
                 EmojiSelectorForMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
 
                 EmojiSelectorForEditMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3607,13 +3607,13 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
 
                 EmojiSelectorForMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
 
                 EmojiSelectorForEditMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3816,13 +3816,13 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.noAttr
 
                 EmojiSelectorForReaction _ _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
 
                 EmojiSelectorForMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
 
                 EmojiSelectorForEditMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector loggedIn.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]

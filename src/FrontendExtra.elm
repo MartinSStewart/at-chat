@@ -231,7 +231,7 @@ layout model attributes child =
                                                 nameSoFar
                                                 guildOrDmId
                                                 loggedIn.emojiSelector.selectedSkinTone
-                                                loggedIn.emojiData
+                                                model.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
@@ -244,7 +244,7 @@ layout model attributes child =
                                                 nameSoFar
                                                 guildOrDmId
                                                 loggedIn.emojiSelector.selectedSkinTone
-                                                loggedIn.emojiData
+                                                model.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown

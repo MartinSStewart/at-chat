@@ -292,6 +292,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , userAgent = userAgent
             , pageHasFocus = True
             , versionNumber = Nothing
+            , emojiData = Nothing
             }
 
         ( model2, cmdA ) =
@@ -382,7 +383,6 @@ loadedInitHelper timezone userAgent loginData loading =
             , textEditor = TextEditor.init
             , profilePictureEditor = ImageEditor.init
             , externalLinkWarning = Nothing
-            , emojiData = Nothing
             , emojiSelector = Emoji.selectorInit
             }
     in
@@ -1129,10 +1129,10 @@ updateLoaded msg model =
                                         Command.none
 
                                 EmojiSelectorForMessage maybeSelection ->
-                                    insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji loggedIn
+                                    insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji model loggedIn
 
                                 EmojiSelectorForEditMessage maybeSelection ->
-                                    insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji loggedIn
+                                    insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji model loggedIn
                         )
                         model
 
@@ -2802,7 +2802,7 @@ updateLoaded msg model =
                                                                 guildOrDmId
                                                                 index
                                                                 textInputFocus.dropdown
-                                                                loggedIn.emojiData
+                                                                model.emojiData
                                                                 (Local.model loggedIn.localState)
                                                     }
                                                         |> Just
@@ -2849,7 +2849,7 @@ updateLoaded msg model =
                                                         dropdownIndex
                                                         textInputFocus.dropdown
                                                         loggedIn.emojiSelector.selectedSkinTone
-                                                        loggedIn.emojiData
+                                                        model.emojiData
                                                         (Local.model loggedIn.localState)
                                                         nonempty
                                             in
@@ -3044,7 +3044,7 @@ updateLoaded msg model =
                                                                 guildOrDmId
                                                                 index
                                                                 textInputFocus.dropdown
-                                                                loggedIn.emojiData
+                                                                model.emojiData
                                                                 (Local.model loggedIn.localState)
                                                     }
                                                         |> Just
@@ -3257,7 +3257,7 @@ updateLoaded msg model =
                                                         index
                                                         textInputFocus.dropdown
                                                         loggedIn.emojiSelector.selectedSkinTone
-                                                        loggedIn.emojiData
+                                                        model.emojiData
                                                         (Local.model loggedIn.localState)
                                                         text
                                             in
@@ -3295,9 +3295,7 @@ updateLoaded msg model =
         GotEmojiData result ->
             case result of
                 Ok emojiData ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn -> ( { loggedIn | emojiData = Just emojiData }, Command.none ))
-                        model
+                    ( { model | emojiData = Just emojiData }, Command.none )
 
                 Err error ->
                     let
@@ -3335,12 +3333,12 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
         model
 
 
-insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
-insertEmoji inputId maybeSelection emoji loggedIn =
+insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
+insertEmoji inputId maybeSelection emoji model loggedIn =
     let
         text : String
         text =
-            case loggedIn.emojiData of
+            case model.emojiData of
                 Just emojiData ->
                     Emoji.emojiWithSkinTone loggedIn.emojiSelector.selectedSkinTone emoji emojiData ++ " "
 
@@ -3387,7 +3385,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
                                                 |> not
 
                                 Just (EmojiSoFar emojiSoFar) ->
-                                    case loggedIn.emojiData of
+                                    case model.emojiData of
                                         Just emojiData2 ->
                                             MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
                                                 |> List.isEmpty

@@ -147,6 +147,7 @@ type alias LoadedFrontend =
     , userAgent : UserAgent
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
+    , emojiData : Maybe CachedEmojiData
     }
 
 
@@ -194,7 +195,6 @@ type alias LoggedIn2 =
     , textEditor : TextEditor.Model
     , profilePictureEditor : ImageEditor.Model
     , externalLinkWarning : Maybe Url
-    , emojiData : Maybe CachedEmojiData
     , emojiSelector : Emoji.Model
     }
 
