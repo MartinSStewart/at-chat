@@ -23,6 +23,8 @@ module User exposing
     , sectionToString
     , setDiscordGuildNotificationLevel
     , setDomainWhitelist
+    , setEmojiCategory
+    , setEmojiSkinTone
     , setGuildNotificationLevel
     , setIcon
     , setLastChannelViewed
@@ -32,12 +34,14 @@ module User exposing
     , toString
     )
 
+import Array
 import Base64
 import Codec exposing (Codec)
 import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (Category(..), EmojiConfig, SkinTone)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
@@ -81,7 +85,26 @@ type alias BackendUser =
     , expandedDiscordGuilds : SeqSet (Discord.Id Discord.GuildId)
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
+    , emojiConfig : EmojiConfig
     }
+
+
+setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+setEmojiCategory category user =
+    let
+        emojiConfig =
+            user.emojiConfig
+    in
+    { user | emojiConfig = { emojiConfig | category = category } }
+
+
+setEmojiSkinTone : Maybe SkinTone -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+setEmojiSkinTone skinTone user =
+    let
+        emojiConfig =
+            user.emojiConfig
+    in
+    { user | emojiConfig = { emojiConfig | skinTone = skinTone } }
 
 
 setDomainWhitelist : Bool -> Domain -> { a | domainWhitelist : SeqSet Domain } -> { a | domainWhitelist : SeqSet Domain }
@@ -166,6 +189,7 @@ init createdAt name email userIsAdmin =
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
+    , emojiConfig = { skinTone = Nothing, category = SmileysAndEmotion, lastUsedEmojis = Array.empty }
     }
 
 
@@ -468,6 +492,7 @@ backendToFrontendCurrent user =
     , expandedDiscordGuilds = user.expandedDiscordGuilds
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist
+    , emojiConfig = user.emojiConfig
     }
 
 

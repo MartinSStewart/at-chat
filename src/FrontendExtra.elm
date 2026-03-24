@@ -30,13 +30,14 @@ import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, 
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), MessageState)
-import MessageInput exposing (NameSoFar)
+import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
 import MyUi exposing (Range)
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
+import PersonName
 import Ports
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -174,6 +175,12 @@ pendingChangesText localChange =
         Local_SetDomainWhitelist _ _ ->
             "Whitelist domain"
 
+        Local_SetEmojiCategory _ ->
+            "Selected emoji category"
+
+        Local_SetEmojiSkinTone _ ->
+            "Selected emoji skin tone"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -225,10 +232,12 @@ layout model attributes child =
                                 of
                                     ( Just nameSoFar, Just dropdown ) ->
                                         if textInputFocus.htmlId == Pages.Guild.channelTextInputId then
-                                            MessageInput.pingDropdownView
+                                            MessageInput.dropdownView
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
+                                                local.localUser.user.emojiConfig.skinTone
+                                                model.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
@@ -236,10 +245,12 @@ layout model attributes child =
                                                 |> Ui.inFront
 
                                         else if textInputFocus.htmlId == MessageMenu.editMessageTextInputId then
-                                            MessageInput.pingDropdownView
+                                            MessageInput.dropdownView
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
+                                                local.localUser.user.emojiConfig.skinTone
+                                                model.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
                                                 dropdown
@@ -1153,8 +1164,8 @@ isPressMsg msg =
         MessageMenu_PressedEditMessage _ _ ->
             True
 
-        PressedEmojiSelectorEmoji _ ->
-            True
+        EmojiSelectorMsg emojiMsg ->
+            Emoji.isPressed emojiMsg
 
         MessageMenu_PressedReply _ ->
             True
@@ -1199,9 +1210,6 @@ isPressMsg msg =
             False
 
         PressedBody ->
-            True
-
-        PressedReactionEmojiContainer ->
             True
 
         MessageMenu_PressedDeleteMessage _ _ ->
@@ -1362,6 +1370,12 @@ isPressMsg msg =
 
         MessageInputMsg _ _ messageInputMsg ->
             MessageInput.isPress messageInputMsg
+
+        GotEmojiData _ ->
+            False
+
+        GotEditMessageTextInputPositionForEmojiSelector _ ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -2128,9 +2142,23 @@ changeUpdate localMsg local =
                         localUser =
                             local.localUser
                     in
-                    { local
-                        | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user }
-                    }
+                    { local | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user } }
+
+                Local_SetEmojiCategory category ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setEmojiCategory category localUser.user } }
+
+                Local_SetEmojiSkinTone maybeSkinTone ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
 
         ServerChange serverChange ->
             case serverChange of
@@ -3526,39 +3554,62 @@ deleteMessage guildOrDmId threadRoute local =
 pingUserNameSoFar : HtmlId -> Range -> AnyGuildOrDmId -> ThreadRoute -> LoggedIn2 -> Maybe NameSoFar
 pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
     let
-        helper text =
-            let
-                previous : String
-                previous =
-                    text |> String.slice 0 selection.start
-            in
-            case String.split "@" previous |> List.reverse of
-                nameSoFar :: beforeAt :: rest ->
-                    if
-                        (beforeAt == "" && List.isEmpty rest)
-                            || String.endsWith " " beforeAt
-                            || String.endsWith "\n" beforeAt
-                            || String.endsWith "\u{000D}" beforeAt
-                    then
-                        { nameSoFar = nameSoFar
-                        , index =
-                            String.length beforeAt
-                                + List.foldl (\a count -> String.length a + count + 1) 0 rest
-                                + 1
-                        }
-                            |> Just
+        isValidStart : Int -> String -> Bool
+        isValidStart index text =
+            if index <= 0 then
+                True
 
-                    else
-                        Nothing
+            else
+                case String.slice (index - 1) index text of
+                    " " ->
+                        True
 
-                _ ->
-                    Nothing
+                    "\n" ->
+                        True
+
+                    "\u{000D}" ->
+                        True
+
+                    _ ->
+                        False
+
+        helper : Int -> String -> Maybe NameSoFar
+        helper index text =
+            if PersonName.maxLength < selection.start - index || index <= 0 then
+                Nothing
+
+            else
+                case String.slice (index - 1) index text of
+                    "@" ->
+                        if isValidStart (index - 1) text then
+                            { nameSoFar = String.slice index selection.start text
+                            , index = index
+                            }
+                                |> NameSoFar
+                                |> Just
+
+                        else
+                            Nothing
+
+                    ":" ->
+                        if isValidStart (index - 1) text then
+                            { nameSoFar = String.slice index selection.start text
+                            , index = index
+                            }
+                                |> EmojiSoFar
+                                |> Just
+
+                        else
+                            Nothing
+
+                    _ ->
+                        helper (index - 1) text
     in
     if selection.start == selection.end then
         if htmlId == Pages.Guild.channelTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts of
                 Just draft ->
-                    helper (String.Nonempty.toString draft)
+                    helper selection.start (String.Nonempty.toString draft)
 
                 Nothing ->
                     Nothing
@@ -3566,7 +3617,7 @@ pingUserNameSoFar htmlId selection guildOrDmId threadRoute loggedIn =
         else if htmlId == MessageMenu.editMessageTextInputId then
             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                 Just edit ->
-                    helper edit.text
+                    helper selection.start edit.text
 
                 Nothing ->
                     Nothing

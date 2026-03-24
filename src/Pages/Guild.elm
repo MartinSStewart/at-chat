@@ -28,7 +28,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiConfig)
 import Env
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -1737,44 +1737,6 @@ channelTextInputId =
     "channel_textinput" |> Dom.id
 
 
-emojiSelector : Element FrontendMsg
-emojiSelector =
-    Ui.column
-        [ Ui.width (Ui.px (8 * 32 + 21))
-        , Ui.height (Ui.px 400)
-        , Ui.scrollable
-        , Ui.background MyUi.background1
-        , Ui.border 1
-        , Ui.borderColor MyUi.border1
-        , Ui.Font.size 24
-        , MyUi.blockClickPropagation PressedReactionEmojiContainer
-        ]
-        (List.map
-            (\emojiRow ->
-                Ui.row
-                    [ Ui.height (Ui.px 34) ]
-                    (List.map
-                        (\emoji ->
-                            let
-                                emojiText =
-                                    Emoji.toString emoji
-                            in
-                            MyUi.elButton
-                                (Dom.id ("guild_emojiSelector_" ++ emojiText))
-                                (PressedEmojiSelectorEmoji emoji)
-                                [ Ui.width (Ui.px 32)
-                                , Ui.contentCenterX
-                                ]
-                                (Ui.text emojiText)
-                        )
-                        emojiRow
-                    )
-            )
-            (List.Extra.greedyGroupsOf 8 Emoji.emojis)
-        )
-        |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
-
-
 messageHover : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
 messageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
@@ -3089,6 +3051,71 @@ privateChatWith name =
     ]
 
 
+emojiSelector : Bool -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
+emojiSelector isMobile local loggedIn model =
+    let
+        emojiConfig : EmojiConfig
+        emojiConfig =
+            local.localUser.user.emojiConfig
+    in
+    case loggedIn.showEmojiSelector of
+        EmojiSelectorHidden ->
+            Ui.noAttr
+
+        EmojiSelectorForReaction _ _ ->
+            Ui.inFront
+                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                    |> Ui.el
+                        [ Ui.alignBottom
+                        , Ui.paddingXY 8 0
+                        , if isMobile then
+                            Ui.width Ui.fill
+
+                          else
+                            Ui.width Ui.shrink
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
+
+        EmojiSelectorForMessage _ ->
+            Ui.inFront
+                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                    |> Ui.el
+                        [ Ui.alignBottom
+                        , Ui.paddingXY 8 0
+                        , if isMobile then
+                            Ui.width Ui.fill
+
+                          else
+                            Ui.width Ui.shrink
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
+
+        EmojiSelectorForEditMessage position _ ->
+            let
+                y =
+                    Coord.yRaw position - Emoji.selectorHeight - channelHeaderHeight
+            in
+            Ui.inFront
+                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                    |> Ui.el
+                        [ Ui.paddingXY 8 0
+                        , Ui.move
+                            { x = 0
+                            , y =
+                                if y < 0 then
+                                    Coord.yRaw position
+
+                                else
+                                    y
+                            , z = 0
+                            }
+                        ]
+                    |> Ui.map EmojiSelectorMsg
+                )
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -3146,12 +3173,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3350,12 +3372,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3628,12 +3645,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3831,12 +3843,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -6447,7 +6454,7 @@ friendLabelMessagePreview time messagePreview message =
             MessageLoaded message2 ->
                 MyUi.timeElapsedShort time (Message.createdAt message2)
                     |> Ui.text
-                    |> Ui.el [ Ui.alignRight, Ui.Font.italic ]
+                    |> Ui.el [ Ui.alignRight, Ui.Font.italic, Ui.opacity 0.7 ]
 
             MessageUnloaded ->
                 Ui.none

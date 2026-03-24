@@ -23,6 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
+import Emoji exposing (Emoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -39,7 +40,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
-import MessageInput
+import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
 import MyUi exposing (Range)
@@ -291,6 +292,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , userAgent = userAgent
             , pageHasFocus = True
             , versionNumber = Nothing
+            , emojiData = Nothing
             }
 
         ( model2, cmdA ) =
@@ -308,6 +310,7 @@ initLoadedFrontend loading time userAgent loginResult =
 
             Err _ ->
                 Command.none
+        , Emoji.requestEmojiData GotEmojiData
         ]
     )
 
@@ -358,6 +361,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
             , textInputFocus = Nothing
+            , previousTextInputFocus = Nothing
             , messageHover = NoMessageHover
             , showEmojiSelector = EmojiSelectorHidden
             , editMessage = SeqDict.empty
@@ -379,6 +383,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , textEditor = TextEditor.init
             , profilePictureEditor = ImageEditor.init
             , externalLinkWarning = Nothing
+            , emojiSelector = Emoji.selectorInit
             }
     in
     ( loggedIn
@@ -485,6 +490,21 @@ update msg model =
             case ( FrontendExtra.isPressMsg msg, loaded.dragPrevious ) of
                 ( True, Dragging _ ) ->
                     ( model, Command.none )
+
+                ( True, _ ) ->
+                    updateLoaded msg loaded
+                        |> Tuple.mapFirst
+                            (\loaded2 ->
+                                case loaded2.loginStatus of
+                                    LoggedIn loggedIn ->
+                                        { loaded2
+                                            | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
+                                        }
+                                            |> Loaded
+
+                                    NotLoggedIn _ ->
+                                        Loaded loaded2
+                            )
 
                 _ ->
                     updateLoaded msg loaded |> Tuple.mapFirst Loaded
@@ -965,7 +985,10 @@ updateLoaded msg model =
                             case loggedIn.textInputFocus of
                                 Just textInputFocus ->
                                     if textInputFocus.htmlId == htmlId then
-                                        { loggedIn | textInputFocus = Just { textInputFocus | dropdown = Just ok } }
+                                        { loggedIn
+                                            | textInputFocus = Just { textInputFocus | dropdown = Just ok }
+                                            , previousTextInputFocus = loggedIn.textInputFocus
+                                        }
 
                                     else
                                         loggedIn
@@ -1006,6 +1029,7 @@ updateLoaded msg model =
                                                 Just _ ->
                                                     ( { loggedIn2
                                                         | textInputFocus = Just { textInputFocus | dropdown = Nothing }
+                                                        , previousTextInputFocus = loggedIn2.textInputFocus
                                                         , showEmojiSelector = EmojiSelectorHidden
                                                       }
                                                     , Command.none
@@ -1088,21 +1112,67 @@ updateLoaded msg model =
         MessageMenu_PressedEditMessage guildOrDmId threadRoute ->
             pressedEditMessage guildOrDmId threadRoute model
 
-        PressedEmojiSelectorEmoji emoji ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.showEmojiSelector of
-                        EmojiSelectorHidden ->
-                            ( loggedIn, Command.none )
+        EmojiSelectorMsg emojiMsg ->
+            case emojiMsg of
+                Emoji.PressedSelectEmoji emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case loggedIn.showEmojiSelector of
+                                EmojiSelectorHidden ->
+                                    ( loggedIn, Command.none )
 
-                        EmojiSelectorForReaction guildOrDmId threadRoute ->
+                                EmojiSelectorForReaction guildOrDmId threadRoute ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                        Command.none
+
+                                EmojiSelectorForMessage maybeSelection ->
+                                    insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji model loggedIn
+
+                                EmojiSelectorForEditMessage _ maybeSelection ->
+                                    insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji model loggedIn
+                        )
+                        model
+
+                Emoji.PressedContainer ->
+                    ( model, Command.none )
+
+                Emoji.PressedCategory category ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
-                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                (Local_SetEmojiCategory category |> Just)
+                                loggedIn
                                 Command.none
-                )
-                model
+                        )
+                        model
+
+                Emoji.PressedSkinTone skinTone ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_SetEmojiSkinTone skinTone |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                Emoji.MouseEnteredEmoji emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            , Command.none
+                            )
+                        )
+                        model
 
         MessageMenu_PressedReply threadRoute ->
             case Route.toGuildOrDmId model.route of
@@ -1540,9 +1610,6 @@ updateLoaded msg model =
                     )
                 )
                 model
-
-        PressedReactionEmojiContainer ->
-            ( model, Command.none )
 
         MessageMenu_PressedDeleteMessage guildOrDmId messageIndex ->
             FrontendExtra.updateLoggedIn
@@ -2731,6 +2798,7 @@ updateLoaded msg model =
                                                                 guildOrDmId
                                                                 index
                                                                 textInputFocus.dropdown
+                                                                model.emojiData
                                                                 (Local.model loggedIn.localState)
                                                     }
                                                         |> Just
@@ -2740,6 +2808,7 @@ updateLoaded msg model =
 
                                         Nothing ->
                                             loggedIn.textInputFocus
+                                , previousTextInputFocus = loggedIn.textInputFocus
                               }
                             , Command.none
                             )
@@ -2749,7 +2818,7 @@ updateLoaded msg model =
                 MessageInput.PressedArrowUpInEmptyInput ->
                     ( model, Command.none )
 
-                MessageInput.PressedPingUser dropdownIndex ->
+                MessageInput.PressedDropdownItem dropdownIndex ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage, loggedIn.textInputFocus ) of
@@ -2767,7 +2836,7 @@ updateLoaded msg model =
                                         ( Just nonempty, Just nameSoFar ) ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedPingUser
+                                                    MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         nameSoFar
@@ -2775,11 +2844,13 @@ updateLoaded msg model =
                                                         MessageMenu.editMessageTextInputId
                                                         dropdownIndex
                                                         textInputFocus.dropdown
+                                                        model.emojiData
                                                         (Local.model loggedIn.localState)
                                                         nonempty
                                             in
                                             ( { loggedIn
                                                 | textInputFocus = Just { textInputFocus | dropdown = pingUser }
+                                                , previousTextInputFocus = loggedIn.textInputFocus
                                                 , editMessage =
                                                     SeqDict.insert
                                                         ( guildOrDmId, threadRoute )
@@ -2808,6 +2879,23 @@ updateLoaded msg model =
 
                 MessageInput.OnSelectionChanged htmlId range ->
                     messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
+
+                MessageInput.PressedOpenEmojiSelector ->
+                    ( model
+                    , Dom.getElement MessageMenu.editMessageTextInputId
+                        |> Task.attempt GotEditMessageTextInputPositionForEmojiSelector
+                    )
+
+        GotEditMessageTextInputPositionForEmojiSelector result ->
+            case result of
+                Ok ok ->
+                    pressedOpenEmojiSelector
+                        MessageMenu.editMessageTextInputId
+                        (EmojiSelectorForEditMessage (Coord.xy (round ok.element.x) (round ok.element.y)))
+                        model
+
+                Err _ ->
+                    ( model, Command.none )
 
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
@@ -2965,6 +3053,7 @@ updateLoaded msg model =
                                                                 guildOrDmId
                                                                 index
                                                                 textInputFocus.dropdown
+                                                                model.emojiData
                                                                 (Local.model loggedIn.localState)
                                                     }
                                                         |> Just
@@ -2974,6 +3063,7 @@ updateLoaded msg model =
 
                                         Nothing ->
                                             loggedIn.textInputFocus
+                                , previousTextInputFocus = loggedIn.textInputFocus
                               }
                             , Command.none
                             )
@@ -3151,7 +3241,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedPingUser index ->
+                MessageInput.PressedDropdownItem index ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case ( SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.drafts, loggedIn.textInputFocus ) of
@@ -3167,7 +3257,7 @@ updateLoaded msg model =
                                         Just nameSoFar ->
                                             let
                                                 ( pingUser, text2, cmd ) =
-                                                    MessageInput.pressedPingUser
+                                                    MessageInput.pressedDropdownItem
                                                         SetFocus
                                                         (MyUi.isMobile model)
                                                         nameSoFar
@@ -3175,11 +3265,13 @@ updateLoaded msg model =
                                                         Pages.Guild.channelTextInputId
                                                         index
                                                         textInputFocus.dropdown
+                                                        model.emojiData
                                                         (Local.model loggedIn.localState)
                                                         text
                                             in
                                             ( { loggedIn
                                                 | textInputFocus = Just { textInputFocus | dropdown = pingUser }
+                                                , previousTextInputFocus = loggedIn.textInputFocus
                                                 , drafts = SeqDict.insert ( guildOrDmId, threadRoute ) text2 loggedIn.drafts
                                               }
                                             , cmd
@@ -3205,6 +3297,75 @@ updateLoaded msg model =
                 MessageInput.OnSelectionChanged htmlId range ->
                     messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
 
+                MessageInput.PressedOpenEmojiSelector ->
+                    pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
+
+        GotEmojiData result ->
+            case result of
+                Ok emojiData ->
+                    ( { model | emojiData = Just emojiData }, Command.none )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "emoji error" error
+                    in
+                    ( model, Command.none )
+
+
+pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedOpenEmojiSelector textInputId emojiSelector model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | showEmojiSelector =
+                    case loggedIn.showEmojiSelector of
+                        EmojiSelectorHidden ->
+                            case loggedIn.previousTextInputFocus of
+                                Just textInputFocus ->
+                                    if textInputFocus.htmlId == textInputId then
+                                        emojiSelector (Just textInputFocus.selection)
+
+                                    else
+                                        emojiSelector Nothing
+
+                                Nothing ->
+                                    emojiSelector Nothing
+
+                        _ ->
+                            EmojiSelectorHidden
+              }
+            , Command.none
+            )
+        )
+        model
+
+
+insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
+insertEmoji inputId maybeSelection emoji model loggedIn =
+    let
+        text : String
+        text =
+            case model.emojiData of
+                Just emojiData ->
+                    Emoji.emojiWithSkinTone
+                        (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
+                        emoji
+                        emojiData
+                        ++ " "
+
+                Nothing ->
+                    ""
+    in
+    ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+    , case maybeSelection of
+        Just { start, end } ->
+            Ports.execCommand inputId start end text
+
+        Nothing ->
+            Ports.execCommand inputId 99999 99999 text
+    )
+
 
 messageInputSelectionChanged : AnyGuildOrDmId -> ThreadRoute -> HtmlId -> Range -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
@@ -3215,7 +3376,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
                 showDropdown =
                     ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
                         && (case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
-                                Just nameSoFar ->
+                                Just (NameSoFar nameSoFar) ->
                                     case guildOrDmId of
                                         GuildOrDmId guildOrDmId2 ->
                                             MessageInput.userDropdownList
@@ -3234,6 +3395,16 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
                                                 (Local.model loggedIn.localState)
                                                 |> List.isEmpty
                                                 |> not
+
+                                Just (EmojiSoFar emojiSoFar) ->
+                                    case model.emojiData of
+                                        Just emojiData2 ->
+                                            MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
+                                                |> List.isEmpty
+                                                |> not
+
+                                        Nothing ->
+                                            False
 
                                 Nothing ->
                                     False
@@ -3260,6 +3431,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
 
                         Nothing ->
                             Just { htmlId = htmlId, selection = range, dropdown = Nothing }
+                , previousTextInputFocus = loggedIn.textInputFocus
               }
             , if showDropdown then
                 Dom.getElement htmlId
@@ -3277,7 +3449,10 @@ textInputGotFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command Fronte
 textInputGotFocus htmlId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
-            ( { loggedIn | textInputFocus = Just { htmlId = htmlId, selection = { start = 0, end = 0 }, dropdown = Nothing } }
+            ( { loggedIn
+                | textInputFocus = Just { htmlId = htmlId, selection = { start = 0, end = 0 }, dropdown = Nothing }
+                , previousTextInputFocus = loggedIn.textInputFocus
+              }
             , Command.batch
                 [ if model.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
                     Command.none
@@ -3306,6 +3481,7 @@ textInputLostFocus htmlId model =
 
                     else
                         loggedIn.textInputFocus
+                , previousTextInputFocus = loggedIn.textInputFocus
               }
             , Command.none
             )
@@ -3550,6 +3726,12 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                             EmojiSelectorForReaction guildOrDmId messageIndex
 
                         EmojiSelectorForReaction _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForMessage _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
                 , messageHover =
                     case loggedIn.messageHover of

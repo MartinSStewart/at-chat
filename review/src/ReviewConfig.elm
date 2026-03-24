@@ -130,6 +130,8 @@ config =
             [ [ "Backend" ]
             , [ "BackendExtra" ]
             , [ "UiViewer" ]
+            , [ "WireHelper" ]
+            , [ "DiscordSync" ]
             ]
         }
     ]

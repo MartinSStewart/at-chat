@@ -61,7 +61,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
-import Emoji exposing (Emoji)
+import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
@@ -76,6 +76,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MyUi exposing (Range)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -146,6 +147,7 @@ type alias LoadedFrontend =
     , userAgent : UserAgent
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
+    , emojiData : Maybe CachedEmojiData
     }
 
 
@@ -176,6 +178,8 @@ type alias LoggedIn2 =
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
     , textInputFocus : Maybe TextInputFocus
+    , -- Lasts until mouseUp
+      previousTextInputFocus : Maybe TextInputFocus
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( AnyGuildOrDmId, ThreadRoute ) EditMessage
@@ -191,6 +195,7 @@ type alias LoggedIn2 =
     , textEditor : TextEditor.Model
     , profilePictureEditor : ImageEditor.Model
     , externalLinkWarning : Maybe Url
+    , emojiSelector : Emoji.Model
     }
 
 
@@ -264,6 +269,8 @@ type alias EditMessage =
 type EmojiSelector
     = EmojiSelectorHidden
     | EmojiSelectorForReaction AnyGuildOrDmId ThreadRouteWithMessage
+    | EmojiSelectorForMessage (Maybe Range)
+    | EmojiSelectorForEditMessage (Coord CssPixels) (Maybe Range)
 
 
 type alias BackendModel =
@@ -378,7 +385,7 @@ type FrontendMsg
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
-    | PressedEmojiSelectorEmoji Emoji
+    | EmojiSelectorMsg Emoji.Msg
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo ( AnyGuildOrDmId, ThreadRoute )
@@ -396,7 +403,6 @@ type FrontendMsg
     | PressedShowMembers
     | UserScrolled AnyGuildOrDmId ThreadRoute ScrollPosition
     | PressedBody
-    | PressedReactionEmojiContainer
     | MessageMenu_PressedDeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | ScrolledToMessage
     | MessageMenu_PressedClose
@@ -447,6 +453,8 @@ type FrontendMsg
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
+    | GotEmojiData (Result Http.Error CachedEmojiData)
+    | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
 
 
 type ScrollPosition
@@ -743,3 +751,5 @@ type LocalChange
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Local_LinkDiscordAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
+    | Local_SetEmojiCategory Emoji.Category
+    | Local_SetEmojiSkinTone (Maybe SkinTone)

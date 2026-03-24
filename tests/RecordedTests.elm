@@ -51,6 +51,7 @@ setup =
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
+        |> T.addStringFile "/compact-emoji.json"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -69,6 +70,7 @@ fileRequests : Dict String String
 fileRequests =
     [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
     , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
+    , ( "GET_/compact-emoji.json", "/compact-emoji.json" )
     ]
         |> Dict.fromList
 
@@ -814,8 +816,8 @@ handleCustomRequest url =
         UnhandledHttpRequest
 
 
-tests : Dict String Bytes -> String -> String -> Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
+tests : Dict String Bytes -> String -> String -> Bytes -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
@@ -833,6 +835,15 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon =
                                 , headers = Dict.empty
                                 }
                                 infoEndpointResponse
+
+                        "/compact-emoji.json" ->
+                            StringHttpResponse
+                                { url = currentRequest.url
+                                , statusCode = 200
+                                , statusText = "OK"
+                                , headers = Dict.empty
+                                }
+                                emojiJson
 
                         "http://localhost:3000/file/custom-request" ->
                             case currentRequest.body of
