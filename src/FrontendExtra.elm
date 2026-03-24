@@ -175,6 +175,12 @@ pendingChangesText localChange =
         Local_SetDomainWhitelist _ _ ->
             "Whitelist domain"
 
+        Local_SetEmojiCategory category ->
+            "Selected emoji category"
+
+        Local_SetEmojiSkinTone maybeSkinTone ->
+            "Selected emoji skin tone"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -230,7 +236,7 @@ layout model attributes child =
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
-                                                loggedIn.emojiSelector.selectedSkinTone
+                                                local.localUser.user.emojiConfig.skinTone
                                                 model.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
@@ -243,7 +249,7 @@ layout model attributes child =
                                                 isMobile
                                                 nameSoFar
                                                 guildOrDmId
-                                                loggedIn.emojiSelector.selectedSkinTone
+                                                local.localUser.user.emojiConfig.skinTone
                                                 model.emojiData
                                                 local
                                                 Pages.Guild.dropdownButtonId
@@ -2133,9 +2139,23 @@ changeUpdate localMsg local =
                         localUser =
                             local.localUser
                     in
-                    { local
-                        | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user }
-                    }
+                    { local | localUser = { localUser | user = User.setDomainWhitelist enable domain localUser.user } }
+
+                Local_SetEmojiCategory category ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setEmojiCategory category localUser.user } }
+
+                Local_SetEmojiSkinTone maybeSkinTone ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
 
         ServerChange serverChange ->
             case serverChange of

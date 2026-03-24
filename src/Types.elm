@@ -61,7 +61,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
-import Emoji exposing (CachedEmojiData, Emoji)
+import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
@@ -750,3 +750,5 @@ type LocalChange
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)
     | Local_LinkDiscordAcknowledgementIsChecked Bool
     | Local_SetDomainWhitelist Bool Domain
+    | Local_SetEmojiCategory Emoji.Category
+    | Local_SetEmojiSkinTone (Maybe SkinTone)

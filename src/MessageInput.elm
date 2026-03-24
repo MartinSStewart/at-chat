@@ -726,12 +726,11 @@ pressedDropdownItem :
     -> HtmlId
     -> Int
     -> Maybe MentionUserDropdown
-    -> Maybe SkinTone
     -> Maybe CachedEmojiData
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId dropdownIndex pingUser emojiSkinTone emojiData local inputText =
+pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputId dropdownIndex pingUser emojiData local inputText =
     let
         maybeTextToInsert : Maybe ( Range, String )
         maybeTextToInsert =
@@ -778,7 +777,7 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
                                     ( { start = emojiSoFar.index - 1
                                       , end = emojiSoFar.index + String.length emojiSoFar.nameSoFar
                                       }
-                                    , Emoji.emojiWithSkinTone emojiSkinTone emoji emojiData2
+                                    , Emoji.emojiWithSkinTone local.localUser.user.emojiConfig.skinTone emoji emojiData2
                                     )
                                         |> Just
 

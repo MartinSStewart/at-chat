@@ -1142,26 +1142,22 @@ updateLoaded msg model =
                 Emoji.PressedCategory category ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            let
-                                emojiSelector =
-                                    loggedIn.emojiSelector
-                            in
-                            ( { loggedIn | emojiSelector = { emojiSelector | selectedCategory = category } }
-                            , Command.none
-                            )
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_SetEmojiCategory category |> Just)
+                                loggedIn
+                                Command.none
                         )
                         model
 
                 Emoji.PressedSkinTone skinTone ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            let
-                                emojiSelector =
-                                    loggedIn.emojiSelector
-                            in
-                            ( { loggedIn | emojiSelector = { emojiSelector | selectedSkinTone = skinTone } }
-                            , Command.none
-                            )
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_SetEmojiSkinTone skinTone |> Just)
+                                loggedIn
+                                Command.none
                         )
                         model
 
@@ -2848,7 +2844,6 @@ updateLoaded msg model =
                                                         MessageMenu.editMessageTextInputId
                                                         dropdownIndex
                                                         textInputFocus.dropdown
-                                                        loggedIn.emojiSelector.selectedSkinTone
                                                         model.emojiData
                                                         (Local.model loggedIn.localState)
                                                         nonempty
@@ -3256,7 +3251,6 @@ updateLoaded msg model =
                                                         Pages.Guild.channelTextInputId
                                                         index
                                                         textInputFocus.dropdown
-                                                        loggedIn.emojiSelector.selectedSkinTone
                                                         model.emojiData
                                                         (Local.model loggedIn.localState)
                                                         text
@@ -3340,7 +3334,11 @@ insertEmoji inputId maybeSelection emoji model loggedIn =
         text =
             case model.emojiData of
                 Just emojiData ->
-                    Emoji.emojiWithSkinTone loggedIn.emojiSelector.selectedSkinTone emoji emojiData ++ " "
+                    Emoji.emojiWithSkinTone
+                        (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
+                        emoji
+                        emojiData
+                        ++ " "
 
                 Nothing ->
                     ""

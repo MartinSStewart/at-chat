@@ -2,6 +2,7 @@ module Emoji exposing
     ( CachedEmojiData
     , Category(..)
     , Emoji(..)
+    , EmojiConfig
     , EmojiData
     , EmojiResponse
     , Model
@@ -19,6 +20,8 @@ module Emoji exposing
 
 import Array exposing (Array)
 import Codec exposing (Codec)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Discord
 import Effect.Browser.Dom as Dom
@@ -237,17 +240,20 @@ allSkinTones =
 
 
 type alias Model =
-    { selectedCategory : Category
-    , selectedSkinTone : Maybe SkinTone
-    , emojiHovered : Maybe Emoji
+    { emojiHovered : Maybe Emoji
+    }
+
+
+type alias EmojiConfig =
+    { skinTone : Maybe SkinTone
+    , category : Category
+    , lastUsedEmojis : Array Emoji
     }
 
 
 selectorInit : Model
 selectorInit =
-    { selectedCategory = SmileysAndEmotion
-    , selectedSkinTone = Nothing
-    , emojiHovered = Nothing
+    { emojiHovered = Nothing
     }
 
 
@@ -300,7 +306,7 @@ categoryButtonId category =
     Dom.id ("emoji_category_" ++ categoryToString category)
 
 
-skinToneView : Maybe SkinTone -> Element Msg
+skinToneView : Maybe SkinTone -> List (Element Msg)
 skinToneView selectedSkinTone =
     List.map
         (\skinTone ->
@@ -328,7 +334,6 @@ skinToneView selectedSkinTone =
                 (Ui.text text)
         )
         (Nothing :: List.map Just allSkinTones)
-        |> Ui.row [ Ui.alignRight ]
 
 
 emojiWidth : number
@@ -341,16 +346,25 @@ emojiHeight =
     50
 
 
-selector : Bool -> Model -> Maybe CachedEmojiData -> Element Msg
-selector isMobile model emojiData =
+paddingRight =
+    21
+
+
+selector : Bool -> Coord CssPixels -> Model -> EmojiConfig -> Maybe CachedEmojiData -> Element Msg
+selector isMobile windowSize model userData emojiData =
     let
+        columns : Int
         columns =
-            16
+            (Coord.xRaw windowSize - paddingRight) // emojiWidth |> min 16
     in
     case emojiData of
         Just emojiData2 ->
             Ui.column
-                [ Ui.width (Ui.px (columns * emojiWidth + 21))
+                [ if isMobile then
+                    Ui.width Ui.fill
+
+                  else
+                    Ui.width (Ui.px (columns * emojiWidth + paddingRight))
                 , Ui.height (Ui.px 400)
                 , Ui.background MyUi.background2
                 , Ui.border 1
@@ -375,14 +389,14 @@ selector isMobile model emojiData =
                                         (PressedCategory category)
                                         [ Ui.Font.center
                                         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-                                        , Ui.attrIf (category == model.selectedCategory) (Ui.background MyUi.background3)
+                                        , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
                                         ]
-                                        (Ui.text (representativeEmoji model.selectedSkinTone category))
+                                        (Ui.text (representativeEmoji userData.skinTone category))
                                         |> Just
                         )
                         allCategories
                     )
-                , case SeqDict.get model.selectedCategory emojiData2.categories of
+                , case SeqDict.get userData.category emojiData2.categories of
                     Just emojis ->
                         List.map
                             (\emojiRow ->
@@ -393,9 +407,9 @@ selector isMobile model emojiData =
                                             let
                                                 text : String
                                                 text =
-                                                    case model.selectedCategory of
+                                                    case userData.category of
                                                         PeopleAndBody ->
-                                                            emojiWithSkinTone model.selectedSkinTone emoji emojiData2
+                                                            emojiWithSkinTone userData.skinTone emoji emojiData2
 
                                                         _ ->
                                                             toString emoji
@@ -427,7 +441,7 @@ selector isMobile model emojiData =
                     ]
                     ((case model.emojiHovered of
                         Just emoji ->
-                            Ui.text (emojiWithSkinTone model.selectedSkinTone emoji emojiData2)
+                            Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
                                 :: (case SeqDict.get emoji emojiData2.emojis of
                                         Just emoji2 ->
                                             List.map
@@ -445,16 +459,32 @@ selector isMobile model emojiData =
                         Nothing ->
                             []
                      )
-                        ++ (case model.selectedCategory of
+                        ++ (case userData.category of
                                 PeopleAndBody ->
-                                    [ skinToneView model.selectedSkinTone ]
+                                    [ skinToneView userData.skinTone
+                                        |> Ui.row
+                                            [ if isMobile then
+                                                Ui.alignLeft
+
+                                              else
+                                                Ui.alignRight
+                                            ]
+                                    ]
 
                                 _ ->
                                     []
                            )
                     )
                 ]
-                |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
+                |> Ui.el
+                    [ Ui.alignBottom
+                    , Ui.paddingXY 8 0
+                    , if isMobile then
+                        Ui.width Ui.fill
+
+                      else
+                        Ui.width Ui.shrink
+                    ]
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"

@@ -28,7 +28,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiConfig)
 import Env
 import FileStatus exposing (FileHash)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -3051,6 +3051,27 @@ privateChatWith name =
     ]
 
 
+emojiSelector : Bool -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
+emojiSelector isMobile local loggedIn model =
+    let
+        emojiConfig : EmojiConfig
+        emojiConfig =
+            local.localUser.user.emojiConfig
+    in
+    case loggedIn.showEmojiSelector of
+        EmojiSelectorHidden ->
+            Ui.noAttr
+
+        EmojiSelectorForReaction _ _ ->
+            Ui.inFront (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData |> Ui.map EmojiSelectorMsg)
+
+        EmojiSelectorForMessage _ ->
+            Ui.inFront (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData |> Ui.map EmojiSelectorMsg)
+
+        EmojiSelectorForEditMessage _ ->
+            Ui.inFront (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData |> Ui.map EmojiSelectorMsg)
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -3108,18 +3129,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg)
-
-                EmojiSelectorForMessage _ ->
-                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg)
-
-                EmojiSelectorForEditMessage _ ->
-                    Ui.inFront (Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg)
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3290,6 +3300,10 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        emojiConfig : EmojiConfig
+        emojiConfig =
+            local.localUser.user.emojiConfig
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3318,18 +3332,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
-
-                EmojiSelectorForMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
-
-                EmojiSelectorForEditMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3574,6 +3577,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        emojiConfig : EmojiConfig
+        emojiConfig =
+            local.localUser.user.emojiConfig
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3602,18 +3609,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
-
-                EmojiSelectorForMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
-
-                EmojiSelectorForEditMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3811,18 +3807,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         ]
             )
         , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
-
-                EmojiSelectorForMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
-
-                EmojiSelectorForEditMessage _ ->
-                    Emoji.selector isMobile loggedIn.emojiSelector model.emojiData |> Ui.map EmojiSelectorMsg |> Ui.inFront
+            [ emojiSelector isMobile local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
