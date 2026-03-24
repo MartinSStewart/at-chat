@@ -3343,13 +3343,23 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
 
 insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
 insertEmoji inputId maybeSelection emoji loggedIn =
+    let
+        text : String
+        text =
+            case loggedIn.emojiData of
+                Just emojiData ->
+                    Emoji.emojiWithSkinTone loggedIn.emojiSelector.selectedSkinTone emoji emojiData ++ " "
+
+                Nothing ->
+                    ""
+    in
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
     , case maybeSelection of
         Just { start, end } ->
-            Ports.execCommand inputId start end (Emoji.toString emoji ++ " ")
+            Ports.execCommand inputId start end text
 
         Nothing ->
-            Ports.execCommand inputId 99999 99999 (Emoji.toString emoji ++ " ")
+            Ports.execCommand inputId 99999 99999 text
     )
 
 

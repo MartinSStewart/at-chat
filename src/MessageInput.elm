@@ -779,10 +779,10 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
                         Just emojiData2 ->
                             case emojiDropdownList isMobile emojiSoFar emojiData2 |> List.Extra.getAt dropdownIndex of
                                 Just emoji ->
-                                    ( { start = emojiSoFar.index
+                                    ( { start = emojiSoFar.index - 1
                                       , end = emojiSoFar.index + String.length emojiSoFar.nameSoFar
                                       }
-                                    , Emoji.toString emoji
+                                    , Emoji.emojiWithSkinTone emojiSkinTone emoji emojiData2
                                     )
                                         |> Just
 
@@ -866,7 +866,7 @@ pingDropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dr
                                         dropdown
                                         dropdownButtonId
                                         index
-                                        (Ui.text (Emoji.toString emoji))
+                                        (Ui.text (Emoji.emojiWithSkinTone skinTone emoji emojiData2))
                                 )
                                 (emojiDropdownList isMobile emojiSoFar emojiData2)
 

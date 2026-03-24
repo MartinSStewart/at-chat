@@ -1,4 +1,4 @@
-module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiResponse, Model, Msg(..), SkinTone, fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
+module Emoji exposing (CachedEmojiData, Category(..), Emoji(..), EmojiResponse, Model, Msg(..), SkinTone, emojiWithSkinTone, fromDiscord, isPressed, requestEmojiData, selector, selectorInit, toString, view)
 
 import Array exposing (Array)
 import Codec exposing (Codec)
