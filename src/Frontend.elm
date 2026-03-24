@@ -491,6 +491,21 @@ update msg model =
                 ( True, Dragging _ ) ->
                     ( model, Command.none )
 
+                ( True, _ ) ->
+                    updateLoaded msg loaded
+                        |> Tuple.mapFirst
+                            (\loaded2 ->
+                                case loaded2.loginStatus of
+                                    LoggedIn loggedIn ->
+                                        { loaded2
+                                            | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
+                                        }
+                                            |> Loaded
+
+                                    NotLoggedIn record ->
+                                        Loaded loaded2
+                            )
+
                 _ ->
                     updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
@@ -970,7 +985,10 @@ updateLoaded msg model =
                             case loggedIn.textInputFocus of
                                 Just textInputFocus ->
                                     if textInputFocus.htmlId == htmlId then
-                                        { loggedIn | textInputFocus = Just { textInputFocus | dropdown = Just ok } }
+                                        { loggedIn
+                                            | textInputFocus = Just { textInputFocus | dropdown = Just ok }
+                                            , previousTextInputFocus = loggedIn.textInputFocus
+                                        }
 
                                     else
                                         loggedIn
@@ -1011,6 +1029,7 @@ updateLoaded msg model =
                                                 Just _ ->
                                                     ( { loggedIn2
                                                         | textInputFocus = Just { textInputFocus | dropdown = Nothing }
+                                                        , previousTextInputFocus = loggedIn2.textInputFocus
                                                         , showEmojiSelector = EmojiSelectorHidden
                                                       }
                                                     , Command.none
@@ -2792,6 +2811,7 @@ updateLoaded msg model =
 
                                         Nothing ->
                                             loggedIn.textInputFocus
+                                , previousTextInputFocus = loggedIn.textInputFocus
                               }
                             , Command.none
                             )
@@ -2832,6 +2852,7 @@ updateLoaded msg model =
                                             in
                                             ( { loggedIn
                                                 | textInputFocus = Just { textInputFocus | dropdown = pingUser }
+                                                , previousTextInputFocus = loggedIn.textInputFocus
                                                 , editMessage =
                                                     SeqDict.insert
                                                         ( guildOrDmId, threadRoute )
@@ -3032,6 +3053,7 @@ updateLoaded msg model =
 
                                         Nothing ->
                                             loggedIn.textInputFocus
+                                , previousTextInputFocus = loggedIn.textInputFocus
                               }
                             , Command.none
                             )
@@ -3238,6 +3260,7 @@ updateLoaded msg model =
                                             in
                                             ( { loggedIn
                                                 | textInputFocus = Just { textInputFocus | dropdown = pingUser }
+                                                , previousTextInputFocus = loggedIn.textInputFocus
                                                 , drafts = SeqDict.insert ( guildOrDmId, threadRoute ) text2 loggedIn.drafts
                                               }
                                             , cmd
@@ -3290,7 +3313,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
         (\loggedIn ->
             ( { loggedIn
                 | showEmojiSelector =
-                    case loggedIn.textInputFocus of
+                    case loggedIn.previousTextInputFocus of
                         Just textInputFocus ->
                             if textInputFocus.htmlId == textInputId then
                                 emojiSelector (Just textInputFocus.selection)
@@ -3373,6 +3396,7 @@ messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
 
                         Nothing ->
                             Just { htmlId = htmlId, selection = range, dropdown = Nothing }
+                , previousTextInputFocus = loggedIn.textInputFocus
               }
             , if showDropdown then
                 Dom.getElement htmlId
@@ -3390,7 +3414,10 @@ textInputGotFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command Fronte
 textInputGotFocus htmlId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
-            ( { loggedIn | textInputFocus = Just { htmlId = htmlId, selection = { start = 0, end = 0 }, dropdown = Nothing } }
+            ( { loggedIn
+                | textInputFocus = Just { htmlId = htmlId, selection = { start = 0, end = 0 }, dropdown = Nothing }
+                , previousTextInputFocus = loggedIn.textInputFocus
+              }
             , Command.batch
                 [ if model.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
                     Command.none
@@ -3419,6 +3446,7 @@ textInputLostFocus htmlId model =
 
                     else
                         loggedIn.textInputFocus
+                , previousTextInputFocus = loggedIn.textInputFocus
               }
             , Command.none
             )
