@@ -523,8 +523,8 @@ flushText text revNodes =
             revNodes
 
 
-finalizeResult : String -> List (RichText userId) -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
-finalizeResult accText revNodes modifiers =
+finalizeResult : String -> List (RichText userId) -> List Modifiers -> Int -> { nodes : List (RichText userId), nextIndex : Int }
+finalizeResult accText revNodes modifiers index =
     let
         flushed =
             flushText accText revNodes
@@ -543,7 +543,7 @@ finalizeResult accText revNodes modifiers =
 
             [] ->
                 finalNodes
-    , nextIndex = -1
+    , nextIndex = index
     }
 
 
@@ -582,7 +582,7 @@ parseLoop :
     -> { nodes : List (RichText userId), nextIndex : Int }
 parseLoop source index len users modifiers accText revNodes =
     if index >= len then
-        finalizeResult accText revNodes modifiers
+        finalizeResult accText revNodes modifiers index
 
     else
         let
@@ -633,7 +633,7 @@ parseLoop source index len users modifiers accText revNodes =
                 closeModifier afterSymbol accText revNodes Bold (modifierToSymbol IsBold)
 
             else if List.member IsBold modifiers then
-                finalizeResult accText revNodes modifiers
+                finalizeResult accText revNodes modifiers index
 
             else
                 let
@@ -666,7 +666,7 @@ parseLoop source index len users modifiers accText revNodes =
                     closeModifier afterSymbol accText revNodes Underline (modifierToSymbol IsUnderlined)
 
                 else if List.member IsUnderlined modifiers then
-                    finalizeResult accText revNodes modifiers
+                    finalizeResult accText revNodes modifiers index
 
                 else
                     let
@@ -690,7 +690,7 @@ parseLoop source index len users modifiers accText revNodes =
                     closeModifier afterSymbol accText revNodes Italic (modifierToSymbol IsItalic)
 
                 else if List.member IsItalic modifiers then
-                    finalizeResult accText revNodes modifiers
+                    finalizeResult accText revNodes modifiers index
 
                 else
                     let
@@ -715,7 +715,7 @@ parseLoop source index len users modifiers accText revNodes =
                     closeModifier afterSymbol accText revNodes Strikethrough (modifierToSymbol IsStrikethrough)
 
                 else if List.member IsStrikethrough modifiers then
-                    finalizeResult accText revNodes modifiers
+                    finalizeResult accText revNodes modifiers index
 
                 else
                     let
@@ -743,7 +743,7 @@ parseLoop source index len users modifiers accText revNodes =
                     closeModifier afterSymbol accText revNodes Spoiler (modifierToSymbol IsSpoilered)
 
                 else if List.member IsSpoilered modifiers then
-                    finalizeResult accText revNodes modifiers
+                    finalizeResult accText revNodes modifiers index
 
                 else
                     let
