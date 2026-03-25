@@ -347,6 +347,7 @@ emojiHeight =
     50
 
 
+paddingRight : number
 paddingRight =
     21
 
