@@ -734,9 +734,9 @@ taskResult task =
     Task.map Ok task |> Task.onError (\error -> Task.succeed (Err error))
 
 
-joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> Command restriction toMsg BackendMsg
-joinThread authentication guildId channelId =
-    Discord.joinThreadPayload (Discord.userToken authentication) channelId
+joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.MessageId -> Command restriction toMsg BackendMsg
+joinThread authentication guildId threadId =
+    Discord.joinThreadPayload (Discord.userToken authentication) threadId
         |> http
         |> taskResult
         |> Task.andThen (\result -> Task.map (JoinedDiscordThread guildId result) Time.now)
@@ -751,9 +751,6 @@ handleCreateMessage :
 handleCreateMessage discordMessage attachments model =
     case discordMessage.type_ of
         Discord.ThreadCreated ->
-            ( model, Command.none )
-
-        Discord.ThreadStarterMessage ->
             ( model, Command.none )
 
         _ ->
@@ -1226,30 +1223,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                                 joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
                                 joinThreadCmd =
-                                    case message.type_ of
-                                        Discord.ThreadCreated ->
-                                            case message.guildId of
-                                                Included guildId ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "ThreadCreated" message
-                                                    in
-                                                    joinThread userData.auth guildId message.channelId
+                                    case ( message.guildId, message.flags ) of
+                                        ( Included guildId, Included flags ) ->
+                                            if flags.hasThread then
+                                                joinThread userData.auth guildId message.id
 
-                                                Missing ->
-                                                    Command.none
-
-                                        Discord.ThreadStarterMessage ->
-                                            case message.guildId of
-                                                Included guildId ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "ThreadStarterMessage" message
-                                                    in
-                                                    joinThread userData.auth guildId message.channelId
-
-                                                Missing ->
-                                                    Command.none
+                                            else
+                                                Command.none
 
                                         _ ->
                                             Command.none
@@ -1289,19 +1269,29 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
                                     messageToFileData edit model2.discordAttachments
+
+                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
+                                joinThreadCmd =
+                                    case ( edit.guildId, edit.flags.hasThread ) of
+                                        ( Included guildId, True ) ->
+                                            joinThread userData.auth guildId edit.id
+
+                                        _ ->
+                                            Command.none
                             in
                             if SeqDict.size attachments == List.length edit.attachments then
                                 let
                                     ( model3, cmd2 ) =
                                         handleEditMessage edit attachments model2
                                 in
-                                ( model3, cmd2 :: cmds )
+                                ( model3, cmd2 :: joinThreadCmd :: cmds )
 
                             else
                                 ( model2
                                 , Task.perform
                                     (DiscordMessageUpdate_AttachmentsUploaded edit)
                                     (Task.sequence (List.map loadMessageAttachment edit.attachments))
+                                    :: joinThreadCmd
                                     :: cmds
                                 )
 

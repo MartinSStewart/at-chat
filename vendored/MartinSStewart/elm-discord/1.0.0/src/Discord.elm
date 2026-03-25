@@ -1430,14 +1430,14 @@ startThreadFromMessagePayload authentication { channelId, messageId, name, autoA
 
 {-| <https://docs.discord.com/developers/resources/channel#join-thread>
 -}
-joinThread : Authentication -> Id ChannelId -> Task HttpError ()
+joinThread : Authentication -> Id MessageId -> Task HttpError ()
 joinThread authentication channelId =
     joinThreadPayload authentication channelId |> toTask
 
 
 {-| <https://docs.discord.com/developers/resources/channel#join-thread>
 -}
-joinThreadPayload : Authentication -> Id ChannelId -> HttpRequest ()
+joinThreadPayload : Authentication -> Id MessageId -> HttpRequest ()
 joinThreadPayload authentication channelId =
     httpPut
         authentication
