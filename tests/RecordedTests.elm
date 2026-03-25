@@ -51,7 +51,7 @@ setup =
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
-        |> T.addStringFile "/compact-emoji.json"
+        |> T.addStringFile "/public/compact-emoji.json"
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -70,7 +70,7 @@ fileRequests : Dict String String
 fileRequests =
     [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
     , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
-    , ( "GET_/compact-emoji.json", "/compact-emoji.json" )
+    , ( "GET_/compact-emoji.json", "/public/compact-emoji.json" )
     ]
         |> Dict.fromList
 
