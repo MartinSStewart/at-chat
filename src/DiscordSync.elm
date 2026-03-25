@@ -880,7 +880,12 @@ handleCreateMessage discordMessage attachments model =
                             ( model, Command.none )
 
                 Included discordGuildId ->
-                    handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model
+                    handleDiscordCreateGuildMessage
+                        discordGuildId
+                        discordMessage.content
+                        discordMessage
+                        attachments
+                        model
 
 
 discordGetGuildChannel :
@@ -926,11 +931,12 @@ discordGetGuildChannel message guild =
 
 handleDiscordCreateGuildMessage :
     Discord.Id Discord.GuildId
+    -> String
     -> Discord.Message
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model =
+handleDiscordCreateGuildMessage discordGuildId content discordMessage attachments model =
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
             case discordGetGuildChannel discordMessage guild of
@@ -942,7 +948,7 @@ handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model 
                         let
                             richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
-                                RichText.fromDiscord discordMessage.content attachments
+                                RichText.fromDiscord content attachments
 
                             threadOrChannelId : Discord.Id Discord.ChannelId
                             threadOrChannelId =
