@@ -2162,7 +2162,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Server_SendMessage createdBy createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -2199,14 +2199,14 @@ changeUpdate localMsg local =
                                                 channel
                                                 threadRouteWithRepliedTo
                                                 createdAt
-                                                userId
+                                                createdBy
                                                 text
                                                 attachedFiles
                                                 local
                                         , localUser =
                                             { localUser
                                                 | user =
-                                                    if userId == localUser.session.userId then
+                                                    if createdBy == localUser.session.userId then
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
@@ -2278,7 +2278,7 @@ changeUpdate localMsg local =
                                             LocalState.createChannelMessageFrontend
                                                 (Message.userTextMessage
                                                     createdAt
-                                                    localUser.session.userId
+                                                    createdBy
                                                     text
                                                     maybeReplyTo
                                                     attachedFiles
@@ -2291,7 +2291,7 @@ changeUpdate localMsg local =
                                 , localUser =
                                     { localUser
                                         | user =
-                                            if userId == localUser.session.userId then
+                                            if createdBy == localUser.session.userId then
                                                 { user
                                                     | lastViewed =
                                                         SeqDict.insert

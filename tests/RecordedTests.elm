@@ -2140,6 +2140,13 @@ inviteUserAndDmChat config =
                                                     , writeMessage user "Hello"
                                                     , admin.click 100 (Dom.id "guildsColumn_openDm_1")
                                                     , writeMessage user "Hello 2"
+                                                    , writeMessage admin "Hello from *admin*"
+                                                    , user.checkView
+                                                        100
+                                                        (\html ->
+                                                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
+                                                                |> Test.Html.Query.count (Expect.equal 2)
+                                                        )
                                                     ]
                                                 )
 
