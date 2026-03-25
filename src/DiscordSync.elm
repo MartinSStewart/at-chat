@@ -729,6 +729,20 @@ backendSessionIdHash =
     SessionIdHash.fromString Env.secretKey
 
 
+taskResult : Task restriction a value -> Task restriction x (Result a value)
+taskResult task =
+    Task.map Ok task |> Task.onError (\error -> Task.succeed (Err error))
+
+
+joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.ChannelId -> Command restriction toMsg BackendMsg
+joinThread authentication guildId channelId =
+    Discord.joinThreadPayload (Discord.userToken authentication) channelId
+        |> http
+        |> taskResult
+        |> Task.andThen (\result -> Task.map (JoinedDiscordThread guildId result) Time.now)
+        |> Task.perform identity
+
+
 handleCreateMessage :
     Discord.Message
     -> SeqDict (Id FileId) FileData
@@ -1209,19 +1223,50 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
                                     messageToFileData message model2.discordAttachments
+
+                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
+                                joinThreadCmd =
+                                    case message.type_ of
+                                        Discord.ThreadCreated ->
+                                            case message.guildId of
+                                                Included guildId ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "ThreadCreated" message
+                                                    in
+                                                    joinThread userData.auth guildId message.channelId
+
+                                                Missing ->
+                                                    Command.none
+
+                                        Discord.ThreadStarterMessage ->
+                                            case message.guildId of
+                                                Included guildId ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "ThreadStarterMessage" message
+                                                    in
+                                                    joinThread userData.auth guildId message.channelId
+
+                                                Missing ->
+                                                    Command.none
+
+                                        _ ->
+                                            Command.none
                             in
                             if SeqDict.size attachments == List.length message.attachments then
                                 let
                                     ( model3, cmd2 ) =
                                         handleCreateMessage message attachments model2
                                 in
-                                ( model3, cmd2 :: cmds )
+                                ( model3, joinThreadCmd :: cmd2 :: cmds )
 
                             else
                                 ( model2
-                                , Task.perform
-                                    (DiscordMessageCreate_AttachmentsUploaded message)
-                                    (Task.sequence (List.map loadMessageAttachment message.attachments))
+                                , joinThreadCmd
+                                    :: Task.perform
+                                        (DiscordMessageCreate_AttachmentsUploaded message)
+                                        (Task.sequence (List.map loadMessageAttachment message.attachments))
                                     :: cmds
                                 )
 
@@ -1282,7 +1327,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread _ ->
+                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread channel ->
                             ( model2, cmds )
 
                         Discord.UserOutMsg_UserAddedReaction reaction ->
@@ -2416,8 +2461,7 @@ getUserAvatars existingUsers users =
             )
             users
             |> Task.sequence
-            |> Task.map Ok
-            |> Task.onError (\error -> Task.succeed (Err error))
+            |> taskResult
         )
         Time.now
         |> Task.perform identity

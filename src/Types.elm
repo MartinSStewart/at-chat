@@ -577,6 +577,7 @@ type BackendMsg
             Discord.HttpError
             { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
         )
+    | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
 
 
 type alias ExportState =
