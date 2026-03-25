@@ -1029,7 +1029,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ T.start
+    [ inviteUserAndDmChat config
+    , T.start
         "Admin can open admin page"
         startTime
         config
@@ -2094,3 +2095,64 @@ checkNoErrorLogs =
                 errors ->
                     "Error logs detected: " ++ String.join ", " errors |> Err
         )
+
+
+inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inviteUserAndDmChat config =
+    T.start
+        "Invite user and then have DM chat"
+        startTime
+        config
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_createInviteLink")
+                , admin.click 100 (Dom.id "guild_copyText")
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            List.filter
+                                (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
+                                data.portRequests
+                        of
+                            [ portRequest ] ->
+                                case Json.Decode.decodeValue Json.Decode.string portRequest.value of
+                                    Ok copyText ->
+                                        [ if String.startsWith Env.domain copyText then
+                                            T.connectFrontend
+                                                100
+                                                sessionId1
+                                                (String.dropLeft (String.length Env.domain) copyText)
+                                                desktopWindow
+                                                (\user ->
+                                                    [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                                    , handleLoginFromLoginPage userEmail user
+                                                    , user.input 100 (Dom.id "loginForm_name") "Sven"
+                                                    , user.click 100 (Dom.id "loginForm_submit")
+                                                    , user.click 1000 (Dom.id "guild_openDm_0")
+                                                    , writeMessage user "Hello"
+                                                    , admin.click 100 (Dom.id "guildsColumn_openDm_1")
+                                                    , writeMessage user "Hello 2"
+                                                    ]
+                                                )
+
+                                          else
+                                            admin.checkModel 100 (\_ -> Err "Copied invalid link")
+                                        ]
+
+                                    Err _ ->
+                                        [ admin.checkModel 100 (\_ -> Err "Didn't decode port") ]
+
+                            _ ->
+                                [ admin.checkModel 100 (\_ -> Err "Didn't copy link") ]
+                    )
+                ]
+            )
+        ]
