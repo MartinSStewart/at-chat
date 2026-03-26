@@ -8,6 +8,7 @@
 * Two messages get sent if a linked Discord user starts a thread
 * Handle Discord user joined messages
 * High five emoji is missing
+* Clicking on a message reply should scroll to the original message
 
 Requested features:
 
