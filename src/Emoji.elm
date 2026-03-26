@@ -21,15 +21,12 @@ module Emoji exposing
 
 import Array exposing (Array)
 import Codec exposing (Codec)
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.Http as Http
 import Hex
-import List.Extra
 import MyUi
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
@@ -347,11 +344,6 @@ emojiWidth =
 emojiHeight : number
 emojiHeight =
     50
-
-
-paddingRight : number
-paddingRight =
-    21
 
 
 selectorHeight : number
