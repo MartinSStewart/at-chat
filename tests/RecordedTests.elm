@@ -801,7 +801,7 @@ handleCustomRequest method url =
 }"""
                     )
 
-            ( "PUT", [ "discord.com", "api", "v9", "channels", channelId, "thread-members", "@me" ] ) ->
+            ( "PUT", [ "discord.com", "api", "v9", "channels", _, "thread-members", "@me" ] ) ->
                 StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
 
             _ ->
@@ -819,6 +819,7 @@ handleCustomRequest method url =
         UnhandledHttpRequest
 
 
+decodeCustomRequest : HttpRequest -> Maybe ( String, String )
 decodeCustomRequest request =
     case request.body of
         T.JsonBody json ->
@@ -1254,7 +1255,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\user ->
                     [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                     , andThenWebsocket
-                        (\connection websocketState ->
+                        (\connection _ ->
                             [ T.websocketSendString
                                 100
                                 connection
@@ -1327,7 +1328,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\user ->
                     [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                     , andThenWebsocket
-                        (\connection websocketState ->
+                        (\connection _ ->
                             [ T.websocketSendString
                                 100
                                 connection

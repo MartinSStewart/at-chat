@@ -1318,7 +1318,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread channel ->
+                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread _ ->
                             ( model2, cmds )
 
                         Discord.UserOutMsg_UserAddedReaction reaction ->
