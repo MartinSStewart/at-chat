@@ -5,3 +5,4 @@
 * Typing indicator not appearing for Discord guilds
 * Changing tabs and then returning to a channel causes it to unload all old messages
 * Add search to emoji picker
+* Emojis sometimes don't fit inside picker. Might be due to emoji widths varying on different devices

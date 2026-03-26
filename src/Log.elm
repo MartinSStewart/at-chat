@@ -37,6 +37,7 @@ type Log
     | FailedToGetDiscordUserAvatars Discord.HttpError
     | FailedToParseDiscordWebsocket (Maybe String) String
     | FailedToGetDataForJoinedOrCreatedDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) Discord.HttpError
+    | JoinedDiscordThreadFailed (Discord.Id Discord.GuildId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -97,6 +98,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToGetDataForJoinedOrCreatedDiscordGuild _ _ _ ->
+            Nothing
+
+        JoinedDiscordThreadFailed _ _ ->
             Nothing
 
 
@@ -411,6 +415,14 @@ logContent onPressCopy log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord data for guild that was created or joined failed"
                 , fieldRow "User" (Ui.text (Discord.idToString discordUserId))
+                , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        JoinedDiscordThreadFailed guildId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Joining Discord thread failed"
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]

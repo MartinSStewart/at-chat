@@ -235,21 +235,24 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
             ]
             []
         , Html.div
-            [ Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.style "padding" "0 9px 0 9px"
-            , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
-            , Html.Attributes.style "white-space" "pre-wrap"
-            , Html.Attributes.style "overflow-wrap" "anywhere"
-            , Html.Attributes.style "height" "fit-content"
-            , Html.Attributes.style "min-height" "100%"
-            , Html.Attributes.style "color"
-                (if text == "" then
-                    "rgb(180,180,180)"
+            ([ Html.Attributes.style "pointer-events" "none"
+             , Html.Attributes.style "padding" "0 9px 0 9px"
+             , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
+             , Html.Attributes.style "overflow-wrap" "anywhere"
+             , Html.Attributes.style "height" "fit-content"
+             , Html.Attributes.style "min-height" "100%"
+             ]
+                ++ (if text == "" then
+                        [ Html.Attributes.style "color" "rgb(180,180,180)"
+                        , Html.Attributes.style "white-space" "nowrap"
+                        , Html.Attributes.style "text-overflow" "ellipsis"
+                        , Html.Attributes.style "overflow" "hidden"
+                        ]
 
-                 else
-                    "rgb(255,255,255)"
-                )
-            ]
+                    else
+                        [ Html.Attributes.style "color" "rgb(255,255,255)", Html.Attributes.style "white-space" "pre-wrap" ]
+                   )
+            )
             (case String.Nonempty.fromString text of
                 Just nonempty ->
                     RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)

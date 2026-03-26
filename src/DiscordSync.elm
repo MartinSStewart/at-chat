@@ -729,147 +729,158 @@ backendSessionIdHash =
     SessionIdHash.fromString Env.secretKey
 
 
+taskResult : Task restriction a value -> Task restriction x (Result a value)
+taskResult task =
+    Task.map Ok task |> Task.onError (\error -> Task.succeed (Err error))
+
+
+joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.MessageId -> Command restriction toMsg BackendMsg
+joinThread authentication guildId threadId =
+    Discord.joinThreadPayload (Discord.userToken authentication) threadId
+        |> http
+        |> taskResult
+        |> Task.andThen (\result -> Task.map (JoinedDiscordThread guildId result) Time.now)
+        |> Task.perform identity
+
+
 handleCreateMessage :
     Discord.Message
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleCreateMessage discordMessage attachments model =
-    case discordMessage.type_ of
-        Discord.ThreadCreated ->
-            ( model, Command.none )
+    case discordMessage.guildId of
+        Missing ->
+            let
+                dmChannelId : Discord.Id Discord.PrivateChannelId
+                dmChannelId =
+                    Discord.idToUInt64 discordMessage.channelId |> Discord.idFromUInt64
+            in
+            case SeqDict.get dmChannelId model.discordDmChannels of
+                Just channel ->
+                    if OneToOne.memberFirst discordMessage.id channel.linkedMessageIds then
+                        ( model, Command.none )
 
-        Discord.ThreadStarterMessage ->
-            ( model, Command.none )
+                    else
+                        let
+                            richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                            richText =
+                                RichText.fromDiscord discordMessage.content attachments
 
-        _ ->
-            case discordMessage.guildId of
-                Missing ->
-                    let
-                        dmChannelId : Discord.Id Discord.PrivateChannelId
-                        dmChannelId =
-                            Discord.idToUInt64 discordMessage.channelId |> Discord.idFromUInt64
-                    in
-                    case SeqDict.get dmChannelId model.discordDmChannels of
-                        Just channel ->
-                            if OneToOne.memberFirst discordMessage.id channel.linkedMessageIds then
+                            replyTo : Maybe (Id ChannelMessageId)
+                            replyTo =
+                                referencedMessageToMessageId discordMessage channel
+
+                            ( message, embedCmds ) =
+                                Message.userTextMessage
+                                    discordMessage.timestamp
+                                    discordMessage.author.id
+                                    richText
+                                    replyTo
+                                    attachments
+
+                            guildOrDmId : DiscordGuildOrDmId
+                            guildOrDmId =
+                                DiscordGuildOrDmId_Dm { currentUserId = discordMessage.author.id, channelId = dmChannelId }
+                        in
+                        case LocalState.createDiscordDmChannelMessageBackend discordMessage.id message channel of
+                            Ok ( messageId, channel2 ) ->
+                                let
+                                    notification : Command BackendOnly toMsg BackendMsg
+                                    notification =
+                                        Broadcast.discordDmNotification
+                                            discordMessage.timestamp
+                                            dmChannelId
+                                            discordMessage.author.id
+                                            discordMessage.author.username
+                                            (case SeqDict.get discordMessage.author.id model.discordUsers of
+                                                Just discordUser ->
+                                                    DiscordUserData.icon discordUser
+
+                                                Nothing ->
+                                                    Nothing
+                                            )
+                                            (RichText.toStringWithGetter DiscordUserData.username model.discordUsers richText)
+                                            model
+                                in
+                                ( { model
+                                    | discordDmChannels =
+                                        SeqDict.insert dmChannelId channel2 model.discordDmChannels
+                                    , discordUsers =
+                                        addDiscordUserData
+                                            (Discord.userToPartialUser discordMessage.author)
+                                            model.discordUsers
+                                  }
+                                , case
+                                    SeqDict.get
+                                        { currentUserId = discordMessage.author.id, channelId = dmChannelId }
+                                        model.pendingDiscordCreateDmMessages
+                                  of
+                                    Just ( clientId, changeId ) ->
+                                        Command.batch
+                                            [ LocalChangeResponse
+                                                changeId
+                                                (Local_Discord_SendMessage
+                                                    discordMessage.timestamp
+                                                    guildOrDmId
+                                                    richText
+                                                    (NoThreadWithMaybeMessage replyTo)
+                                                    attachments
+                                                )
+                                                |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDiscordDmChannelExcludingOne
+                                                clientId
+                                                dmChannelId
+                                                (Server_Discord_SendMessage
+                                                    discordMessage.timestamp
+                                                    guildOrDmId
+                                                    richText
+                                                    (NoThreadWithMaybeMessage replyTo)
+                                                    attachments
+                                                    |> ServerChange
+                                                )
+                                                model
+                                            , notification
+                                            , Command.map
+                                                identity
+                                                (DiscordGotDmMessageEmbed dmChannelId messageId)
+                                                embedCmds
+                                            ]
+
+                                    Nothing ->
+                                        Command.batch
+                                            [ Broadcast.toDiscordDmChannel
+                                                dmChannelId
+                                                (Server_Discord_SendMessage
+                                                    discordMessage.timestamp
+                                                    guildOrDmId
+                                                    richText
+                                                    (NoThreadWithMaybeMessage replyTo)
+                                                    attachments
+                                                    |> ServerChange
+                                                )
+                                                model
+                                            , notification
+                                            , Command.map
+                                                identity
+                                                (DiscordGotDmMessageEmbed dmChannelId messageId)
+                                                embedCmds
+                                            ]
+                                )
+
+                            Err _ ->
                                 ( model, Command.none )
 
-                            else
-                                let
-                                    richText : Nonempty (RichText (Discord.Id Discord.UserId))
-                                    richText =
-                                        RichText.fromDiscord discordMessage.content attachments
+                Nothing ->
+                    ( model, Command.none )
 
-                                    replyTo : Maybe (Id ChannelMessageId)
-                                    replyTo =
-                                        referencedMessageToMessageId discordMessage channel
-
-                                    ( message, embedCmds ) =
-                                        Message.userTextMessage
-                                            discordMessage.timestamp
-                                            discordMessage.author.id
-                                            richText
-                                            replyTo
-                                            attachments
-
-                                    guildOrDmId : DiscordGuildOrDmId
-                                    guildOrDmId =
-                                        DiscordGuildOrDmId_Dm { currentUserId = discordMessage.author.id, channelId = dmChannelId }
-                                in
-                                case LocalState.createDiscordDmChannelMessageBackend discordMessage.id message channel of
-                                    Ok ( messageId, channel2 ) ->
-                                        let
-                                            notification : Command BackendOnly toMsg BackendMsg
-                                            notification =
-                                                Broadcast.discordDmNotification
-                                                    discordMessage.timestamp
-                                                    dmChannelId
-                                                    discordMessage.author.id
-                                                    discordMessage.author.username
-                                                    (case SeqDict.get discordMessage.author.id model.discordUsers of
-                                                        Just discordUser ->
-                                                            DiscordUserData.icon discordUser
-
-                                                        Nothing ->
-                                                            Nothing
-                                                    )
-                                                    (RichText.toStringWithGetter DiscordUserData.username model.discordUsers richText)
-                                                    model
-                                        in
-                                        ( { model
-                                            | discordDmChannels =
-                                                SeqDict.insert dmChannelId channel2 model.discordDmChannels
-                                            , discordUsers =
-                                                addDiscordUserData
-                                                    (Discord.userToPartialUser discordMessage.author)
-                                                    model.discordUsers
-                                          }
-                                        , case
-                                            SeqDict.get
-                                                { currentUserId = discordMessage.author.id, channelId = dmChannelId }
-                                                model.pendingDiscordCreateDmMessages
-                                          of
-                                            Just ( clientId, changeId ) ->
-                                                Command.batch
-                                                    [ LocalChangeResponse
-                                                        changeId
-                                                        (Local_Discord_SendMessage
-                                                            discordMessage.timestamp
-                                                            guildOrDmId
-                                                            richText
-                                                            (NoThreadWithMaybeMessage replyTo)
-                                                            attachments
-                                                        )
-                                                        |> Lamdera.sendToFrontend clientId
-                                                    , Broadcast.toDiscordDmChannelExcludingOne
-                                                        clientId
-                                                        dmChannelId
-                                                        (Server_Discord_SendMessage
-                                                            discordMessage.timestamp
-                                                            guildOrDmId
-                                                            richText
-                                                            (NoThreadWithMaybeMessage replyTo)
-                                                            attachments
-                                                            |> ServerChange
-                                                        )
-                                                        model
-                                                    , notification
-                                                    , Command.map
-                                                        identity
-                                                        (DiscordGotDmMessageEmbed dmChannelId messageId)
-                                                        embedCmds
-                                                    ]
-
-                                            Nothing ->
-                                                Command.batch
-                                                    [ Broadcast.toDiscordDmChannel
-                                                        dmChannelId
-                                                        (Server_Discord_SendMessage
-                                                            discordMessage.timestamp
-                                                            guildOrDmId
-                                                            richText
-                                                            (NoThreadWithMaybeMessage replyTo)
-                                                            attachments
-                                                            |> ServerChange
-                                                        )
-                                                        model
-                                                    , notification
-                                                    , Command.map
-                                                        identity
-                                                        (DiscordGotDmMessageEmbed dmChannelId messageId)
-                                                        embedCmds
-                                                    ]
-                                        )
-
-                                    Err _ ->
-                                        ( model, Command.none )
-
-                        Nothing ->
-                            ( model, Command.none )
-
-                Included discordGuildId ->
-                    handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model
+        Included discordGuildId ->
+            handleDiscordCreateGuildMessage
+                discordGuildId
+                discordMessage.content
+                discordMessage
+                attachments
+                model
 
 
 discordGetGuildChannel :
@@ -915,11 +926,12 @@ discordGetGuildChannel message guild =
 
 handleDiscordCreateGuildMessage :
     Discord.Id Discord.GuildId
+    -> String
     -> Discord.Message
     -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model =
+handleDiscordCreateGuildMessage discordGuildId content discordMessage attachments model =
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
             case discordGetGuildChannel discordMessage guild of
@@ -931,7 +943,7 @@ handleDiscordCreateGuildMessage discordGuildId discordMessage attachments model 
                         let
                             richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
-                                RichText.fromDiscord discordMessage.content attachments
+                                RichText.fromDiscord content attachments
 
                             threadOrChannelId : Discord.Id Discord.ChannelId
                             threadOrChannelId =
@@ -1209,19 +1221,33 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
                                     messageToFileData message model2.discordAttachments
+
+                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
+                                joinThreadCmd =
+                                    case ( message.guildId, message.flags ) of
+                                        ( Included guildId, Included flags ) ->
+                                            if flags.hasThread then
+                                                joinThread userData.auth guildId message.id
+
+                                            else
+                                                Command.none
+
+                                        _ ->
+                                            Command.none
                             in
                             if SeqDict.size attachments == List.length message.attachments then
                                 let
                                     ( model3, cmd2 ) =
                                         handleCreateMessage message attachments model2
                                 in
-                                ( model3, cmd2 :: cmds )
+                                ( model3, joinThreadCmd :: cmd2 :: cmds )
 
                             else
                                 ( model2
-                                , Task.perform
-                                    (DiscordMessageCreate_AttachmentsUploaded message)
-                                    (Task.sequence (List.map loadMessageAttachment message.attachments))
+                                , joinThreadCmd
+                                    :: Task.perform
+                                        (DiscordMessageCreate_AttachmentsUploaded message)
+                                        (Task.sequence (List.map loadMessageAttachment message.attachments))
                                     :: cmds
                                 )
 
@@ -1244,19 +1270,29 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
                                     messageToFileData edit model2.discordAttachments
+
+                                joinThreadCmd : Command BackendOnly ToFrontend BackendMsg
+                                joinThreadCmd =
+                                    case ( edit.guildId, edit.flags.hasThread ) of
+                                        ( Included guildId, True ) ->
+                                            joinThread userData.auth guildId edit.id
+
+                                        _ ->
+                                            Command.none
                             in
                             if SeqDict.size attachments == List.length edit.attachments then
                                 let
                                     ( model3, cmd2 ) =
                                         handleEditMessage edit attachments model2
                                 in
-                                ( model3, cmd2 :: cmds )
+                                ( model3, cmd2 :: joinThreadCmd :: cmds )
 
                             else
                                 ( model2
                                 , Task.perform
                                     (DiscordMessageUpdate_AttachmentsUploaded edit)
                                     (Task.sequence (List.map loadMessageAttachment edit.attachments))
+                                    :: joinThreadCmd
                                     :: cmds
                                 )
 
@@ -2416,8 +2452,7 @@ getUserAvatars existingUsers users =
             )
             users
             |> Task.sequence
-            |> Task.map Ok
-            |> Task.onError (\error -> Task.succeed (Err error))
+            |> taskResult
         )
         Time.now
         |> Task.perform identity
