@@ -6,3 +6,5 @@
 * Changing tabs and then returning to a channel causes it to unload all old messages
 * Add search to emoji picker
 * Emojis sometimes don't fit inside picker. Might be due to emoji widths varying on different devices
+* Two messages get sent if a linked Discord user starts a thread
+* Handle Discord user joined messages
