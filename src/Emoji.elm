@@ -7,7 +7,7 @@ module Emoji exposing
     , EmojiResponse
     , Model
     , Msg(..)
-    , SkinTone
+    , SkinTone(..)
     , emojiWithSkinTone
     , fromDiscord
     , isPressed
@@ -181,6 +181,8 @@ allCategories =
     ]
 
 
+{-| OpaqueVariants
+-}
 type SkinTone
     = SkinTone1
     | SkinTone2
