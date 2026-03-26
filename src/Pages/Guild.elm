@@ -3057,6 +3057,18 @@ emojiSelector isMobile local loggedIn model =
         emojiConfig : EmojiConfig
         emojiConfig =
             local.localUser.user.emojiConfig
+
+        paddingX : number
+        paddingX =
+            4
+
+        x : Int
+        x =
+            if isMobile then
+                Coord.xRaw model.windowSize - paddingX * 2
+
+            else
+                Coord.xRaw model.windowSize - channelAndGuildColumnWidth model.windowSize - paddingX * 2
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->
@@ -3064,10 +3076,15 @@ emojiSelector isMobile local loggedIn model =
 
         EmojiSelectorForReaction _ _ ->
             Ui.inFront
-                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                (Emoji.selector
+                    isMobile
+                    x
+                    loggedIn.emojiSelector
+                    emojiConfig
+                    model.emojiData
                     |> Ui.el
                         [ Ui.alignBottom
-                        , Ui.paddingXY 8 0
+                        , Ui.paddingXY paddingX 0
                         , if isMobile then
                             Ui.width Ui.fill
 
@@ -3079,10 +3096,15 @@ emojiSelector isMobile local loggedIn model =
 
         EmojiSelectorForMessage _ ->
             Ui.inFront
-                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                (Emoji.selector
+                    isMobile
+                    x
+                    loggedIn.emojiSelector
+                    emojiConfig
+                    model.emojiData
                     |> Ui.el
                         [ Ui.alignBottom
-                        , Ui.paddingXY 8 0
+                        , Ui.paddingXY paddingX 0
                         , if isMobile then
                             Ui.width Ui.fill
 
@@ -3098,9 +3120,14 @@ emojiSelector isMobile local loggedIn model =
                     Coord.yRaw position - Emoji.selectorHeight - channelHeaderHeight
             in
             Ui.inFront
-                (Emoji.selector isMobile model.windowSize loggedIn.emojiSelector emojiConfig model.emojiData
+                (Emoji.selector
+                    isMobile
+                    x
+                    loggedIn.emojiSelector
+                    emojiConfig
+                    model.emojiData
                     |> Ui.el
-                        [ Ui.paddingXY 8 0
+                        [ Ui.paddingXY paddingX 0
                         , Ui.move
                             { x = 0
                             , y =

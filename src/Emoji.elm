@@ -359,21 +359,12 @@ selectorHeight =
     400
 
 
-selector : Bool -> Coord CssPixels -> Model -> EmojiConfig -> Maybe CachedEmojiData -> Element Msg
-selector isMobile windowSize model userData emojiData =
-    let
-        columns : Int
-        columns =
-            (Coord.xRaw windowSize - paddingRight) // emojiWidth |> min 16
-    in
+selector : Bool -> Int -> Model -> EmojiConfig -> Maybe CachedEmojiData -> Element Msg
+selector isMobile width model userData emojiData =
     case emojiData of
         Just emojiData2 ->
             Ui.column
-                [ if isMobile then
-                    Ui.width Ui.fill
-
-                  else
-                    Ui.width (Ui.px (columns * emojiWidth + paddingRight))
+                [ Ui.width (Ui.px (min 620 width))
                 , Ui.height (Ui.px selectorHeight)
                 , Ui.background MyUi.background2
                 , Ui.border 1
@@ -407,38 +398,39 @@ selector isMobile windowSize model userData emojiData =
                     )
                 , case SeqDict.get userData.category emojiData2.categories of
                     Just emojis ->
-                        List.map
-                            (\emojiRow ->
-                                Ui.row
-                                    [ Ui.height (Ui.px emojiHeight), Ui.width Ui.shrink ]
-                                    (List.map
-                                        (\emoji ->
-                                            let
-                                                text : String
-                                                text =
-                                                    case userData.category of
-                                                        PeopleAndBody ->
-                                                            emojiWithSkinTone userData.skinTone emoji emojiData2
+                        --List.map
+                        --    (\emojiRow ->
+                        Ui.row
+                            [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3, Ui.width Ui.shrink, Ui.wrap ]
+                            (List.map
+                                (\emoji ->
+                                    let
+                                        text : String
+                                        text =
+                                            case userData.category of
+                                                PeopleAndBody ->
+                                                    emojiWithSkinTone userData.skinTone emoji emojiData2
 
-                                                        _ ->
-                                                            toString emoji
-                                            in
-                                            MyUi.elButton
-                                                (Dom.id ("guild_emojiSelector_" ++ text))
-                                                (PressedSelectEmoji emoji)
-                                                [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
-                                                , Ui.attrIf
-                                                    (model.emojiHovered == Just emoji)
-                                                    (Ui.background MyUi.hoverHighlight)
-                                                ]
-                                                (Ui.text text)
-                                        )
-                                        emojiRow
-                                    )
+                                                _ ->
+                                                    toString emoji
+                                    in
+                                    MyUi.elButton
+                                        (Dom.id ("guild_emojiSelector_" ++ text))
+                                        (PressedSelectEmoji emoji)
+                                        [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
+                                        , Ui.attrIf
+                                            (model.emojiHovered == Just emoji)
+                                            (Ui.background MyUi.hoverHighlight)
+                                        , Ui.width Ui.shrink
+                                        ]
+                                        (Ui.text text)
+                                )
+                                emojis
                             )
-                            (List.Extra.greedyGroupsOf columns emojis)
-                            |> Ui.column [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3 ]
 
+                    --)
+                    --(List.Extra.greedyGroupsOf columns emojis)
+                    --|> Ui.column [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3 ]
                     Nothing ->
                         Ui.none
                 , Ui.row
