@@ -7,7 +7,6 @@
 * Add search to emoji picker
 * Two messages get sent if a linked Discord user starts a thread
 * Handle Discord user joined messages
-* High five emoji is missing
 * Clicking on a message reply should scroll to the original message
 * 4 Discord messages DM restriction not removed until after the page is refreshed
 
