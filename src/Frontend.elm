@@ -39,7 +39,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -2344,7 +2344,7 @@ updateLoaded msg model =
                                                                         Nothing ->
                                                                             False
 
-                                                                ViewThreadWithMessage threadId messageId ->
+                                                                ViewThreadWithMessage _ _ ->
                                                                     False
 
                                                         Nothing ->
@@ -2353,7 +2353,7 @@ updateLoaded msg model =
                                         NoMessageHover ->
                                             False
 
-                                        MessageMenu messageMenuExtraOptions ->
+                                        MessageMenu _ ->
                                             False
                             in
                             FrontendExtra.handleLocalChange

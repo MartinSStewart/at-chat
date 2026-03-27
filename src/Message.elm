@@ -328,8 +328,8 @@ reactionEmojis message =
         UserTextMessage data ->
             data.reactions
 
-        UserJoinedMessage posix userId reactions ->
+        UserJoinedMessage _ _ reactions ->
             reactions
 
-        DeletedMessage posix ->
+        DeletedMessage _ ->
             SeqDict.empty

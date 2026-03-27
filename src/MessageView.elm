@@ -3,7 +3,6 @@ module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView)
 import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Dict
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -89,7 +88,7 @@ isPressMsg msg =
         MessageView_NoOp ->
             False
 
-        MessageViewMsg_PressedReactionEmoji emoji ->
+        MessageViewMsg_PressedReactionEmoji _ ->
             True
 
 
