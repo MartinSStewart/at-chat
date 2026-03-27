@@ -89,6 +89,9 @@ module LocalState exposing
     , memberIsTyping
     , memberIsTypingHelper
     , messageDeleted
+    , messageReactions
+    , messageReactionsHelper
+    , messageReactionsNoThread
     , messageToString
     , removeReactionEmoji
     , removeReactionEmojiFrontend
@@ -122,6 +125,7 @@ import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (ChangeAttachments, Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
@@ -320,6 +324,60 @@ type alias DiscordFrontendChannel =
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     }
+
+
+messageReactions : GuildOrDmId -> ThreadRouteWithMessage -> LocalState -> SeqDict Emoji (NonemptySet (Id UserId))
+messageReactions guildOrDmId threadRoute local =
+    case guildOrDmId of
+        GuildOrDmId_Guild guildId channelId ->
+            case getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    messageReactionsHelper channel threadRoute
+
+                Nothing ->
+                    SeqDict.empty
+
+        GuildOrDmId_Dm otherUserId ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just channel ->
+                    messageReactionsHelper channel threadRoute
+
+                Nothing ->
+                    SeqDict.empty
+
+
+messageReactionsHelper :
+    { a
+        | messages : Array (MessageState ChannelMessageId userId)
+        , threads : SeqDict (Id ChannelMessageId) { b | messages : Array (MessageState ThreadMessageId userId) }
+    }
+    -> ThreadRouteWithMessage
+    -> SeqDict Emoji (NonemptySet userId)
+messageReactionsHelper channel threadRoute2 =
+    case threadRoute2 of
+        NoThreadWithMessage messageId ->
+            messageReactionsNoThread messageId channel
+
+        ViewThreadWithMessage threadId messageId ->
+            case SeqDict.get threadId channel.threads of
+                Just thread ->
+                    messageReactionsNoThread messageId thread
+
+                Nothing ->
+                    SeqDict.empty
+
+
+messageReactionsNoThread :
+    Id messageId
+    -> { a | messages : Array (MessageState messageId userId) }
+    -> SeqDict Emoji (NonemptySet userId)
+messageReactionsNoThread messageId channel =
+    case DmChannel.getArray messageId channel.messages of
+        Just (MessageLoaded message) ->
+            Message.reactionEmojis message
+
+        _ ->
+            SeqDict.empty
 
 
 messageToString : SeqDict userId { a | name : PersonName } -> Message messageId userId -> String

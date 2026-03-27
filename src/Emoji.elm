@@ -112,8 +112,8 @@ categoryToString category =
             "Travel & Places"
 
 
-representativeEmoji : Maybe SkinTone -> Category -> String
-representativeEmoji skinTone category =
+categoryToEmojiString : Maybe SkinTone -> Category -> String
+categoryToEmojiString skinTone category =
     case category of
         Activities ->
             "🎉"
@@ -207,28 +207,6 @@ skinToneToString skinTone =
             "🏿"
 
 
-stringToSkinTone : String -> Maybe SkinTone
-stringToSkinTone text =
-    case text of
-        "1F3FB" ->
-            Just SkinTone1
-
-        "1F3FC" ->
-            Just SkinTone2
-
-        "1F3FD" ->
-            Just SkinTone3
-
-        "1F3FE" ->
-            Just SkinTone4
-
-        "1F3FF" ->
-            Just SkinTone5
-
-        _ ->
-            Nothing
-
-
 allSkinTones : List SkinTone
 allSkinTones =
     [ SkinTone1
@@ -265,7 +243,7 @@ type alias CachedEmojiData =
 
 
 type alias EmojiData =
-    { skinVariations : SeqDict SkinTone String
+    { skinVariations : Maybe String
     , shortNames : List String
     }
 
@@ -383,7 +361,7 @@ selector isMobile width model userData emojiData =
                                         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
                                         , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
                                         ]
-                                        (Ui.text (representativeEmoji userData.skinTone category))
+                                        (Ui.text (categoryToEmojiString userData.skinTone category))
                                         |> Just
                         )
                         allCategories
@@ -480,8 +458,12 @@ emojiWithSkinTone maybeSkinTone emoji emojiData2 =
         Just skinTone ->
             case SeqDict.get emoji emojiData2.emojis of
                 Just emojiData3 ->
-                    SeqDict.get skinTone emojiData3.skinVariations
-                        |> Maybe.withDefault (toString emoji)
+                    case emojiData3.skinVariations of
+                        Just skinVariation ->
+                            String.replace (skinToneToString SkinTone1) (skinToneToString skinTone) skinVariation
+
+                        Nothing ->
+                            toString emoji
 
                 Nothing ->
                     toString emoji
@@ -512,20 +494,10 @@ requestEmojiData gotEmojiData =
                                                 , skinVariations =
                                                     case emoji.skinVariations of
                                                         Just skinVariations ->
-                                                            List.filterMap
-                                                                (\( key, value ) ->
-                                                                    case stringToSkinTone key of
-                                                                        Just skinTone ->
-                                                                            Just ( skinTone, value )
-
-                                                                        Nothing ->
-                                                                            Nothing
-                                                                )
-                                                                (Dict.toList skinVariations)
-                                                                |> SeqDict.fromList
+                                                            Dict.get "1F3FB" skinVariations
 
                                                         Nothing ->
-                                                            SeqDict.empty
+                                                            Nothing
                                                 }
                                                 dict
                                         )

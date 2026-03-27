@@ -1,7 +1,9 @@
 module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView)
 
+import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Dict
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -11,10 +13,13 @@ import Icons
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import SeqDict
 import Touch exposing (Touch)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Url exposing (Url)
+import User exposing (FrontendCurrentUser)
 
 
 type MessageViewMsg
@@ -33,6 +38,7 @@ type MessageViewMsg
     | MessageViewMsg_PressedShowFullMenu Bool (Coord CssPixels)
     | MessageView_PressedViewThreadLink
     | MessageView_NoOp
+    | MessageViewMsg_PressedReactionEmoji Emoji
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -83,9 +89,35 @@ isPressMsg msg =
         MessageView_NoOp ->
             False
 
+        MessageViewMsg_PressedReactionEmoji emoji ->
+            True
 
-miniView : Bool -> Bool -> Element MessageViewMsg
-miniView isThreadStarter canEdit =
+
+miniView : FrontendCurrentUser -> Bool -> Bool -> Element MessageViewMsg
+miniView user isThreadStarter canEdit =
+    let
+        recentEmojis : List (Element MessageViewMsg)
+        recentEmojis =
+            Array.foldl
+                (\emoji dict -> SeqDict.update emoji (\maybe -> Maybe.withDefault 0 maybe |> (+) 1 |> Just) dict)
+                SeqDict.empty
+                user.emojiConfig.lastUsedEmojis
+                |> SeqDict.toList
+                |> List.sortBy (\( _, count ) -> -count)
+                |> List.take 3
+                |> List.indexedMap
+                    (\index ( emoji, _ ) ->
+                        miniButton
+                            (Dom.id ("miniView_emojiReact_" ++ String.fromInt index))
+                            (MessageViewMsg_PressedReactionEmoji emoji)
+                            (Html.div
+                                [ Html.Attributes.style "font-size" "20px"
+                                , Html.Attributes.style "transform" "translateY(-3px)"
+                                ]
+                                [ Html.text (Emoji.toString emoji) ]
+                            )
+                    )
+    in
     Ui.row
         [ Ui.alignRight
         , Ui.background MyUi.background1
@@ -94,32 +126,35 @@ miniView isThreadStarter canEdit =
         , Ui.border 1
         , Ui.move { x = -48, y = -16, z = 0 }
         , Ui.height (Ui.px 32)
+        , Ui.clip
         ]
-        [ miniButton
-            (Dom.id "miniView_showReactionEmojiSelector")
-            MessageViewMsg_PressedShowReactionEmojiSelector
-            Icons.smile
-        , if canEdit then
-            miniButton
-                (Dom.id "miniView_editMessage")
-                MessageViewMsg_PressedEditMessage
-                Icons.pencil
+        (recentEmojis
+            ++ [ miniButton
+                    (Dom.id "miniView_showReactionEmojiSelector")
+                    MessageViewMsg_PressedShowReactionEmojiSelector
+                    Icons.smile
+               , if canEdit then
+                    miniButton
+                        (Dom.id "miniView_editMessage")
+                        MessageViewMsg_PressedEditMessage
+                        Icons.pencil
 
-          else
-            Ui.none
-        , if isThreadStarter then
-            Ui.none
+                 else
+                    Ui.none
+               , if isThreadStarter then
+                    Ui.none
 
-          else
-            miniButton
-                (Dom.id "miniView_reply")
-                MessageViewMsg_PressedReply
-                Icons.reply
-        , miniButtonWithPosition
-            (Dom.id "miniView_showFullMenu")
-            (MessageViewMsg_PressedShowFullMenu isThreadStarter)
-            Icons.dotDotDot
-        ]
+                 else
+                    miniButton
+                        (Dom.id "miniView_reply")
+                        MessageViewMsg_PressedReply
+                        Icons.reply
+               , miniButtonWithPosition
+                    (Dom.id "miniView_showFullMenu")
+                    (MessageViewMsg_PressedShowFullMenu isThreadStarter)
+                    Icons.dotDotDot
+               ]
+        )
 
 
 miniButton : HtmlId -> msg -> Html msg -> Element msg
@@ -131,6 +166,7 @@ miniButton htmlId onPress svg =
         , Ui.id (Dom.idToString htmlId)
         , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
         , Ui.pointer
+        , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
         (Ui.html svg)
 
@@ -150,5 +186,6 @@ miniButtonWithPosition htmlId onPress svg =
                 (Json.Decode.field "clientY" Json.Decode.float)
             )
         , Ui.pointer
+        , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
         (Ui.html svg)

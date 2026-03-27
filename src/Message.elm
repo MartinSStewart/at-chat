@@ -10,6 +10,7 @@ module Message exposing
     , addReactionEmoji
     , createdAt
     , editUserTextMessage
+    , reactionEmojis
     , removeReactionEmoji
     , userTextMessage
     , userTextMessageNoEmbeds
@@ -319,3 +320,16 @@ removeReactionEmoji userId emoji message =
 
         DeletedMessage _ ->
             message
+
+
+reactionEmojis : Message messageId userId -> SeqDict Emoji (NonemptySet userId)
+reactionEmojis message =
+    case message of
+        UserTextMessage data ->
+            data.reactions
+
+        UserJoinedMessage posix userId reactions ->
+            reactions
+
+        DeletedMessage posix ->
+            SeqDict.empty

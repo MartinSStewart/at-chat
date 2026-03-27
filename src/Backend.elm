@@ -2290,13 +2290,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 guildId
-                                (\{ userId } _ guild ->
+                                (\{ userId } user guild ->
                                     ( { model
                                         | guilds =
                                             SeqDict.insert
                                                 guildId
                                                 (LocalState.updateChannel (LocalState.addReactionEmoji emoji userId threadRoute) channelId guild)
                                                 model.guilds
+                                        , users = NonemptyDict.insert userId (User.addRecentlyUsedEmoji emoji user) model.users
                                       }
                                     , Command.batch
                                         [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
@@ -2312,8 +2313,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model
                                 sessionId
-                                (\{ userId } _ ->
+                                (\{ userId } user ->
                                     let
+                                        dmChannelId : DmChannelId
                                         dmChannelId =
                                             DmChannel.channelIdFromUserIds userId otherUserId
                                     in
@@ -2323,6 +2325,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 dmChannelId
                                                 (LocalState.addReactionEmoji emoji userId threadRoute)
                                                 model.dmChannels
+                                        , users = NonemptyDict.insert userId (User.addRecentlyUsedEmoji emoji user) model.users
                                       }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
@@ -2348,7 +2351,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentUserId
-                                (\_ userData _ guild ->
+                                (\session userData user guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model
@@ -2361,6 +2364,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             guild
                                                         )
                                                         model.discordGuilds
+                                                , users = NonemptyDict.insert session.userId (User.addRecentlyUsedEmoji emoji user) model.users
                                               }
                                             , Command.batch
                                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
@@ -2406,7 +2410,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 data
-                                (\_ userData _ channel ->
+                                (\session userData user channel ->
                                     case threadRoute of
                                         NoThreadWithMessage messageId ->
                                             ( { model
@@ -2415,6 +2419,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         data.channelId
                                                         (LocalState.addReactionEmojiHelper emoji data.currentUserId messageId)
                                                         model.discordDmChannels
+                                                , users = NonemptyDict.insert session.userId (User.addRecentlyUsedEmoji emoji user) model.users
                                               }
                                             , Command.batch
                                                 [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
