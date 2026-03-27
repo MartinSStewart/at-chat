@@ -447,8 +447,11 @@ connectTwoUsersAndJoinNewGuild continueFunc =
 writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessage user text =
     T.group
-        [ user.input 100 (Dom.id "channel_textinput") text
+        [ user.focus 100 (Dom.id "channel_textinput")
+        , user.click 1005 (Dom.id "channel_textinput")
+        , user.input 100 (Dom.id "channel_textinput") text
         , user.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+        , user.blur 100 (Dom.id "channel_textinput")
         ]
 
 
@@ -2037,11 +2040,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.input 164 (Dom.id "loginForm_loginCodeInput") "22923193"
                         , tabA.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
-                        , tabA.focus 19 (Dom.id "channel_textinput")
-                        , tabA.click 1005 (Dom.id "channel_textinput")
-                        , tabA.input 636 (Dom.id "channel_textinput") "Test"
-                        , tabA.keyDown 751 (Dom.id "channel_textinput") "Enter" []
-                        , tabA.blur 910 (Dom.id "channel_textinput")
+                        , writeMessage tabA "Test"
                         , tabB.click 111 (Dom.id "guild_openGuild_0")
                         , tabB.focus 25 (Dom.id "channel_textinput")
                         , tabA.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
@@ -2055,15 +2054,22 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.input 781 (Dom.id "channel_textinput") "Test2"
                         , tabA.blur 2357 (Dom.id "channel_textinput")
                         , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
-                        , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
-                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
-                        , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
-                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
-                        , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
-                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
-                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
-                        , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
+                        , T.collapsableGroup
+                            "Add emoji to guild channel message"
+                            [ tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
+                            , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                            , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
+                            , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                            , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                            , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
+                            , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                            , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                            , tabA.click 100 (Dom.id "miniView_emojiReact_0")
+                            , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                            , tabA.click 100 (Dom.id "miniView_emojiReact_0")
+                            , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                            , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
+                            ]
                         , createThread tabA (Id.fromInt 0)
                         , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
@@ -2082,11 +2088,16 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.mouseEnter 1 (Dom.id "thread_message_0") ( 1036, 55 ) []
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
-                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.click 100 (Dom.id "emoji_category_People & Body")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_👍")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "👍" ])
                         , tabA.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
-                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "👍" ])
+                        , tabA.click 100 (Dom.id "miniView_emojiReact_1")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "👍" ])
+                        , tabA.click 100 (Dom.id "miniView_emojiReact_1")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "👍" ])
                         , tabA.mouseLeave 410 (Dom.id "thread_message_0") ( 148, 63 ) []
                         ]
                     )

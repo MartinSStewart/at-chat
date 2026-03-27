@@ -3292,6 +3292,19 @@ discordDmMemberTyping time userId channelId local =
 
 addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId threadRoute emoji local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+
+        localUser2 : LocalUser
+        localUser2 =
+            if userId == localUser.session.userId then
+                { localUser | user = User.addRecentlyUsedEmoji emoji localUser.user }
+
+            else
+                localUser
+    in
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
@@ -3303,6 +3316,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                             channelId
                         )
                         local.guilds
+                , localUser = localUser2
             }
 
         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
@@ -3312,6 +3326,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         otherUserId
                         (LocalState.addReactionEmojiFrontend emoji userId threadRoute)
                         local.dmChannels
+                , localUser = localUser2
             }
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
@@ -3324,6 +3339,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                             channelId
                         )
                         local.discordGuilds
+                , localUser = localUser2
             }
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
@@ -3338,6 +3354,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                                 channelId
                                 (LocalState.addReactionEmojiFrontendHelper emoji currentUserId messageId)
                                 local.discordDmChannels
+                        , localUser = localUser2
                     }
 
 

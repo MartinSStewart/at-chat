@@ -10,6 +10,7 @@ module User exposing
     , NotificationLevel(..)
     , addDirectMention
     , addDiscordDirectMention
+    , addRecentlyUsedEmoji
     , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
@@ -41,7 +42,7 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), EmojiConfig, SkinTone)
+import Emoji exposing (Category(..), Emoji, EmojiConfig, SkinTone)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
@@ -86,6 +87,28 @@ type alias BackendUser =
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
+    }
+
+
+addRecentlyUsedEmoji : Emoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+addRecentlyUsedEmoji emoji user =
+    let
+        emojiConfig =
+            user.emojiConfig
+
+        count =
+            Array.length emojiConfig.lastUsedEmojis
+    in
+    { user
+        | emojiConfig =
+            { emojiConfig
+                | lastUsedEmojis =
+                    if count > 30 then
+                        Array.push emoji (Array.slice (count - 20) count emojiConfig.lastUsedEmojis)
+
+                    else
+                        Array.push emoji emojiConfig.lastUsedEmojis
+            }
     }
 
 

@@ -4306,6 +4306,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
     case message of
         UserTextMessage data ->
             let
+                maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
                     reactionEmojiView currentUserId data.reactions
 
@@ -4800,6 +4801,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 messageIndex
                 (currentUserId == data.createdBy)
                 currentUserId
+                localUser.user
                 data.reactions
                 maybeThreadStarter
                 isHovered
@@ -4826,6 +4828,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 messageIndex
                 False
                 currentUserId
+                localUser.user
                 reactions
                 maybeThreadStarter
                 isHovered
@@ -4846,6 +4849,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 messageIndex
                 False
                 currentUserId
+                localUser.user
                 SeqDict.empty
                 maybeThreadStarter
                 isHovered
@@ -4884,6 +4888,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 messageIndex
                 (currentUserId == message2.createdBy)
                 currentUserId
+                localUser.user
                 message2.reactions
                 isHovered
                 (userTextMessageContent
@@ -4906,6 +4911,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 messageIndex
                 False
                 currentUserId
+                localUser.user
                 reactions
                 isHovered
                 (Ui.row
@@ -4921,6 +4927,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 messageIndex
                 False
                 localUser.session.userId
+                localUser.user
                 SeqDict.empty
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
@@ -5195,12 +5202,13 @@ messageContainer :
     -> Id ChannelMessageId
     -> Bool
     -> userId
+    -> FrontendCurrentUser
     -> SeqDict Emoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
+messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -5275,7 +5283,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView isThreadStarter canEdit |> Ui.inFront
+                        , MessageView.miniView currentUser isThreadStarter canEdit |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -5311,11 +5319,12 @@ threadMessageContainer :
     -> Id ThreadMessageId
     -> Bool
     -> userId
+    -> FrontendCurrentUser
     -> SeqDict Emoji (NonemptySet userId)
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
+threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -5390,7 +5399,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId reactions is
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView False canEdit |> Ui.inFront
+                        , MessageView.miniView currentUser False canEdit |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->

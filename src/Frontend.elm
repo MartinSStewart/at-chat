@@ -2292,6 +2292,88 @@ updateLoaded msg model =
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )
 
+                MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+
+                                messageHasReaction : Bool
+                                messageHasReaction =
+                                    case loggedIn.messageHover of
+                                        MessageHover guildOrDmId2 threadRoute2 ->
+                                            case guildOrDmId2 of
+                                                GuildOrDmId guildOrDmId3 ->
+                                                    case LocalState.messageReactions guildOrDmId3 threadRoute2 local |> SeqDict.get emoji of
+                                                        Just reactions ->
+                                                            NonemptySet.member local.localUser.session.userId reactions
+
+                                                        Nothing ->
+                                                            False
+
+                                                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+                                                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                                        Just ( _, channel ) ->
+                                                            case
+                                                                LocalState.messageReactionsHelper channel threadRoute2
+                                                                    |> SeqDict.get emoji
+                                                            of
+                                                                Just reactions ->
+                                                                    NonemptySet.member currentUserId reactions
+
+                                                                Nothing ->
+                                                                    False
+
+                                                        Nothing ->
+                                                            False
+
+                                                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+                                                    case SeqDict.get data.channelId local.discordDmChannels of
+                                                        Just channel ->
+                                                            case threadRoute2 of
+                                                                NoThreadWithMessage messageId ->
+                                                                    case
+                                                                        LocalState.messageReactionsNoThread messageId channel
+                                                                            |> SeqDict.get emoji
+                                                                    of
+                                                                        Just reactions ->
+                                                                            NonemptySet.member data.currentUserId reactions
+
+                                                                        Nothing ->
+                                                                            False
+
+                                                                ViewThreadWithMessage _ _ ->
+                                                                    False
+
+                                                        Nothing ->
+                                                            False
+
+                                        NoMessageHover ->
+                                            False
+
+                                        MessageMenu _ ->
+                                            False
+                            in
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                ((if messageHasReaction then
+                                    Local_RemoveReactionEmoji
+
+                                  else
+                                    Local_AddReactionEmoji
+                                 )
+                                    guildOrDmId
+                                    threadRoute
+                                    emoji
+                                    |> Just
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
