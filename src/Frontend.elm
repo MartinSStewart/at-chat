@@ -1174,6 +1174,19 @@ updateLoaded msg model =
                         )
                         model
 
+                Emoji.SearchChanged text ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | searchText = text } }
+                            , Command.none
+                            )
+                        )
+                        model
+
         MessageMenu_PressedReply threadRoute ->
             case Route.toGuildOrDmId model.route of
                 Just ( guildOrDmId, _ ) ->
@@ -3399,6 +3412,10 @@ pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFro
 pressedOpenEmojiSelector textInputId emojiSelector model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
+            let
+                emojiSelectorModel =
+                    loggedIn.emojiSelector
+            in
             ( { loggedIn
                 | showEmojiSelector =
                     case loggedIn.showEmojiSelector of
@@ -3416,6 +3433,7 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
 
                         _ ->
                             EmojiSelectorHidden
+                , emojiSelector = { emojiSelectorModel | searchText = "" }
               }
             , Command.none
             )
@@ -3801,6 +3819,10 @@ showReactionEmojiSelector : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFr
 showReactionEmojiSelector guildOrDmId messageIndex model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
+            let
+                emojiSelectorModel =
+                    loggedIn.emojiSelector
+            in
             ( { loggedIn
                 | showEmojiSelector =
                     case loggedIn.showEmojiSelector of
@@ -3815,6 +3837,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
+                , emojiSelector = { emojiSelectorModel | searchText = "" }
                 , messageHover =
                     case loggedIn.messageHover of
                         NoMessageHover ->

@@ -33,6 +33,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
+import Ui.Input
 
 
 {-| OpaqueVariants
@@ -219,6 +220,7 @@ allSkinTones =
 
 type alias Model =
     { emojiHovered : Maybe Emoji
+    , searchText : String
     }
 
 
@@ -232,6 +234,7 @@ type alias EmojiConfig =
 selectorInit : Model
 selectorInit =
     { emojiHovered = Nothing
+    , searchText = ""
     }
 
 
@@ -258,6 +261,7 @@ type Msg
     | PressedSelectEmoji Emoji
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji Emoji
+    | SearchChanged String
 
 
 isPressed : Msg -> Bool
@@ -276,6 +280,9 @@ isPressed msg =
             True
 
         MouseEnteredEmoji _ ->
+            False
+
+        SearchChanged _ ->
             False
 
 
@@ -329,10 +336,46 @@ selectorHeight =
     400
 
 
+searchInputId : Dom.HtmlId
+searchInputId =
+    Dom.id "emoji_search_input"
+
+
 selector : Bool -> Int -> Model -> EmojiConfig -> Maybe CachedEmojiData -> Element Msg
 selector isMobile width model userData emojiData =
     case emojiData of
         Just emojiData2 ->
+            let
+                isSearching : Bool
+                isSearching =
+                    model.searchText /= ""
+
+                searchLabel : { element : Element Msg, id : Ui.Input.Label }
+                searchLabel =
+                    Ui.Input.label "emoji_search_label" [] Ui.none
+
+                searchResults : List Emoji
+                searchResults =
+                    if isSearching then
+                        let
+                            query : String
+                            query =
+                                String.toLower model.searchText
+                        in
+                        Array.toList emojiData2.shortNames
+                            |> List.filterMap
+                                (\{ shortName, emoji } ->
+                                    if String.contains query shortName then
+                                        Just emoji
+
+                                    else
+                                        Nothing
+                                )
+                            |> uniqueEmojis
+
+                    else
+                        []
+            in
             Ui.column
                 [ Ui.width (Ui.px (min 620 width))
                 , Ui.height (Ui.px selectorHeight)
@@ -346,63 +389,79 @@ selector isMobile width model userData emojiData =
                 , Ui.clip
                 ]
                 [ Ui.row
-                    [ MyUi.noShrinking ]
-                    (List.filterMap
-                        (\category ->
-                            case category of
-                                Components ->
-                                    Nothing
+                    [ MyUi.noShrinking, Ui.spacing 4, Ui.paddingXY 4 4 ]
+                    [ Ui.Input.text
+                        [ Ui.border 1
+                        , Ui.borderColor MyUi.inputBorder
+                        , Ui.background MyUi.inputBackground
+                        , Ui.rounded 4
+                        , Ui.paddingXY 8 4
+                        , Ui.Font.size 14
+                        , Ui.height (Ui.px 32)
+                        ]
+                        { onChange = SearchChanged
+                        , text = model.searchText
+                        , placeholder = Nothing
+                        , label = searchLabel.id
+                        }
+                    ]
+                , if isSearching then
+                    Ui.none
 
-                                _ ->
-                                    MyUi.elButton
-                                        (categoryButtonId category)
-                                        (PressedCategory category)
-                                        [ Ui.Font.center
-                                        , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-                                        , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
-                                        ]
-                                        (Ui.text (categoryToEmojiString userData.skinTone category))
-                                        |> Just
-                        )
-                        allCategories
-                    )
-                , case SeqDict.get userData.category emojiData2.categories of
-                    Just emojis ->
-                        --List.map
-                        --    (\emojiRow ->
-                        Ui.row
-                            [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3, Ui.width Ui.shrink, Ui.wrap ]
-                            (List.map
-                                (\emoji ->
-                                    let
-                                        text : String
-                                        text =
-                                            case userData.category of
-                                                PeopleAndBody ->
-                                                    emojiWithSkinTone userData.skinTone emoji emojiData2
+                  else
+                    Ui.row
+                        [ MyUi.noShrinking ]
+                        (List.filterMap
+                            (\category ->
+                                case category of
+                                    Components ->
+                                        Nothing
 
-                                                _ ->
-                                                    toString emoji
-                                    in
-                                    MyUi.elButton
-                                        (Dom.id ("guild_emojiSelector_" ++ text))
-                                        (PressedSelectEmoji emoji)
-                                        [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
-                                        , Ui.attrIf
-                                            (model.emojiHovered == Just emoji)
-                                            (Ui.background MyUi.hoverHighlight)
-                                        , Ui.width Ui.shrink
-                                        ]
-                                        (Ui.text text)
-                                )
-                                emojis
+                                    _ ->
+                                        MyUi.elButton
+                                            (categoryButtonId category)
+                                            (PressedCategory category)
+                                            [ Ui.Font.center
+                                            , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+                                            , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
+                                            ]
+                                            (Ui.text (categoryToEmojiString userData.skinTone category))
+                                            |> Just
                             )
+                            allCategories
+                        )
+                , let
+                    emojis : List Emoji
+                    emojis =
+                        if isSearching then
+                            searchResults
 
-                    --)
-                    --(List.Extra.greedyGroupsOf columns emojis)
-                    --|> Ui.column [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3 ]
-                    Nothing ->
-                        Ui.none
+                        else
+                            SeqDict.get userData.category emojiData2.categories
+                                |> Maybe.withDefault []
+                  in
+                  Ui.row
+                    [ Ui.scrollable, Ui.heightMin 0, Ui.background MyUi.background3, Ui.width Ui.shrink, Ui.wrap ]
+                    (List.map
+                        (\emoji ->
+                            let
+                                text : String
+                                text =
+                                    emojiWithSkinTone userData.skinTone emoji emojiData2
+                            in
+                            MyUi.elButton
+                                (Dom.id ("guild_emojiSelector_" ++ text))
+                                (PressedSelectEmoji emoji)
+                                [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
+                                , Ui.attrIf
+                                    (model.emojiHovered == Just emoji)
+                                    (Ui.background MyUi.hoverHighlight)
+                                , Ui.width Ui.shrink
+                                ]
+                                (Ui.text text)
+                        )
+                        emojis
+                    )
                 , Ui.row
                     [ Ui.height (Ui.px emojiHeight)
                     , Ui.contentCenterY
@@ -450,6 +509,22 @@ selector isMobile width model userData emojiData =
 
         Nothing ->
             Ui.text "Emojis didn't load for some reason"
+
+
+uniqueEmojis : List Emoji -> List Emoji
+uniqueEmojis emojis =
+    List.foldl
+        (\emoji ( seen, acc ) ->
+            if SeqDict.member emoji seen then
+                ( seen, acc )
+
+            else
+                ( SeqDict.insert emoji () seen, emoji :: acc )
+        )
+        ( SeqDict.empty, [] )
+        emojis
+        |> Tuple.second
+        |> List.reverse
 
 
 emojiWithSkinTone : Maybe SkinTone -> Emoji -> CachedEmojiData -> String
