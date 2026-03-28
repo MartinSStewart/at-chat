@@ -2348,6 +2348,12 @@ inviteUserAndDmChat config =
         ]
 
 
+startTest :
+    String
+    -> Time.Posix
+    -> T.Config toBackend FrontendMsg FrontendModel toFrontend backendMsg backendModel
+    -> List (T.Action toBackend FrontendMsg FrontendModel toFrontend backendMsg backendModel)
+    -> T.EndToEndTest toBackend FrontendMsg FrontendModel toFrontend backendMsg backendModel
 startTest name startTime2 config actions =
     T.start
         name
