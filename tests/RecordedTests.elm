@@ -1,5 +1,6 @@
 module RecordedTests exposing (main, setup)
 
+import AiChat
 import Array
 import Backend
 import Broadcast
@@ -22,6 +23,7 @@ import FileStatus
 import Frontend
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -37,16 +39,20 @@ import PersonName
 import RichText exposing (Domain(..), RichText(..))
 import Route
 import SafeJson exposing (SafeJson(..))
+import SecretId exposing (SecretId(..))
 import SeqDict
+import SessionIdHash exposing (SessionIdHash(..))
+import Slack
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
 import Unsafe
 import Url exposing (Url)
 import User
+import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import VisibleMessages
 
@@ -2471,21 +2477,21 @@ attackerTriesToLeakSensitiveData config =
 
 attackerToBackendChanges : List ToBackend
 attackerToBackendChanges =
-    [ CheckLoginRequest InitialLoadRequest
-    , LoginWithTokenRequest InitialLoadRequest Int UserAgent
-    , LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
-    , GetLoginTokenRequest EmailAddress
-    , AdminToBackend Pages.Admin.ToBackend
-    , LocalModelChangeRequest ChangeId LocalChange
-    , TwoFactorToBackend TwoFactorAuthentication.ToBackend
-    , JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    , FinishUserCreationRequest InitialLoadRequest PersonName UserAgent
-    , AiChatToBackend AiChat.ToBackend
-    , ReloadDataRequest InitialLoadRequest
-    , LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
-    , LinkDiscordRequest Discord.UserAuth
-    , ProfilePictureEditorToBackend ImageEditor.ToBackend
-    , AdminDataRequest (Maybe (Id PageId))
+    [ CheckLoginRequest InitialLoadRequested_None
+    , LoginWithTokenRequest InitialLoadRequested_None 0 UserAgent.init
+    , LoginWithTwoFactorRequest InitialLoadRequested_None 0 UserAgent.init
+    , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com")
+    , AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll)
+    , LocalModelChangeRequest (ChangeId 0) Local_Invalid
+    , TwoFactorToBackend TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest
+    , JoinGuildByInviteRequest (Id.fromInt 0) (SecretId "fake-invite-link")
+    , FinishUserCreationRequest InitialLoadRequested_None (Unsafe.personName "hacked") UserAgent.init
+    , AiChatToBackend (AiChat.AiMessageRequestSimple "model" (AiChat.RespondId 0) "hacked")
+    , ReloadDataRequest InitialLoadRequested_None
+    , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
+    , LinkDiscordRequest discordUserAuth
+    , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
+    , AdminDataRequest Nothing
     , -- Make sure this one is last
       LogOutRequest
     ]
