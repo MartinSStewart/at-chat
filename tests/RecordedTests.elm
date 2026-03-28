@@ -4,7 +4,6 @@ import Array
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
-import ChannelName exposing (ChannelName(..))
 import Codec
 import Coord
 import Dict exposing (Dict)
@@ -28,22 +27,17 @@ import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
-import LocalState exposing (PrivateVapidKey(..))
 import LoginForm
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
-import PersonName exposing (PersonName(..))
+import PersonName
 import RichText exposing (Domain(..), RichText(..))
 import Route
 import SafeJson exposing (SafeJson(..))
-import SecretId exposing (SecretId(..))
 import SeqDict
-import SeqSet
-import Slack
-import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
@@ -1060,7 +1054,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ attackerTriesToLeakSensitiveData config
+    [ attackerTriesToLeakSensitiveData normalConfig
     , inviteUserAndDmChat config
     , T.start
         "Admin can open admin page"
@@ -2387,21 +2381,8 @@ attackerTriesToLeakSensitiveData config =
                                 , attacker.click 100 (Dom.id "loginForm_submit")
                                 , T.andThen
                                     100
-                                    (\data ->
+                                    (\before ->
                                         let
-                                            -- Capture backend state before attacks
-                                            backendBefore =
-                                                data.backend
-
-                                            -- The attacker knows these IDs but should NOT have access
-                                            adminUserId : Id UserId
-                                            adminUserId =
-                                                Id.fromInt 0
-
-                                            normalUserId : Id UserId
-                                            normalUserId =
-                                                Id.fromInt 1
-
                                             attackerUserId : Id UserId
                                             attackerUserId =
                                                 Id.fromInt 2
@@ -2409,141 +2390,56 @@ attackerTriesToLeakSensitiveData config =
                                             guildId : Id GuildId
                                             guildId =
                                                 Id.fromInt 0
-
-                                            channelId : Id ChannelId
-                                            channelId =
-                                                Id.fromInt 0
-
-                                            messageTime =
-                                                Time.millisToPosix 99999
-
-                                            normalText =
-                                                Nonempty (NormalText 'h' "acked") []
-
-                                            discordUserId =
-                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
-
-                                            discordGuildId =
-                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
-
-                                            discordChannelId =
-                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
-
-                                            discordPrivateChannelId =
-                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
-
-                                            guildOrDmId =
-                                                GuildOrDmId_Guild guildId channelId
-
-                                            discordGuildOrDmId =
-                                                DiscordGuildOrDmId_Guild discordUserId discordGuildId discordChannelId
-
-                                            anyGuildOrDmId =
-                                                GuildOrDmId guildOrDmId
-
-                                            threadRouteWithMessage =
-                                                NoThreadWithMessage (Id.fromInt 0)
-
-                                            threadRouteWithMaybeMessage =
-                                                NoThreadWithMaybeMessage (Just (Id.fromInt 0))
-
-                                            emoji =
-                                                Emoji.UnicodeEmoji "👍"
-
-                                            discordDmData : DiscordGuildOrDmId_DmData
-                                            discordDmData =
-                                                { currentUserId = discordUserId
-                                                , channelId = discordPrivateChannelId
-                                                }
-
-                                            allLocalChanges : List LocalChange
-                                            allLocalChanges =
-                                                [ Local_AddReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji
-                                                , Local_Admin (Pages.Admin.SetSignupsEnabled True)
-                                                , Local_CurrentlyViewing StopViewingChannel
-                                                , Local_DeleteChannel guildId channelId
-                                                , Local_DeleteMessage anyGuildOrDmId threadRouteWithMessage
-                                                , Local_Discord_LoadChannelMessages discordGuildOrDmId (Id.fromInt 0) EmptyPlaceholder
-                                                , Local_Discord_LoadThreadMessages discordGuildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
-                                                , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
-                                                , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
-                                                , Local_Discord_SendMessage messageTime discordGuildOrDmId (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
-                                                , Local_EditChannel guildId channelId (Unsafe.channelName "hacked")
-                                                , Local_Invalid
-                                                , Local_LinkDiscordAcknowledgementIsChecked True
-                                                , Local_LoadChannelMessages guildOrDmId (Id.fromInt 0) EmptyPlaceholder
-                                                , Local_LoadThreadMessages guildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
-                                                , Local_MemberEditTyping messageTime anyGuildOrDmId threadRouteWithMessage
-                                                , Local_MemberTyping messageTime ( anyGuildOrDmId, NoThread )
-                                                , Local_NewChannel messageTime guildId (Unsafe.channelName "hacked")
-                                                , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
-                                                , Local_NewInviteLink messageTime guildId EmptyPlaceholder
-                                                , Local_RegisterPushSubscription { endpoint = domain, auth = "auth", p256dh = "p256dh" }
-                                                , Local_RemoveReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji
-                                                , Local_SendEditMessage messageTime guildOrDmId threadRouteWithMessage normalText SeqDict.empty
-                                                , Local_SendMessage messageTime guildOrDmId normalText threadRouteWithMaybeMessage SeqDict.empty
-                                                , Local_SetDiscordGuildNotificationLevel discordGuildId User.NotifyOnEveryMessage
-                                                , Local_SetDomainWhitelist True (Domain "example.com")
-                                                , Local_SetEmojiCategory Emoji.Activities
-                                                , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
-                                                , Local_SetGuildNotificationLevel guildId User.NotifyOnEveryMessage
-                                                , Local_SetLastViewed anyGuildOrDmId threadRouteWithMessage
-                                                , Local_SetName (Unsafe.personName "hacked")
-                                                , Local_SetNotificationMode NoNotifications
-                                                , Local_StartReloadingDiscordUser messageTime discordUserId
-                                                , Local_TextEditor TextEditor.Local_Reset
-                                                , Local_UnlinkDiscordUser discordUserId
-                                                ]
                                         in
                                         [ List.indexedMap
                                             (\index localChange ->
                                                 attacker.sendToBackend 100 (LocalModelChangeRequest (ChangeId index) localChange)
                                             )
-                                            allLocalChanges
+                                            attackerLocalChanges
                                             |> T.collapsableGroup "attacks"
                                         , T.checkState
                                             500
-                                            (\afterData ->
+                                            (\after ->
                                                 let
                                                     errors : List String
                                                     errors =
-                                                        (if backendBefore.guilds == afterData.backend.guilds then
+                                                        (if SeqDict.get guildId before.backend.guilds == SeqDict.get guildId after.backend.guilds then
                                                             []
 
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
-                                                            ++ (if backendBefore.dmChannels == afterData.backend.dmChannels then
+                                                            ++ (if before.backend.dmChannels == after.backend.dmChannels then
                                                                     []
 
                                                                 else
                                                                     [ "DM channels were modified by attacker" ]
                                                                )
-                                                            ++ (if NonemptyDict.remove attackerUserId backendBefore.users == NonemptyDict.remove attackerUserId afterData.backend.users then
+                                                            ++ (if NonemptyDict.remove attackerUserId before.backend.users == NonemptyDict.remove attackerUserId after.backend.users then
                                                                     []
 
                                                                 else
                                                                     [ "Users were modified by attacker" ]
                                                                )
-                                                            ++ (if backendBefore.privateVapidKey == afterData.backend.privateVapidKey then
+                                                            ++ (if before.backend.privateVapidKey == after.backend.privateVapidKey then
                                                                     []
 
                                                                 else
                                                                     [ "Private VAPID key was modified by attacker" ]
                                                                )
-                                                            ++ (if backendBefore.slackClientSecret == afterData.backend.slackClientSecret then
+                                                            ++ (if before.backend.slackClientSecret == after.backend.slackClientSecret then
                                                                     []
 
                                                                 else
                                                                     [ "Slack client secret was modified by attacker" ]
                                                                )
-                                                            ++ (if backendBefore.openRouterKey == afterData.backend.openRouterKey then
+                                                            ++ (if before.backend.openRouterKey == after.backend.openRouterKey then
                                                                     []
 
                                                                 else
                                                                     [ "OpenRouter key was modified by attacker" ]
                                                                )
-                                                            ++ (if backendBefore.emailNotificationsEnabled == afterData.backend.emailNotificationsEnabled then
+                                                            ++ (if before.backend.emailNotificationsEnabled == after.backend.emailNotificationsEnabled then
                                                                     []
 
                                                                 else
@@ -2569,3 +2465,111 @@ attackerTriesToLeakSensitiveData config =
                 ]
             )
         ]
+
+
+attackerLocalChanges : List LocalChange
+attackerLocalChanges =
+    let
+        normalUserId : Id UserId
+        normalUserId =
+            Id.fromInt 1
+
+        guildId : Id GuildId
+        guildId =
+            Id.fromInt 0
+
+        channelId : Id ChannelId
+        channelId =
+            Id.fromInt 0
+
+        messageTime =
+            Time.millisToPosix 99999
+
+        normalText =
+            Nonempty (NormalText 'h' "acked") []
+
+        discordUserId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        discordGuildId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        discordChannelId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        discordPrivateChannelId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        guildOrDmId_dm : AnyGuildOrDmId
+        guildOrDmId_dm =
+            GuildOrDmId_Dm normalUserId |> GuildOrDmId
+
+        guildOrDmId_guild : AnyGuildOrDmId
+        guildOrDmId_guild =
+            GuildOrDmId_Guild guildId channelId |> GuildOrDmId
+
+        discordGuildOrDmId : DiscordGuildOrDmId
+        discordGuildOrDmId =
+            DiscordGuildOrDmId_Guild discordUserId discordGuildId discordChannelId
+
+        threadRouteWithMessage =
+            NoThreadWithMessage (Id.fromInt 0)
+
+        threadRouteWithMaybeMessage =
+            NoThreadWithMaybeMessage (Just (Id.fromInt 0))
+
+        emoji =
+            Emoji.UnicodeEmoji "👍"
+
+        discordDmData : DiscordGuildOrDmId_DmData
+        discordDmData =
+            { currentUserId = discordUserId
+            , channelId = discordPrivateChannelId
+            }
+    in
+    [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
+    , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
+    , Local_Admin (Pages.Admin.SetSignupsEnabled True)
+    , Local_CurrentlyViewing StopViewingChannel
+    , Local_DeleteChannel guildId channelId
+    , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage
+    , Local_DeleteMessage guildOrDmId_guild threadRouteWithMessage
+    , Local_Discord_LoadChannelMessages discordGuildOrDmId (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages discordGuildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
+    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+    , Local_EditChannel guildId channelId (Unsafe.channelName "hacked")
+    , Local_Invalid
+    , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_LoadChannelMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_MemberEditTyping messageTime guildOrDmId_dm threadRouteWithMessage
+    , Local_MemberTyping messageTime ( guildOrDmId_dm, NoThread )
+    , Local_LoadChannelMessages (GuildOrDmId_Guild guildId channelId) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Guild guildId channelId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_MemberEditTyping messageTime guildOrDmId_guild threadRouteWithMessage
+    , Local_MemberTyping messageTime ( guildOrDmId_guild, NoThread )
+    , Local_NewChannel messageTime guildId (Unsafe.channelName "hacked")
+    , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
+    , Local_NewInviteLink messageTime guildId EmptyPlaceholder
+    , Local_RegisterPushSubscription { endpoint = domain, auth = "auth", p256dh = "p256dh" }
+    , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
+    , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Guild guildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
+    , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Guild guildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SetDiscordGuildNotificationLevel discordGuildId User.NotifyOnEveryMessage
+    , Local_SetDomainWhitelist True (Domain "example.com")
+    , Local_SetEmojiCategory Emoji.Activities
+    , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
+    , Local_SetGuildNotificationLevel guildId User.NotifyOnEveryMessage
+    , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
+    , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
+    , Local_SetName (Unsafe.personName "hacked")
+    , Local_SetNotificationMode NoNotifications
+    , Local_StartReloadingDiscordUser messageTime discordUserId
+    , Local_TextEditor TextEditor.Local_Reset
+    , Local_UnlinkDiscordUser discordUserId
+    ]
