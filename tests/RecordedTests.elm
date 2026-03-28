@@ -254,6 +254,11 @@ sessionId2 =
     Lamdera.sessionIdFromString "sessionId2"
 
 
+sessionIdAttacker : SessionId
+sessionIdAttacker =
+    Lamdera.sessionIdFromString "sessionId3"
+
+
 handleLogin :
     String
     -> EmailAddress
@@ -306,6 +311,11 @@ userEmail =
 joeEmail : EmailAddress
 joeEmail =
     Unsafe.emailAddress "joe@hotmail.com"
+
+
+attackerEmail : EmailAddress
+attackerEmail =
+    Unsafe.emailAddress "hacker-joe@hotmail.com"
 
 
 enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -1062,7 +1072,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
     in
     [ attackerTriesToLeakSensitiveData normalConfig
     , inviteUserAndDmChat config
-    , T.start
+    , startTest
         "Admin can open admin page"
         startTime
         config
@@ -1079,7 +1089,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Create message with embeds and then edit that message"
         startTime
         normalConfig
@@ -1149,7 +1159,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             )
         ]
     , T.testGroup "Discord"
-        [ T.start
+        [ startTest
             "Link Discord account with login"
             startTime
             normalConfig
@@ -1162,7 +1172,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 discordOp0ReadySupplemental
                 (\_ -> [])
             ]
-        , T.start
+        , startTest
             "Link Discord account with login to non-existent at-chat account"
             startTime
             normalConfig
@@ -1185,7 +1195,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Link Discord account already logged in"
             startTime
             normalConfig
@@ -1239,7 +1249,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Ping discord user"
             startTime
             normalConfig
@@ -1258,7 +1268,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Unlinked Discord user starts thread from message"
             startTime
             normalConfig
@@ -1331,7 +1341,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Unlinked Discord user starts stand-alone thread"
             startTime
             normalConfig
@@ -1406,7 +1416,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 )
             ]
         ]
-    , T.start
+    , startTest
         "Connect multiple devices"
         startTime
         normalConfig
@@ -1458,7 +1468,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "spoilers"
         startTime
         normalConfig
@@ -1490,7 +1500,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Mobile edit message"
         startTime
         normalConfig
@@ -1519,7 +1529,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Desktop edit message"
         startTime
         normalConfig
@@ -1552,7 +1562,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Change notification level"
         startTime
         normalConfig
@@ -1570,7 +1580,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             )
         ]
 
-    --, T.start
+    --, startTest
     --    "Remove direct mention when viewed on another session"
     --    startTime
     --    normalConfig
@@ -1597,7 +1607,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
     --            ]
     --        )
     --    ]
-    , T.start
+    , startTest
         "Check notification icons appear"
         startTime
         normalConfig
@@ -1629,7 +1639,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Guild icon notification is shown"
         startTime
         normalConfig
@@ -1651,7 +1661,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "No messages missing even in long chat history"
         startTime
         normalConfig
@@ -1713,7 +1723,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Notifications"
         startTime
         normalConfig
@@ -1796,7 +1806,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Enable 2FA"
         startTime
         normalConfig
@@ -1899,7 +1909,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start "Logins are rate limited"
+    , startTest "Logins are rate limited"
         startTime
         normalConfig
         [ T.connectFrontend
@@ -1981,7 +1991,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         Err "Expected to only see LoginsRateLimited as an error email"
             )
         ]
-    , T.start "Test login"
+    , startTest "Test login"
         startTime
         normalConfig
         [ T.connectFrontend
@@ -2018,7 +2028,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             )
         , checkNoErrorLogs
         ]
-    , T.start
+    , startTest
         "Add and remove reaction emojis"
         (Time.millisToPosix 1756739527046)
         normalConfig
@@ -2043,16 +2053,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     (\tabB ->
                         [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
                         , tabB.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
-                        , tabB.portEvent
-                            1
-                            "user_agent_from_js"
-                            (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
-                        , tabA.click 3098 (Dom.id "homePage_loginButton")
-                        , tabA.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
-                        , tabA.keyUp 263 (Dom.id "loginForm_emailInput") "Enter" []
-                        , tabA.input 164 (Dom.id "loginForm_loginCodeInput") "22923193"
-                        , tabA.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                        , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tabB
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
                         , writeMessage tabA "Test"
                         , tabB.click 111 (Dom.id "guild_openGuild_0")
@@ -2118,7 +2120,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Opening non-existent guild shouldn't show \"Unable to reach the server.\" warning"
         (Time.millisToPosix 1757158297558)
         normalConfig
@@ -2130,15 +2132,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             (\tab1 ->
                 [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
-                , tab1.portEvent
-                    1
-                    "user_agent_from_js"
-                    (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                 , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
-                , tab1.input 2099 (Dom.id "loginForm_emailInput") "a@a.se"
-                , tab1.keyUp 286 (Dom.id "loginForm_emailInput") "Enter" []
-                , tab1.input 91 (Dom.id "loginForm_loginCodeInput") "22923193"
-                , tab1.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tab1
                 , tab1.click 17660 (Dom.id "guild_openGuild_0")
                 , tab1.focus 17 (Dom.id "channel_textinput")
                 , tab1.blur 3994 (Dom.id "channel_textinput")
@@ -2146,7 +2141,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Export and import backend round-trip"
         startTime
         (T.Config
@@ -2321,7 +2316,7 @@ inviteUser admin continueWith =
 
 inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 inviteUserAndDmChat config =
-    T.start
+    startTest
         "Invite user and then have DM chat"
         startTime
         config
@@ -2353,6 +2348,47 @@ inviteUserAndDmChat config =
         ]
 
 
+startTest name startTime2 config actions =
+    T.start
+        name
+        startTime2
+        config
+        [ T.connectFrontend
+            100
+            sessionIdAttacker
+            "/"
+            desktopWindow
+            (\attacker ->
+                [ T.collapsableGroup
+                    "Attacker setup"
+                    [ handleLogin firefoxDesktop attackerEmail attacker
+                    , attacker.update 100 Types.EnableToFrontendLogging
+                    ]
+                , T.group actions
+                , attacker.checkModel
+                    100
+                    (\model ->
+                        case model of
+                            Types.Loaded loaded ->
+                                case loaded.toFrontendLogs of
+                                    Just toFrontendLogs ->
+                                        if Array.isEmpty toFrontendLogs then
+                                            Ok ()
+
+                                        else
+                                            Err "Attacker got ToFrontend when it shouldn't have"
+
+                                    Nothing ->
+                                        Err "Should have been logging toFrontend"
+
+                            Types.Loading _ ->
+                                Err "Attacker didn't load for some reason"
+                    )
+                ]
+            )
+        ]
+
+
 attackerTriesToLeakSensitiveData :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -2378,11 +2414,11 @@ attackerTriesToLeakSensitiveData config =
                         , writeMessage user "sensitive DM message"
                         , T.connectFrontend
                             100
-                            sessionId2
+                            sessionIdAttacker
                             "/"
                             desktopWindow
                             (\attacker ->
-                                [ handleLogin chromeDesktop joeEmail attacker
+                                [ handleLogin chromeDesktop attackerEmail attacker
                                 , attacker.update 0 Types.EnableToFrontendLogging
                                 , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                                 , attacker.click 100 (Dom.id "loginForm_submit")
