@@ -4,10 +4,12 @@ import Array
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
+import ChannelName exposing (ChannelName(..))
 import Codec
 import Coord
 import Dict exposing (Dict)
 import Discord
+import DmChannel exposing (DmChannelId(..))
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility(..))
@@ -15,32 +17,44 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
+import Emoji
 import Env
 import Expect
 import FileStatus
 import Frontend
+import GuildName exposing (GuildName(..))
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id(..), InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
+import List.Nonempty exposing (Nonempty(..))
+import Local exposing (ChangeId(..))
+import LocalState exposing (PrivateVapidKey(..))
 import LoginForm
 import NonemptyDict
+import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
-import PersonName
+import PersonName exposing (PersonName(..))
+import RichText exposing (RichText(..))
 import Route
 import SafeJson exposing (SafeJson(..))
+import SecretId exposing (SecretId(..))
 import SeqDict
+import SeqSet
+import Slack
+import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
 import Unsafe
 import Url exposing (Url)
 import User
+import UserSession exposing (ToBeFilledInByBackend(..))
 import VisibleMessages
 
 
@@ -2354,21 +2368,382 @@ attackerTriesToLeakSensitiveData config =
             "/"
             desktopWindow
             (\admin ->
-                [ T.connectFrontend
-                    100
-                    sessionId0
-                    "/"
-                    desktopWindow
-                    (\attacker ->
-                        [ handleLogin firefoxDesktop adminEmail admin
-                        , inviteUser
-                            admin
-                            (\user ->
-                                [ writeMessage user "sensitive guild message"
-                                , admin.click 100 (Dom.id "guild_openChannel_0")
-                                , writeMessage admin "sensitive guild message 2"
-                                , user.click 1000 (Dom.id "guild_openDm_0")
-                                , writeMessage user "sensitive DM message"
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ writeMessage user "sensitive guild message"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , writeMessage admin "sensitive guild message 2"
+                        , user.click 1000 (Dom.id "guild_openDm_0")
+                        , writeMessage user "sensitive DM message"
+                        , T.connectFrontend
+                            100
+                            sessionId2
+                            "/"
+                            desktopWindow
+                            (\attacker ->
+                                [ handleLogin chromeDesktop joeEmail attacker
+                                , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
+                                , attacker.click 100 (Dom.id "loginForm_submit")
+                                , T.andThen
+                                    100
+                                    (\data ->
+                                        let
+                                            -- Capture backend state before attacks
+                                            backendBefore =
+                                                data.backend
+
+                                            -- The attacker knows these IDs but should NOT have access
+                                            adminUserId =
+                                                Id.fromInt 0
+
+                                            normalUserId =
+                                                Id.fromInt 1
+
+                                            attackerUserId =
+                                                Id.fromInt 2
+
+                                            guildId =
+                                                Id.fromInt 0
+
+                                            channelId =
+                                                Id.fromInt 0
+
+                                            dmChannelIdBetweenAdminAndUser =
+                                                DmChannel.channelIdFromUserIds adminUserId normalUserId
+
+                                            messageTime =
+                                                Time.millisToPosix 99999
+
+                                            normalText =
+                                                Nonempty (NormalText 'h' "acked") []
+                                        in
+                                        [ -- Attack 1: Try to send a message to a guild the attacker is not a member of
+                                          attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 0)
+                                                (Local_SendMessage
+                                                    messageTime
+                                                    (GuildOrDmId_Guild guildId channelId)
+                                                    normalText
+                                                    (NoThreadWithMaybeMessage Nothing)
+                                                    SeqDict.empty
+                                                )
+                                            )
+
+                                        -- Attack 2: Try to send a message to a DM channel between two other users
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 1)
+                                                (Local_SendMessage
+                                                    messageTime
+                                                    (GuildOrDmId_Dm adminUserId)
+                                                    normalText
+                                                    (NoThreadWithMaybeMessage Nothing)
+                                                    SeqDict.empty
+                                                )
+                                            )
+
+                                        -- Attack 3: Try to delete a message in the guild
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 2)
+                                                (Local_DeleteMessage
+                                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                                    (NoThreadWithMessage (Id.fromInt 0))
+                                                )
+                                            )
+
+                                        -- Attack 4: Try to delete a message in someone else's DM
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 3)
+                                                (Local_DeleteMessage
+                                                    (GuildOrDmId (GuildOrDmId_Dm adminUserId))
+                                                    (NoThreadWithMessage (Id.fromInt 0))
+                                                )
+                                            )
+
+                                        -- Attack 5: Try to create a new channel in a guild the attacker is not a member of
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 4)
+                                                (Local_NewChannel
+                                                    messageTime
+                                                    guildId
+                                                    (ChannelName (NonemptyString 'h' "acked-channel"))
+                                                )
+                                            )
+
+                                        -- Attack 6: Try to delete a channel in a guild the attacker is not a member of
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 5)
+                                                (Local_DeleteChannel guildId channelId)
+                                            )
+
+                                        -- Attack 7: Try to create an invite link for a guild the attacker doesn't own
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 6)
+                                                (Local_NewInviteLink messageTime guildId EmptyPlaceholder)
+                                            )
+
+                                        -- Attack 8: Try to use admin-only operations (non-admin user attempting admin changes)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 7)
+                                                (Local_Admin
+                                                    (Pages.Admin.ChangeUsers
+                                                        { time = messageTime
+                                                        , changedUsers =
+                                                            SeqDict.singleton adminUserId
+                                                                { name = "Hacked Admin"
+                                                                , email = "hacked@evil.com"
+                                                                , isAdmin = False
+                                                                , createdAt = messageTime
+                                                                }
+                                                        , newUsers = Array.empty
+                                                        , deletedUsers = SeqSet.empty
+                                                        }
+                                                    )
+                                                )
+                                            )
+
+                                        -- Attack 9: Try to delete users via admin (attacker is not admin)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 8)
+                                                (Local_Admin
+                                                    (Pages.Admin.ChangeUsers
+                                                        { time = messageTime
+                                                        , changedUsers = SeqDict.empty
+                                                        , newUsers = Array.empty
+                                                        , deletedUsers = SeqSet.singleton normalUserId
+                                                        }
+                                                    )
+                                                )
+                                            )
+
+                                        -- Attack 10: Try to set private VAPID key (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 9)
+                                                (Local_Admin (Pages.Admin.SetPrivateVapidKey (PrivateVapidKey "stolen-key")))
+                                            )
+
+                                        -- Attack 11: Try to set Slack client secret (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 10)
+                                                (Local_Admin (Pages.Admin.SetSlackClientSecret (Just (Slack.ClientSecret "evil-secret"))))
+                                            )
+
+                                        -- Attack 12: Try to set OpenRouter key (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 11)
+                                                (Local_Admin (Pages.Admin.SetOpenRouterKey (Just "evil-openrouter-key")))
+                                            )
+
+                                        -- Attack 13: Try to delete a guild the attacker doesn't own (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 12)
+                                                (Local_Admin (Pages.Admin.DeleteGuild guildId))
+                                            )
+
+                                        -- Attack 14: Try to edit a channel in a guild the attacker is not a member of
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 13)
+                                                (Local_EditChannel guildId channelId (ChannelName (NonemptyString 'h' "acked")))
+                                            )
+
+                                        -- Attack 15: Try to edit a message in someone else's DM
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 14)
+                                                (Local_SendEditMessage
+                                                    messageTime
+                                                    (GuildOrDmId_Dm adminUserId)
+                                                    (NoThreadWithMessage (Id.fromInt 0))
+                                                    normalText
+                                                    SeqDict.empty
+                                                )
+                                            )
+
+                                        -- Attack 16: Try to edit a message in a guild the attacker is not in
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 15)
+                                                (Local_SendEditMessage
+                                                    messageTime
+                                                    (GuildOrDmId_Guild guildId channelId)
+                                                    (NoThreadWithMessage (Id.fromInt 0))
+                                                    normalText
+                                                    SeqDict.empty
+                                                )
+                                            )
+
+                                        -- Attack 17: Try to add a reaction to a message in a guild the attacker is not in
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 16)
+                                                (Local_AddReactionEmoji
+                                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                                    (NoThreadWithMessage (Id.fromInt 0))
+                                                    (Emoji.UnicodeEmoji "👍")
+                                                )
+                                            )
+
+                                        -- Attack 18: Try to change another user's name
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 17)
+                                                (Local_SetName (PersonName (NonemptyString 'H' "acked Name")))
+                                            )
+
+                                        -- Attack 19: Try to join the guild via a guessed invite link
+                                        , attacker.sendToBackend 100
+                                            (JoinGuildByInviteRequest guildId (SecretId "guessed-invite-link"))
+
+                                        -- Attack 20: Try to request admin data
+                                        , attacker.sendToBackend 100
+                                            (AdminDataRequest Nothing)
+
+                                        -- Attack 21: Try to export backend data (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll))
+
+                                        -- Attack 22: Try to set email notifications enabled (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 18)
+                                                (Local_Admin (Pages.Admin.SetEmailNotificationsEnabled False))
+                                            )
+
+                                        -- Attack 23: Try to set signups enabled (admin-only)
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 19)
+                                                (Local_Admin (Pages.Admin.SetSignupsEnabled False))
+                                            )
+
+                                        -- Attack 24: Try to load channel messages from a guild the attacker is not in
+                                        , attacker.sendToBackend 100
+                                            (LocalModelChangeRequest (ChangeId 20)
+                                                (Local_LoadChannelMessages
+                                                    (GuildOrDmId_Guild guildId channelId)
+                                                    (Id.fromInt 0)
+                                                    EmptyPlaceholder
+                                                )
+                                            )
+
+                                        -- Now verify that none of the attacks succeeded
+                                        , T.checkState
+                                            500
+                                            (\afterData ->
+                                                let
+                                                    guildUnchanged =
+                                                        backendBefore.guilds == afterData.backend.guilds
+
+                                                    dmChannelsUnchanged =
+                                                        backendBefore.dmChannels == afterData.backend.dmChannels
+
+                                                    usersUnchanged =
+                                                        backendBefore.users == afterData.backend.users
+
+                                                    vapidKeyUnchanged =
+                                                        backendBefore.privateVapidKey == afterData.backend.privateVapidKey
+
+                                                    slackSecretUnchanged =
+                                                        backendBefore.slackClientSecret == afterData.backend.slackClientSecret
+
+                                                    openRouterKeyUnchanged =
+                                                        backendBefore.openRouterKey == afterData.backend.openRouterKey
+
+                                                    emailNotificationsUnchanged =
+                                                        backendBefore.emailNotificationsEnabled == afterData.backend.emailNotificationsEnabled
+
+                                                    errors =
+                                                        (if guildUnchanged then
+                                                            []
+
+                                                         else
+                                                            [ "Guild data was modified by attacker" ]
+                                                        )
+                                                            ++ (if dmChannelsUnchanged then
+                                                                    []
+
+                                                                else
+                                                                    [ "DM channels were modified by attacker" ]
+                                                               )
+                                                            ++ (if usersUnchanged then
+                                                                    []
+
+                                                                else
+                                                                    [ "Users were modified by attacker" ]
+                                                               )
+                                                            ++ (if vapidKeyUnchanged then
+                                                                    []
+
+                                                                else
+                                                                    [ "Private VAPID key was modified by attacker" ]
+                                                               )
+                                                            ++ (if slackSecretUnchanged then
+                                                                    []
+
+                                                                else
+                                                                    [ "Slack client secret was modified by attacker" ]
+                                                               )
+                                                            ++ (if openRouterKeyUnchanged then
+                                                                    []
+
+                                                                else
+                                                                    [ "OpenRouter key was modified by attacker" ]
+                                                               )
+                                                            ++ (if emailNotificationsUnchanged then
+                                                                    []
+
+                                                                else
+                                                                    [ "Email notifications setting was modified by attacker" ]
+                                                               )
+                                                in
+                                                case errors of
+                                                    [] ->
+                                                        Ok ()
+
+                                                    _ ->
+                                                        Err (String.join "; " errors)
+                                            )
+
+                                        -- Verify the attacker's name change only affected the attacker (attack 18 is allowed for own name)
+                                        -- but verify no OTHER user's data changed
+                                        , T.checkState
+                                            100
+                                            (\afterData ->
+                                                let
+                                                    adminUser =
+                                                        NonemptyDict.get adminUserId afterData.backend.users
+
+                                                    normalUser =
+                                                        NonemptyDict.get normalUserId afterData.backend.users
+                                                in
+                                                case ( adminUser, normalUser ) of
+                                                    ( Just adminU, Just normalU ) ->
+                                                        if PersonName.toString normalU.name == "Sven" then
+                                                            Ok ()
+
+                                                        else
+                                                            Err ("Other users' names were changed by attacker. Normal user name is now: " ++ PersonName.toString normalU.name)
+
+                                                    _ ->
+                                                        Err "Users are missing from backend after attack"
+                                            )
+
+                                        -- Verify no data was leaked to attacker's frontend
+                                        , attacker.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.text "sensitive guild message"
+                                                ]
+                                            )
+                                        , attacker.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.text "sensitive guild message 2"
+                                                ]
+                                            )
+                                        , attacker.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.text "sensitive DM message"
+                                                ]
+                                            )
+                                        ]
+                                    )
                                 ]
                             )
                         ]
