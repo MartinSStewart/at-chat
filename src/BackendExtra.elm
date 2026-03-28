@@ -922,18 +922,10 @@ sendDm :
     -> SeqDict (Id FileId) FileData
     -> UserSession
     -> BackendUser
+    -> DmChannelId
+    -> DmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user =
-    let
-        dmChannelId : DmChannelId
-        dmChannelId =
-            DmChannel.channelIdFromUserIds session.userId otherUserId
-
-        dmChannel : DmChannel
-        dmChannel =
-            SeqDict.get dmChannelId model.dmChannels
-                |> Maybe.withDefault DmChannel.backendInit
-    in
+sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user dmChannelId dmChannel =
     case threadRouteWithReplyTo of
         ViewThreadWithMaybeMessage threadId repliedTo ->
             let
