@@ -360,17 +360,13 @@ searchInputId =
 searchInput : Bool -> Model -> Element Msg
 searchInput searchHasFocus model =
     let
-        searchLabel : { element : Element Msg, id : Ui.Input.Label }
-        searchLabel =
-            Ui.Input.label "emoji_search_label" [] Ui.none
-
         isSearching =
             model.searchText /= ""
     in
     Ui.row
         [ Ui.attrIf
             (not isSearching && not searchHasFocus)
-            (Ui.inFront (Ui.el [ MyUi.noPointerEvents, Ui.move { x = 0, y = 2, z = 0 }, Ui.centerX ] (Ui.text "🔎")))
+            (Ui.inFront (Ui.el [ MyUi.noPointerEvents, Ui.centerX ] (Ui.text "🔎")))
         , Ui.height Ui.fill
         ]
         [ Ui.Input.text
@@ -381,22 +377,18 @@ searchInput searchHasFocus model =
                 Ui.background MyUi.background2
             , Ui.Font.size 16
             , Ui.border 0
-            , Ui.id (Dom.idToString searchInputId)
             , Ui.Events.onFocus SearchGotFocus
             , Ui.Events.onLoseFocus SearchLoseFocus
             , Ui.attrIf (not isSearching && not searchHasFocus) Ui.pointer
             , Ui.height Ui.fill
             , Ui.paddingXY 8 0
-            , if isSearching then
-                Ui.width Ui.fill
-
-              else
-                Ui.width (Ui.px 40)
+            , Ui.width Ui.fill
+            , Ui.id (Dom.idToString searchInputId)
             ]
             { onChange = TypedSearchText
             , text = model.searchText
             , placeholder = Nothing
-            , label = searchLabel.id
+            , label = Ui.Input.labelHidden (Dom.idToString searchInputId)
             }
         , if isSearching then
             MyUi.elButton
