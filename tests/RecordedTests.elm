@@ -2397,6 +2397,8 @@ attackerTriesToLeakSensitiveData config =
                                             )
                                             attackerLocalChanges
                                             |> T.collapsableGroup "attacks"
+                                        , List.map (attacker.sendToBackend 100) attackerToBackendChanges
+                                            |> T.collapsableGroup "attacks"
                                         , T.checkState
                                             500
                                             (\after ->
@@ -2465,6 +2467,28 @@ attackerTriesToLeakSensitiveData config =
                 ]
             )
         ]
+
+
+attackerToBackendChanges : List ToBackend
+attackerToBackendChanges =
+    [ CheckLoginRequest InitialLoadRequest
+    , LoginWithTokenRequest InitialLoadRequest Int UserAgent
+    , LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
+    , GetLoginTokenRequest EmailAddress
+    , AdminToBackend Pages.Admin.ToBackend
+    , LocalModelChangeRequest ChangeId LocalChange
+    , TwoFactorToBackend TwoFactorAuthentication.ToBackend
+    , JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
+    , FinishUserCreationRequest InitialLoadRequest PersonName UserAgent
+    , AiChatToBackend AiChat.ToBackend
+    , ReloadDataRequest InitialLoadRequest
+    , LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
+    , LinkDiscordRequest Discord.UserAuth
+    , ProfilePictureEditorToBackend ImageEditor.ToBackend
+    , AdminDataRequest (Maybe (Id PageId))
+    , -- Make sure this one is last
+      LogOutRequest
+    ]
 
 
 attackerLocalChanges : List LocalChange
