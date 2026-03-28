@@ -23,7 +23,6 @@ import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..),
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
-import MessageView
 import MyUi
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
@@ -488,7 +487,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                                     (\index ( emoji, _ ) ->
                                         MyUi.elButton
                                             (Dom.id ("messageMenu_mobileReactionEmoji_" ++ String.fromInt index))
-                                            (PressedMobileMenuReactionEmoji emoji)
+                                            (MessageMenu_PressedReactionEmoji emoji)
                                             [ Ui.contentCenterX
                                             , Ui.contentCenterY
                                             , buttonHeight isMobile |> Ui.px |> Ui.height

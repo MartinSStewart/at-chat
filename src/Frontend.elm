@@ -1126,6 +1126,23 @@ updateLoaded msg model =
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
             showReactionEmojiSelector guildOrDmId threadRoute model
 
+        MessageMenu_PressedReactionEmoji emoji ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.messageHover of
+                        NoMessageHover ->
+                            ( loggedIn, Command.none )
+
+                        MessageMenu data ->
+                            MessageMenu.close model loggedIn
+                                |> toggleReactionEmoji emoji data.guildOrDmId data.threadRoute model
+
+                        MessageHover guildOrDmId threadRoute ->
+                            MessageMenu.close model loggedIn
+                                |> toggleReactionEmoji emoji guildOrDmId threadRoute model
+                )
+                model
+
         MessageMenu_PressedEditMessage guildOrDmId threadRoute ->
             pressedEditMessage guildOrDmId threadRoute model
 
@@ -2330,42 +2347,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-
-                                messageHasReaction2 : Bool
-                                messageHasReaction2 =
-                                    case loggedIn.messageHover of
-                                        MessageHover guildOrDmId2 threadRoute2 ->
-                                            messageHasReaction emoji guildOrDmId2 threadRoute2 local
-
-                                        NoMessageHover ->
-                                            False
-
-                                        MessageMenu data ->
-                                            messageHasReaction emoji data.guildOrDmId data.threadRoute local
-                            in
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                ((if messageHasReaction2 then
-                                    Local_RemoveReactionEmoji
-
-                                  else
-                                    Local_AddReactionEmoji
-                                 )
-                                    guildOrDmId
-                                    threadRoute
-                                    emoji
-                                    |> Just
-                                )
-                                loggedIn
-                                Command.none
-                        )
-                        model
+                    FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId threadRoute model) model
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -3387,10 +3369,8 @@ updateLoaded msg model =
                     in
                     ( model, Command.none )
 
-        PressedMobileMenuReactionEmoji emoji ->
-            Debug.todo ""
 
-
+messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
 messageHasReaction emoji guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId guildOrDmId3 ->
@@ -3437,6 +3417,36 @@ messageHasReaction emoji guildOrDmId threadRoute local =
 
                 Nothing ->
                     False
+
+
+toggleReactionEmoji :
+    Emoji
+    -> AnyGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+toggleReactionEmoji emoji guildOrDmId threadRoute model loggedIn =
+    let
+        local : LocalState
+        local =
+            Local.model loggedIn.localState
+    in
+    FrontendExtra.handleLocalChange
+        model.time
+        ((if messageHasReaction emoji guildOrDmId threadRoute local then
+            Local_RemoveReactionEmoji
+
+          else
+            Local_AddReactionEmoji
+         )
+            guildOrDmId
+            threadRoute
+            emoji
+            |> Just
+        )
+        loggedIn
+        Command.none
 
 
 pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

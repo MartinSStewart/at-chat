@@ -19,7 +19,6 @@ module Emoji exposing
     , selectorInit
     , setSearch
     , smiley
-    , sweatSmiley
     , thumbsUp
     , toString
     , view
@@ -369,11 +368,6 @@ thumbsUp =
 smiley : Emoji
 smiley =
     UnicodeEmoji "😃"
-
-
-sweatSmiley : Emoji
-sweatSmiley =
-    UnicodeEmoji "😅"
 
 
 searchInputId : Dom.HtmlId

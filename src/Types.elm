@@ -384,6 +384,7 @@ type FrontendMsg
     | TextInputGotFocus HtmlId
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
+    | MessageMenu_PressedReactionEmoji Emoji
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
     | EmojiSelectorMsg Emoji.Msg
     | MessageMenu_PressedReply ThreadRouteWithMessage
@@ -455,7 +456,6 @@ type FrontendMsg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
     | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
-    | PressedMobileMenuReactionEmoji Emoji
 
 
 type ScrollPosition

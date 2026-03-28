@@ -1377,7 +1377,7 @@ isPressMsg msg =
         GotEditMessageTextInputPositionForEmojiSelector _ ->
             False
 
-        PressedMobileMenuReactionEmoji emoji ->
+        MessageMenu_PressedReactionEmoji _ ->
             True
 
 

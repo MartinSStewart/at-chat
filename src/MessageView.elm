@@ -1,6 +1,5 @@
 module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView)
 
-import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -12,7 +11,6 @@ import Icons
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import SeqDict
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Anim
