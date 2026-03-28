@@ -51,11 +51,6 @@ main =
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
                 ]
-            , Ui.column
-                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
-                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
-                , MessageMenu.view
-                ]
             ]
         )
 
