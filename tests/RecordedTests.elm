@@ -2,7 +2,6 @@ module RecordedTests exposing (main, setup)
 
 import AiChat
 import Array exposing (Array)
-import Array.Extra
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
@@ -2491,7 +2490,7 @@ attackerTriesToLeakSensitiveData config =
                                                             Nothing ->
                                                                 Err "Should have been logging toFrontend"
 
-                                                    Types.Loading loadingFrontend ->
+                                                    Types.Loading _ ->
                                                         Err "Attacker didn't load for some reason"
                                             )
                                         ]
@@ -2508,10 +2507,10 @@ attackerTriesToLeakSensitiveData config =
 attackerShouldNotGetThisToFrontend : ToFrontend -> Bool
 attackerShouldNotGetThisToFrontend toFrontend =
     case toFrontend of
-        CheckLoginResponse result ->
+        CheckLoginResponse _ ->
             False
 
-        LoginWithTokenResponse loginResult ->
+        LoginWithTokenResponse _ ->
             False
 
         GetLoginTokenRateLimited ->
@@ -2526,36 +2525,36 @@ attackerShouldNotGetThisToFrontend toFrontend =
         AdminToFrontend _ ->
             True
 
-        LocalChangeResponse changeId localChange ->
+        LocalChangeResponse _ _ ->
             False
 
         ChangeBroadcast localMsg ->
             case localMsg of
-                Types.LocalChange userId localChange ->
+                Types.LocalChange _ _ ->
                     True
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage id posix guildOrDmId message threadRouteWithMaybeMessage seqDict ->
+                        Types.Server_SendMessage _ _ _ _ _ _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
-                        Types.Server_Discord_SendMessage posix discordGuildOrDmId nonempty threadRouteWithMaybeMessage seqDict ->
+                        Types.Server_Discord_SendMessage _ _ _ _ _ ->
                             True
 
-                        Types.Server_NewChannel posix id channelName ->
+                        Types.Server_NewChannel _ _ _ ->
                             True
 
-                        Types.Server_EditChannel guildId channelId channelName ->
+                        Types.Server_EditChannel _ _ _ ->
                             True
 
-                        Types.Server_DeleteChannel guildId channelId ->
+                        Types.Server_DeleteChannel _ _ ->
                             True
 
-                        Types.Server_NewInviteLink posix guildId channelId secretId ->
+                        Types.Server_NewInviteLink _ _ _ _ ->
                             True
 
-                        Types.Server_MemberJoined posix guildId channelId frontendUser ->
+                        Types.Server_MemberJoined _ _ _ _ ->
                             True
 
                         Types.Server_YouJoinedGuildByInvite result ->
@@ -2566,133 +2565,133 @@ attackerShouldNotGetThisToFrontend toFrontend =
                                 Err _ ->
                                     False
 
-                        Types.Server_MemberTyping posix id guildOrDmId threadRoute ->
+                        Types.Server_MemberTyping _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordGuildMemberTyping posix userId guildId channelId threadRoute ->
+                        Types.Server_DiscordGuildMemberTyping _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordDmMemberTyping posix userId channelId ->
+                        Types.Server_DiscordDmMemberTyping _ _ _ ->
                             True
 
-                        Types.Server_AddReactionEmoji id guildOrDmId threadRouteWithMessage emoji ->
+                        Types.Server_AddReactionEmoji _ _ _ _ ->
                             False
 
-                        Types.Server_RemoveReactionEmoji id guildOrDmId threadRouteWithMessage emoji ->
+                        Types.Server_RemoveReactionEmoji _ _ _ _ ->
                             False
 
-                        Types.Server_DiscordAddReactionGuildEmoji userId guildId channelId threadRouteWithMessage emoji ->
+                        Types.Server_DiscordAddReactionGuildEmoji _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordAddReactionDmEmoji userId guildId channelId emoji ->
+                        Types.Server_DiscordAddReactionDmEmoji _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordRemoveReactionGuildEmoji userId guildId channelId threadRouteWithMessage emoji ->
+                        Types.Server_DiscordRemoveReactionGuildEmoji _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordRemoveReactionDmEmoji userId guildId channelId emoji ->
+                        Types.Server_DiscordRemoveReactionDmEmoji _ _ _ _ ->
                             True
 
-                        Types.Server_SendEditMessage posix id guildOrDmId threadRouteWithMessage nonempty seqDict ->
+                        Types.Server_SendEditMessage _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordSendEditGuildMessage posix userId guildId channelId threadRouteWithMessage nonempty ->
+                        Types.Server_DiscordSendEditGuildMessage _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordSendEditDmMessage posix discordGuildOrDmId_DmData id nonempty ->
+                        Types.Server_DiscordSendEditDmMessage _ _ _ _ ->
                             True
 
-                        Types.Server_MemberEditTyping posix id anyGuildOrDmId threadRouteWithMessage ->
+                        Types.Server_MemberEditTyping _ _ _ _ ->
                             False
 
-                        Types.Server_DeleteMessage anyGuildOrDmId threadRouteWithMessage ->
+                        Types.Server_DeleteMessage _ _ ->
                             False
 
-                        Types.Server_DiscordDeleteGuildMessage guildId channelId threadRouteWithMessage ->
+                        Types.Server_DiscordDeleteGuildMessage _ _ _ ->
                             True
 
-                        Types.Server_DiscordDeleteDmMessage channelId messageId ->
+                        Types.Server_DiscordDeleteDmMessage _ _ ->
                             True
 
-                        Types.Server_SetName id personName ->
+                        Types.Server_SetName _ _ ->
                             True
 
-                        Types.Server_SetUserIcon id fileHash ->
+                        Types.Server_SetUserIcon _ _ ->
                             False
 
-                        Types.Server_PushNotificationsReset string ->
+                        Types.Server_PushNotificationsReset _ ->
                             True
 
-                        Types.Server_SetGuildNotificationLevel id notificationLevel ->
+                        Types.Server_SetGuildNotificationLevel _ _ ->
                             True
 
-                        Types.Server_SetDiscordGuildNotificationLevel id notificationLevel ->
+                        Types.Server_SetDiscordGuildNotificationLevel _ _ ->
                             True
 
-                        Types.Server_PushNotificationFailed error ->
+                        Types.Server_PushNotificationFailed _ ->
                             True
 
-                        Types.Server_NewSession sessionIdHash frontendUserSession ->
+                        Types.Server_NewSession _ _ ->
                             True
 
-                        Types.Server_LoggedOut sessionIdHash ->
+                        Types.Server_LoggedOut _ ->
                             True
 
-                        Types.Server_CurrentlyViewing sessionIdHash maybe ->
+                        Types.Server_CurrentlyViewing _ _ ->
                             True
 
                         Types.Server_TextEditor _ ->
                             True
 
-                        Types.Server_LinkDiscordUser id discordFrontendCurrentUser ->
+                        Types.Server_LinkDiscordUser _ _ ->
                             False
 
-                        Types.Server_UnlinkDiscordUser id ->
+                        Types.Server_UnlinkDiscordUser _ ->
                             True
 
-                        Types.Server_DiscordChannelCreated guildId channelId channelName optionalData ->
+                        Types.Server_DiscordChannelCreated _ _ _ _ ->
                             True
 
-                        Types.Server_DiscordDmChannelCreated id nonemptyDict ->
+                        Types.Server_DiscordDmChannelCreated _ _ ->
                             True
 
-                        Types.Server_DiscordNeedsAuthAgain id ->
+                        Types.Server_DiscordNeedsAuthAgain _ ->
                             True
 
-                        Types.Server_DiscordUserLoadingDataIsDone id result ->
+                        Types.Server_DiscordUserLoadingDataIsDone _ _ ->
                             True
 
-                        Types.Server_StartReloadingDiscordUser posix id ->
+                        Types.Server_StartReloadingDiscordUser _ _ ->
                             True
 
-                        Types.Server_LoadingDiscordChannelChanged id maybeLoadingDiscordChannel ->
+                        Types.Server_LoadingDiscordChannelChanged _ _ ->
                             True
 
-                        Types.Server_LoadAdminData initAdminData ->
+                        Types.Server_LoadAdminData _ ->
                             True
 
-                        Types.Server_NewLog posix log ->
+                        Types.Server_NewLog _ _ ->
                             True
 
-                        Types.Server_GotGuildMessageEmbed guildId channelId threadRouteWithMessage ( url, result ) ->
+                        Types.Server_GotGuildMessageEmbed _ _ _ _ ->
                             True
 
-                        Types.Server_GotDmMessageEmbed id threadRouteWithMessage ( url, result ) ->
+                        Types.Server_GotDmMessageEmbed _ _ _ ->
                             True
 
-                        Types.Server_GotDiscordGuildMessageEmbed guildId channelId threadRouteWithMessage ( url, result ) ->
+                        Types.Server_GotDiscordGuildMessageEmbed _ _ _ _ ->
                             True
 
-                        Types.Server_GotDiscordDmMessageEmbed channelId messageId ( url, result ) ->
+                        Types.Server_GotDiscordDmMessageEmbed _ _ _ ->
                             True
 
-                        Types.Server_DiscordGuildJoinedOrCreated id discordFrontendGuild ->
+                        Types.Server_DiscordGuildJoinedOrCreated _ _ ->
                             True
 
-                        Types.Server_DiscordUpdateChannel guildId channelId optionalData _ ->
+                        Types.Server_DiscordUpdateChannel _ _ _ _ ->
                             True
 
-                        Types.Server_UpdateDiscordMembers id membersAndOwner ->
+                        Types.Server_UpdateDiscordMembers _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -2704,10 +2703,10 @@ attackerShouldNotGetThisToFrontend toFrontend =
         YouConnected ->
             True
 
-        ReloadDataResponse result ->
+        ReloadDataResponse _ ->
             False
 
-        LinkDiscordResponse result ->
+        LinkDiscordResponse _ ->
             False
 
         ProfilePictureEditorToFrontend _ ->
