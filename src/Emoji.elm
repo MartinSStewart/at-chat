@@ -10,6 +10,7 @@ module Emoji exposing
     , SkinTone(..)
     , emojiWithSkinTone
     , fromDiscord
+    , heart
     , isPressed
     , requestEmojiData
     , searchInputId
@@ -17,6 +18,9 @@ module Emoji exposing
     , selectorHeight
     , selectorInit
     , setSearch
+    , smiley
+    , sweatSmiley
+    , thumbsUp
     , toString
     , view
     )
@@ -350,6 +354,26 @@ emojiHeight =
 selectorHeight : number
 selectorHeight =
     400
+
+
+heart : Emoji
+heart =
+    UnicodeEmoji "❤️"
+
+
+thumbsUp : Emoji
+thumbsUp =
+    UnicodeEmoji "👍"
+
+
+smiley : Emoji
+smiley =
+    UnicodeEmoji "😃"
+
+
+sweatSmiley : Emoji
+sweatSmiley =
+    UnicodeEmoji "😅"
 
 
 searchInputId : Dom.HtmlId

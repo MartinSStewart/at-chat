@@ -455,6 +455,7 @@ type FrontendMsg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
     | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
+    | PressedMobileMenuReactionEmoji Emoji
 
 
 type ScrollPosition

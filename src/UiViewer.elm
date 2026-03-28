@@ -17,6 +17,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log exposing (Log)
+import MessageMenu
 import MyUi
 import Postmark
 import RichText exposing (Domain)
@@ -49,6 +50,11 @@ main =
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
+                ]
+            , Ui.column
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
+                , MessageMenu.view
                 ]
             ]
         )

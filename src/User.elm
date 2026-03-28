@@ -14,6 +14,7 @@ module User exposing
     , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
+    , commonlyUsedEmojis
     , discordCurrentUserToFrontend
     , discordFullDataUserToFrontendCurrentUser
     , init
@@ -88,6 +89,16 @@ type alias BackendUser =
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
     }
+
+
+commonlyUsedEmojis : FrontendCurrentUser -> List ( Emoji, Int )
+commonlyUsedEmojis user =
+    Array.foldl
+        (\emoji dict -> SeqDict.update emoji (\maybe -> Maybe.withDefault 0 maybe |> (+) 1 |> Just) dict)
+        (SeqDict.fromList [ ( Emoji.heart, 0 ), ( Emoji.thumbsUp, 0 ), ( Emoji.smiley, 0 ) ])
+        user.emojiConfig.lastUsedEmojis
+        |> SeqDict.toList
+        |> List.sortBy (\( _, count ) -> -count)
 
 
 addRecentlyUsedEmoji : Emoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }

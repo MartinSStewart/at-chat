@@ -2337,65 +2337,21 @@ updateLoaded msg model =
                                 local =
                                     Local.model loggedIn.localState
 
-                                messageHasReaction : Bool
-                                messageHasReaction =
+                                messageHasReaction2 : Bool
+                                messageHasReaction2 =
                                     case loggedIn.messageHover of
                                         MessageHover guildOrDmId2 threadRoute2 ->
-                                            case guildOrDmId2 of
-                                                GuildOrDmId guildOrDmId3 ->
-                                                    case LocalState.messageReactions guildOrDmId3 threadRoute2 local |> SeqDict.get emoji of
-                                                        Just reactions ->
-                                                            NonemptySet.member local.localUser.session.userId reactions
-
-                                                        Nothing ->
-                                                            False
-
-                                                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
-                                                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                                                        Just ( _, channel ) ->
-                                                            case
-                                                                LocalState.messageReactionsHelper channel threadRoute2
-                                                                    |> SeqDict.get emoji
-                                                            of
-                                                                Just reactions ->
-                                                                    NonemptySet.member currentUserId reactions
-
-                                                                Nothing ->
-                                                                    False
-
-                                                        Nothing ->
-                                                            False
-
-                                                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                                                    case SeqDict.get data.channelId local.discordDmChannels of
-                                                        Just channel ->
-                                                            case threadRoute2 of
-                                                                NoThreadWithMessage messageId ->
-                                                                    case
-                                                                        LocalState.messageReactionsNoThread messageId channel
-                                                                            |> SeqDict.get emoji
-                                                                    of
-                                                                        Just reactions ->
-                                                                            NonemptySet.member data.currentUserId reactions
-
-                                                                        Nothing ->
-                                                                            False
-
-                                                                ViewThreadWithMessage _ _ ->
-                                                                    False
-
-                                                        Nothing ->
-                                                            False
+                                            messageHasReaction emoji guildOrDmId2 threadRoute2 local
 
                                         NoMessageHover ->
                                             False
 
-                                        MessageMenu _ ->
-                                            False
+                                        MessageMenu data ->
+                                            messageHasReaction emoji data.guildOrDmId data.threadRoute local
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                ((if messageHasReaction then
+                                ((if messageHasReaction2 then
                                     Local_RemoveReactionEmoji
 
                                   else
@@ -3430,6 +3386,57 @@ updateLoaded msg model =
                             Debug.log "emoji error" error
                     in
                     ( model, Command.none )
+
+        PressedMobileMenuReactionEmoji emoji ->
+            Debug.todo ""
+
+
+messageHasReaction emoji guildOrDmId threadRoute local =
+    case guildOrDmId of
+        GuildOrDmId guildOrDmId3 ->
+            case LocalState.messageReactions guildOrDmId3 threadRoute local |> SeqDict.get emoji of
+                Just reactions ->
+                    NonemptySet.member local.localUser.session.userId reactions
+
+                Nothing ->
+                    False
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case
+                        LocalState.messageReactionsHelper channel threadRoute
+                            |> SeqDict.get emoji
+                    of
+                        Just reactions ->
+                            NonemptySet.member currentUserId reactions
+
+                        Nothing ->
+                            False
+
+                Nothing ->
+                    False
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just channel ->
+                    case threadRoute of
+                        NoThreadWithMessage messageId ->
+                            case
+                                LocalState.messageReactionsNoThread messageId channel
+                                    |> SeqDict.get emoji
+                            of
+                                Just reactions ->
+                                    NonemptySet.member data.currentUserId reactions
+
+                                Nothing ->
+                                    False
+
+                        ViewThreadWithMessage _ _ ->
+                            False
+
+                Nothing ->
+                    False
 
 
 pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

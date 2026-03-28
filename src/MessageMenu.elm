@@ -16,12 +16,14 @@ import Discord
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Emoji
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
+import MessageView
 import MyUi
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
@@ -30,6 +32,7 @@ import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, 
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
+import User
 
 
 width : number
@@ -463,12 +466,46 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
     in
     case maybeData of
         Just ( canEditAndDelete, text ) ->
-            [ button
-                isMobile
-                (Dom.id "messageMenu_addReaction")
-                Icons.smile
-                "Add reaction emoji"
-                (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute position)
+            [ Ui.row
+                []
+                [ -- We need to have this container around the button, otherwise the divider between button and emojis isn't centered for some reason
+                  Ui.el
+                    []
+                    (button
+                        isMobile
+                        (Dom.id "messageMenu_addReaction")
+                        Icons.smile
+                        "Add reaction emoji"
+                        (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute position)
+                    )
+                , if isMobile then
+                    let
+                        commonEmojis : List (Element FrontendMsg)
+                        commonEmojis =
+                            User.commonlyUsedEmojis local.localUser.user
+                                |> List.take 3
+                                |> List.indexedMap
+                                    (\index ( emoji, _ ) ->
+                                        MyUi.elButton
+                                            (Dom.id ("messageMenu_mobileReactionEmoji_" ++ String.fromInt index))
+                                            (PressedMobileMenuReactionEmoji emoji)
+                                            [ Ui.contentCenterX
+                                            , Ui.contentCenterY
+                                            , buttonHeight isMobile |> Ui.px |> Ui.height
+                                            , Ui.Font.size 24
+                                            ]
+                                            (Ui.text (Emoji.toString emoji))
+                                    )
+                    in
+                    Ui.el
+                        [ Ui.paddingXY 0 4, Ui.width (Ui.px 1), Ui.height Ui.fill ]
+                        (Ui.el [ Ui.height Ui.fill, Ui.background MyUi.buttonBorder ] Ui.none)
+                        :: commonEmojis
+                        |> Ui.row [ Ui.height (Ui.px (buttonHeight True)), MyUi.noShrinking, Ui.width Ui.fill ]
+
+                  else
+                    Ui.none
+                ]
                 |> Just
             , if canEditAndDelete then
                 button

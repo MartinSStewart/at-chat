@@ -97,12 +97,7 @@ miniView user isThreadStarter canEdit =
     let
         recentEmojis : List (Element MessageViewMsg)
         recentEmojis =
-            Array.foldl
-                (\emoji dict -> SeqDict.update emoji (\maybe -> Maybe.withDefault 0 maybe |> (+) 1 |> Just) dict)
-                SeqDict.empty
-                user.emojiConfig.lastUsedEmojis
-                |> SeqDict.toList
-                |> List.sortBy (\( _, count ) -> -count)
+            User.commonlyUsedEmojis user
                 |> List.take 3
                 |> List.indexedMap
                     (\index ( emoji, _ ) ->
