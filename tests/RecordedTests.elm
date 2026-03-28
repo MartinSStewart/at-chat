@@ -22,7 +22,7 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -36,7 +36,7 @@ import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName exposing (PersonName(..))
-import RichText exposing (RichText(..))
+import RichText exposing (Domain(..), RichText(..))
 import Route
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
@@ -46,13 +46,14 @@ import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
+import TextEditor
 import Time
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
 import Unsafe
 import Url exposing (Url)
 import User
-import UserSession exposing (ToBeFilledInByBackend(..))
+import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import VisibleMessages
 
 
@@ -2419,43 +2420,79 @@ attackerTriesToLeakSensitiveData config =
                                             normalText =
                                                 Nonempty (NormalText 'h' "acked") []
 
+                                            discordUserId =
+                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+                                            discordGuildId =
+                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+                                            discordChannelId =
+                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+                                            discordPrivateChannelId =
+                                                Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+                                            guildOrDmId =
+                                                GuildOrDmId_Guild guildId channelId
+
+                                            discordGuildOrDmId =
+                                                DiscordGuildOrDmId_Guild discordUserId discordGuildId discordChannelId
+
+                                            anyGuildOrDmId =
+                                                GuildOrDmId guildOrDmId
+
+                                            threadRouteWithMessage =
+                                                NoThreadWithMessage (Id.fromInt 0)
+
+                                            threadRouteWithMaybeMessage =
+                                                NoThreadWithMaybeMessage (Just (Id.fromInt 0))
+
+                                            emoji =
+                                                Emoji.UnicodeEmoji "👍"
+
+                                            discordDmData : DiscordGuildOrDmId_DmData
+                                            discordDmData =
+                                                { currentUserId = discordUserId
+                                                , channelId = discordPrivateChannelId
+                                                }
+
                                             allLocalChanges : List LocalChange
                                             allLocalChanges =
-                                                [ Local_AddReactionEmoji
-                                                , Local_Admin
-                                                , Local_CurrentlyViewing
-                                                , Local_DeleteChannel
-                                                , Local_DeleteMessage
-                                                , Local_Discord_LoadChannelMessages
-                                                , Local_Discord_LoadThreadMessages
-                                                , Local_Discord_SendEditDmMessage
-                                                , Local_Discord_SendEditGuildMessage
-                                                , Local_Discord_SendMessage
-                                                , Local_EditChannel
+                                                [ Local_AddReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji
+                                                , Local_Admin (Pages.Admin.SetSignupsEnabled True)
+                                                , Local_CurrentlyViewing StopViewingChannel
+                                                , Local_DeleteChannel guildId channelId
+                                                , Local_DeleteMessage anyGuildOrDmId threadRouteWithMessage
+                                                , Local_Discord_LoadChannelMessages discordGuildOrDmId (Id.fromInt 0) EmptyPlaceholder
+                                                , Local_Discord_LoadThreadMessages discordGuildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+                                                , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
+                                                , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
+                                                , Local_Discord_SendMessage messageTime discordGuildOrDmId (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+                                                , Local_EditChannel guildId channelId (Unsafe.channelName "hacked")
                                                 , Local_Invalid
-                                                , Local_LinkDiscordAcknowledgementIsChecked
-                                                , Local_LoadChannelMessages
-                                                , Local_LoadThreadMessages
-                                                , Local_MemberEditTyping
-                                                , Local_MemberTyping
-                                                , Local_NewChannel
-                                                , Local_NewGuild
-                                                , Local_NewInviteLink
-                                                , Local_RegisterPushSubscription
-                                                , Local_RemoveReactionEmoji
-                                                , Local_SendEditMessage
-                                                , Local_SendMessage
-                                                , Local_SetDiscordGuildNotificationLevel
-                                                , Local_SetDomainWhitelist
-                                                , Local_SetEmojiCategory
-                                                , Local_SetEmojiSkinTone
-                                                , Local_SetGuildNotificationLevel
-                                                , Local_SetLastViewed
-                                                , Local_SetName
-                                                , Local_SetNotificationMode
-                                                , Local_StartReloadingDiscordUser
-                                                , Local_TextEditor
-                                                , Local_UnlinkDiscordUser
+                                                , Local_LinkDiscordAcknowledgementIsChecked True
+                                                , Local_LoadChannelMessages guildOrDmId (Id.fromInt 0) EmptyPlaceholder
+                                                , Local_LoadThreadMessages guildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+                                                , Local_MemberEditTyping messageTime anyGuildOrDmId threadRouteWithMessage
+                                                , Local_MemberTyping messageTime ( anyGuildOrDmId, NoThread )
+                                                , Local_NewChannel messageTime guildId (Unsafe.channelName "hacked")
+                                                , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
+                                                , Local_NewInviteLink messageTime guildId EmptyPlaceholder
+                                                , Local_RegisterPushSubscription { endpoint = domain, auth = "auth", p256dh = "p256dh" }
+                                                , Local_RemoveReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji
+                                                , Local_SendEditMessage messageTime guildOrDmId threadRouteWithMessage normalText SeqDict.empty
+                                                , Local_SendMessage messageTime guildOrDmId normalText threadRouteWithMaybeMessage SeqDict.empty
+                                                , Local_SetDiscordGuildNotificationLevel discordGuildId User.NotifyOnEveryMessage
+                                                , Local_SetDomainWhitelist True (Domain "example.com")
+                                                , Local_SetEmojiCategory Emoji.Activities
+                                                , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
+                                                , Local_SetGuildNotificationLevel guildId User.NotifyOnEveryMessage
+                                                , Local_SetLastViewed anyGuildOrDmId threadRouteWithMessage
+                                                , Local_SetName (Unsafe.personName "hacked")
+                                                , Local_SetNotificationMode NoNotifications
+                                                , Local_StartReloadingDiscordUser messageTime discordUserId
+                                                , Local_TextEditor TextEditor.Local_Reset
+                                                , Local_UnlinkDiscordUser discordUserId
                                                 ]
                                         in
                                         [ List.indexedMap
