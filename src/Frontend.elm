@@ -2987,7 +2987,11 @@ updateLoaded msg model =
                                                 SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.drafts
                                     , typingDebouncer = False
                                 }
-                                (Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping))
+                                (Command.batch
+                                    [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
+                                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    ]
+                                )
                         )
                         model
 
