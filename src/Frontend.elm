@@ -293,6 +293,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
+            , toFrontendLogs = Nothing
             }
 
         ( model2, cmdA ) =
@@ -3369,6 +3370,9 @@ updateLoaded msg model =
                     in
                     ( model, Command.none )
 
+        EnableToFrontendLogging ->
+            ( { model | toFrontendLogs = Just Array.empty }, Command.none )
+
 
 messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
 messageHasReaction emoji guildOrDmId threadRoute local =
@@ -4321,7 +4325,16 @@ updateFromBackend msg model =
                     ( model, Command.none )
 
         Loaded loaded ->
-            updateLoadedFromBackend msg loaded |> Tuple.mapFirst Loaded
+            updateLoadedFromBackend
+                msg
+                (case loaded.toFrontendLogs of
+                    Just logs ->
+                        { loaded | toFrontendLogs = Array.push msg logs |> Just }
+
+                    Nothing ->
+                        loaded
+                )
+                |> Tuple.mapFirst Loaded
 
 
 updateLoadedFromBackend : ToFrontend -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

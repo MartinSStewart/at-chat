@@ -1,10 +1,10 @@
 module RecordedTests exposing (main, setup)
 
-import Array
+import AiChat
+import Array exposing (Array)
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
-import ChannelName exposing (ChannelName(..))
 import Codec
 import Coord
 import Dict exposing (Dict)
@@ -22,37 +22,38 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
-import LocalState exposing (PrivateVapidKey(..))
 import LoginForm
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
-import PersonName exposing (PersonName(..))
-import RichText exposing (RichText(..))
+import PersonName
+import RichText exposing (Domain(..), RichText(..))
 import Route
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
 import SeqDict
-import SeqSet
+import SessionIdHash exposing (SessionIdHash(..))
 import Slack
-import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
+import TextEditor
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Url exposing (Url)
 import User
-import UserSession exposing (ToBeFilledInByBackend(..))
+import UserAgent
+import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import VisibleMessages
 
 
@@ -253,6 +254,11 @@ sessionId2 =
     Lamdera.sessionIdFromString "sessionId2"
 
 
+sessionIdAttacker : SessionId
+sessionIdAttacker =
+    Lamdera.sessionIdFromString "sessionId3"
+
+
 handleLogin :
     String
     -> EmailAddress
@@ -305,6 +311,11 @@ userEmail =
 joeEmail : EmailAddress
 joeEmail =
     Unsafe.emailAddress "joe@hotmail.com"
+
+
+attackerEmail : EmailAddress
+attackerEmail =
+    Unsafe.emailAddress "hacker-joe@hotmail.com"
 
 
 enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -1059,9 +1070,9 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ attackerTriesToLeakSensitiveData config
+    [ attackerTriesToLeakSensitiveData normalConfig
     , inviteUserAndDmChat config
-    , T.start
+    , startTest
         "Admin can open admin page"
         startTime
         config
@@ -1078,7 +1089,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Create message with embeds and then edit that message"
         startTime
         normalConfig
@@ -1148,7 +1159,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             )
         ]
     , T.testGroup "Discord"
-        [ T.start
+        [ startTest
             "Link Discord account with login"
             startTime
             normalConfig
@@ -1161,7 +1172,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 discordOp0ReadySupplemental
                 (\_ -> [])
             ]
-        , T.start
+        , startTest
             "Link Discord account with login to non-existent at-chat account"
             startTime
             normalConfig
@@ -1184,7 +1195,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Link Discord account already logged in"
             startTime
             normalConfig
@@ -1238,7 +1249,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Ping discord user"
             startTime
             normalConfig
@@ -1257,7 +1268,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Unlinked Discord user starts thread from message"
             startTime
             normalConfig
@@ -1330,7 +1341,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     ]
                 )
             ]
-        , T.start
+        , startTest
             "Unlinked Discord user starts stand-alone thread"
             startTime
             normalConfig
@@ -1405,7 +1416,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 )
             ]
         ]
-    , T.start
+    , startTest
         "Connect multiple devices"
         startTime
         normalConfig
@@ -1457,7 +1468,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "spoilers"
         startTime
         normalConfig
@@ -1489,7 +1500,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Mobile edit message"
         startTime
         normalConfig
@@ -1518,7 +1529,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Desktop edit message"
         startTime
         normalConfig
@@ -1551,7 +1562,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Change notification level"
         startTime
         normalConfig
@@ -1569,7 +1580,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             )
         ]
 
-    --, T.start
+    --, startTest
     --    "Remove direct mention when viewed on another session"
     --    startTime
     --    normalConfig
@@ -1596,7 +1607,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
     --            ]
     --        )
     --    ]
-    , T.start
+    , startTest
         "Check notification icons appear"
         startTime
         normalConfig
@@ -1628,7 +1639,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Guild icon notification is shown"
         startTime
         normalConfig
@@ -1650,7 +1661,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "No messages missing even in long chat history"
         startTime
         normalConfig
@@ -1712,7 +1723,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Notifications"
         startTime
         normalConfig
@@ -1795,7 +1806,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Enable 2FA"
         startTime
         normalConfig
@@ -1898,7 +1909,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start "Logins are rate limited"
+    , startTest "Logins are rate limited"
         startTime
         normalConfig
         [ T.connectFrontend
@@ -1980,7 +1991,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         Err "Expected to only see LoginsRateLimited as an error email"
             )
         ]
-    , T.start "Test login"
+    , startTest "Test login"
         startTime
         normalConfig
         [ T.connectFrontend
@@ -2017,7 +2028,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             )
         , checkNoErrorLogs
         ]
-    , T.start
+    , startTest
         "Add and remove reaction emojis"
         (Time.millisToPosix 1756739527046)
         normalConfig
@@ -2042,16 +2053,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     (\tabB ->
                         [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
                         , tabB.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
-                        , tabB.portEvent
-                            1
-                            "user_agent_from_js"
-                            (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
-                        , tabA.click 3098 (Dom.id "homePage_loginButton")
-                        , tabA.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
-                        , tabA.keyUp 263 (Dom.id "loginForm_emailInput") "Enter" []
-                        , tabA.input 164 (Dom.id "loginForm_loginCodeInput") "22923193"
-                        , tabA.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                        , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tabB
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
                         , writeMessage tabA "Test"
                         , tabB.click 111 (Dom.id "guild_openGuild_0")
@@ -2117,7 +2120,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Opening non-existent guild shouldn't show \"Unable to reach the server.\" warning"
         (Time.millisToPosix 1757158297558)
         normalConfig
@@ -2129,15 +2132,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             (\tab1 ->
                 [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
-                , tab1.portEvent
-                    1
-                    "user_agent_from_js"
-                    (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                 , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
-                , tab1.input 2099 (Dom.id "loginForm_emailInput") "a@a.se"
-                , tab1.keyUp 286 (Dom.id "loginForm_emailInput") "Enter" []
-                , tab1.input 91 (Dom.id "loginForm_loginCodeInput") "22923193"
-                , tab1.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tab1
                 , tab1.click 17660 (Dom.id "guild_openGuild_0")
                 , tab1.focus 17 (Dom.id "channel_textinput")
                 , tab1.blur 3994 (Dom.id "channel_textinput")
@@ -2145,7 +2141,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
-    , T.start
+    , startTest
         "Export and import backend round-trip"
         startTime
         (T.Config
@@ -2320,7 +2316,7 @@ inviteUser admin continueWith =
 
 inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 inviteUserAndDmChat config =
-    T.start
+    startTest
         "Invite user and then have DM chat"
         startTime
         config
@@ -2352,6 +2348,47 @@ inviteUserAndDmChat config =
         ]
 
 
+startTest name startTime2 config actions =
+    T.start
+        name
+        startTime2
+        config
+        [ T.connectFrontend
+            100
+            sessionIdAttacker
+            "/"
+            desktopWindow
+            (\attacker ->
+                [ T.collapsableGroup
+                    "Attacker setup"
+                    [ handleLogin firefoxDesktop attackerEmail attacker
+                    , attacker.update 100 Types.EnableToFrontendLogging
+                    ]
+                , T.group actions
+                , attacker.checkModel
+                    100
+                    (\model ->
+                        case model of
+                            Types.Loaded loaded ->
+                                case loaded.toFrontendLogs of
+                                    Just toFrontendLogs ->
+                                        if Array.isEmpty toFrontendLogs then
+                                            Ok ()
+
+                                        else
+                                            Err "Attacker got ToFrontend when it shouldn't have"
+
+                                    Nothing ->
+                                        Err "Should have been logging toFrontend"
+
+                            Types.Loading _ ->
+                                Err "Attacker didn't load for some reason"
+                    )
+                ]
+            )
+        ]
+
+
 attackerTriesToLeakSensitiveData :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -2377,312 +2414,77 @@ attackerTriesToLeakSensitiveData config =
                         , writeMessage user "sensitive DM message"
                         , T.connectFrontend
                             100
-                            sessionId2
+                            sessionIdAttacker
                             "/"
                             desktopWindow
                             (\attacker ->
-                                [ handleLogin chromeDesktop joeEmail attacker
+                                [ handleLogin chromeDesktop attackerEmail attacker
+                                , attacker.update 0 Types.EnableToFrontendLogging
                                 , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                                 , attacker.click 100 (Dom.id "loginForm_submit")
                                 , T.andThen
                                     100
-                                    (\data ->
+                                    (\before ->
                                         let
-                                            -- Capture backend state before attacks
-                                            backendBefore =
-                                                data.backend
-
-                                            -- The attacker knows these IDs but should NOT have access
-                                            adminUserId : Id UserId
-                                            adminUserId =
-                                                Id.fromInt 0
-
-                                            normalUserId : Id UserId
-                                            normalUserId =
-                                                Id.fromInt 1
-
                                             attackerUserId : Id UserId
                                             attackerUserId =
                                                 Id.fromInt 2
 
+                                            guildId : Id GuildId
                                             guildId =
                                                 Id.fromInt 0
-
-                                            channelId =
-                                                Id.fromInt 0
-
-                                            messageTime =
-                                                Time.millisToPosix 99999
-
-                                            normalText =
-                                                Nonempty (NormalText 'h' "acked") []
                                         in
-                                        [ -- Attack 1: Try to send a message to a guild the attacker is not a member of
-                                          attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 0)
-                                                (Local_SendMessage
-                                                    messageTime
-                                                    (GuildOrDmId_Guild guildId channelId)
-                                                    normalText
-                                                    (NoThreadWithMaybeMessage Nothing)
-                                                    SeqDict.empty
-                                                )
+                                        [ List.indexedMap
+                                            (\index localChange ->
+                                                attacker.sendToBackend 100 (LocalModelChangeRequest (ChangeId index) localChange)
                                             )
-
-                                        -- Attack 2: Try to send a message to a DM channel between two other users
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 1)
-                                                (Local_SendMessage
-                                                    messageTime
-                                                    (GuildOrDmId_Dm adminUserId)
-                                                    normalText
-                                                    (NoThreadWithMaybeMessage Nothing)
-                                                    SeqDict.empty
-                                                )
-                                            )
-
-                                        -- Attack 3: Try to delete a message in the guild
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 2)
-                                                (Local_DeleteMessage
-                                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                                    (NoThreadWithMessage (Id.fromInt 0))
-                                                )
-                                            )
-
-                                        -- Attack 4: Try to delete a message in someone else's DM
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 3)
-                                                (Local_DeleteMessage
-                                                    (GuildOrDmId (GuildOrDmId_Dm adminUserId))
-                                                    (NoThreadWithMessage (Id.fromInt 0))
-                                                )
-                                            )
-
-                                        -- Attack 5: Try to create a new channel in a guild the attacker is not a member of
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 4)
-                                                (Local_NewChannel
-                                                    messageTime
-                                                    guildId
-                                                    (ChannelName (NonemptyString 'h' "acked-channel"))
-                                                )
-                                            )
-
-                                        -- Attack 6: Try to delete a channel in a guild the attacker is not a member of
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 5)
-                                                (Local_DeleteChannel guildId channelId)
-                                            )
-
-                                        -- Attack 7: Try to create an invite link for a guild the attacker doesn't own
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 6)
-                                                (Local_NewInviteLink messageTime guildId EmptyPlaceholder)
-                                            )
-
-                                        -- Attack 8: Try to use admin-only operations (non-admin user attempting admin changes)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 7)
-                                                (Local_Admin
-                                                    (Pages.Admin.ChangeUsers
-                                                        { time = messageTime
-                                                        , changedUsers =
-                                                            SeqDict.singleton adminUserId
-                                                                { name = "Hacked Admin"
-                                                                , email = "hacked@evil.com"
-                                                                , isAdmin = False
-                                                                , createdAt = messageTime
-                                                                }
-                                                        , newUsers = Array.empty
-                                                        , deletedUsers = SeqSet.empty
-                                                        }
-                                                    )
-                                                )
-                                            )
-
-                                        -- Attack 9: Try to delete users via admin (attacker is not admin)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 8)
-                                                (Local_Admin
-                                                    (Pages.Admin.ChangeUsers
-                                                        { time = messageTime
-                                                        , changedUsers = SeqDict.empty
-                                                        , newUsers = Array.empty
-                                                        , deletedUsers = SeqSet.singleton normalUserId
-                                                        }
-                                                    )
-                                                )
-                                            )
-
-                                        -- Attack 10: Try to set private VAPID key (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 9)
-                                                (Local_Admin (Pages.Admin.SetPrivateVapidKey (PrivateVapidKey "stolen-key")))
-                                            )
-
-                                        -- Attack 11: Try to set Slack client secret (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 10)
-                                                (Local_Admin (Pages.Admin.SetSlackClientSecret (Just (Slack.ClientSecret "evil-secret"))))
-                                            )
-
-                                        -- Attack 12: Try to set OpenRouter key (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 11)
-                                                (Local_Admin (Pages.Admin.SetOpenRouterKey (Just "evil-openrouter-key")))
-                                            )
-
-                                        -- Attack 13: Try to delete a guild the attacker doesn't own (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 12)
-                                                (Local_Admin (Pages.Admin.DeleteGuild guildId))
-                                            )
-
-                                        -- Attack 14: Try to edit a channel in a guild the attacker is not a member of
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 13)
-                                                (Local_EditChannel guildId channelId (ChannelName (NonemptyString 'h' "acked")))
-                                            )
-
-                                        -- Attack 15: Try to edit a message in someone else's DM
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 14)
-                                                (Local_SendEditMessage
-                                                    messageTime
-                                                    (GuildOrDmId_Dm adminUserId)
-                                                    (NoThreadWithMessage (Id.fromInt 0))
-                                                    normalText
-                                                    SeqDict.empty
-                                                )
-                                            )
-
-                                        -- Attack 16: Try to edit a message in a guild the attacker is not in
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 15)
-                                                (Local_SendEditMessage
-                                                    messageTime
-                                                    (GuildOrDmId_Guild guildId channelId)
-                                                    (NoThreadWithMessage (Id.fromInt 0))
-                                                    normalText
-                                                    SeqDict.empty
-                                                )
-                                            )
-
-                                        -- Attack 17: Try to add a reaction to a message in a guild the attacker is not in
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 16)
-                                                (Local_AddReactionEmoji
-                                                    (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                                    (NoThreadWithMessage (Id.fromInt 0))
-                                                    (Emoji.UnicodeEmoji "👍")
-                                                )
-                                            )
-
-                                        -- Attack 18: Try to change another user's name
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 17)
-                                                (Local_SetName (PersonName (NonemptyString 'H' "acked Name")))
-                                            )
-
-                                        -- Attack 19: Try to join the guild via a guessed invite link
-                                        , attacker.sendToBackend 100
-                                            (JoinGuildByInviteRequest guildId (SecretId "guessed-invite-link"))
-
-                                        -- Attack 20: Try to request admin data
-                                        , attacker.sendToBackend 100
-                                            (AdminDataRequest Nothing)
-
-                                        -- Attack 21: Try to export backend data (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll))
-
-                                        -- Attack 22: Try to set email notifications enabled (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 18)
-                                                (Local_Admin (Pages.Admin.SetEmailNotificationsEnabled False))
-                                            )
-
-                                        -- Attack 23: Try to set signups enabled (admin-only)
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 19)
-                                                (Local_Admin (Pages.Admin.SetSignupsEnabled False))
-                                            )
-
-                                        -- Attack 24: Try to load channel messages from a guild the attacker is not in
-                                        , attacker.sendToBackend 100
-                                            (LocalModelChangeRequest (ChangeId 20)
-                                                (Local_LoadChannelMessages
-                                                    (GuildOrDmId_Guild guildId channelId)
-                                                    (Id.fromInt 0)
-                                                    EmptyPlaceholder
-                                                )
-                                            )
-
-                                        -- Now verify that none of the attacks succeeded
+                                            attackerLocalChanges
+                                            |> T.collapsableGroup "attacks"
+                                        , List.map (attacker.sendToBackend 100) attackerToBackendChanges
+                                            |> T.collapsableGroup "attacks"
                                         , T.checkState
                                             500
-                                            (\afterData ->
+                                            (\after ->
                                                 let
-                                                    guildUnchanged =
-                                                        backendBefore.guilds == afterData.backend.guilds
-
-                                                    dmChannelsUnchanged =
-                                                        backendBefore.dmChannels == afterData.backend.dmChannels
-
-                                                    usersUnchanged =
-                                                        NonemptyDict.remove attackerUserId backendBefore.users == NonemptyDict.remove attackerUserId afterData.backend.users
-
-                                                    vapidKeyUnchanged =
-                                                        backendBefore.privateVapidKey == afterData.backend.privateVapidKey
-
-                                                    slackSecretUnchanged =
-                                                        backendBefore.slackClientSecret == afterData.backend.slackClientSecret
-
-                                                    openRouterKeyUnchanged =
-                                                        backendBefore.openRouterKey == afterData.backend.openRouterKey
-
-                                                    emailNotificationsUnchanged =
-                                                        backendBefore.emailNotificationsEnabled == afterData.backend.emailNotificationsEnabled
-
+                                                    errors : List String
                                                     errors =
-                                                        (if guildUnchanged then
+                                                        (if SeqDict.get guildId before.backend.guilds == SeqDict.get guildId after.backend.guilds then
                                                             []
 
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
-                                                            ++ (if dmChannelsUnchanged then
+                                                            ++ (if before.backend.dmChannels == after.backend.dmChannels then
                                                                     []
 
                                                                 else
                                                                     [ "DM channels were modified by attacker" ]
                                                                )
-                                                            ++ (if usersUnchanged then
+                                                            ++ (if NonemptyDict.remove attackerUserId before.backend.users == NonemptyDict.remove attackerUserId after.backend.users then
                                                                     []
 
                                                                 else
                                                                     [ "Users were modified by attacker" ]
                                                                )
-                                                            ++ (if vapidKeyUnchanged then
+                                                            ++ (if before.backend.privateVapidKey == after.backend.privateVapidKey then
                                                                     []
 
                                                                 else
                                                                     [ "Private VAPID key was modified by attacker" ]
                                                                )
-                                                            ++ (if slackSecretUnchanged then
+                                                            ++ (if before.backend.slackClientSecret == after.backend.slackClientSecret then
                                                                     []
 
                                                                 else
                                                                     [ "Slack client secret was modified by attacker" ]
                                                                )
-                                                            ++ (if openRouterKeyUnchanged then
+                                                            ++ (if before.backend.openRouterKey == after.backend.openRouterKey then
                                                                     []
 
                                                                 else
                                                                     [ "OpenRouter key was modified by attacker" ]
                                                                )
-                                                            ++ (if emailNotificationsUnchanged then
+                                                            ++ (if before.backend.emailNotificationsEnabled == after.backend.emailNotificationsEnabled then
                                                                     []
 
                                                                 else
@@ -2696,49 +2498,36 @@ attackerTriesToLeakSensitiveData config =
                                                     _ ->
                                                         Err (String.join "; " errors)
                                             )
-
-                                        -- Verify the attacker's name change only affected the attacker (attack 18 is allowed for own name)
-                                        -- but verify no OTHER user's data changed
-                                        , T.checkState
+                                        , attacker.checkModel
                                             100
-                                            (\afterData ->
-                                                let
-                                                    adminUser =
-                                                        NonemptyDict.get adminUserId afterData.backend.users
+                                            (\model ->
+                                                case model of
+                                                    Types.Loaded loaded ->
+                                                        case loaded.toFrontendLogs of
+                                                            Just toFrontendLogs ->
+                                                                let
+                                                                    invalidToFrontends : Array ToFrontend
+                                                                    invalidToFrontends =
+                                                                        Array.filter attackerShouldNotGetThisToFrontend toFrontendLogs
+                                                                in
+                                                                if Array.isEmpty invalidToFrontends then
+                                                                    Ok ()
 
-                                                    normalUser =
-                                                        NonemptyDict.get normalUserId afterData.backend.users
-                                                in
-                                                case ( adminUser, normalUser ) of
-                                                    ( Just _, Just normalU ) ->
-                                                        if PersonName.toString normalU.name == "Sven" then
-                                                            Ok ()
+                                                                else
+                                                                    Array.toList invalidToFrontends
+                                                                        |> List.map
+                                                                            (\invalid ->
+                                                                                Debug.toString invalid
+                                                                            )
+                                                                        |> String.join ", "
+                                                                        |> (\a -> "The attacker received ToFrontend with potentially sensitive info: " ++ a)
+                                                                        |> Err
 
-                                                        else
-                                                            Err ("Other users' names were changed by attacker. Normal user name is now: " ++ PersonName.toString normalU.name)
+                                                            Nothing ->
+                                                                Err "Should have been logging toFrontend"
 
-                                                    _ ->
-                                                        Err "Users are missing from backend after attack"
-                                            )
-
-                                        -- Verify no data was leaked to attacker's frontend
-                                        , attacker.checkView
-                                            100
-                                            (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text "sensitive guild message"
-                                                ]
-                                            )
-                                        , attacker.checkView
-                                            100
-                                            (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text "sensitive guild message 2"
-                                                ]
-                                            )
-                                        , attacker.checkView
-                                            100
-                                            (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.text "sensitive DM message"
-                                                ]
+                                                    Types.Loading _ ->
+                                                        Err "Attacker didn't load for some reason"
                                             )
                                         ]
                                     )
@@ -2749,3 +2538,342 @@ attackerTriesToLeakSensitiveData config =
                 ]
             )
         ]
+
+
+attackerShouldNotGetThisToFrontend : ToFrontend -> Bool
+attackerShouldNotGetThisToFrontend toFrontend =
+    case toFrontend of
+        CheckLoginResponse _ ->
+            False
+
+        LoginWithTokenResponse _ ->
+            False
+
+        GetLoginTokenRateLimited ->
+            False
+
+        SignupsDisabledResponse ->
+            False
+
+        LoggedOutSession ->
+            False
+
+        AdminToFrontend _ ->
+            True
+
+        LocalChangeResponse _ _ ->
+            False
+
+        ChangeBroadcast localMsg ->
+            case localMsg of
+                Types.LocalChange _ _ ->
+                    True
+
+                Types.ServerChange serverChange ->
+                    case serverChange of
+                        Types.Server_SendMessage _ _ _ _ _ _ ->
+                            True
+
+                        --RichText.toString SeqDict.empty message |> String.contains "sensitive"
+                        Types.Server_Discord_SendMessage _ _ _ _ _ ->
+                            True
+
+                        Types.Server_NewChannel _ _ _ ->
+                            True
+
+                        Types.Server_EditChannel _ _ _ ->
+                            True
+
+                        Types.Server_DeleteChannel _ _ ->
+                            True
+
+                        Types.Server_NewInviteLink _ _ _ _ ->
+                            True
+
+                        Types.Server_MemberJoined _ _ _ _ ->
+                            True
+
+                        Types.Server_YouJoinedGuildByInvite result ->
+                            case result of
+                                Ok _ ->
+                                    True
+
+                                Err _ ->
+                                    False
+
+                        Types.Server_MemberTyping _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordGuildMemberTyping _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordDmMemberTyping _ _ _ ->
+                            True
+
+                        Types.Server_AddReactionEmoji _ _ _ _ ->
+                            False
+
+                        Types.Server_RemoveReactionEmoji _ _ _ _ ->
+                            False
+
+                        Types.Server_DiscordAddReactionGuildEmoji _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordAddReactionDmEmoji _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordRemoveReactionGuildEmoji _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordRemoveReactionDmEmoji _ _ _ _ ->
+                            True
+
+                        Types.Server_SendEditMessage _ _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordSendEditGuildMessage _ _ _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordSendEditDmMessage _ _ _ _ ->
+                            True
+
+                        Types.Server_MemberEditTyping _ _ _ _ ->
+                            False
+
+                        Types.Server_DeleteMessage _ _ ->
+                            False
+
+                        Types.Server_DiscordDeleteGuildMessage _ _ _ ->
+                            True
+
+                        Types.Server_DiscordDeleteDmMessage _ _ ->
+                            True
+
+                        Types.Server_SetName _ _ ->
+                            True
+
+                        Types.Server_SetUserIcon _ _ ->
+                            False
+
+                        Types.Server_PushNotificationsReset _ ->
+                            True
+
+                        Types.Server_SetGuildNotificationLevel _ _ ->
+                            True
+
+                        Types.Server_SetDiscordGuildNotificationLevel _ _ ->
+                            True
+
+                        Types.Server_PushNotificationFailed _ ->
+                            True
+
+                        Types.Server_NewSession _ _ ->
+                            True
+
+                        Types.Server_LoggedOut _ ->
+                            True
+
+                        Types.Server_CurrentlyViewing _ _ ->
+                            True
+
+                        Types.Server_TextEditor _ ->
+                            True
+
+                        Types.Server_LinkDiscordUser _ _ ->
+                            False
+
+                        Types.Server_UnlinkDiscordUser _ ->
+                            True
+
+                        Types.Server_DiscordChannelCreated _ _ _ _ ->
+                            True
+
+                        Types.Server_DiscordDmChannelCreated _ _ ->
+                            True
+
+                        Types.Server_DiscordNeedsAuthAgain _ ->
+                            True
+
+                        Types.Server_DiscordUserLoadingDataIsDone _ _ ->
+                            True
+
+                        Types.Server_StartReloadingDiscordUser _ _ ->
+                            True
+
+                        Types.Server_LoadingDiscordChannelChanged _ _ ->
+                            True
+
+                        Types.Server_LoadAdminData _ ->
+                            True
+
+                        Types.Server_NewLog _ _ ->
+                            True
+
+                        Types.Server_GotGuildMessageEmbed _ _ _ _ ->
+                            True
+
+                        Types.Server_GotDmMessageEmbed _ _ _ ->
+                            True
+
+                        Types.Server_GotDiscordGuildMessageEmbed _ _ _ _ ->
+                            True
+
+                        Types.Server_GotDiscordDmMessageEmbed _ _ _ ->
+                            True
+
+                        Types.Server_DiscordGuildJoinedOrCreated _ _ ->
+                            True
+
+                        Types.Server_DiscordUpdateChannel _ _ _ _ ->
+                            True
+
+                        Types.Server_UpdateDiscordMembers _ _ ->
+                            True
+
+        TwoFactorAuthenticationToFrontend _ ->
+            False
+
+        AiChatToFrontend _ ->
+            False
+
+        YouConnected ->
+            True
+
+        ReloadDataResponse _ ->
+            False
+
+        LinkDiscordResponse _ ->
+            False
+
+        ProfilePictureEditorToFrontend _ ->
+            False
+
+
+attackerToBackendChanges : List ToBackend
+attackerToBackendChanges =
+    [ CheckLoginRequest InitialLoadRequested_None
+    , LoginWithTokenRequest InitialLoadRequested_None 0 UserAgent.init
+    , LoginWithTwoFactorRequest InitialLoadRequested_None 0 UserAgent.init
+    , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com")
+    , AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll)
+    , LocalModelChangeRequest (ChangeId 0) Local_Invalid
+    , TwoFactorToBackend TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest
+    , JoinGuildByInviteRequest (Id.fromInt 0) (SecretId "fake-invite-link")
+    , FinishUserCreationRequest InitialLoadRequested_None (Unsafe.personName "hacked") UserAgent.init
+    , AiChatToBackend (AiChat.AiMessageRequestSimple "model" (AiChat.RespondId 0) "hacked")
+    , ReloadDataRequest InitialLoadRequested_None
+    , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
+    , LinkDiscordRequest discordUserAuth
+    , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
+    , AdminDataRequest Nothing
+    , -- Make sure this one is last
+      LogOutRequest
+    ]
+
+
+attackerLocalChanges : List LocalChange
+attackerLocalChanges =
+    let
+        normalUserId : Id UserId
+        normalUserId =
+            Id.fromInt 1
+
+        guildId : Id GuildId
+        guildId =
+            Id.fromInt 0
+
+        channelId : Id ChannelId
+        channelId =
+            Id.fromInt 0
+
+        messageTime =
+            Time.millisToPosix 99999
+
+        normalText =
+            Nonempty (NormalText 'h' "acked") []
+
+        discordUserId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        discordGuildId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        discordChannelId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        discordPrivateChannelId =
+            Discord.idFromUInt64 (Unsafe.uint64 "0")
+
+        guildOrDmId_dm : AnyGuildOrDmId
+        guildOrDmId_dm =
+            GuildOrDmId_Dm normalUserId |> GuildOrDmId
+
+        guildOrDmId_guild : AnyGuildOrDmId
+        guildOrDmId_guild =
+            GuildOrDmId_Guild guildId channelId |> GuildOrDmId
+
+        discordGuildOrDmId : DiscordGuildOrDmId
+        discordGuildOrDmId =
+            DiscordGuildOrDmId_Guild discordUserId discordGuildId discordChannelId
+
+        threadRouteWithMessage =
+            NoThreadWithMessage (Id.fromInt 0)
+
+        threadRouteWithMaybeMessage =
+            NoThreadWithMaybeMessage (Just (Id.fromInt 0))
+
+        emoji =
+            Emoji.UnicodeEmoji "👍"
+
+        discordDmData : DiscordGuildOrDmId_DmData
+        discordDmData =
+            { currentUserId = discordUserId
+            , channelId = discordPrivateChannelId
+            }
+    in
+    [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
+    , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
+    , Local_Admin (Pages.Admin.SetSignupsEnabled True)
+    , Local_CurrentlyViewing StopViewingChannel
+    , Local_DeleteChannel guildId channelId
+    , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage
+    , Local_DeleteMessage guildOrDmId_guild threadRouteWithMessage
+    , Local_Discord_LoadChannelMessages discordGuildOrDmId (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages discordGuildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
+    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+    , Local_EditChannel guildId channelId (Unsafe.channelName "hacked")
+    , Local_Invalid
+    , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_LoadChannelMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_MemberEditTyping messageTime guildOrDmId_dm threadRouteWithMessage
+    , Local_MemberTyping messageTime ( guildOrDmId_dm, NoThread )
+    , Local_LoadChannelMessages (GuildOrDmId_Guild guildId channelId) (Id.fromInt 0) EmptyPlaceholder
+    , Local_LoadThreadMessages (GuildOrDmId_Guild guildId channelId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_MemberEditTyping messageTime guildOrDmId_guild threadRouteWithMessage
+    , Local_MemberTyping messageTime ( guildOrDmId_guild, NoThread )
+    , Local_NewChannel messageTime guildId (Unsafe.channelName "hacked")
+    , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
+    , Local_NewInviteLink messageTime guildId EmptyPlaceholder
+    , Local_RegisterPushSubscription { endpoint = domain, auth = "auth", p256dh = "p256dh" }
+    , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
+    , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Guild guildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
+    , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
+    , Local_SendMessage messageTime (GuildOrDmId_Guild guildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SetDiscordGuildNotificationLevel discordGuildId User.NotifyOnEveryMessage
+    , Local_SetDomainWhitelist True (Domain "example.com")
+    , Local_SetEmojiCategory Emoji.Activities
+    , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
+    , Local_SetGuildNotificationLevel guildId User.NotifyOnEveryMessage
+    , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
+    , Local_SetLastViewed guildOrDmId_dm threadRouteWithMessage
+    , Local_SetName (Unsafe.personName "hacked")
+    , Local_SetNotificationMode NoNotifications
+    , Local_StartReloadingDiscordUser messageTime discordUserId
+    , Local_TextEditor TextEditor.Local_Reset
+    , Local_UnlinkDiscordUser discordUserId
+    ]
