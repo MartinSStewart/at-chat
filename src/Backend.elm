@@ -2147,7 +2147,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ dmChannelId dmChannel ->
+                                (\{ userId } _ dmChannelId _ ->
                                     ( { model
                                         | dmChannels =
                                             SeqDict.updateIfExists
@@ -3533,7 +3533,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ dmChannelId dmChannel ->
+                                (\_ _ _ dmChannel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage dmChannel
                                         |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
@@ -3570,7 +3570,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ _ dmChannel ->
+                                (\_ _ _ dmChannel ->
                                     ( model
                                     , SeqDict.get threadId dmChannel.threads
                                         |> Maybe.withDefault Thread.backendInit

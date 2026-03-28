@@ -9,7 +9,6 @@ import Codec
 import Coord
 import Dict exposing (Dict)
 import Discord
-import DmChannel exposing (DmChannelId(..))
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility(..))
@@ -22,9 +21,8 @@ import Env
 import Expect
 import FileStatus
 import Frontend
-import GuildName exposing (GuildName(..))
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id(..), InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -2401,17 +2399,11 @@ attackerTriesToLeakSensitiveData config =
                                             normalUserId =
                                                 Id.fromInt 1
 
-                                            attackerUserId =
-                                                Id.fromInt 2
-
                                             guildId =
                                                 Id.fromInt 0
 
                                             channelId =
                                                 Id.fromInt 0
-
-                                            dmChannelIdBetweenAdminAndUser =
-                                                DmChannel.channelIdFromUserIds adminUserId normalUserId
 
                                             messageTime =
                                                 Time.millisToPosix 99999
@@ -2712,7 +2704,7 @@ attackerTriesToLeakSensitiveData config =
                                                         NonemptyDict.get normalUserId afterData.backend.users
                                                 in
                                                 case ( adminUser, normalUser ) of
-                                                    ( Just adminU, Just normalU ) ->
+                                                    ( Just _, Just normalU ) ->
                                                         if PersonName.toString normalU.name == "Sven" then
                                                             Ok ()
 

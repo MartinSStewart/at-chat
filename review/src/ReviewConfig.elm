@@ -54,7 +54,7 @@ import Simplify
 config : List Rule
 config =
     [ ExposeAllRecordFields.rule |> defaultIgnore
-    , OpaqueTypes.rule
+    , OpaqueTypes.rule |> Review.Rule.ignoreErrorsForFiles [ "tests/RecordedTests.elm" ]
     , RunUnsafeAtStartup.rule
     , NoStaleReferences.rule
         |> defaultIgnore

@@ -17,7 +17,6 @@ import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log exposing (Log)
-import MessageMenu
 import MyUi
 import Postmark
 import RichText exposing (Domain)
