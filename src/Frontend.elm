@@ -1161,7 +1161,7 @@ updateLoaded msg model =
                                         model.time
                                         (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
                                         { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                        Command.none
+                                        (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
 
                                 EmojiSelectorForMessage maybeSelection ->
                                     insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji model loggedIn
@@ -2162,7 +2162,7 @@ updateLoaded msg model =
                                 model.time
                                 (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
                                 loggedIn
-                                Command.none
+                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
                         )
                         model
 
@@ -3435,10 +3435,13 @@ toggleReactionEmoji emoji guildOrDmId threadRoute model loggedIn =
         local : LocalState
         local =
             Local.model loggedIn.localState
+
+        hasReaction =
+            messageHasReaction emoji guildOrDmId threadRoute local
     in
     FrontendExtra.handleLocalChange
         model.time
-        ((if messageHasReaction emoji guildOrDmId threadRoute local then
+        ((if hasReaction then
             Local_RemoveReactionEmoji
 
           else
@@ -3450,7 +3453,12 @@ toggleReactionEmoji emoji guildOrDmId threadRoute model loggedIn =
             |> Just
         )
         loggedIn
-        Command.none
+        (if hasReaction then
+            Command.none
+
+         else
+            Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+        )
 
 
 pressedOpenEmojiSelector : HtmlId -> (Maybe Range -> EmojiSelector) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4835,6 +4843,9 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
                                     )
+
+                                Server_AddReactionEmoji _ _ _ _ ->
+                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
 
                                 _ ->
                                     ( loggedIn2, Command.none )
