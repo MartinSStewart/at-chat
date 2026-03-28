@@ -1380,6 +1380,9 @@ isPressMsg msg =
         MessageMenu_PressedReactionEmoji _ ->
             True
 
+        EnableToFrontendLogging ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

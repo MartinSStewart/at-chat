@@ -1,7 +1,8 @@
 module RecordedTests exposing (main, setup)
 
 import AiChat
-import Array
+import Array exposing (Array)
+import Array.Extra
 import Backend
 import Broadcast
 import Bytes exposing (Bytes)
@@ -48,7 +49,7 @@ import Test.Html.Selector
 import TextEditor
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Url exposing (Url)
 import User
@@ -2383,6 +2384,7 @@ attackerTriesToLeakSensitiveData config =
                             desktopWindow
                             (\attacker ->
                                 [ handleLogin chromeDesktop joeEmail attacker
+                                , attacker.update 0 Types.EnableToFrontendLogging
                                 , attacker.input 100 (Dom.id "loginForm_name") "Attacker"
                                 , attacker.click 100 (Dom.id "loginForm_submit")
                                 , T.andThen
@@ -2461,9 +2463,37 @@ attackerTriesToLeakSensitiveData config =
                                                     _ ->
                                                         Err (String.join "; " errors)
                                             )
-                                        , attacker.checkView
+                                        , attacker.checkModel
                                             100
-                                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "sensitive" ])
+                                            (\model ->
+                                                case model of
+                                                    Types.Loaded loaded ->
+                                                        case loaded.toFrontendLogs of
+                                                            Just toFrontendLogs ->
+                                                                let
+                                                                    invalidToFrontends : Array ToFrontend
+                                                                    invalidToFrontends =
+                                                                        Array.filter attackerShouldNotGetThisToFrontend toFrontendLogs
+                                                                in
+                                                                if Array.isEmpty invalidToFrontends then
+                                                                    Ok ()
+
+                                                                else
+                                                                    Array.toList invalidToFrontends
+                                                                        |> List.map
+                                                                            (\invalid ->
+                                                                                Debug.toString invalid
+                                                                            )
+                                                                        |> String.join ", "
+                                                                        |> (\a -> "The attacker received ToFrontend with potentially sensitive info: " ++ a)
+                                                                        |> Err
+
+                                                            Nothing ->
+                                                                Err "Should have been logging toFrontend"
+
+                                                    Types.Loading loadingFrontend ->
+                                                        Err "Attacker didn't load for some reason"
+                                            )
                                         ]
                                     )
                                 ]
@@ -2473,6 +2503,215 @@ attackerTriesToLeakSensitiveData config =
                 ]
             )
         ]
+
+
+attackerShouldNotGetThisToFrontend : ToFrontend -> Bool
+attackerShouldNotGetThisToFrontend toFrontend =
+    case toFrontend of
+        CheckLoginResponse result ->
+            False
+
+        LoginWithTokenResponse loginResult ->
+            False
+
+        GetLoginTokenRateLimited ->
+            False
+
+        SignupsDisabledResponse ->
+            False
+
+        LoggedOutSession ->
+            False
+
+        AdminToFrontend _ ->
+            True
+
+        LocalChangeResponse changeId localChange ->
+            False
+
+        ChangeBroadcast localMsg ->
+            case localMsg of
+                Types.LocalChange userId localChange ->
+                    True
+
+                Types.ServerChange serverChange ->
+                    case serverChange of
+                        Types.Server_SendMessage id posix guildOrDmId message threadRouteWithMaybeMessage seqDict ->
+                            True
+
+                        --RichText.toString SeqDict.empty message |> String.contains "sensitive"
+                        Types.Server_Discord_SendMessage posix discordGuildOrDmId nonempty threadRouteWithMaybeMessage seqDict ->
+                            True
+
+                        Types.Server_NewChannel posix id channelName ->
+                            True
+
+                        Types.Server_EditChannel guildId channelId channelName ->
+                            True
+
+                        Types.Server_DeleteChannel guildId channelId ->
+                            True
+
+                        Types.Server_NewInviteLink posix guildId channelId secretId ->
+                            True
+
+                        Types.Server_MemberJoined posix guildId channelId frontendUser ->
+                            True
+
+                        Types.Server_YouJoinedGuildByInvite result ->
+                            case result of
+                                Ok _ ->
+                                    True
+
+                                Err _ ->
+                                    False
+
+                        Types.Server_MemberTyping posix id guildOrDmId threadRoute ->
+                            True
+
+                        Types.Server_DiscordGuildMemberTyping posix userId guildId channelId threadRoute ->
+                            True
+
+                        Types.Server_DiscordDmMemberTyping posix userId channelId ->
+                            True
+
+                        Types.Server_AddReactionEmoji id guildOrDmId threadRouteWithMessage emoji ->
+                            False
+
+                        Types.Server_RemoveReactionEmoji id guildOrDmId threadRouteWithMessage emoji ->
+                            False
+
+                        Types.Server_DiscordAddReactionGuildEmoji userId guildId channelId threadRouteWithMessage emoji ->
+                            True
+
+                        Types.Server_DiscordAddReactionDmEmoji userId guildId channelId emoji ->
+                            True
+
+                        Types.Server_DiscordRemoveReactionGuildEmoji userId guildId channelId threadRouteWithMessage emoji ->
+                            True
+
+                        Types.Server_DiscordRemoveReactionDmEmoji userId guildId channelId emoji ->
+                            True
+
+                        Types.Server_SendEditMessage posix id guildOrDmId threadRouteWithMessage nonempty seqDict ->
+                            True
+
+                        Types.Server_DiscordSendEditGuildMessage posix userId guildId channelId threadRouteWithMessage nonempty ->
+                            True
+
+                        Types.Server_DiscordSendEditDmMessage posix discordGuildOrDmId_DmData id nonempty ->
+                            True
+
+                        Types.Server_MemberEditTyping posix id anyGuildOrDmId threadRouteWithMessage ->
+                            False
+
+                        Types.Server_DeleteMessage anyGuildOrDmId threadRouteWithMessage ->
+                            False
+
+                        Types.Server_DiscordDeleteGuildMessage guildId channelId threadRouteWithMessage ->
+                            True
+
+                        Types.Server_DiscordDeleteDmMessage channelId messageId ->
+                            True
+
+                        Types.Server_SetName id personName ->
+                            True
+
+                        Types.Server_SetUserIcon id fileHash ->
+                            False
+
+                        Types.Server_PushNotificationsReset string ->
+                            True
+
+                        Types.Server_SetGuildNotificationLevel id notificationLevel ->
+                            True
+
+                        Types.Server_SetDiscordGuildNotificationLevel id notificationLevel ->
+                            True
+
+                        Types.Server_PushNotificationFailed error ->
+                            True
+
+                        Types.Server_NewSession sessionIdHash frontendUserSession ->
+                            True
+
+                        Types.Server_LoggedOut sessionIdHash ->
+                            True
+
+                        Types.Server_CurrentlyViewing sessionIdHash maybe ->
+                            True
+
+                        Types.Server_TextEditor _ ->
+                            True
+
+                        Types.Server_LinkDiscordUser id discordFrontendCurrentUser ->
+                            False
+
+                        Types.Server_UnlinkDiscordUser id ->
+                            True
+
+                        Types.Server_DiscordChannelCreated guildId channelId channelName optionalData ->
+                            True
+
+                        Types.Server_DiscordDmChannelCreated id nonemptyDict ->
+                            True
+
+                        Types.Server_DiscordNeedsAuthAgain id ->
+                            True
+
+                        Types.Server_DiscordUserLoadingDataIsDone id result ->
+                            True
+
+                        Types.Server_StartReloadingDiscordUser posix id ->
+                            True
+
+                        Types.Server_LoadingDiscordChannelChanged id maybeLoadingDiscordChannel ->
+                            True
+
+                        Types.Server_LoadAdminData initAdminData ->
+                            True
+
+                        Types.Server_NewLog posix log ->
+                            True
+
+                        Types.Server_GotGuildMessageEmbed guildId channelId threadRouteWithMessage ( url, result ) ->
+                            True
+
+                        Types.Server_GotDmMessageEmbed id threadRouteWithMessage ( url, result ) ->
+                            True
+
+                        Types.Server_GotDiscordGuildMessageEmbed guildId channelId threadRouteWithMessage ( url, result ) ->
+                            True
+
+                        Types.Server_GotDiscordDmMessageEmbed channelId messageId ( url, result ) ->
+                            True
+
+                        Types.Server_DiscordGuildJoinedOrCreated id discordFrontendGuild ->
+                            True
+
+                        Types.Server_DiscordUpdateChannel guildId channelId optionalData _ ->
+                            True
+
+                        Types.Server_UpdateDiscordMembers id membersAndOwner ->
+                            True
+
+        TwoFactorAuthenticationToFrontend _ ->
+            False
+
+        AiChatToFrontend _ ->
+            False
+
+        YouConnected ->
+            True
+
+        ReloadDataResponse result ->
+            False
+
+        LinkDiscordResponse result ->
+            False
+
+        ProfilePictureEditorToFrontend _ ->
+            False
 
 
 attackerToBackendChanges : List ToBackend

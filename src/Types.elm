@@ -148,6 +148,8 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
+    , -- This is here for end-to-end test purposes
+      toFrontendLogs : Maybe (Array ToFrontend)
     }
 
 
@@ -456,6 +458,7 @@ type FrontendMsg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | GotEmojiData (Result Http.Error CachedEmojiData)
     | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
+    | EnableToFrontendLogging
 
 
 type ScrollPosition
