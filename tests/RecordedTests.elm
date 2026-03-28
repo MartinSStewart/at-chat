@@ -447,7 +447,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
 writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessage user text =
     T.group
-        [ user.focus 100 (Dom.id "channel_textinput")
+        [ user.focus 200 (Dom.id "channel_textinput")
         , user.click 1005 (Dom.id "channel_textinput")
         , user.input 100 (Dom.id "channel_textinput") text
         , user.keyDown 100 (Dom.id "channel_textinput") "Enter" []
@@ -1047,7 +1047,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ inviteUserAndDmChat config
+    [ attackerTriesToLeakSensitiveData config
+    , inviteUserAndDmChat config
     , T.start
         "Admin can open admin page"
         startTime
@@ -2256,6 +2257,55 @@ checkNoErrorLogs =
         )
 
 
+inviteUser :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inviteUser admin continueWith =
+    [ admin.click 100 (Dom.id "guild_openGuild_0")
+    , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+    , admin.click 100 (Dom.id "guild_createInviteLink")
+    , admin.click 100 (Dom.id "guild_copyText")
+    , T.andThen
+        100
+        (\data ->
+            case
+                List.filter
+                    (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
+                    data.portRequests
+            of
+                [ portRequest ] ->
+                    case Json.Decode.decodeValue Json.Decode.string portRequest.value of
+                        Ok copyText ->
+                            [ if String.startsWith Env.domain copyText then
+                                T.connectFrontend
+                                    100
+                                    sessionId1
+                                    (String.dropLeft (String.length Env.domain) copyText)
+                                    desktopWindow
+                                    (\user ->
+                                        [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                        , handleLoginFromLoginPage userEmail user
+                                        , user.input 100 (Dom.id "loginForm_name") "Sven"
+                                        , user.click 100 (Dom.id "loginForm_submit")
+                                        , T.group (continueWith user)
+                                        ]
+                                    )
+
+                              else
+                                admin.checkModel 100 (\_ -> Err "Copied invalid link")
+                            ]
+
+                        Err _ ->
+                            [ admin.checkModel 100 (\_ -> Err "Didn't decode port") ]
+
+                _ ->
+                    [ admin.checkModel 100 (\_ -> Err "Didn't copy link") ]
+        )
+    ]
+        |> T.collapsableGroup "Invite user"
+
+
 inviteUserAndDmChat : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 inviteUserAndDmChat config =
     T.start
@@ -2269,55 +2319,59 @@ inviteUserAndDmChat config =
             desktopWindow
             (\admin ->
                 [ handleLogin firefoxDesktop adminEmail admin
-                , admin.click 100 (Dom.id "guild_openGuild_0")
-                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
-                , admin.click 100 (Dom.id "guild_createInviteLink")
-                , admin.click 100 (Dom.id "guild_copyText")
-                , T.andThen
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , writeMessage user "Hello"
+                        , admin.click 100 (Dom.id "guildsColumn_openDm_1")
+                        , writeMessage user "Hello 2"
+                        , writeMessage admin "Hello from *admin*"
+                        , user.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
+                                    |> Test.Html.Query.count (Expect.equal 2)
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+attackerTriesToLeakSensitiveData :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+attackerTriesToLeakSensitiveData config =
+    T.start
+        "Attacker tries to leak/modify sensitive data"
+        startTime
+        config
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ T.connectFrontend
                     100
-                    (\data ->
-                        case
-                            List.filter
-                                (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
-                                data.portRequests
-                        of
-                            [ portRequest ] ->
-                                case Json.Decode.decodeValue Json.Decode.string portRequest.value of
-                                    Ok copyText ->
-                                        [ if String.startsWith Env.domain copyText then
-                                            T.connectFrontend
-                                                100
-                                                sessionId1
-                                                (String.dropLeft (String.length Env.domain) copyText)
-                                                desktopWindow
-                                                (\user ->
-                                                    [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                                                    , handleLoginFromLoginPage userEmail user
-                                                    , user.input 100 (Dom.id "loginForm_name") "Sven"
-                                                    , user.click 100 (Dom.id "loginForm_submit")
-                                                    , user.click 1000 (Dom.id "guild_openDm_0")
-                                                    , writeMessage user "Hello"
-                                                    , admin.click 100 (Dom.id "guildsColumn_openDm_1")
-                                                    , writeMessage user "Hello 2"
-                                                    , writeMessage admin "Hello from *admin*"
-                                                    , user.checkView
-                                                        100
-                                                        (\html ->
-                                                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
-                                                                |> Test.Html.Query.count (Expect.equal 2)
-                                                        )
-                                                    ]
-                                                )
-
-                                          else
-                                            admin.checkModel 100 (\_ -> Err "Copied invalid link")
-                                        ]
-
-                                    Err _ ->
-                                        [ admin.checkModel 100 (\_ -> Err "Didn't decode port") ]
-
-                            _ ->
-                                [ admin.checkModel 100 (\_ -> Err "Didn't copy link") ]
+                    sessionId0
+                    "/"
+                    desktopWindow
+                    (\attacker ->
+                        [ handleLogin firefoxDesktop adminEmail admin
+                        , inviteUser
+                            admin
+                            (\user ->
+                                [ writeMessage user "sensitive guild message"
+                                , admin.click 100 (Dom.id "guild_openChannel_0")
+                                , writeMessage admin "sensitive guild message 2"
+                                , user.click 1000 (Dom.id "guild_openDm_0")
+                                , writeMessage user "sensitive DM message"
+                                ]
+                            )
+                        ]
                     )
                 ]
             )
