@@ -3077,6 +3077,7 @@ emojiSelector isMobile local loggedIn model =
         EmojiSelectorForReaction _ _ ->
             Ui.inFront
                 (Emoji.selector
+                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
                     isMobile
                     x
                     loggedIn.emojiSelector
@@ -3097,6 +3098,7 @@ emojiSelector isMobile local loggedIn model =
         EmojiSelectorForMessage _ ->
             Ui.inFront
                 (Emoji.selector
+                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
                     isMobile
                     x
                     loggedIn.emojiSelector
@@ -3121,6 +3123,7 @@ emojiSelector isMobile local loggedIn model =
             in
             Ui.inFront
                 (Emoji.selector
+                    (Maybe.map .htmlId loggedIn.textInputFocus == Just Emoji.searchInputId)
                     isMobile
                     x
                     loggedIn.emojiSelector

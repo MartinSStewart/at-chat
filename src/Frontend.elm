@@ -1025,19 +1025,36 @@ updateLoaded msg model =
                                 isPingUserDropdownOpen =
                                     case loggedIn2.textInputFocus of
                                         Just textInputFocus ->
-                                            case textInputFocus.dropdown of
-                                                Just _ ->
-                                                    ( { loggedIn2
-                                                        | textInputFocus = Just { textInputFocus | dropdown = Nothing }
-                                                        , previousTextInputFocus = loggedIn2.textInputFocus
-                                                        , showEmojiSelector = EmojiSelectorHidden
-                                                      }
-                                                    , Command.none
-                                                    )
-                                                        |> Just
+                                            if textInputFocus.htmlId == Emoji.searchInputId then
+                                                ( { loggedIn2
+                                                    | emojiSelector = Emoji.setSearch "" loggedIn2.emojiSelector
+                                                  }
+                                                , Dom.blur Emoji.searchInputId
+                                                    |> Task.attempt
+                                                        (\result ->
+                                                            let
+                                                                _ =
+                                                                    Debug.log "result" result
+                                                            in
+                                                            RemoveFocus
+                                                        )
+                                                )
+                                                    |> Just
 
-                                                Nothing ->
-                                                    Nothing
+                                            else
+                                                case textInputFocus.dropdown of
+                                                    Just _ ->
+                                                        ( { loggedIn2
+                                                            | textInputFocus = Just { textInputFocus | dropdown = Nothing }
+                                                            , previousTextInputFocus = loggedIn2.textInputFocus
+                                                            , showEmojiSelector = EmojiSelectorHidden
+                                                          }
+                                                        , Command.none
+                                                        )
+                                                            |> Just
+
+                                                    Nothing ->
+                                                        Nothing
 
                                         Nothing ->
                                             Nothing
@@ -1174,16 +1191,23 @@ updateLoaded msg model =
                         )
                         model
 
-                Emoji.SearchChanged text ->
+                Emoji.TypedSearchText text ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            let
-                                emojiSelector =
-                                    loggedIn.emojiSelector
-                            in
-                            ( { loggedIn | emojiSelector = { emojiSelector | searchText = text } }
-                            , Command.none
-                            )
+                            ( { loggedIn | emojiSelector = Emoji.setSearch text loggedIn.emojiSelector }, Command.none )
+                        )
+                        model
+
+                Emoji.SearchGotFocus ->
+                    textInputGotFocus Emoji.searchInputId model
+
+                Emoji.SearchLoseFocus ->
+                    textInputLostFocus Emoji.searchInputId model
+
+                Emoji.PressedClearSearch ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | emojiSelector = Emoji.setSearch "" loggedIn.emojiSelector }, Command.none )
                         )
                         model
 
