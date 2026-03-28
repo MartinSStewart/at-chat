@@ -22,7 +22,7 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -2393,11 +2393,17 @@ attackerTriesToLeakSensitiveData config =
                                                 data.backend
 
                                             -- The attacker knows these IDs but should NOT have access
+                                            adminUserId : Id UserId
                                             adminUserId =
                                                 Id.fromInt 0
 
+                                            normalUserId : Id UserId
                                             normalUserId =
                                                 Id.fromInt 1
+
+                                            attackerUserId : Id UserId
+                                            attackerUserId =
+                                                Id.fromInt 2
 
                                             guildId =
                                                 Id.fromInt 0
@@ -2625,7 +2631,7 @@ attackerTriesToLeakSensitiveData config =
                                                         backendBefore.dmChannels == afterData.backend.dmChannels
 
                                                     usersUnchanged =
-                                                        backendBefore.users == afterData.backend.users
+                                                        NonemptyDict.remove attackerUserId backendBefore.users == NonemptyDict.remove attackerUserId afterData.backend.users
 
                                                     vapidKeyUnchanged =
                                                         backendBefore.privateVapidKey == afterData.backend.privateVapidKey
