@@ -5013,7 +5013,7 @@ asDiscordDmUser model sessionId { currentUserId, channelId } func =
                 )
             of
                 ( Just user, Just (FullData discordUser), Just dmChannel ) ->
-                    if discordUser.linkedTo == session.userId then
+                    if discordUser.linkedTo == session.userId && NonemptyDict.member currentUserId dmChannel.members then
                         func session discordUser user dmChannel
 
                     else
@@ -5048,7 +5048,7 @@ asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, cha
                 )
             of
                 ( Just user, Just (FullData discordUser), Just dmChannel ) ->
-                    if discordUser.linkedTo == session.userId then
+                    if discordUser.linkedTo == session.userId && NonemptyDict.member currentUserId dmChannel.members then
                         func
                             session
                             { user = discordUser.user
@@ -5063,7 +5063,7 @@ asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, cha
                         ( model, Command.none )
 
                 ( Just user, Just (NeedsAuthAgain discordUser), Just dmChannel ) ->
-                    if discordUser.linkedTo == session.userId then
+                    if discordUser.linkedTo == session.userId && NonemptyDict.member currentUserId dmChannel.members then
                         func session discordUser user dmChannel
 
                     else
@@ -5087,7 +5087,15 @@ asGuildMember model sessionId guildId func =
         Just session ->
             case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
                 ( Just user, Just guild ) ->
-                    func session user guild
+                    case MembersAndOwner.isMember session.userId guild.membersAndOwner of
+                        IsNotMember ->
+                            ( model, Command.none )
+
+                        IsMember ->
+                            func session user guild
+
+                        IsOwner ->
+                            func session user guild
 
                 _ ->
                     ( model, Command.none )
@@ -5113,7 +5121,15 @@ asDiscordGuildMember model sessionId guildId discordUserId func =
                 )
             of
                 ( Just user, Just guild, Just (FullData discordUser) ) ->
-                    func session discordUser user guild
+                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                        IsNotMember ->
+                            ( model, Command.none )
+
+                        IsMember ->
+                            func session discordUser user guild
+
+                        IsOwner ->
+                            func session discordUser user guild
 
                 _ ->
                     ( model, Command.none )
@@ -5139,18 +5155,42 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discord
                 )
             of
                 ( Just user, Just guild, Just (FullData discordUser) ) ->
-                    func
-                        session
-                        { user = discordUser.user
-                        , linkedTo = discordUser.linkedTo
-                        , icon = discordUser.icon
-                        , linkedAt = discordUser.linkedAt
-                        }
-                        user
-                        guild
+                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                        IsNotMember ->
+                            ( model, Command.none )
+
+                        IsMember ->
+                            func
+                                session
+                                { user = discordUser.user
+                                , linkedTo = discordUser.linkedTo
+                                , icon = discordUser.icon
+                                , linkedAt = discordUser.linkedAt
+                                }
+                                user
+                                guild
+
+                        IsOwner ->
+                            func
+                                session
+                                { user = discordUser.user
+                                , linkedTo = discordUser.linkedTo
+                                , icon = discordUser.icon
+                                , linkedAt = discordUser.linkedAt
+                                }
+                                user
+                                guild
 
                 ( Just user, Just guild, Just (NeedsAuthAgain discordUser) ) ->
-                    func session discordUser user guild
+                    case MembersAndOwner.isMember discordUserId guild.membersAndOwner of
+                        IsNotMember ->
+                            ( model, Command.none )
+
+                        IsMember ->
+                            func session discordUser user guild
+
+                        IsOwner ->
+                            func session discordUser user guild
 
                 _ ->
                     ( model, Command.none )
