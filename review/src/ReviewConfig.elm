@@ -26,6 +26,7 @@ import NoMissingTypeAnnotation
 import NoMissingTypeConstructor
 import NoMissingTypeExpose
 import NoModuleOnExposedNames
+import NoOpaqueInToBackend
 import NoSimpleLetBody
 import NoStaleReferences
 import NoUnused.CustomTypeConstructors
@@ -119,6 +120,7 @@ config =
             , "src/LamderaRPC.elm"
             ]
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
+    , NoOpaqueInToBackend.rule
     , EncoderDecoderNaming.rule
         |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
