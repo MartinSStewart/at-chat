@@ -6415,7 +6415,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
          )
             |> List.sortBy (\( time, _ ) -> Time.posixToMillis time |> negate)
             |> List.map Tuple.second
-            |> Ui.column [ scrollable canScroll2 ]
+            |> Ui.column [ scrollable canScroll2, Ui.heightMin 0 ]
         )
 
 
