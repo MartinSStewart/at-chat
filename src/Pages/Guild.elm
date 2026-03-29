@@ -5704,7 +5704,6 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             hasNotifications
                             channelNameHover
                             channelRoute
-                            localUser
                             guildId
                             channelId
                             channel
@@ -5831,7 +5830,6 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                             hasNotifications
                             channelNameHover
                             routeData
-                            localUser
                             channelId
                             channel
                         , discordChannelColumnThreads
@@ -6101,12 +6099,11 @@ channelColumnRow :
     -> ChannelNotificationType
     -> GuildChannelNameHover
     -> ChannelRoute
-    -> LocalUser
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg
-channelColumnRow isMobile hasNotification channelNameHover channelRoute localUser guildId channelId channel =
+channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -6200,11 +6197,10 @@ discordChannelColumnRow :
     -> ChannelNotificationType
     -> GuildChannelNameHover
     -> DiscordGuildRouteData
-    -> LocalUser
     -> Discord.Id Discord.ChannelId
     -> DiscordFrontendChannel
     -> Element FrontendMsg
-discordChannelColumnRow isMobile hasNotifications channelNameHover routeData localUser channelId channel =
+discordChannelColumnRow isMobile hasNotifications channelNameHover routeData channelId channel =
     let
         isSelected : Bool
         isSelected =

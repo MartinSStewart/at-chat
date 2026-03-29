@@ -29,7 +29,6 @@ import Time
 import Ui
 import Ui.Font
 import Unsafe
-import UserAgent
 
 
 main : Html ()

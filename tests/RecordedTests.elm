@@ -1620,12 +1620,12 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 , writeMessage admin "First message"
                 , writeMessage admin "Next message"
                 , writeMessage admin "Third message"
-                , hasExactText user [ "3" ]
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
                 , user.click 100 (Dom.id "guild_openGuild_1")
-                , hasExactText user [ "3" ]
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
                 , writeMessage admin "@Stevie Steve Hello!"
                 , writeMessage admin "@Stevie Steve Hello again!"
-                , hasExactText user [ "2" ]
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
                 , T.connectFrontend
                     100
                     sessionId1
@@ -1633,7 +1633,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                        , hasExactText userReload [ "2" ]
+                        , userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
                         ]
                     )
                 ]

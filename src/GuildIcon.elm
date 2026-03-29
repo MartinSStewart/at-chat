@@ -21,7 +21,6 @@ import MyUi
 import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)
 import Ui.Font
-import UserAgent exposing (Browser(..), UserAgent)
 
 
 type Mode
@@ -76,6 +75,7 @@ notificationHelper color fontColor borderColor xOffset yOffset count =
             , Ui.Font.color fontColor
             , Ui.contentCenterX
             , Ui.contentCenterY
+            , MyUi.htmlStyle "aria-label" (String.fromInt count2)
             ]
         |> Ui.inFront
 
