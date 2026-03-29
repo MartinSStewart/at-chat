@@ -13,11 +13,13 @@ import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
+import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log exposing (Log)
 import MyUi
+import OneOrGreater
 import Postmark
 import RichText exposing (Domain)
 import SeqDict
@@ -27,6 +29,7 @@ import Time
 import Ui
 import Ui.Font
 import Unsafe
+import UserAgent
 
 
 main : Html ()
@@ -49,6 +52,31 @@ main =
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
+                ]
+            , Ui.column
+                []
+                [ Ui.row
+                    [ Ui.spacing 8, Ui.wrap ]
+                    (List.range 1 100
+                        |> List.foldl
+                            (\index ( count, items ) ->
+                                ( OneOrGreater.increment count
+                                , GuildIcon.userView
+                                    (if modBy 2 index == 1 then
+                                        GuildIcon.NewMessage count
+
+                                     else
+                                        GuildIcon.NewMessageForUser count
+                                    )
+                                    Nothing
+                                    (Id.fromInt index)
+                                    :: items
+                                )
+                            )
+                            ( OneOrGreater.one, [] )
+                        |> Tuple.second
+                        |> List.reverse
+                    )
                 ]
             ]
         )
@@ -148,7 +176,7 @@ embedExamples whitelistedDomains =
                 (\_ -> ())
                 whitelistedDomains
                 (\_ -> ())
-                SeqSet.empty
+                (SeqSet.fromList [])
                 SeqDict.empty
                 SeqDict.empty
                 (Array.fromList embeds)
@@ -196,5 +224,18 @@ embedExamples whitelistedDomains =
         , message
             (NonemptyString 'C' "heck out this cool link! http://town-collab.app/ Cool huh?")
             [ EmbedLoaded Embed.empty
+            ]
+        , message
+            (NonemptyString 'C' "heck out this cool link! ||http://town-collab.app/ Cool huh?||")
+            [ EmbedLoaded Embed.empty
+            ]
+        , message
+            (NonemptyString 'C' ("heck out this cool link! ||" ++ url ++ " Cool huh?||"))
+            [ EmbedLoaded
+                { title = Just "Title of this embed"
+                , image = Just { url = "/android-chrome-512x512.png", imageSize = Coord.xy 512 512, format = Just Embed.Png }
+                , description = Just "Content of this embedded link"
+                , createdAt = Just (Time.millisToPosix 0)
+                }
             ]
         ]

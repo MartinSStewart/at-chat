@@ -291,10 +291,10 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                         []
                                         (case SeqDict.get otherUserId allUsers of
                                             Just otherUser ->
-                                                GuildIcon.userView localUser.userAgent (NewMessageForUser count) otherUser.icon otherUserId
+                                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUserId
 
                                             Nothing ->
-                                                GuildIcon.userView localUser.userAgent (NewMessageForUser count) Nothing otherUserId
+                                                GuildIcon.userView (NewMessageForUser count) Nothing otherUserId
                                         )
                                         |> Just
 
@@ -340,7 +340,6 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                             )
                             []
                             (GuildIcon.view
-                                localUser.userAgent
                                 (case route of
                                     GuildRoute a _ ->
                                         if a == guildId then
@@ -398,7 +397,6 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                     )
                                     []
                                     (GuildIcon.view
-                                        localUser.userAgent
                                         (case route of
                                             DiscordGuildRoute data ->
                                                 if data.guildId == guildId then
@@ -5951,7 +5949,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                                         )
                                         thread
                                   )
-                                    |> GuildIcon.notificationView localUser.userAgent 4 5 MyUi.background2
+                                    |> GuildIcon.notificationView 4 5 MyUi.background2
                                 , Ui.move { x = 0, y = 0, z = 0 }
                                 , Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -6065,7 +6063,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                                         )
                                         thread
                                   )
-                                    |> GuildIcon.notificationView localUser.userAgent 4 5 MyUi.background2
+                                    |> GuildIcon.notificationView 4 5 MyUi.background2
                                 , Ui.move { x = 0, y = 0, z = 0 }
                                 , Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -6163,7 +6161,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute localUse
                    else
                     hasNotification
                   )
-                    |> GuildIcon.notificationView localUser.userAgent 0 -3 MyUi.background2
+                    |> GuildIcon.notificationView 0 -3 MyUi.background2
                 , Ui.width (Ui.px 20)
                 , Ui.move { x = 4, y = 0, z = 0 }
                 , Ui.centerY
@@ -6266,7 +6264,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData loc
                    else
                     hasNotifications
                   )
-                    |> GuildIcon.notificationView localUser.userAgent 0 -3 MyUi.background2
+                    |> GuildIcon.notificationView 0 -3 MyUi.background2
                 , Ui.width (Ui.px 20)
                 , Ui.move { x = 4, y = 0, z = 0 }
                 , Ui.centerY

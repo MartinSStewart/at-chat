@@ -17,12 +17,14 @@ module Icons exposing
     , gear
     , hashtag
     , image
+    , infinity
     , info
     , inviteUserIcon
     , link
     , logoutSvg
     , map
     , mobile
+    , number
     , openEye
     , pencil
     , person
@@ -717,3 +719,228 @@ spinner =
         , Ui.htmlAttribute (Html.Attributes.style "border-radius" "50px")
         ]
         Ui.none
+
+
+number : Int -> String -> List (Html msg)
+number width value =
+    numberHelper width [] (String.toList value)
+        |> List.reverse
+
+
+numberHelper : Int -> List (Html msg) -> List Char -> List (Html msg)
+numberHelper width html int =
+    case int of
+        head :: rest ->
+            let
+                html2 : List (Html msg)
+                html2 =
+                    (case head of
+                        '0' ->
+                            zero width
+
+                        '1' ->
+                            one width
+
+                        '2' ->
+                            two width
+
+                        '3' ->
+                            three width
+
+                        '4' ->
+                            four width
+
+                        '5' ->
+                            five width
+
+                        '6' ->
+                            six width
+
+                        '7' ->
+                            seven width
+
+                        '8' ->
+                            eight width
+
+                        '9' ->
+                            nine width
+
+                        _ ->
+                            Html.span [ Html.Attributes.style "width" (String.fromInt width ++ "px") ] []
+                    )
+                        :: html
+            in
+            numberHelper width html2 rest
+
+        [] ->
+            html
+
+
+zero : Int -> Html msg
+zero width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.fillRule "evenodd"
+            , Svg.Attributes.clipRule "evenodd"
+            , Svg.Attributes.d "M3 5C3 2.23858 5.23858 0 8 0C10.7614 0 13 2.23858 13 5V11C13 13.7614 10.7614 16 8 16C5.23858 16 3 13.7614 3 11V5ZM8 3C6.89543 3 6 3.89543 6 5V11C6 12.1046 6.89543 13 8 13C9.10457 13 10 12.1046 10 11V5C10 3.89543 9.10457 3 8 3Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+one : Int -> Html msg
+one width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d "M6.64594 0L2.32922 2.15836L3.67086 4.84164L7.00004 3.17705V13H3.00004V16H13V13H10V0H6.64594Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+two : Int -> Html msg
+two width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d "M3 5C3 2.23858 5.23858 0 8 0H8.07519C10.7951 0 13 2.20491 13 4.92481C13 6.36248 12.3718 7.72838 11.2802 8.66401L6.22155 13H13V16H3V11.8101L9.32784 6.38624C9.75447 6.02056 10 5.48671 10 4.92481C10 3.86177 9.13823 3 8.07519 3H8C6.89543 3 6 3.89543 6 5H3Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+three : Int -> Html msg
+three width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d "M6.5 4.5C6.5 3.67157 7.17157 3 8 3C8.82843 3 9.5 3.67157 9.5 4.5C9.5 5.32843 8.82843 6 8 6H7V9H8C9.10457 9 10 9.89543 10 11C10 12.1046 9.10457 13 8 13C6.89543 13 6 12.1046 6 11H3C3 13.7614 5.23858 16 8 16C10.7614 16 13 13.7614 13 11C13 9.57824 12.4066 8.29508 11.4539 7.38469C12.107 6.60363 12.5 5.59771 12.5 4.5C12.5 2.01472 10.4853 0 8 0C5.51472 0 3.5 2.01472 3.5 4.5H6.5Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+four : Int -> Html msg
+four width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d "M13 0H10V7H6.03769L7.46324 0.680058L4.53676 0.0199507L3 6.83293V10H10V16H13V0Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+five : Int -> Html msg
+five width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d "M4.11984 0H13V3H6.88024L6.70068 5.15468C7.11748 5.05361 7.55269 5 8.00004 5C11.0376 5 13.5 7.46243 13.5 10.5C13.5 13.5376 11.0376 16 8.00004 16C5.68948 16 3.71518 14.5757 2.90039 12.5628L5.6812 11.4372C6.05319 12.3561 6.95322 13 8.00004 13C9.38075 13 10.5 11.8807 10.5 10.5C10.5 9.11929 9.38075 8 8.00004 8C7.36498 8 6.78843 8.23483 6.34681 8.62461L5.9215 9H3.36984L4.11984 0Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+six : Int -> Html msg
+six width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.fillRule "evenodd"
+            , Svg.Attributes.clipRule "evenodd"
+            , Svg.Attributes.d "M8.14856 5.00197C11.1174 5.0807 13.5 7.51211 13.5 10.5C13.5 13.5376 11.0376 16 8 16C4.96243 16 2.5 13.5376 2.5 10.5C2.5 9.44185 2.79882 8.45349 3.31667 7.61471L7.43172 0.0343628L10.0683 1.46564L8.14856 5.00197ZM5.90352 9.13756C6.34947 8.45275 7.12186 8 8 8C9.38071 8 10.5 9.11929 10.5 10.5C10.5 11.8807 9.38071 13 8 13C6.61929 13 5.5 11.8807 5.5 10.5C5.5 10.0937 5.60153 9.69386 5.79537 9.33679L5.90352 9.13756Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+seven : Int -> Html msg
+seven width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.d "M9.875 3H3V0H13V3.3L7.88462 15.5769L5.11538 14.4231L9.875 3Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+eight : Int -> Html msg
+eight width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.fillRule "evenodd"
+            , Svg.Attributes.clipRule "evenodd"
+            , Svg.Attributes.d "M11.4539 7.38469C12.107 6.60363 12.5 5.59772 12.5 4.5C12.5 2.01472 10.4853 0 8 0C5.51472 0 3.5 2.01472 3.5 4.5C3.5 5.59771 3.89304 6.60363 4.54608 7.38469C3.59342 8.29508 3 9.57824 3 11C3 13.7614 5.23858 16 8 16C10.7614 16 13 13.7614 13 11C13 9.57824 12.4066 8.29508 11.4539 7.38469ZM9.5 4.5C9.5 5.32843 8.82843 6 8 6C7.17157 6 6.5 5.32843 6.5 4.5C6.5 3.67157 7.17157 3 8 3C8.82843 3 9.5 3.67157 9.5 4.5ZM8 9C6.89543 9 6 9.89543 6 11C6 12.1046 6.89543 13 8 13C9.10457 13 10 12.1046 10 11C10 9.89543 9.10457 9 8 9Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+nine : Int -> Html msg
+nine width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "2 0 12 16"
+        , Svg.Attributes.width (String.fromInt width)
+        ]
+        [ Svg.path
+            [ Svg.Attributes.fillRule "evenodd"
+            , Svg.Attributes.clipRule "evenodd"
+            , Svg.Attributes.d "M7.85144 10.998C4.88255 10.9193 2.5 8.48789 2.5 5.5C2.5 2.46243 4.96243 0 8 0C11.0376 0 13.5 2.46243 13.5 5.5C13.5 6.55815 13.2012 7.54651 12.6833 8.38529L8.56828 15.9656L5.93172 14.5344L7.85144 10.998ZM10.0965 6.86244C9.65053 7.54725 8.87814 8 8 8C6.61929 8 5.5 6.88071 5.5 5.5C5.5 4.11929 6.61929 3 8 3C9.38071 3 10.5 4.11929 10.5 5.5C10.5 5.90629 10.3985 6.30614 10.2046 6.66322L10.0965 6.86244Z"
+            , Svg.Attributes.fill "currentColor"
+            ]
+            []
+        ]
+
+
+infinity : Int -> Html msg
+infinity width =
+    Svg.svg
+        [ Svg.Attributes.viewBox "0 0 16 16"
+        , Svg.Attributes.width (String.fromInt width)
+        , Svg.Attributes.fill "currentColor"
+        ]
+        [ Svg.g
+            [ Svg.Attributes.transform "translate(6.025 -1038.1)"
+            ]
+            [ Svg.path
+                [ Svg.Attributes.d "M-2.025 1042.1a4 4 0 0 0 0 8c2 0 4-1 5-4-1-3-3-4-5-4zm0 2s2 0 3 2c-1 2-3 2-3 2a2 2 0 1 1 0-4z"
+                ]
+                []
+            , Svg.path
+                [ Svg.Attributes.d "M5.975 1042.1a4 4 0 0 1 0 8c-2 0-4-1-5-4 1-3 3-4 5-4zm0 2s-2 0-3 2c1 2 3 2 3 2a2 2 0 1 0 0-4z"
+                ]
+                []
+            ]
+        ]

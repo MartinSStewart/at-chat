@@ -1,4 +1,4 @@
-module OneOrGreater exposing (OneOrGreater(..), fromInt, increment, one, plus, toInt)
+module OneOrGreater exposing (OneOrGreater(..), fromInt, increment, one, plus, ten, toInt)
 
 {-| A integer that's guaranteed to be 1 or a value greater than 1
 -}
@@ -13,6 +13,11 @@ type OneOrGreater
 one : OneOrGreater
 one =
     OneOrGreater 1
+
+
+ten : OneOrGreater
+ten =
+    OneOrGreater 10
 
 
 increment : OneOrGreater -> OneOrGreater

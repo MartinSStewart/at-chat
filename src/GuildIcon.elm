@@ -40,15 +40,23 @@ maxNotifications =
     99
 
 
-notificationHelper : UserAgent -> Ui.Color -> Ui.Color -> Ui.Color -> Int -> Int -> OneOrGreater -> Ui.Attribute msg
-notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
+notificationHelper : Ui.Color -> Ui.Color -> Ui.Color -> Int -> Int -> OneOrGreater -> Ui.Attribute msg
+notificationHelper color fontColor borderColor xOffset yOffset count =
     let
         count2 : Int
         count2 =
             OneOrGreater.toInt count
     in
-    Ui.inFront
-        (Ui.el
+    Html.div
+        [ Html.Attributes.style "display" "flex" ]
+        (if count2 > maxNotifications then
+            [ Icons.infinity 14 ]
+
+         else
+            Icons.number 7 (String.fromInt count2)
+        )
+        |> Ui.html
+        |> Ui.el
             [ Ui.rounded 99
             , Ui.background color
             , Ui.width
@@ -65,83 +73,28 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
             , Ui.borderColor borderColor
             , Ui.move { x = xOffset, y = yOffset, z = 0 }
             , Ui.alignRight
-            , Ui.Font.lineHeight 1
-            , Ui.Font.size
-                (if count2 > maxNotifications then
-                    13
-
-                 else
-                    11
-                )
-            , Ui.Font.bold
             , Ui.Font.color fontColor
-            , Ui.Font.family [ Ui.Font.typeface "Arial" ]
+            , Ui.contentCenterX
+            , Ui.contentCenterY
             ]
-            (Ui.el
-                [ Ui.contentCenterX
-                , Ui.move
-                    (case userAgent.browser of
-                        Safari ->
-                            { x = 0
-                            , y =
-                                if count2 > maxNotifications then
-                                    0
-
-                                else
-                                    1
-                            , z = 0
-                            }
-
-                        Firefox ->
-                            { x = 0
-                            , y =
-                                if count2 > maxNotifications then
-                                    -1
-
-                                else
-                                    1
-                            , z = 0
-                            }
-
-                        _ ->
-                            { x = 0
-                            , y =
-                                if count2 > maxNotifications then
-                                    -2
-
-                                else
-                                    0
-                            , z = 0
-                            }
-                    )
-                ]
-                (Ui.text
-                    (if count2 > maxNotifications then
-                        "∞"
-
-                     else
-                        String.fromInt count2
-                    )
-                )
-            )
-        )
+        |> Ui.inFront
 
 
-notificationView : UserAgent -> Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
-notificationView userAgent xOffset yOffset borderColor notification =
+notificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
+notificationView xOffset yOffset borderColor notification =
     case notification of
         NoNotification ->
             Ui.noAttr
 
         NewMessage count ->
-            notificationHelper userAgent MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
+            notificationHelper MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
 
         NewMessageForUser count ->
-            notificationHelper userAgent MyUi.alertColor MyUi.white borderColor xOffset yOffset count
+            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-view : UserAgent -> Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
-view userAgent mode guild =
+view : Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
+view mode guild =
     let
         name : String
         name =
@@ -153,7 +106,7 @@ view userAgent mode guild =
                 Ui.noAttr
 
             Normal notification ->
-                notificationView userAgent 0 -3 MyUi.background1 notification
+                notificationView 0 -3 MyUi.background1 notification
         ]
         (case guild.icon of
             Just icon ->
@@ -196,10 +149,11 @@ view userAgent mode guild =
         )
 
 
-userView : UserAgent -> ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
-userView userAgent notification maybeIcon userId =
+userView : ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
+userView notification maybeIcon userId =
     Ui.el
-        [ notificationView userAgent 0 -3 MyUi.background1 notification
+        [ notificationView 0 -3 MyUi.background1 notification
+        , Ui.width Ui.shrink
         ]
         (case maybeIcon of
             Just icon ->
