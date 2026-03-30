@@ -57,6 +57,7 @@ module MyUi exposing
     , rowButton
     , secondaryButton
     , secondaryGrayBorder
+    , selectedTextBackground
     , simpleButton
     , textLinkColor
     , textLinkColorOnDarkBackground
@@ -798,11 +799,15 @@ css =
                 ++ fontFace 300 "Montserrat-Light"
                 ++ """
 textarea::selection {
-    background-color: rgb(0,120,215);
+    background-color: """
+                ++ colorToStyle selectedTextBackground
+                ++ """;
     color: rgba(0,0,0,0);
 }
 textarea::-moz-selection {
-    background-color: rgb(0,120,215);
+    background-color: """
+                ++ colorToStyle selectedTextBackground
+                ++ """;
     color: rgba(0,0,0,0);
 }
 
@@ -961,6 +966,11 @@ inputBackground =
 inputBorder : Ui.Color
 inputBorder =
     Ui.rgb 97 104 124
+
+
+selectedTextBackground : Ui.Color
+selectedTextBackground =
+    Ui.rgb 0 120 215
 
 
 buttonBackground : Ui.Color

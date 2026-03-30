@@ -40,6 +40,7 @@ import PersonName exposing (PersonName)
 import Ports exposing (PwaStatus(..))
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
@@ -458,6 +459,18 @@ twoFactorCodeLength =
     6
 
 
+cursorBlinking : Ui.Attribute msg
+cursorBlinking =
+    Ui.Anim.keyframes
+        [ Ui.Anim.loop
+            [ Ui.Anim.set [ Ui.Anim.opacity 1 ]
+            , Ui.Anim.step (Ui.Anim.ms 999) [ Ui.Anim.opacity 1 ]
+            , Ui.Anim.step (Ui.Anim.ms 1) [ Ui.Anim.opacity 0 ]
+            , Ui.Anim.step (Ui.Anim.ms 999) [ Ui.Anim.opacity 0 ]
+            ]
+        ]
+
+
 loginCodeInput :
     Int
     -> (String -> msg)
@@ -501,12 +514,12 @@ loginCodeInput codeLength onInput textInputFocus loginCode label =
                             [ Ui.paddingXY -1 -1
                             , Ui.behindContent
                                 (Ui.el
-                                    [ Ui.height (Ui.px 54)
-                                    , Ui.paddingXY 0 24
-                                    , Ui.width (Ui.px 32)
-                                    , Ui.Font.color MyUi.font1
-                                    , Ui.inFront char
-                                    , if index == (codeLength - 1) // 2 then
+                                    ([ Ui.height (Ui.px 54)
+                                     , Ui.paddingXY 0 24
+                                     , Ui.width (Ui.px 32)
+                                     , Ui.Font.color MyUi.font1
+                                     , Ui.inFront char
+                                     , if index == (codeLength - 1) // 2 then
                                         Ui.onRight
                                             (Ui.el
                                                 [ Ui.borderWith
@@ -522,15 +535,46 @@ loginCodeInput codeLength onInput textInputFocus loginCode label =
                                                 Ui.none
                                             )
 
-                                      else
+                                       else
                                         Ui.noAttr
-                                    , Ui.border 1
-                                    , Ui.rounded 8
-                                    , Ui.borderColor MyUi.inputBorder
-                                    , Ui.background MyUi.inputBackground
-                                    , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.2 } ]
-                                    , MyUi.noPointerEvents
-                                    ]
+                                     , Ui.border 1
+                                     , Ui.rounded 8
+                                     , Ui.borderColor MyUi.inputBorder
+                                     , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.2 } ]
+                                     , MyUi.noPointerEvents
+                                     ]
+                                        ++ (case textInputFocus of
+                                                Just textInputFocus2 ->
+                                                    let
+                                                        range =
+                                                            textInputFocus2.selection
+                                                    in
+                                                    if range.start == range.end && index == range.start then
+                                                        [ Ui.background MyUi.inputBackground
+                                                        , Ui.inFront
+                                                            (Ui.el
+                                                                [ Ui.paddingXY 4 0, Ui.height Ui.fill ]
+                                                                (Ui.el
+                                                                    [ Ui.height Ui.fill
+                                                                    , Ui.background (Ui.rgb 255 255 255)
+                                                                    , Ui.borderWith { left = 2, right = 0, top = 0, bottom = 0 }
+                                                                    , cursorBlinking
+                                                                    ]
+                                                                    Ui.none
+                                                                )
+                                                            )
+                                                        ]
+
+                                                    else if range.start <= index && index < range.end then
+                                                        [ Ui.background MyUi.selectedTextBackground ]
+
+                                                    else
+                                                        [ Ui.background MyUi.inputBackground ]
+
+                                                Nothing ->
+                                                    [ Ui.background MyUi.inputBackground ]
+                                           )
+                                    )
                                     Ui.none
                                 )
                             , Ui.Font.color (Ui.rgba 0 0 0 0)
