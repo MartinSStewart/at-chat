@@ -453,7 +453,7 @@ view currentUserId local =
         , Ui.contentTop
         ]
         [ Ui.column
-            [ Ui.background MyUi.background1, Ui.width (Ui.px 200), Ui.scrollable, Ui.Font.size 14 ]
+            [ Ui.background MyUi.background1, Ui.width (Ui.px 200), Ui.scrollable, Ui.heightMin 0, Ui.Font.size 14 ]
             (Array.toList local.history
                 |> List.indexedMap
                     (\index ( changeBy, edit ) ->

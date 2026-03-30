@@ -185,7 +185,7 @@ view isMobile time local loggedIn loaded model =
             )
         ]
         (Ui.el
-            [ Ui.scrollable ]
+            [ Ui.scrollable, Ui.heightMin 0 ]
             (Ui.column
                 [ MyUi.htmlStyle
                     "padding"

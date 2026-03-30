@@ -1300,6 +1300,7 @@ view isMobile2 version local adminData user model =
         [ Ui.scrollable
         , Ui.background MyUi.background1
         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
+        , Ui.heightMin 0
         ]
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 } ]
