@@ -60,15 +60,18 @@ main =
                         |> List.foldl
                             (\index ( count, items ) ->
                                 ( OneOrGreater.increment count
-                                , GuildIcon.userView
-                                    (if modBy 2 index == 1 then
-                                        GuildIcon.NewMessage count
+                                , Ui.el
+                                    [ Ui.width Ui.shrink ]
+                                    (GuildIcon.userView
+                                        (if modBy 2 index == 1 then
+                                            GuildIcon.NewMessage count
 
-                                     else
-                                        GuildIcon.NewMessageForUser count
+                                         else
+                                            GuildIcon.NewMessageForUser count
+                                        )
+                                        Nothing
+                                        (Id.fromInt index)
                                     )
-                                    Nothing
-                                    (Id.fromInt index)
                                     :: items
                                 )
                             )

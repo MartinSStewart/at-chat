@@ -152,8 +152,7 @@ view mode guild =
 userView : ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
 userView notification maybeIcon userId =
     Ui.el
-        [ notificationView 0 -3 MyUi.background1 notification
-        , Ui.width Ui.shrink
+        [ notificationView 1 -3 MyUi.background1 notification
         ]
         (case maybeIcon of
             Just icon ->
