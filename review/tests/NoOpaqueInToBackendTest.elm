@@ -282,6 +282,10 @@ type ToBackend
 type Msg
     = CreatedEmail Email
     | Abc ToBackend
+
+type alias Record =
+    { email : Email
+    }
 """
                 , """module Types exposing (..)
 import Admin
