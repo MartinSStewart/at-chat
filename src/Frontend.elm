@@ -623,7 +623,7 @@ updateLoaded msg model =
                     in
                     case
                         LoginForm.update
-                            (\email -> GetLoginTokenRequest email |> Lamdera.sendToBackend)
+                            (\email -> GetLoginTokenRequest (Untrusted.untrust email) |> Lamdera.sendToBackend)
                             (\loginToken ->
                                 LoginWithTokenRequest requestMessagesFor loginToken model.userAgent
                                     |> Lamdera.sendToBackend
