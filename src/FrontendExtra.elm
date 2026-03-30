@@ -1388,7 +1388,10 @@ isPressMsg msg =
         EnableToFrontendLogging ->
             False
 
-        TextSelectionChanged maybeHtmlId maybe ->
+        TextSelectionChanged _ ->
+            False
+
+        DomFocusChanged maybeHtmlId ->
             False
 
 

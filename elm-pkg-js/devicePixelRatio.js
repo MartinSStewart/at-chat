@@ -32,17 +32,8 @@ exports.init = async function init(app)
         }
     });
 
-    let previousActiveElement = document.activeElement;
-
     document.addEventListener('focusin', (event) => {
-      if (event.target !== previousActiveElement) {
-        previousActiveElement = event.target;
-        const id = event.target.id;
-        if (id) {
-          console.log('Focus changed to element with id:', id);
-          return id;
-        }
-      }
+      app.ports.selection_changed_from_js.send(event.target);
     });
 
     document.addEventListener('selectionchange', (event) => {
@@ -50,9 +41,7 @@ exports.init = async function init(app)
         const { selectionStart, selectionEnd, selectionDirection } = event.target;
         console.log(selectionDirection);
         app.ports.selection_changed_from_js.send(event.target);
-    }
-    );
-
+    });
 
     app.ports.exec_command_to_js.subscribe((data) => {
         var textarea = document.getElementById(data.htmlId);

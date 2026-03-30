@@ -464,7 +464,8 @@ type FrontendMsg
     | GotEmojiData (Result Http.Error CachedEmojiData)
     | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
     | EnableToFrontendLogging
-    | TextSelectionChanged (Maybe HtmlId) (Maybe ( Range, SelectionDirection ))
+    | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
+    | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
 
 
 type ScrollPosition

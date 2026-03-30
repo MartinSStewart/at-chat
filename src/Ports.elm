@@ -13,6 +13,7 @@ port module Ports exposing
     , cropImageToJs
     , execCommand
     , fixCursorPosition
+    , focusChanged
     , getScrollbarWidth
     , getUserAgent
     , hapticFeedback
@@ -109,41 +110,56 @@ port fix_cursor_position_to_js : Json.Encode.Value -> Cmd msg
 port selection_changed_from_js : (Json.Encode.Value -> msg) -> Sub msg
 
 
-selectionChanged : (Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> msg) -> Subscription FrontendOnly msg
+port focus_changed_from_js : (Json.Encode.Value -> msg) -> Sub msg
+
+
+focusChanged : (( Maybe HtmlId, Maybe ( Range, SelectionDirection ) ) -> msg) -> Subscription FrontendOnly msg
+focusChanged msg =
+    Subscription.fromJs
+        "focus_changed_from_js"
+        focus_changed_from_js
+        (\json ->
+            Json.Decode.decodeValue decodeHtmlIdAndSelection json |> Result.withDefault ( Nothing, Nothing ) |> msg
+        )
+
+
+selectionChanged : (( Maybe HtmlId, Maybe ( Range, SelectionDirection ) ) -> msg) -> Subscription FrontendOnly msg
 selectionChanged msg =
     Subscription.fromJs
         "selection_changed_from_js"
         selection_changed_from_js
         (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.oneOf
-                    [ Json.Decode.map4
-                        (\id start end direction ->
-                            msg id
-                                (Just
-                                    ( { start = start, end = end }
-                                    , if direction == "forward" then
-                                        SelectForward
-
-                                      else
-                                        SelectBackward
-                                    )
-                                )
-                        )
-                        (Json.Decode.field "id" (Json.Decode.nullable decodeDomId))
-                        (Json.Decode.field "selectionStart" Json.Decode.int)
-                        (Json.Decode.field "selectionEnd" Json.Decode.int)
-                        (Json.Decode.field "selectionDirection" Json.Decode.string)
-                    , Json.Decode.map
-                        (\id -> msg id Nothing)
-                        (Json.Decode.field "id" (Json.Decode.nullable decodeDomId))
-                    ]
-                )
-                json
-                |> Result.withDefault (msg Nothing Nothing)
+            Json.Decode.decodeValue decodeHtmlIdAndSelection json |> Result.withDefault ( Nothing, Nothing ) |> msg
         )
 
 
+decodeHtmlIdAndSelection : Json.Decode.Decoder ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
+decodeHtmlIdAndSelection =
+    Json.Decode.oneOf
+        [ Json.Decode.map4
+            (\id start end direction ->
+                ( id
+                , Just
+                    ( { start = start, end = end }
+                    , if direction == "forward" then
+                        SelectForward
+
+                      else
+                        SelectBackward
+                    )
+                )
+            )
+            (Json.Decode.field "id" (Json.Decode.nullable decodeDomId))
+            (Json.Decode.field "selectionStart" Json.Decode.int)
+            (Json.Decode.field "selectionEnd" Json.Decode.int)
+            (Json.Decode.field "selectionDirection" Json.Decode.string)
+        , Json.Decode.map
+            (\id -> ( id, Nothing ))
+            (Json.Decode.field "id" (Json.Decode.nullable decodeDomId))
+        ]
+
+
+decodeDomId : Json.Decode.Decoder HtmlId
 decodeDomId =
     Json.Decode.map Dom.id Json.Decode.string
 

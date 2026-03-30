@@ -46,7 +46,6 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Ui.Shadow
-import UserAgent exposing (Browser(..), UserAgent)
 
 
 {-| OpaqueVariants
@@ -246,23 +245,27 @@ typedCode :
     -> { a | attempts : SeqDict Int CodeStatus, code : String }
     -> ( { a | attempts : SeqDict Int CodeStatus, code : String }, Command FrontendOnly toMsg msg )
 typedCode digitCount onSubmitLoginCode text model =
-    case validateCode digitCount text of
+    let
+        text2 =
+            String.filter Char.isDigit text
+    in
+    case validateCode digitCount text2 of
         Ok loginCode ->
             if SeqDict.member loginCode model.attempts then
-                ( { model | code = String.left digitCount text }
+                ( { model | code = String.left digitCount text2 }
                 , Command.none
                 )
 
             else
                 ( { model
-                    | code = String.left digitCount text
+                    | code = String.left digitCount text2
                     , attempts = SeqDict.insert loginCode Checking model.attempts
                   }
                 , onSubmitLoginCode loginCode
                 )
 
         Err _ ->
-            ( { model | code = String.left digitCount text }
+            ( { model | code = String.left digitCount text2 }
             , Command.none
             )
 
@@ -553,7 +556,10 @@ loginCodeInput codeLength onInput textInputFocus loginCode label =
                                                         [ Ui.background MyUi.inputBackground
                                                         , Ui.inFront
                                                             (Ui.el
-                                                                [ Ui.paddingXY 4 0, Ui.height Ui.fill ]
+                                                                [ Ui.paddingXY 4 0
+                                                                , Ui.height Ui.fill
+                                                                , MyUi.noPointerEvents
+                                                                ]
                                                                 (Ui.el
                                                                     [ Ui.height Ui.fill
                                                                     , Ui.background (Ui.rgb 255 255 255)

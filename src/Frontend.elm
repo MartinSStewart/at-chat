@@ -122,6 +122,7 @@ subscriptions model =
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
+        , Ports.focusChanged DomFocusChanged
         , case model of
             Loading _ ->
                 Subscription.none
@@ -3374,7 +3375,10 @@ updateLoaded msg model =
         EnableToFrontendLogging ->
             ( { model | toFrontendLogs = Just Array.empty }, Command.none )
 
-        TextSelectionChanged maybeHtmlId maybeRange ->
+        TextSelectionChanged ( maybeHtmlId, maybeRange ) ->
+            selectionChanged maybeHtmlId maybeRange model
+
+        DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             selectionChanged maybeHtmlId maybeRange model
 
 
