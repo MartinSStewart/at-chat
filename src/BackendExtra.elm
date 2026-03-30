@@ -62,6 +62,7 @@ import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
+import Untrusted exposing (Untrusted)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
@@ -373,7 +374,7 @@ invalidChangeResponse changeId clientId =
         |> Lamdera.sendToFrontend clientId
 
 
-validateAttachedFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
+validateAttachedFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) (Untrusted FileData) -> SeqDict (Id FileId) FileData
 validateAttachedFiles uploadedFiles dict =
     SeqDict.filterMap
         (\id fileData ->

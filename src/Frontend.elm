@@ -3039,12 +3039,14 @@ updateLoaded msg model =
                                                                 NoThreadWithMaybeMessage
                                                                     (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
                                                         )
-                                                        (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                        ((case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                             Just dict ->
                                                                 NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
                                                             Nothing ->
                                                                 SeqDict.empty
+                                                         )
+                                                            |> Untrusted.untrust
                                                         )
 
                                                 DiscordGuildOrDmId guildOrDmId2 ->
@@ -3062,12 +3064,14 @@ updateLoaded msg model =
                                                                 NoThreadWithMaybeMessage
                                                                     (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
                                                         )
-                                                        (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                        ((case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                                             Just dict ->
                                                                 NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
                                                             Nothing ->
                                                                 SeqDict.empty
+                                                         )
+                                                            |> Untrusted.untrust
                                                         )
                                              )
                                                 |> Just
