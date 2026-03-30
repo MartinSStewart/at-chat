@@ -37,6 +37,7 @@ import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
+import RateLimit
 import RichText exposing (Domain(..), RichText(..))
 import Route
 import SafeJson exposing (SafeJson(..))
@@ -2278,7 +2279,107 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 ]
             )
         ]
+    , sendMessageRateLimitTest normalConfig
     ]
+
+
+sendMessageRateLimitTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+sendMessageRateLimitTest config =
+    T.start
+        "SendMessage rate limiting"
+        startTime
+        config
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+
+                    channelId : Id ChannelId
+                    channelId =
+                        Id.fromInt 0
+
+                    sendMessage : Int -> DelayInMs -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    sendMessage changeIndex delayMs client =
+                        client.sendToBackend delayMs
+                            (LocalModelChangeRequest (ChangeId changeIndex)
+                                (Local_SendMessage
+                                    (Time.millisToPosix 0)
+                                    (GuildOrDmId_Guild guildId channelId)
+                                    (Nonempty (NormalText 'm' ("sg " ++ String.fromInt changeIndex)) [])
+                                    (NoThreadWithMaybeMessage Nothing)
+                                    SeqDict.empty
+                                )
+                            )
+
+                    getMessageCount : T.Data FrontendModel BackendModel -> Int
+                    getMessageCount data =
+                        case SeqDict.get guildId data.backend.guilds of
+                            Just guild ->
+                                case SeqDict.get channelId guild.channels of
+                                    Just channel ->
+                                        Array.length channel.messages
+
+                                    Nothing ->
+                                        -1
+
+                            Nothing ->
+                                -1
+
+                    checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    checkMessageCount label expected =
+                        T.checkState
+                            100
+                            (\data ->
+                                let
+                                    actual =
+                                        getMessageCount data
+                                in
+                                if actual == expected then
+                                    Ok ()
+
+                                else
+                                    Err (label ++ ": Expected " ++ String.fromInt expected ++ " messages but got " ++ String.fromInt actual)
+                            )
+                in
+                [ T.andThen
+                    100
+                    (\dataBefore ->
+                        let
+                            initialCount =
+                                getMessageCount dataBefore
+                        in
+                        [ T.collapsableGroup "Send messages up to rate limit"
+                            (List.range 0 (RateLimit.maxMessagesPerWindow - 1)
+                                |> List.map
+                                    (\i ->
+                                        sendMessage i 0.0 admin
+                                    )
+                            )
+                        , T.collapsableGroup "Send messages exceeding rate limit"
+                            (List.range RateLimit.maxMessagesPerWindow (RateLimit.maxMessagesPerWindow + 4)
+                                |> List.map
+                                    (\i ->
+                                        sendMessage i 0.0 admin
+                                    )
+                            )
+                        , checkMessageCount "After rate limit" (initialCount + RateLimit.maxMessagesPerWindow)
+                        , T.collapsableGroup "User2 can still send while admin is rate limited"
+                            [ sendMessage 200 0.0 user
+                            ]
+                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.maxMessagesPerWindow + 1)
+                        , T.collapsableGroup "After rate limit window, sending works again"
+                            [ sendMessage 100 (Duration.inMilliseconds RateLimit.windowDuration + 1) admin
+                            ]
+                        , checkMessageCount "After window reset" (initialCount + RateLimit.maxMessagesPerWindow + 2)
+                        ]
+                    )
+                ]
+            )
+        ]
 
 
 checkNoErrorLogs : T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel

@@ -86,6 +86,7 @@ import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
+import RateLimit
 import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
@@ -315,6 +316,7 @@ type alias BackendModel =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
     , signupsEnabled : Bool
     , exportState : Maybe ExportState
+    , sendMessageRateLimits : RateLimit.SendMessageRateLimits
     }
 
 
