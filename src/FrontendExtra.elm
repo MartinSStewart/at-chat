@@ -1157,9 +1157,6 @@ isPressMsg msg =
         RemoveFocus ->
             False
 
-        TextInputGotFocus _ ->
-            False
-
         KeyDown _ ->
             False
 
@@ -1391,7 +1388,7 @@ isPressMsg msg =
         TextSelectionChanged _ ->
             False
 
-        DomFocusChanged maybeHtmlId ->
+        DomFocusChanged _ ->
             False
 
 

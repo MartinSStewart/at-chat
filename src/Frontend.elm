@@ -43,7 +43,7 @@ import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMe
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
-import MyUi exposing (Range, SelectionDirection(..))
+import MyUi exposing (Range, SelectionDirection)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -1014,9 +1014,6 @@ updateLoaded msg model =
         RemoveFocus ->
             ( model, Command.none )
 
-        TextInputGotFocus htmlId ->
-            textInputGotFocus htmlId model
-
         KeyDown key ->
             case key of
                 "Escape" ->
@@ -1219,12 +1216,6 @@ updateLoaded msg model =
                             ( { loggedIn | emojiSelector = Emoji.setSearch text loggedIn.emojiSelector }, Command.none )
                         )
                         model
-
-                Emoji.SearchGotFocus ->
-                    textInputGotFocus Emoji.searchInputId model
-
-                Emoji.SearchLoseFocus ->
-                    textInputLostFocus Emoji.searchInputId model
 
                 Emoji.PressedClearSearch ->
                     FrontendExtra.updateLoggedIn
@@ -2643,12 +2634,6 @@ updateLoaded msg model =
 
         EditMessage_MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
-                MessageInput.TextInputGotFocus htmlId ->
-                    textInputGotFocus htmlId model
-
-                MessageInput.TextInputLostFocus htmlId ->
-                    textInputLostFocus htmlId model
-
                 MessageInput.PressedTextInput ->
                     ( { model | virtualKeyboardOpen = True }, Command.none )
 
@@ -2958,12 +2943,6 @@ updateLoaded msg model =
 
         MessageInputMsg guildOrDmId threadRoute messageInputMsg ->
             case messageInputMsg of
-                MessageInput.TextInputGotFocus htmlId ->
-                    textInputGotFocus htmlId model
-
-                MessageInput.TextInputLostFocus htmlId ->
-                    textInputLostFocus htmlId model
-
                 MessageInput.PressedTextInput ->
                     ( { model | virtualKeyboardOpen = True }, Command.none )
 
@@ -3379,7 +3358,11 @@ updateLoaded msg model =
             selectionChanged maybeHtmlId maybeRange model
 
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
-            selectionChanged maybeHtmlId maybeRange model
+            textInputFocusChanged maybeHtmlId maybeRange model
+
+
+
+--selectionChanged maybeHtmlId maybeRange model
 
 
 messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
@@ -3640,56 +3623,73 @@ selectionChanged maybeHtmlId maybeRange model =
             ( model, Command.none )
 
 
-textInputGotFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-textInputGotFocus htmlId model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            ( { loggedIn
-                | textInputFocus =
-                    Just
-                        { htmlId = htmlId
-                        , selection = { start = 0, end = 0 }
-                        , direction = SelectForward
-                        , dropdown = Nothing
+textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+textInputFocusChanged maybeHtmlId maybeSelection model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            ( { model
+                | virtualKeyboardOpen = False
+                , loginStatus =
+                    LoggedIn
+                        { loggedIn
+                            | textInputFocus =
+                                case maybeHtmlId of
+                                    Just htmlId ->
+                                        case maybeSelection of
+                                            Just ( range, direction ) ->
+                                                { htmlId = htmlId, selection = range, direction = direction, dropdown = Nothing }
+                                                    |> Just
+
+                                            Nothing ->
+                                                Nothing
+
+                                    Nothing ->
+                                        Nothing
+                            , previousTextInputFocus = loggedIn.textInputFocus
                         }
-                , previousTextInputFocus = loggedIn.textInputFocus
               }
-            , Command.batch
-                [ if model.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
-                    Command.none
+            , case maybeHtmlId of
+                Just htmlId ->
+                    Command.batch
+                        [ if model.userAgent.device == UserAgent.Desktop || Maybe.map .htmlId loggedIn.textInputFocus == Just htmlId then
+                            Command.none
 
-                  else
-                    Ports.fixCursorPosition htmlId
-                , if htmlId == UserOptions.discordBookmarkletId then
-                    Ports.textInputSelectAll htmlId
+                          else
+                            Ports.fixCursorPosition htmlId
+                        , if htmlId == UserOptions.discordBookmarkletId then
+                            Ports.textInputSelectAll htmlId
 
-                  else
+                          else
+                            Command.none
+                        ]
+
+                Nothing ->
                     Command.none
-                ]
             )
-        )
-        model
 
+        NotLoggedIn notLoggedIn ->
+            ( { model
+                | virtualKeyboardOpen = False
+                , loginStatus =
+                    NotLoggedIn
+                        { notLoggedIn
+                            | textInputFocus =
+                                case maybeHtmlId of
+                                    Just htmlId ->
+                                        case maybeSelection of
+                                            Just ( range, direction ) ->
+                                                { htmlId = htmlId, selection = range, direction = direction }
+                                                    |> Just
 
-textInputLostFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-textInputLostFocus htmlId model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            ( { loggedIn
-                | textInputFocus =
-                    if Just htmlId == Maybe.map .htmlId loggedIn.textInputFocus then
-                        Nothing
+                                            Nothing ->
+                                                Nothing
 
-                    else
-                        loggedIn.textInputFocus
-                , previousTextInputFocus = loggedIn.textInputFocus
+                                    Nothing ->
+                                        Nothing
+                        }
               }
             , Command.none
             )
-        )
-        { model
-            | virtualKeyboardOpen = False
-        }
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

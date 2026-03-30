@@ -49,7 +49,6 @@ type LocalChange
     | Local_Reset
     | Local_Undo
     | Local_Redo
-    | Local_MovedCursor Range
 
 
 {-| OpaqueVariants
@@ -59,7 +58,6 @@ type ServerChange
     | Server_Reset
     | Server_Undo (Id UserId)
     | Server_Redo (Id UserId)
-    | Server_MovedCursor (Id UserId) Range
 
 
 {-| Opaque
@@ -202,9 +200,6 @@ localChangeUpdate currentUserId change local =
         Local_Redo ->
             redoChange currentUserId local
 
-        Local_MovedCursor range ->
-            moveCursor currentUserId range local
-
 
 changeUpdate : ServerChange -> LocalState -> LocalState
 changeUpdate change local =
@@ -220,14 +215,6 @@ changeUpdate change local =
 
         Server_Redo userId ->
             redoChange userId local
-
-        Server_MovedCursor userId range ->
-            moveCursor userId range local
-
-
-moveCursor : Id UserId -> Range -> LocalState -> LocalState
-moveCursor userId range local =
-    { local | cursorPosition = SeqDict.insert userId range local.cursorPosition }
 
 
 undoChange : Id UserId -> LocalState -> LocalState
@@ -414,9 +401,6 @@ backendChangeUpdate currentUserId change local =
 
         Local_Redo ->
             ( redoChange currentUserId local, Server_Redo currentUserId )
-
-        Local_MovedCursor range ->
-            ( moveCursor currentUserId range local, Server_MovedCursor currentUserId range )
 
 
 inputId : HtmlId

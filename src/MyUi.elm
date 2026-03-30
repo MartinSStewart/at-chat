@@ -79,7 +79,6 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress exposing (EmailAddress)
 import Html exposing (Html)
 import Html.Attributes
-import Html.Events
 import Html.Events.Extra.Touch
 import Icons
 import Json.Decode
@@ -713,13 +712,6 @@ type SelectionDirection
 rangeSize : Range -> Int
 rangeSize range =
     range.end - range.start
-
-
-decodeSelection : Json.Decode.Decoder Range
-decodeSelection =
-    Json.Decode.map2 (\start end -> Range (min start end) (max start end))
-        (Json.Decode.at [ "target", "selectionStart" ] Json.Decode.int)
-        (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
 
 
 focusEffect : Ui.Attribute msg

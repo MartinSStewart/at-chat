@@ -33,7 +33,6 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import UserAgent exposing (UserAgent)
 
 
 type alias TwoFactorAuthentication =

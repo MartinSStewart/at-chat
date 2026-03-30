@@ -388,7 +388,6 @@ type FrontendMsg
     | GotPingUserPosition HtmlId (Result Dom.Error MentionUserDropdown)
     | SetFocus
     | RemoveFocus
-    | TextInputGotFocus HtmlId
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedReactionEmoji Emoji

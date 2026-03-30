@@ -269,8 +269,6 @@ type Msg
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji Emoji
     | TypedSearchText String
-    | SearchGotFocus
-    | SearchLoseFocus
     | PressedClearSearch
 
 
@@ -293,12 +291,6 @@ isPressed msg =
             False
 
         TypedSearchText _ ->
-            False
-
-        SearchGotFocus ->
-            False
-
-        SearchLoseFocus ->
             False
 
         PressedClearSearch ->
@@ -395,8 +387,6 @@ searchInput searchHasFocus model =
                 Ui.background MyUi.background2
             , Ui.Font.size 16
             , Ui.border 0
-            , Ui.Events.onFocus SearchGotFocus
-            , Ui.Events.onLoseFocus SearchLoseFocus
             , Ui.attrIf (not isSearching && not searchHasFocus) Ui.pointer
             , Ui.height Ui.fill
             , Ui.paddingXY 8 0

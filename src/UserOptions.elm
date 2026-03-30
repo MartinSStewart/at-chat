@@ -22,7 +22,6 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
-import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
@@ -406,7 +405,6 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                                 , Ui.borderColor MyUi.inputBorder
                                                 , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
                                                 , Ui.height Ui.fill
-                                                , Ui.Events.onFocus (TextInputGotFocus discordBookmarkletId)
                                                 ]
                                                 { onChange = \_ -> TypedDiscordLinkBookmarklet
                                                 , text = bookmarklet

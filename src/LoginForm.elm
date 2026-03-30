@@ -32,7 +32,7 @@ module LoginForm exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import EmailAddress exposing (EmailAddress)
-import Html exposing (Html)
+import Html
 import Html.Attributes
 import Icons
 import MyUi exposing (Range)

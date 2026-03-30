@@ -69,9 +69,7 @@ type alias NameSoFarData =
 
 
 type Msg
-    = TextInputGotFocus HtmlId
-    | TextInputLostFocus HtmlId
-    | PressedTextInput
+    = PressedTextInput
     | TypedMessage String
     | PressedSendMessage
     | PressedArrowInDropdown Int
@@ -86,12 +84,6 @@ type Msg
 isPress : Msg -> Bool
 isPress msg =
     case msg of
-        TextInputGotFocus _ ->
-            False
-
-        TextInputLostFocus _ ->
-            False
-
         PressedTextInput ->
             True
 
@@ -193,8 +185,6 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                                     Json.Decode.fail ""
                         )
                 )
-            , Html.Events.onFocus (TextInputGotFocus channelTextInputId)
-            , Html.Events.onBlur (TextInputLostFocus channelTextInputId)
             , case textInputFocus of
                 Just textInputFocus2 ->
                     case textInputFocus2.dropdown of
