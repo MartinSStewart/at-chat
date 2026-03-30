@@ -1,7 +1,5 @@
 module RateLimit exposing
     ( checkAndUpdateRateLimit
-    , longWindowDuration
-    , longWindowMaxMessages
     , shortWindowDuration
     , shortWindowMaxMessages
     )

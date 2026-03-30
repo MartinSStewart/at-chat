@@ -86,7 +86,6 @@ import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
-import RateLimit
 import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
