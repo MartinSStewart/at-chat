@@ -1,58 +1,78 @@
 module RateLimit exposing
-    ( RateLimitKey(..)
-    , SendMessageRateLimits
-    , checkAndUpdateRateLimit
-    , empty
-    , maxMessagesPerWindow
-    , windowDuration
+    ( checkAndUpdateRateLimit
+    , longWindowDuration
+    , longWindowMaxMessages
+    , shortWindowDuration
+    , shortWindowMaxMessages
     )
 
-import Discord
+import Array exposing (Array)
+import Array.Extra
 import Duration exposing (Duration)
 import Effect.Time as Time
 import Id exposing (Id, UserId)
+import Quantity
 import SeqDict exposing (SeqDict)
 
 
-type RateLimitKey
-    = NormalUserKey (Id UserId)
-    | DiscordUserKey (Discord.Id Discord.UserId)
+shortWindowMaxMessages : Int
+shortWindowMaxMessages =
+    10
 
 
-type alias SendMessageRateLimits =
-    SeqDict RateLimitKey (List Time.Posix)
+longWindowMaxMessages : Int
+longWindowMaxMessages =
+    200
 
 
-empty : SendMessageRateLimits
-empty =
-    SeqDict.empty
-
-
-maxMessagesPerWindow : Int
-maxMessagesPerWindow =
-    20
-
-
-windowDuration : Duration
-windowDuration =
+shortWindowDuration : Duration
+shortWindowDuration =
     Duration.seconds 10
 
 
-checkAndUpdateRateLimit : Time.Posix -> RateLimitKey -> SendMessageRateLimits -> Result SendMessageRateLimits SendMessageRateLimits
+longWindowDuration : Duration
+longWindowDuration =
+    Duration.minutes 30
+
+
+checkAndUpdateRateLimit :
+    Time.Posix
+    -> Id UserId
+    -> SeqDict (Id UserId) (Array Time.Posix)
+    -> Result () (SeqDict (Id UserId) (Array Time.Posix))
 checkAndUpdateRateLimit now key limits =
-    let
-        windowStart : Int
-        windowStart =
-            Time.posixToMillis now - round (Duration.inMilliseconds windowDuration)
+    case SeqDict.get key limits of
+        Just value ->
+            let
+                ( ( indexToDrop, _ ), longRemaining, shortRemaining ) =
+                    Array.foldl
+                        (\item ( ( indexToDrop2, index ), longRemaining2, shortRemaining2 ) ->
+                            let
+                                elapsed =
+                                    Duration.from item now
+                            in
+                            if elapsed |> Quantity.lessThan shortWindowDuration then
+                                ( ( indexToDrop2, index + 1 ), longRemaining2 - 1, shortRemaining2 - 1 )
 
-        recentMessages : List Time.Posix
-        recentMessages =
-            SeqDict.get key limits
-                |> Maybe.withDefault []
-                |> List.filter (\t -> Time.posixToMillis t > windowStart)
-    in
-    if List.length recentMessages >= maxMessagesPerWindow then
-        Err (SeqDict.insert key recentMessages limits)
+                            else if elapsed |> Quantity.lessThan longWindowDuration then
+                                ( ( indexToDrop2, index + 1 ), longRemaining2 - 1, shortRemaining2 )
 
-    else
-        Ok (SeqDict.insert key (now :: recentMessages) limits)
+                            else
+                                ( ( Just index, index + 1 ), longRemaining2, shortRemaining2 )
+                        )
+                        ( ( Nothing, 0 ), longWindowMaxMessages, shortWindowMaxMessages )
+                        value
+            in
+            if longRemaining > 0 && shortRemaining > 0 then
+                case indexToDrop of
+                    Just indexToDrop2 ->
+                        Ok (SeqDict.insert key (Array.Extra.sliceFrom indexToDrop2 value |> Array.push now) limits)
+
+                    Nothing ->
+                        Ok (SeqDict.insert key (Array.push now value) limits)
+
+            else
+                Err ()
+
+        Nothing ->
+            Ok (SeqDict.insert key (Array.fromList [ now ]) limits)

@@ -316,7 +316,7 @@ type alias BackendModel =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
     , signupsEnabled : Bool
     , exportState : Maybe ExportState
-    , sendMessageRateLimits : RateLimit.SendMessageRateLimits
+    , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     }
 
 

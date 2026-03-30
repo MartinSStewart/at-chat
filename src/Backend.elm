@@ -48,7 +48,7 @@ import OneToOne
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import Quantity
-import RateLimit exposing (RateLimitKey(..))
+import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -212,7 +212,7 @@ init =
       , loadingDiscordChannels = SeqDict.empty
       , signupsEnabled = True
       , exportState = Nothing
-      , sendMessageRateLimits = RateLimit.empty
+      , sendMessageRateLimits = SeqDict.empty
       }
     , Command.none
     )
@@ -1772,114 +1772,145 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (adminChangeUpdate clientId changeId adminChange model time)
 
                 Local_SendMessage _ guildOrDmId text threadRoute attachedFiles ->
-                    case SeqDict.get sessionId model.sessions of
-                        Just session ->
-                            case RateLimit.checkAndUpdateRateLimit time (NormalUserKey session.userId) model.sendMessageRateLimits of
-                                Err updatedLimits ->
-                                    ( { model | sendMessageRateLimits = updatedLimits }
-                                    , BackendExtra.invalidChangeResponse changeId clientId
-                                    )
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model
+                                sessionId
+                                guildId
+                                (BackendExtra.sendGuildMessage
+                                    model
+                                    time
+                                    clientId
+                                    changeId
+                                    guildId
+                                    channelId
+                                    threadRoute
+                                    text
+                                    (BackendExtra.validateAttachedFiles model.files attachedFiles)
+                                )
 
-                                Ok updatedLimits ->
-                                    let
-                                        model2 =
-                                            { model | sendMessageRateLimits = updatedLimits }
-                                    in
-                                    case guildOrDmId of
-                                        GuildOrDmId_Guild guildId channelId ->
-                                            asGuildMember
-                                                model2
-                                                sessionId
-                                                guildId
-                                                (BackendExtra.sendGuildMessage
-                                                    model2
-                                                    time
-                                                    clientId
-                                                    changeId
-                                                    guildId
-                                                    channelId
-                                                    threadRoute
-                                                    text
-                                                    (BackendExtra.validateAttachedFiles model2.files attachedFiles)
-                                                )
-
-                                        GuildOrDmId_Dm otherUserId ->
-                                            asDmUser
-                                                model2
-                                                sessionId
-                                                { otherUserId = otherUserId }
-                                                (BackendExtra.sendDm
-                                                    model2
-                                                    time
-                                                    clientId
-                                                    changeId
-                                                    otherUserId
-                                                    threadRoute
-                                                    text
-                                                    (BackendExtra.validateAttachedFiles model2.files attachedFiles)
-                                                )
-
-                        Nothing ->
-                            ( model, Command.none )
+                        GuildOrDmId_Dm otherUserId ->
+                            asDmUser
+                                model
+                                sessionId
+                                { otherUserId = otherUserId }
+                                (BackendExtra.sendDm
+                                    model
+                                    time
+                                    clientId
+                                    changeId
+                                    otherUserId
+                                    threadRoute
+                                    text
+                                    (BackendExtra.validateAttachedFiles model.files attachedFiles)
+                                )
 
                 Local_Discord_SendMessage _ guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
-                    let
-                        discordUserIdForRateLimit : Discord.Id Discord.UserId
-                        discordUserIdForRateLimit =
-                            case guildOrDmId of
-                                DiscordGuildOrDmId_Guild currentDiscordUserId_ _ _ ->
-                                    currentDiscordUserId_
+                    case guildOrDmId of
+                        DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
+                            asDiscordGuildMember
+                                model
+                                sessionId
+                                guildId
+                                currentDiscordUserId
+                                (\_ discordUser _ guild ->
+                                    case
+                                        ( SeqDict.get channelId guild.channels
+                                        , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
+                                        )
+                                    of
+                                        ( Just channel, Ok sendMessageRateLimits ) ->
+                                            let
+                                                attachedFiles2 : SeqDict (Id FileId) FileData
+                                                attachedFiles2 =
+                                                    BackendExtra.validateAttachedFiles model.files attachedFiles
+                                            in
+                                            case threadRouteWithMaybeReplyTo of
+                                                NoThreadWithMaybeMessage maybeReplyTo ->
+                                                    ( { model
+                                                        | pendingDiscordCreateMessages =
+                                                            SeqDict.insert
+                                                                ( currentDiscordUserId, channelId )
+                                                                ( clientId, changeId )
+                                                                model.pendingDiscordCreateMessages
+                                                        , sendMessageRateLimits = sendMessageRateLimits
+                                                      }
+                                                    , DiscordSync.sendMessage
+                                                        discordUser
+                                                        channelId
+                                                        (case maybeReplyTo of
+                                                            Just replyTo ->
+                                                                OneToOne.first replyTo channel.linkedMessageIds
 
-                                DiscordGuildOrDmId_Dm data_ ->
-                                    data_.currentUserId
-                    in
-                    case RateLimit.checkAndUpdateRateLimit time (DiscordUserKey discordUserIdForRateLimit) model.sendMessageRateLimits of
-                        Err updatedLimits ->
-                            ( { model | sendMessageRateLimits = updatedLimits }
-                            , BackendExtra.invalidChangeResponse changeId clientId
-                            )
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        attachedFiles2
+                                                        text
+                                                        |> Task.attempt
+                                                            (SentDiscordGuildMessage
+                                                                time
+                                                                changeId
+                                                                sessionId
+                                                                clientId
+                                                                guildId
+                                                                channelId
+                                                                threadRouteWithMaybeReplyTo
+                                                                currentDiscordUserId
+                                                            )
+                                                    )
 
-                        Ok updatedLimits ->
-                            let
-                                model2 =
-                                    { model | sendMessageRateLimits = updatedLimits }
-                            in
-                            case guildOrDmId of
-                                DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
-                                    asDiscordGuildMember
-                                        model2
-                                        sessionId
-                                        guildId
-                                        currentDiscordUserId
-                                        (\_ discordUser _ guild ->
-                                            case SeqDict.get channelId guild.channels of
-                                                Just channel ->
-                                                    let
-                                                        attachedFiles2 : SeqDict (Id FileId) FileData
-                                                        attachedFiles2 =
-                                                            BackendExtra.validateAttachedFiles model2.files attachedFiles
-                                                    in
-                                                    case threadRouteWithMaybeReplyTo of
-                                                        NoThreadWithMaybeMessage maybeReplyTo ->
-                                                            ( { model2
+                                                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                                                    case OneToOne.first threadId channel.linkedMessageIds of
+                                                        Just messageId ->
+                                                            let
+                                                                thread : DiscordBackendThread
+                                                                thread =
+                                                                    SeqDict.get threadId channel.threads
+                                                                        |> Maybe.withDefault Thread.discordBackendInit
+
+                                                                discordThreadId : Discord.Id Discord.ChannelId
+                                                                discordThreadId =
+                                                                    Discord.idToUInt64 messageId |> Discord.idFromUInt64
+                                                            in
+                                                            ( { model
                                                                 | pendingDiscordCreateMessages =
                                                                     SeqDict.insert
-                                                                        ( currentDiscordUserId, channelId )
+                                                                        ( currentDiscordUserId, discordThreadId )
                                                                         ( clientId, changeId )
-                                                                        model2.pendingDiscordCreateMessages
+                                                                        model.pendingDiscordCreateMessages
+                                                                , sendMessageRateLimits = sendMessageRateLimits
                                                               }
-                                                            , DiscordSync.sendMessage
-                                                                discordUser
-                                                                channelId
-                                                                (case maybeReplyTo of
-                                                                    Just replyTo ->
-                                                                        OneToOne.first replyTo channel.linkedMessageIds
+                                                            , (case SeqDict.get threadId channel.threads of
+                                                                Just _ ->
+                                                                    Task.succeed ()
 
-                                                                    Nothing ->
-                                                                        Nothing
-                                                                )
-                                                                attachedFiles2
-                                                                text
+                                                                Nothing ->
+                                                                    discordStartThread
+                                                                        discordUser
+                                                                        channel
+                                                                        channelId
+                                                                        threadId
+                                                                        messageId
+                                                                        model
+                                                                        |> Task.map (\_ -> ())
+                                                              )
+                                                                |> Task.andThen
+                                                                    (\() ->
+                                                                        DiscordSync.sendMessage
+                                                                            discordUser
+                                                                            (Discord.idToUInt64 messageId |> Discord.idFromUInt64)
+                                                                            (case maybeReplyTo of
+                                                                                Just replyTo ->
+                                                                                    OneToOne.first replyTo thread.linkedMessageIds
+
+                                                                                Nothing ->
+                                                                                    Nothing
+                                                                            )
+                                                                            attachedFiles2
+                                                                            text
+                                                                    )
                                                                 |> Task.attempt
                                                                     (SentDiscordGuildMessage
                                                                         time
@@ -1893,124 +1924,64 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     )
                                                             )
 
-                                                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                            case OneToOne.first threadId channel.linkedMessageIds of
-                                                                Just messageId ->
-                                                                    let
-                                                                        thread : DiscordBackendThread
-                                                                        thread =
-                                                                            SeqDict.get threadId channel.threads
-                                                                                |> Maybe.withDefault Thread.discordBackendInit
+                                                        _ ->
+                                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                                                        discordThreadId : Discord.Id Discord.ChannelId
-                                                                        discordThreadId =
-                                                                            Discord.idToUInt64 messageId |> Discord.idFromUInt64
-                                                                    in
-                                                                    ( { model2
-                                                                        | pendingDiscordCreateMessages =
-                                                                            SeqDict.insert
-                                                                                ( currentDiscordUserId, discordThreadId )
-                                                                                ( clientId, changeId )
-                                                                                model2.pendingDiscordCreateMessages
-                                                                      }
-                                                                    , (case SeqDict.get threadId channel.threads of
-                                                                        Just _ ->
-                                                                            Task.succeed ()
+                                        _ ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
-                                                                        Nothing ->
-                                                                            discordStartThread
-                                                                                discordUser
-                                                                                channel
-                                                                                channelId
-                                                                                threadId
-                                                                                messageId
-                                                                                model2
-                                                                                |> Task.map (\_ -> ())
-                                                                      )
-                                                                        |> Task.andThen
-                                                                            (\() ->
-                                                                                DiscordSync.sendMessage
-                                                                                    discordUser
-                                                                                    (Discord.idToUInt64 messageId |> Discord.idFromUInt64)
-                                                                                    (case maybeReplyTo of
-                                                                                        Just replyTo ->
-                                                                                            OneToOne.first replyTo thread.linkedMessageIds
-
-                                                                                        Nothing ->
-                                                                                            Nothing
-                                                                                    )
-                                                                                    attachedFiles2
-                                                                                    text
-                                                                            )
-                                                                        |> Task.attempt
-                                                                            (SentDiscordGuildMessage
-                                                                                time
-                                                                                changeId
-                                                                                sessionId
-                                                                                clientId
-                                                                                guildId
-                                                                                channelId
-                                                                                threadRouteWithMaybeReplyTo
-                                                                                currentDiscordUserId
-                                                                            )
-                                                                    )
-
-                                                                _ ->
-                                                                    ( model2, BackendExtra.invalidChangeResponse changeId clientId )
-
-                                                Nothing ->
-                                                    ( model2, BackendExtra.invalidChangeResponse changeId clientId )
+                        DiscordGuildOrDmId_Dm data ->
+                            asDiscordDmUser
+                                model
+                                sessionId
+                                data
+                                (\_ discordUser _ dmChannel ->
+                                    let
+                                        attachedFiles2 : SeqDict (Id FileId) FileData
+                                        attachedFiles2 =
+                                            BackendExtra.validateAttachedFiles model.files attachedFiles
+                                    in
+                                    case
+                                        ( threadRouteWithMaybeReplyTo
+                                        , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
                                         )
+                                    of
+                                        ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->
+                                            ( { model
+                                                | pendingDiscordCreateDmMessages =
+                                                    SeqDict.insert
+                                                        data
+                                                        ( clientId, changeId )
+                                                        model.pendingDiscordCreateDmMessages
+                                                , sendMessageRateLimits = sendMessageRateLimits
+                                              }
+                                            , DiscordSync.sendMessage
+                                                discordUser
+                                                (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
+                                                (case maybeReplyTo of
+                                                    Just replyTo ->
+                                                        OneToOne.first replyTo dmChannel.linkedMessageIds
 
-                                DiscordGuildOrDmId_Dm data ->
-                                    asDiscordDmUser
-                                        model2
-                                        sessionId
-                                        data
-                                        (\_ discordUser _ dmChannel ->
-                                            let
-                                                attachedFiles2 : SeqDict (Id FileId) FileData
-                                                attachedFiles2 =
-                                                    BackendExtra.validateAttachedFiles model2.files attachedFiles
-                                            in
-                                            case threadRouteWithMaybeReplyTo of
-                                                NoThreadWithMaybeMessage maybeReplyTo ->
-                                                    ( { model2
-                                                        | pendingDiscordCreateDmMessages =
-                                                            SeqDict.insert
-                                                                data
-                                                                ( clientId, changeId )
-                                                                model2.pendingDiscordCreateDmMessages
-                                                      }
-                                                    , DiscordSync.sendMessage
-                                                        discordUser
-                                                        (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
-                                                        (case maybeReplyTo of
-                                                            Just replyTo ->
-                                                                OneToOne.first replyTo dmChannel.linkedMessageIds
-
-                                                            Nothing ->
-                                                                Nothing
-                                                        )
-                                                        attachedFiles2
-                                                        text
-                                                        |> Task.attempt
-                                                            (SentDiscordDmMessage
-                                                                time
-                                                                changeId
-                                                                sessionId
-                                                                clientId
-                                                                data.channelId
-                                                                data.currentUserId
-                                                            )
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                attachedFiles2
+                                                text
+                                                |> Task.attempt
+                                                    (SentDiscordDmMessage
+                                                        time
+                                                        changeId
+                                                        sessionId
+                                                        clientId
+                                                        data.channelId
+                                                        data.currentUserId
                                                     )
+                                            )
 
-                                                ViewThreadWithMaybeMessage _ _ ->
-                                                    -- Not supported for Discord DM changes
-                                                    ( model2
-                                                    , BackendExtra.invalidChangeResponse changeId clientId
-                                                    )
-                                        )
+                                        _ ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner

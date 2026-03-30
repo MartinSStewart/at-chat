@@ -54,6 +54,7 @@ import Pagination exposing (PageId)
 import PersonName
 import Postmark
 import Quantity
+import RateLimit
 import RichText exposing (RichText)
 import SecretId
 import SeqDict exposing (SeqDict)
@@ -766,8 +767,8 @@ sendGuildMessage :
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
-    case SeqDict.get channelId guild.channels of
-        Just channel ->
+    case ( SeqDict.get channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
+        ( Just channel, Ok sendMessageRateLimits ) ->
             let
                 ( channel2, embedCmds ) =
                     case threadRouteWithMaybeReplyTo of
@@ -878,6 +879,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 }
                         )
                         users2
+                , sendMessageRateLimits = sendMessageRateLimits
               }
             , Command.batch
                 [ LocalChangeResponse
@@ -905,10 +907,8 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 ]
             )
 
-        Nothing ->
-            ( model
-            , invalidChangeResponse changeId clientId
-            )
+        _ ->
+            ( model, invalidChangeResponse changeId clientId )
 
 
 sendDm :
@@ -926,8 +926,8 @@ sendDm :
     -> DmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user dmChannelId dmChannel =
-    case threadRouteWithReplyTo of
-        ViewThreadWithMaybeMessage threadId repliedTo ->
+    case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
+        ( ViewThreadWithMaybeMessage threadId repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds ) =
                     Message.userTextMessage time session.userId text repliedTo attachedFiles
@@ -948,6 +948,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                                     user.lastViewedThreads
                         }
                         model.users
+                , sendMessageRateLimits = sendMessageRateLimits
               }
             , Command.batch
                 [ if session.userId == otherUserId then
@@ -968,7 +969,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 ]
             )
 
-        NoThreadWithMaybeMessage repliedTo ->
+        ( NoThreadWithMaybeMessage repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds ) =
                     Message.userTextMessage time session.userId text repliedTo attachedFiles
@@ -986,9 +987,13 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                                 SeqDict.insert (GuildOrDmId (GuildOrDmId_Dm otherUserId)) messageId user.lastViewed
                         }
                         model.users
+                , sendMessageRateLimits = sendMessageRateLimits
               }
             , Command.batch
                 [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
                 , Command.map identity (GotDmMessageEmbed dmChannelId (NoThreadWithMessage messageId)) embedCmds
                 ]
             )
+
+        _ ->
+            ( model, invalidChangeResponse changeId clientId )

@@ -499,11 +499,11 @@ focusEvent user delayInMs maybeHtmlId maybeSelection =
         )
 
 
-writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-writeMessage user text =
+writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> DelayInMs -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+writeMessage user delayInMs text =
     T.group
-        [ focusEvent user 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
-        , user.click 1005 (Dom.id "channel_textinput")
+        [ focusEvent user delayInMs (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+        , user.click 100 (Dom.id "channel_textinput")
         , user.input 100 (Dom.id "channel_textinput") text
         , user.keyDown 100 (Dom.id "channel_textinput") "Enter" []
         , focusEvent user 100 Nothing Nothing
@@ -1162,7 +1162,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         ]
                             |> T.collapsableGroup "Check cards"
                 in
-                [ writeMessage admin "Test https://elm.camp/ https://elm.camp/ https://meetdown.app/"
+                [ writeMessage admin 100 "Test https://elm.camp/ https://elm.camp/ https://meetdown.app/"
                 , checkCards 2 1
                 , T.collapsableGroup
                     "Edit message"
@@ -1505,7 +1505,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
-                [ writeMessage admin "This message is ||very|| ||secret||"
+                [ writeMessage admin 100 "This message is ||very|| ||secret||"
                 , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
                 , admin.custom
                     100
@@ -1516,7 +1516,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , ( "clientY", Json.Encode.int 300 )
                         ]
                     )
-                , writeMessage admin "Another ||*super*|| *||secret||* message"
+                , writeMessage admin 100 "Another ||*super*|| *||secret||* message"
                 , clickSpoiler user (Dom.id "spoiler_1_0")
                 , clickSpoiler user (Dom.id "spoiler_1_1")
                 , clickSpoiler user (Dom.id "spoiler_2_1")
@@ -1524,7 +1524,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 , createThread admin (Id.fromInt 2)
                 , clickSpoiler admin (Dom.id "spoiler_2_0")
                 , clickSpoiler admin (Dom.id "spoiler_2_1")
-                , writeMessage admin "||*super*|| ||duper|| *||secret||* text"
+                , writeMessage admin 100 "||*super*|| ||duper|| *||secret||* text"
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , clickSpoiler admin (Dom.id "threadSpoiler_0_0")
                 , clickSpoiler admin (Dom.id "threadSpoiler_0_2")
@@ -1601,11 +1601,11 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             (\admin user ->
                 [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
-                , writeMessage admin "Test"
+                , writeMessage admin 100 "Test"
                 , checkNotification "Test"
-                , writeMessage admin "Test 2"
+                , writeMessage admin 100 "Test 2"
                 , user.click 100 (Dom.id "guild_openChannel_0")
-                , writeMessage user "I shouldn't get notified"
+                , writeMessage user 100 "I shouldn't get notified"
                 , checkNoNotification "I shouldn't get notified"
                 ]
             )
@@ -1618,9 +1618,9 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
     --    [ connectTwoUsersAndJoinNewGuild
     --        (\admin user ->
     --            [ user.click 100 (Dom.id "guildIcon_showFriends")
-    --            , writeMessage admin "@Stevie Steve"
-    --            , writeMessage admin "@Stevie Steve"
-    --            , writeMessage admin "@Stevie Steve"
+    --            , writeMessage admin 100 "@Stevie Steve"
+    --            , writeMessage admin 100 "@Stevie Steve"
+    --            , writeMessage admin 100 "@Stevie Steve"
     --            , hasExactText user [ "3" ]
     --            , T.connectFrontend
     --                100
@@ -1648,14 +1648,14 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 , admin.click 100 (Dom.id "guild_newChannel")
                 , admin.input 100 (Dom.id "newChannelName") "Second-channel-goes-here"
                 , admin.click 100 (Dom.id "guild_createChannel")
-                , writeMessage admin "First message"
-                , writeMessage admin "Next message"
-                , writeMessage admin "Third message"
+                , writeMessage admin 100 "First message"
+                , writeMessage admin 100 "Next message"
+                , writeMessage admin 100 "Third message"
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
                 , user.click 100 (Dom.id "guild_openGuild_1")
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
-                , writeMessage admin "@Stevie Steve Hello!"
-                , writeMessage admin "@Stevie Steve Hello again!"
+                , writeMessage admin 100 "@Stevie Steve Hello!"
+                , writeMessage admin 100 "@Stevie Steve Hello again!"
                 , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
                 , T.connectFrontend
                     100
@@ -1677,7 +1677,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
         [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
-                , writeMessage admin "See if notification appears next to guild icon"
+                , writeMessage admin 100 "See if notification appears next to guild icon"
                 , user.snapshotView 100 { name = "Guild icon new message notification" }
                 , T.connectFrontend
                     100
@@ -1687,7 +1687,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     (\_ ->
                         [ user.snapshotView 100 { name = "Guild icon new message notification on reload" } ]
                     )
-                , writeMessage admin "@Stevie Steve now you should see a red icon"
+                , writeMessage admin 100 "@Stevie Steve now you should see a red icon"
                 , user.snapshotView 100 { name = "Guild icon new mention notification" }
                 ]
             )
@@ -1699,7 +1699,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
         [ connectTwoUsersAndJoinNewGuild
             (\_ user ->
                 [ List.range 0 (VisibleMessages.pageSize * 2)
-                    |> List.map (\index -> writeMessage user ("Message " ++ String.fromInt (index + 1)))
+                    |> List.map (\index -> writeMessage user 1000 ("Message " ++ String.fromInt (index + 1)))
                     |> T.group
                 , T.connectFrontend
                     100
@@ -1709,7 +1709,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
-                        , writeMessage userReload "Another message"
+                        , writeMessage userReload 100 "Another message"
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Another message" ])
@@ -1808,10 +1808,10 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 , checkNotification "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , admin.click 100 (Dom.id "guild_openDm_1")
-                , writeMessage admin "Here's a DM to you"
+                , writeMessage admin 100 "Here's a DM to you"
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
-                , writeMessage user "Here's a reply!"
-                , writeMessage user "And another reply"
+                , writeMessage user 100 "Here's a reply!"
+                , writeMessage user 100 "And another reply"
                 , user.update 100 (Types.VisibilityChanged Hidden)
                 , T.connectFrontend
                     100
@@ -2087,7 +2087,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
                         , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tabB
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
-                        , writeMessage tabA "Test"
+                        , writeMessage tabA 100 "Test"
                         , tabB.click 111 (Dom.id "guild_openGuild_0")
                         , focusEvent tabB 25 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                         , tabA.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
@@ -2199,9 +2199,9 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
         )
         [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
-                [ writeMessage admin "Hello export test!"
+                [ writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
-                , writeMessage user "Hello!"
+                , writeMessage user 100 "Hello!"
                 , linkDiscordAndLogin
                     (Lamdera.sessionIdFromString "JoeSession")
                     "Joe"
@@ -2353,28 +2353,28 @@ sendMessageRateLimitTest config =
                                 getMessageCount dataBefore
                         in
                         [ T.collapsableGroup "Send messages up to rate limit"
-                            (List.range 0 (RateLimit.maxMessagesPerWindow - 1)
+                            (List.range 0 (RateLimit.shortWindowMaxMessages - 1)
                                 |> List.map
                                     (\i ->
                                         sendMessage i 0.0 admin
                                     )
                             )
                         , T.collapsableGroup "Send messages exceeding rate limit"
-                            (List.range RateLimit.maxMessagesPerWindow (RateLimit.maxMessagesPerWindow + 4)
+                            (List.range RateLimit.shortWindowMaxMessages (RateLimit.shortWindowMaxMessages + 4)
                                 |> List.map
                                     (\i ->
                                         sendMessage i 0.0 admin
                                     )
                             )
-                        , checkMessageCount "After rate limit" (initialCount + RateLimit.maxMessagesPerWindow)
+                        , checkMessageCount "After rate limit" (initialCount + RateLimit.shortWindowMaxMessages)
                         , T.collapsableGroup "User2 can still send while admin is rate limited"
                             [ sendMessage 200 0.0 user
                             ]
-                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.maxMessagesPerWindow + 1)
+                        , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.shortWindowMaxMessages + 1)
                         , T.collapsableGroup "After rate limit window, sending works again"
-                            [ sendMessage 100 (Duration.inMilliseconds RateLimit.windowDuration + 1) admin
+                            [ sendMessage 100 (Duration.inMilliseconds RateLimit.shortWindowDuration + 1) admin
                             ]
-                        , checkMessageCount "After window reset" (initialCount + RateLimit.maxMessagesPerWindow + 2)
+                        , checkMessageCount "After window reset" (initialCount + RateLimit.shortWindowMaxMessages + 2)
                         ]
                     )
                 ]
@@ -2462,10 +2462,10 @@ inviteUserAndDmChat config =
                     admin
                     (\user ->
                         [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , writeMessage user "Hello"
+                        , writeMessage user 100 "Hello"
                         , admin.click 100 (Dom.id "guildsColumn_openDm_1")
-                        , writeMessage user "Hello 2"
-                        , writeMessage admin "Hello from *admin*"
+                        , writeMessage user 100 "Hello 2"
+                        , writeMessage admin 100 "Hello from *admin*"
                         , user.checkView
                             100
                             (\html ->
@@ -2544,11 +2544,11 @@ attackerTriesToLeakSensitiveData config =
                 , inviteUser
                     admin
                     (\user ->
-                        [ writeMessage user "sensitive guild message"
+                        [ writeMessage user 100 "sensitive guild message"
                         , admin.click 100 (Dom.id "guild_openChannel_0")
-                        , writeMessage admin "sensitive guild message 2"
+                        , writeMessage admin 100 "sensitive guild message 2"
                         , user.click 1000 (Dom.id "guild_openDm_0")
-                        , writeMessage user "sensitive DM message"
+                        , writeMessage user 100 "sensitive DM message"
                         , T.connectFrontend
                             100
                             sessionIdAttacker
