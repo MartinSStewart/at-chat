@@ -2302,9 +2302,14 @@ sendMessageRateLimitTest config =
                     channelId =
                         Id.fromInt 0
 
-                    sendMessage : Int -> DelayInMs -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-                    sendMessage changeIndex delayMs client =
-                        client.sendToBackend delayMs
+                    sendMessage :
+                        T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        -> Float
+                        -> Int
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    sendMessage client delayInMs changeIndex =
+                        client.sendToBackend
+                            delayInMs
                             (LocalModelChangeRequest (ChangeId changeIndex)
                                 (Local_SendMessage
                                     (Time.millisToPosix 0)
@@ -2352,28 +2357,20 @@ sendMessageRateLimitTest config =
                             initialCount =
                                 getMessageCount dataBefore
                         in
-                        [ T.collapsableGroup "Send messages up to rate limit"
-                            (List.range 0 (RateLimit.shortWindowMaxMessages - 1)
-                                |> List.map
-                                    (\i ->
-                                        sendMessage i 0.0 admin
-                                    )
-                            )
-                        , T.collapsableGroup "Send messages exceeding rate limit"
-                            (List.range RateLimit.shortWindowMaxMessages (RateLimit.shortWindowMaxMessages + 4)
-                                |> List.map
-                                    (\i ->
-                                        sendMessage i 0.0 admin
-                                    )
-                            )
+                        [ List.range 0 (RateLimit.shortWindowMaxMessages - 1)
+                            |> List.map (sendMessage admin 0)
+                            |> T.collapsableGroup "Send messages up to rate limit"
+                        , List.range RateLimit.shortWindowMaxMessages (RateLimit.shortWindowMaxMessages + 4)
+                            |> List.map (sendMessage admin 0)
+                            |> T.collapsableGroup "Send messages exceeding rate limit"
                         , checkMessageCount "After rate limit" (initialCount + RateLimit.shortWindowMaxMessages)
-                        , T.collapsableGroup "User2 can still send while admin is rate limited"
-                            [ sendMessage 200 0.0 user
-                            ]
+                        , T.collapsableGroup
+                            "User2 can still send while admin is rate limited"
+                            [ sendMessage user 0 200 ]
                         , checkMessageCount "User2 not rate limited" (initialCount + RateLimit.shortWindowMaxMessages + 1)
-                        , T.collapsableGroup "After rate limit window, sending works again"
-                            [ sendMessage 100 (Duration.inMilliseconds RateLimit.shortWindowDuration + 1) admin
-                            ]
+                        , T.collapsableGroup
+                            "After rate limit window, sending works again"
+                            [ sendMessage admin (Duration.inMilliseconds RateLimit.shortWindowDuration + 1) 100 ]
                         , checkMessageCount "After window reset" (initialCount + RateLimit.shortWindowMaxMessages + 2)
                         ]
                     )
