@@ -16,6 +16,8 @@ type alias Config =
     }
 
 
+{-| Warning, currently doesn't recursively check types. It only looks in types named "ToBackend".
+-}
 rule : { exemptions : List ( ModuleName, String ) } -> Rule
 rule config =
     Rule.newProjectRuleSchema "NoOpaqueInToBackend" initialProjectContext
