@@ -121,6 +121,13 @@ config =
             ]
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
     , NoOpaqueInToBackend.rule
+        { exemptions =
+            [ ( [ "FileStatus" ], "FileHash" )
+            , ( [ "SecretId" ], "SecretId" )
+            , ( [ "Local" ], "ChangeId" )
+            , ( [ "AiChat" ], "Message" )
+            ]
+        }
     , EncoderDecoderNaming.rule
         |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]

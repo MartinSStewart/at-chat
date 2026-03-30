@@ -11,10 +11,15 @@ import Review.Rule as Rule exposing (Rule)
 import Set exposing (Set)
 
 
-rule : Rule
-rule =
+type alias Config =
+    { exemptions : Set ( ModuleName, String )
+    }
+
+
+rule : { exemptions : List ( ModuleName, String ) } -> Rule
+rule config =
     Rule.newProjectRuleSchema "NoOpaqueInToBackend" initialProjectContext
-        |> Rule.withModuleVisitor moduleVisitor
+        |> Rule.withModuleVisitor (moduleVisitor { exemptions = Set.fromList config.exemptions })
         |> Rule.withContextFromImportedModules
         |> Rule.withModuleContextUsingContextCreator
             { fromProjectToModule =
@@ -77,13 +82,14 @@ foldProjectContexts a b =
 
 
 moduleVisitor :
-    Rule.ModuleRuleSchema {} ModuleContext
+    Config
+    -> Rule.ModuleRuleSchema {} ModuleContext
     -> Rule.ModuleRuleSchema { hasAtLeastOneVisitor : () } ModuleContext
-moduleVisitor visitor =
+moduleVisitor config visitor =
     visitor
         |> Rule.withCommentsVisitor commentsVisitor
         |> Rule.withDeclarationEnterVisitor declarationVisitor
-        |> Rule.withFinalModuleEvaluation finalEvaluation
+        |> Rule.withFinalModuleEvaluation (finalEvaluation config)
 
 
 commentsVisitor : List (Node String) -> ModuleContext -> ( List (Rule.Error {}), ModuleContext )
@@ -232,9 +238,9 @@ hasOpaqueDocComment declRange comments =
         comments
 
 
-finalEvaluation : ModuleContext -> List (Rule.Error {})
-finalEvaluation context =
-    List.concatMap (checkTypeAnnotation context) context.toBackendArgs
+finalEvaluation : Config -> ModuleContext -> List (Rule.Error {})
+finalEvaluation config context =
+    List.concatMap (checkTypeAnnotation config context) context.toBackendArgs
 
 
 isOpaqueDoc : String -> Bool
@@ -266,8 +272,8 @@ resolveModuleName context range =
             result
 
 
-checkTypeAnnotation : ModuleContext -> Node TypeAnnotation -> List (Rule.Error {})
-checkTypeAnnotation context typeAnnotation =
+checkTypeAnnotation : Config -> ModuleContext -> Node TypeAnnotation -> List (Rule.Error {})
+checkTypeAnnotation config context typeAnnotation =
     case Node.value typeAnnotation of
         Typed (Node range ( _, name )) args ->
             if name == "Untrusted" then
@@ -276,7 +282,7 @@ checkTypeAnnotation context typeAnnotation =
             else
                 case resolveModuleName context range of
                     Just actualModuleName ->
-                        if Set.member ( actualModuleName, name ) context.opaqueTypes then
+                        if Set.member ( actualModuleName, name ) context.opaqueTypes && not (Set.member ( actualModuleName, name ) config.exemptions) then
                             [ Rule.error
                                 { message = name ++ " is an opaque type and must be wrapped in Untrusted when used in ToBackend."
                                 , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
@@ -285,29 +291,29 @@ checkTypeAnnotation context typeAnnotation =
                             ]
 
                         else
-                            checkArgsWithPhantom context ( actualModuleName, name ) args
+                            checkArgsWithPhantom config context ( actualModuleName, name ) args
 
                     Nothing ->
-                        List.concatMap (checkTypeAnnotation context) args
+                        List.concatMap (checkTypeAnnotation config context) args
 
         Tupled nodes ->
-            List.concatMap (checkTypeAnnotation context) nodes
+            List.concatMap (checkTypeAnnotation config context) nodes
 
         Record fields ->
-            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotation context field) fields
+            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotation config context field) fields
 
         GenericRecord _ (Node _ fields) ->
-            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotation context field) fields
+            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotation config context field) fields
 
         FunctionTypeAnnotation a b ->
-            checkTypeAnnotation context a ++ checkTypeAnnotation context b
+            checkTypeAnnotation config context a ++ checkTypeAnnotation config context b
 
         _ ->
             []
 
 
-checkArgsWithPhantom : ModuleContext -> ( ModuleName, String ) -> List (Node TypeAnnotation) -> List (Rule.Error {})
-checkArgsWithPhantom context ( moduleName, typeName ) args =
+checkArgsWithPhantom : Config -> ModuleContext -> ( ModuleName, String ) -> List (Node TypeAnnotation) -> List (Rule.Error {})
+checkArgsWithPhantom config context ( moduleName, typeName ) args =
     args
         |> List.indexedMap
             (\i arg ->
@@ -315,6 +321,6 @@ checkArgsWithPhantom context ( moduleName, typeName ) args =
                     []
 
                 else
-                    checkTypeAnnotation context arg
+                    checkTypeAnnotation config context arg
             )
         |> List.concat
