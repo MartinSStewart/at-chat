@@ -61,7 +61,7 @@ main =
                             (\index ( count, items ) ->
                                 ( OneOrGreater.increment count
                                 , Ui.el
-                                    [ Ui.width Ui.shrink ]
+                                    [ Ui.width (Ui.px 54) ]
                                     (GuildIcon.userView
                                         (if modBy 2 index == 1 then
                                             GuildIcon.NewMessage count
