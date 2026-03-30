@@ -32,7 +32,7 @@ module LoginForm exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import EmailAddress exposing (EmailAddress)
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Icons
 import MyUi
@@ -368,8 +368,8 @@ mobileWarning =
         ]
 
 
-view : UserAgent -> LoginForm -> Bool -> PwaStatus -> Element Msg
-view userAgent loginForm isMobile pwaStatus =
+view : LoginForm -> Bool -> PwaStatus -> Element Msg
+view loginForm isMobile pwaStatus =
     Ui.column
         [ MyUi.montserrat
         , Ui.padding 16
@@ -398,10 +398,10 @@ view userAgent loginForm isMobile pwaStatus =
                 enterEmailView enterEmail2
 
             EnterLoginCode enterLoginCode ->
-                enterLoginCodeView userAgent enterLoginCode
+                enterLoginCodeView enterLoginCode
 
             EnterTwoFactorCode enterTwoFactorCode ->
-                enterTwoFactorCodeView userAgent enterTwoFactorCode
+                enterTwoFactorCodeView enterTwoFactorCode
 
             EnterUserData data ->
                 let
@@ -459,13 +459,12 @@ twoFactorCodeLength =
 
 
 loginCodeInput :
-    UserAgent
-    -> Int
+    Int
     -> (String -> msg)
     -> String
     -> { element : Element msg, id : Ui.Input.Label }
     -> Element msg
-loginCodeInput userAgent codeLength onInput loginCode label =
+loginCodeInput codeLength onInput loginCode label =
     Ui.el
         [ Ui.Font.size 36
         , Ui.Prose.paragraph
@@ -477,6 +476,26 @@ loginCodeInput userAgent codeLength onInput loginCode label =
             (List.range 0 (codeLength - 1)
                 |> List.map
                     (\index ->
+                        let
+                            char =
+                                if String.length loginCode > index then
+                                    case String.slice index (index + 1) loginCode |> String.uncons of
+                                        Just ( head, _ ) ->
+                                            Html.div [ Html.Attributes.style "display" "flex" ] [ Icons.number 20 head ]
+                                                |> Ui.html
+                                                |> Ui.el
+                                                    [ Ui.width Ui.shrink
+                                                    , Ui.centerX
+                                                    , Ui.centerY
+                                                    , MyUi.noPointerEvents
+                                                    ]
+
+                                        Nothing ->
+                                            Ui.none
+
+                                else
+                                    Ui.none
+                        in
                         Ui.el
                             [ Ui.paddingXY -1 -1
                             , Ui.behindContent
@@ -485,6 +504,7 @@ loginCodeInput userAgent codeLength onInput loginCode label =
                                     , Ui.paddingXY 0 24
                                     , Ui.width (Ui.px 32)
                                     , Ui.Font.color MyUi.font1
+                                    , Ui.inFront char
                                     , if index == (codeLength - 1) // 2 then
                                         Ui.onRight
                                             (Ui.el
@@ -527,28 +547,7 @@ loginCodeInput userAgent codeLength onInput loginCode label =
             , inputFont
             , MyUi.htmlStyle "inputmode" "numeric"
             , Ui.border 0
-            , Ui.background (Ui.rgba 0 0 0 0)
-            , Ui.Font.color MyUi.font1
-            , Ui.move
-                (case userAgent.browser of
-                    Safari ->
-                        { x = 0, y = 0, z = 0 }
-
-                    Chrome ->
-                        { x = 0, y = 4, z = 0 }
-
-                    Firefox ->
-                        { x = -1, y = 8, z = 0 }
-
-                    Edge ->
-                        { x = 0, y = 4, z = 0 }
-
-                    Opera ->
-                        { x = 0, y = 4, z = 0 }
-
-                    UnknownBrowser ->
-                        { x = 0, y = 0, z = 0 }
-                )
+            , Ui.opacity 0
             ]
             { onChange = onInput
             , text = loginCode
@@ -563,8 +562,8 @@ inputFont =
     Ui.Font.family [ Ui.Font.typeface "Consolas", Ui.Font.monospace ]
 
 
-enterLoginCodeView : UserAgent -> EnterLoginCode2 -> Element Msg
-enterLoginCodeView userAgent model =
+enterLoginCodeView : EnterLoginCode2 -> Element Msg
+enterLoginCodeView model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -596,7 +595,7 @@ enterLoginCodeView userAgent model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput userAgent loginCodeLength TypedLoginCode model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput loginCodeLength TypedLoginCode model.code label)
             , if SeqDict.size model.attempts < maxLoginAttempts then
                 case validateCode loginCodeLength model.code of
                     Ok loginCode ->
@@ -618,8 +617,8 @@ enterLoginCodeView userAgent model =
         ]
 
 
-enterTwoFactorCodeView : UserAgent -> EnterTwoFactorCode2 -> Element Msg
-enterTwoFactorCodeView userAgent model =
+enterTwoFactorCodeView : EnterTwoFactorCode2 -> Element Msg
+enterTwoFactorCodeView model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -644,7 +643,7 @@ enterTwoFactorCodeView userAgent model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput userAgent twoFactorCodeLength TypedTwoFactorCode model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput twoFactorCodeLength TypedTwoFactorCode model.code label)
             , if model.attemptCount < maxLoginAttempts then
                 case validateCode twoFactorCodeLength model.code of
                     Ok loginCode ->

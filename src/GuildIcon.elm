@@ -52,7 +52,7 @@ notificationHelper color fontColor borderColor xOffset yOffset count =
             [ Icons.infinity 14 ]
 
          else
-            Icons.number 7 (String.fromInt count2)
+            Icons.numbers 7 (String.fromInt count2)
         )
         |> Ui.html
         |> Ui.el

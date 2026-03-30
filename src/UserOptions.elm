@@ -205,7 +205,7 @@ view isMobile time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
+                , TwoFactorAuthentication.view isMobile time loggedIn.twoFactor
                     |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1

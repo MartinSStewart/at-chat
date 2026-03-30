@@ -202,8 +202,8 @@ updateFromBackend toFrontend model =
                     model
 
 
-view : UserAgent -> Bool -> Time.Posix -> TwoFactorState -> Element Msg
-view userAgent isMobile time twoFactorStatus =
+view : Bool -> Time.Posix -> TwoFactorState -> Element Msg
+view isMobile time twoFactorStatus =
     MyUi.container
         MyUi.background1
         isMobile
@@ -222,7 +222,7 @@ view userAgent isMobile time twoFactorStatus =
                     (Ui.text "Loading...")
 
             TwoFactorSetup data ->
-                setupView userAgent isMobile data
+                setupView isMobile data
 
             TwoFactorComplete ->
                 Ui.column
@@ -241,8 +241,8 @@ view userAgent isMobile time twoFactorStatus =
         ]
 
 
-setupView : UserAgent -> Bool -> TwoFactorSetupData -> Element Msg
-setupView userAgent isMobile { qrCodeUrl, code, attempts } =
+setupView : Bool -> TwoFactorSetupData -> Element Msg
+setupView isMobile { qrCodeUrl, code, attempts } =
     case QRCode.fromString qrCodeUrl of
         Ok qrCode ->
             let
@@ -324,7 +324,7 @@ setupView userAgent isMobile { qrCodeUrl, code, attempts } =
                     (Ui.column
                         [ Ui.spacing 8 ]
                         [ label.element
-                        , LoginForm.loginCodeInput userAgent LoginForm.twoFactorCodeLength TypedTwoFactorCode code label
+                        , LoginForm.loginCodeInput LoginForm.twoFactorCodeLength TypedTwoFactorCode code label
                         , case LoginForm.validateCode LoginForm.twoFactorCodeLength code of
                             Ok code2 ->
                                 case SeqDict.get code2 attempts of

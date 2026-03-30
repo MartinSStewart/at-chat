@@ -5016,7 +5016,6 @@ view model =
 
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
-                                    loaded.userAgent
                                     (Maybe.withDefault LoginForm.init loginForm)
                                     (MyUi.isMobile loaded)
                                     loaded.pwaStatus
@@ -5069,7 +5068,7 @@ view model =
                                         ]
                                         (case loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view loaded.userAgent loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
+                                                LoginForm.view loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
 
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth
@@ -5173,7 +5172,6 @@ view model =
                                             [ Ui.Font.size 20, Ui.Font.center, Ui.widthMax 400, Ui.centerX ]
                                             (Ui.text "You aren't logged in here. Please log in and then we can link your Discord account.")
                                         , LoginForm.view
-                                            loaded.userAgent
                                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                             (MyUi.isMobile loaded)
                                             -- Don't show PWA warning on this login screen
