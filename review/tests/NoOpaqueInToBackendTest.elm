@@ -1,8 +1,12 @@
 module NoOpaqueInToBackendTest exposing (all)
 
-import NoOpaqueInToBackend exposing (rule)
+import NoOpaqueInToBackend
 import Review.Test
 import Test exposing (Test, describe, test)
+
+
+defaultRule =
+    NoOpaqueInToBackend.rule { exemptions = [] }
 
 
 all : Test
@@ -17,11 +21,11 @@ type ToBackend
     | SendNumber Int
 """
                 ]
-                    |> Review.Test.runOnModules rule
+                    |> Review.Test.runOnModules defaultRule
                     |> Review.Test.expectNoErrors
         , test "should report error when opaque type is used directly in ToBackend (same module)" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -31,7 +35,7 @@ type Email
 type ToBackend
     = SendEmail Email
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
@@ -42,7 +46,7 @@ type ToBackend
                         ]
         , test "should not report error when opaque type is wrapped in Untrusted" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -55,11 +59,11 @@ type Untrusted a
 type ToBackend
     = SendEmail (Untrusted Email)
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectNoErrors
         , test "should report error for opaque type alias used in ToBackend" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| Opaque
 -}
@@ -69,7 +73,7 @@ type alias MyRecord =
 type ToBackend
     = SendRecord MyRecord
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "MyRecord is an opaque type and must be wrapped in Untrusted when used in ToBackend."
@@ -94,7 +98,7 @@ type ToBackend
     = SendEmail Email
 """
                 ]
-                    |> Review.Test.runOnModules rule
+                    |> Review.Test.runOnModules defaultRule
                     |> Review.Test.expectErrorsForModules
                         [ ( "Types"
                           , [ Review.Test.error
@@ -108,7 +112,7 @@ type ToBackend
                         ]
         , test "should report error for opaque type nested inside other types in ToBackend" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -118,7 +122,7 @@ type Email
 type ToBackend
     = SendEmails (List Email)
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
@@ -129,7 +133,7 @@ type ToBackend
                         ]
         , test "should not report errors for non-ToBackend types using opaque types" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -139,11 +143,11 @@ type Email
 type Msg
     = GotEmail Email
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectNoErrors
         , test "should allow opaque types in phantom type parameter positions" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -156,11 +160,11 @@ type Id a
 type ToBackend
     = GetPage (Id PageId)
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectNoErrors
         , test "should report opaque types in non-phantom type parameter positions" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -173,7 +177,7 @@ type Wrapper a
 type ToBackend
     = SendWrapped (Wrapper Email)
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
@@ -184,7 +188,7 @@ type ToBackend
                         ]
         , test "should allow opaque type in phantom position but report in non-phantom position" <|
             \() ->
-                """module MyModule exposing (..)
+                """module Types exposing (..)
 
 {-| OpaqueVariants
 -}
@@ -202,7 +206,7 @@ type Mixed phantom real
 type ToBackend
     = SendMixed (Mixed PageId Email)
 """
-                    |> Review.Test.run rule
+                    |> Review.Test.run defaultRule
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
@@ -230,6 +234,109 @@ type ToBackend
     = GetPage (Id PageId)
 """
                 ]
-                    |> Review.Test.runOnModules rule
+                    |> Review.Test.runOnModules defaultRule
+                    |> Review.Test.expectNoErrors
+        , test "should recursively check types referenced by Types.ToBackend" <|
+            \() ->
+                [ """module Admin exposing (..)
+
+{-| OpaqueVariants
+-}
+type Email
+    = Email String
+
+type ToBackend
+    = DoSomething Email
+"""
+                , """module Types exposing (..)
+import Admin
+
+type ToBackend
+    = AdminToBackend Admin.ToBackend
+"""
+                ]
+                    |> Review.Test.runOnModules defaultRule
+                    |> Review.Test.expectErrorsForModules
+                        [ ( "Admin"
+                          , [ Review.Test.error
+                                { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
+                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                                , under = "Email"
+                                }
+                                |> Review.Test.atExactly { start = { row = 9, column = 19 }, end = { row = 9, column = 24 } }
+                            ]
+                          )
+                        ]
+        , test "should not report errors for ToBackend in non-Types module" <|
+            \() ->
+                """module Admin exposing (..)
+
+{-| OpaqueVariants
+-}
+type Email
+    = Email String
+
+type ToBackend
+    = SendEmail Email
+"""
+                    |> Review.Test.run defaultRule
+                    |> Review.Test.expectNoErrors
+        , test "should recursively check nested type references" <|
+            \() ->
+                [ """module Deep exposing (..)
+
+{-| OpaqueVariants
+-}
+type Secret
+    = Secret String
+"""
+                , """module Middle exposing (..)
+import Deep exposing (Secret)
+
+type Data
+    = Data Secret
+"""
+                , """module Types exposing (..)
+import Middle
+
+type ToBackend
+    = SendData Middle.Data
+"""
+                ]
+                    |> Review.Test.runOnModules defaultRule
+                    |> Review.Test.expectErrorsForModules
+                        [ ( "Middle"
+                          , [ Review.Test.error
+                                { message = "Secret is an opaque type and must be wrapped in Untrusted when used in ToBackend."
+                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                                , under = "Secret"
+                                }
+                                |> Review.Test.atExactly { start = { row = 5, column = 11 }, end = { row = 5, column = 17 } }
+                            ]
+                          )
+                        ]
+        , test "should not recurse into Untrusted-wrapped types" <|
+            \() ->
+                [ """module Other exposing (..)
+
+{-| OpaqueVariants
+-}
+type Email
+    = Email String
+
+type Untrusted a
+    = Untrusted a
+
+type Data
+    = Data (Untrusted Email)
+"""
+                , """module Types exposing (..)
+import Other
+
+type ToBackend
+    = SendData Other.Data
+"""
+                ]
+                    |> Review.Test.runOnModules defaultRule
                     |> Review.Test.expectNoErrors
         ]

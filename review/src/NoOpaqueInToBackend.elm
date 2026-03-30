@@ -1,5 +1,6 @@
 module NoOpaqueInToBackend exposing (rule)
 
+import Dict exposing (Dict)
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
@@ -7,7 +8,7 @@ import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.Type exposing (ValueConstructor)
 import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation(..))
 import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
-import Review.Rule as Rule exposing (Rule)
+import Review.Rule as Rule exposing (ModuleKey, Rule)
 import Set exposing (Set)
 
 
@@ -16,17 +17,21 @@ type alias Config =
     }
 
 
-{-| Warning, currently doesn't recursively check types. It only looks in types named "ToBackend".
--}
 rule : { exemptions : List ( ModuleName, String ) } -> Rule
 rule config =
+    let
+        cfg =
+            { exemptions = Set.fromList config.exemptions }
+    in
     Rule.newProjectRuleSchema "NoOpaqueInToBackend" initialProjectContext
-        |> Rule.withModuleVisitor (moduleVisitor { exemptions = Set.fromList config.exemptions })
+        |> Rule.withModuleVisitor moduleVisitor
+        |> Rule.withFinalProjectEvaluation (finalProjectEvaluation cfg)
         |> Rule.withContextFromImportedModules
         |> Rule.withModuleContextUsingContextCreator
             { fromProjectToModule =
                 Rule.initContextCreator initModuleContext
                     |> Rule.withModuleName
+                    |> Rule.withModuleKey
                     |> Rule.withModuleNameLookupTable
             , fromModuleToProject =
                 Rule.initContextCreator fromModuleToProject
@@ -38,6 +43,15 @@ rule config =
 type alias ProjectContext =
     { opaqueTypes : Set ( ModuleName, String )
     , phantomTypeParams : Set ( ModuleName, String, Int )
+    , typeDefinitions : List ( ( ModuleName, String ), TypeDefInfo )
+    }
+
+
+type alias TypeDefInfo =
+    { args : List (Node TypeAnnotation)
+    , lookupTable : ModuleNameLookupTable
+    , moduleName : ModuleName
+    , moduleKey : ModuleKey
     }
 
 
@@ -45,8 +59,9 @@ type alias ModuleContext =
     { opaqueTypes : Set ( ModuleName, String )
     , phantomTypeParams : Set ( ModuleName, String, Int )
     , moduleName : ModuleName
+    , moduleKey : ModuleKey
     , lookupTable : ModuleNameLookupTable
-    , toBackendArgs : List (Node TypeAnnotation)
+    , typeDefinitions : List ( ( ModuleName, String ), TypeDefInfo )
     , comments : List (Node String)
     }
 
@@ -55,16 +70,18 @@ initialProjectContext : ProjectContext
 initialProjectContext =
     { opaqueTypes = Set.empty
     , phantomTypeParams = Set.empty
+    , typeDefinitions = []
     }
 
 
-initModuleContext : ModuleName -> ModuleNameLookupTable -> ProjectContext -> ModuleContext
-initModuleContext moduleName lookupTable projectContext =
+initModuleContext : ModuleName -> ModuleKey -> ModuleNameLookupTable -> ProjectContext -> ModuleContext
+initModuleContext moduleName moduleKey lookupTable projectContext =
     { opaqueTypes = projectContext.opaqueTypes
     , phantomTypeParams = projectContext.phantomTypeParams
     , moduleName = moduleName
+    , moduleKey = moduleKey
     , lookupTable = lookupTable
-    , toBackendArgs = []
+    , typeDefinitions = []
     , comments = []
     }
 
@@ -73,6 +90,7 @@ fromModuleToProject : ModuleContext -> ProjectContext
 fromModuleToProject moduleContext =
     { opaqueTypes = moduleContext.opaqueTypes
     , phantomTypeParams = moduleContext.phantomTypeParams
+    , typeDefinitions = moduleContext.typeDefinitions
     }
 
 
@@ -80,18 +98,17 @@ foldProjectContexts : ProjectContext -> ProjectContext -> ProjectContext
 foldProjectContexts a b =
     { opaqueTypes = Set.union a.opaqueTypes b.opaqueTypes
     , phantomTypeParams = Set.union a.phantomTypeParams b.phantomTypeParams
+    , typeDefinitions = a.typeDefinitions ++ b.typeDefinitions
     }
 
 
 moduleVisitor :
-    Config
-    -> Rule.ModuleRuleSchema {} ModuleContext
+    Rule.ModuleRuleSchema {} ModuleContext
     -> Rule.ModuleRuleSchema { hasAtLeastOneVisitor : () } ModuleContext
-moduleVisitor config visitor =
+moduleVisitor visitor =
     visitor
         |> Rule.withCommentsVisitor commentsVisitor
         |> Rule.withDeclarationEnterVisitor declarationVisitor
-        |> Rule.withFinalModuleEvaluation (finalEvaluation config)
 
 
 commentsVisitor : List (Node String) -> ModuleContext -> ( List (Rule.Error {}), ModuleContext )
@@ -115,6 +132,18 @@ declarationVisitor node context =
                 phantomIndices =
                     getPhantomTypeParamIndices customType.generics customType.constructors
 
+                allArgs =
+                    List.concatMap
+                        (\(Node _ constructor) -> constructor.arguments)
+                        customType.constructors
+
+                typeDef =
+                    { args = allArgs
+                    , lookupTable = context.lookupTable
+                    , moduleName = context.moduleName
+                    , moduleKey = context.moduleKey
+                    }
+
                 withPhantom =
                     { context
                         | phantomTypeParams =
@@ -125,7 +154,7 @@ declarationVisitor node context =
                                 )
                     }
 
-                updatedContext =
+                withOpaque =
                     if hasOpaqueComment then
                         { withPhantom
                             | opaqueTypes =
@@ -135,37 +164,44 @@ declarationVisitor node context =
                     else
                         withPhantom
 
-                withToBackend =
-                    if Node.value customType.name == "ToBackend" then
-                        { updatedContext
-                            | toBackendArgs =
-                                updatedContext.toBackendArgs
-                                    ++ List.concatMap
-                                        (\(Node _ constructor) -> constructor.arguments)
-                                        customType.constructors
-                        }
-
-                    else
-                        updatedContext
+                withTypeDef =
+                    { withOpaque
+                        | typeDefinitions =
+                            ( ( context.moduleName, Node.value customType.name ), typeDef ) :: withOpaque.typeDefinitions
+                    }
             in
-            ( [], withToBackend )
+            ( [], withTypeDef )
 
         AliasDeclaration typeAlias ->
             let
                 hasOpaqueComment =
                     hasOpaqueDocComment declRange context.comments
                         || hasOpaqueDocField typeAlias.documentation
-            in
-            if hasOpaqueComment then
-                ( []
-                , { context
-                    | opaqueTypes =
-                        Set.insert ( context.moduleName, Node.value typeAlias.name ) context.opaqueTypes
-                  }
-                )
 
-            else
-                ( [], context )
+                typeDef =
+                    { args = [ typeAlias.typeAnnotation ]
+                    , lookupTable = context.lookupTable
+                    , moduleName = context.moduleName
+                    , moduleKey = context.moduleKey
+                    }
+
+                withOpaque =
+                    if hasOpaqueComment then
+                        { context
+                            | opaqueTypes =
+                                Set.insert ( context.moduleName, Node.value typeAlias.name ) context.opaqueTypes
+                        }
+
+                    else
+                        context
+
+                withTypeDef =
+                    { withOpaque
+                        | typeDefinitions =
+                            ( ( context.moduleName, Node.value typeAlias.name ), typeDef ) :: withOpaque.typeDefinitions
+                    }
+            in
+            ( [], withTypeDef )
 
         _ ->
             ( [], context )
@@ -240,11 +276,6 @@ hasOpaqueDocComment declRange comments =
         comments
 
 
-finalEvaluation : Config -> ModuleContext -> List (Rule.Error {})
-finalEvaluation config context =
-    List.concatMap (checkTypeAnnotation config context) context.toBackendArgs
-
-
 isOpaqueDoc : String -> Bool
 isOpaqueDoc text =
     let
@@ -264,28 +295,61 @@ stringDropPrefix prefix text =
         text
 
 
-resolveModuleName : ModuleContext -> Range -> Maybe ModuleName
-resolveModuleName context range =
-    case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+finalProjectEvaluation : Config -> ProjectContext -> List (Rule.Error { useErrorForModule : () })
+finalProjectEvaluation config context =
+    let
+        typeDefDict : Dict ( ModuleName, String ) TypeDefInfo
+        typeDefDict =
+            Dict.fromList context.typeDefinitions
+    in
+    case Dict.get ( [ "Types" ], "ToBackend" ) typeDefDict of
+        Just toBackendDef ->
+            checkTypeDefRecursively config context typeDefDict (Set.singleton ( [ "Types" ], "ToBackend" )) toBackendDef
+
+        Nothing ->
+            []
+
+
+resolveModuleNameWith : TypeDefInfo -> Range -> Maybe ModuleName
+resolveModuleNameWith typeDef range =
+    case ModuleNameLookupTable.moduleNameAt typeDef.lookupTable range of
         Just [] ->
-            Just context.moduleName
+            Just typeDef.moduleName
 
         result ->
             result
 
 
-checkTypeAnnotation : Config -> ModuleContext -> Node TypeAnnotation -> List (Rule.Error {})
-checkTypeAnnotation config context typeAnnotation =
+checkTypeDefRecursively :
+    Config
+    -> ProjectContext
+    -> Dict ( ModuleName, String ) TypeDefInfo
+    -> Set ( ModuleName, String )
+    -> TypeDefInfo
+    -> List (Rule.Error { useErrorForModule : () })
+checkTypeDefRecursively config context typeDefDict visited typeDef =
+    List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited typeDef) typeDef.args
+
+
+checkTypeAnnotationRecursive :
+    Config
+    -> ProjectContext
+    -> Dict ( ModuleName, String ) TypeDefInfo
+    -> Set ( ModuleName, String )
+    -> TypeDefInfo
+    -> Node TypeAnnotation
+    -> List (Rule.Error { useErrorForModule : () })
+checkTypeAnnotationRecursive config context typeDefDict visited typeDef typeAnnotation =
     case Node.value typeAnnotation of
         Typed (Node range ( _, name )) args ->
             if name == "Untrusted" then
                 []
 
             else
-                case resolveModuleName context range of
+                case resolveModuleNameWith typeDef range of
                     Just actualModuleName ->
                         if Set.member ( actualModuleName, name ) context.opaqueTypes && not (Set.member ( actualModuleName, name ) config.exemptions) then
-                            [ Rule.error
+                            [ Rule.errorForModule typeDef.moduleKey
                                 { message = name ++ " is an opaque type and must be wrapped in Untrusted when used in ToBackend."
                                 , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
                                 }
@@ -293,29 +357,58 @@ checkTypeAnnotation config context typeAnnotation =
                             ]
 
                         else
-                            checkArgsWithPhantom config context ( actualModuleName, name ) args
+                            let
+                                argErrors =
+                                    checkArgsWithPhantomRecursive config context typeDefDict visited typeDef ( actualModuleName, name ) args
+
+                                recursiveErrors =
+                                    if Set.member ( actualModuleName, name ) visited then
+                                        []
+
+                                    else
+                                        case Dict.get ( actualModuleName, name ) typeDefDict of
+                                            Just referencedTypeDef ->
+                                                checkTypeDefRecursively config
+                                                    context
+                                                    typeDefDict
+                                                    (Set.insert ( actualModuleName, name ) visited)
+                                                    referencedTypeDef
+
+                                            Nothing ->
+                                                []
+                            in
+                            argErrors ++ recursiveErrors
 
                     Nothing ->
-                        List.concatMap (checkTypeAnnotation config context) args
+                        List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited typeDef) args
 
         Tupled nodes ->
-            List.concatMap (checkTypeAnnotation config context) nodes
+            List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited typeDef) nodes
 
         Record fields ->
-            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotation config context field) fields
+            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotationRecursive config context typeDefDict visited typeDef field) fields
 
         GenericRecord _ (Node _ fields) ->
-            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotation config context field) fields
+            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotationRecursive config context typeDefDict visited typeDef field) fields
 
         FunctionTypeAnnotation a b ->
-            checkTypeAnnotation config context a ++ checkTypeAnnotation config context b
+            checkTypeAnnotationRecursive config context typeDefDict visited typeDef a
+                ++ checkTypeAnnotationRecursive config context typeDefDict visited typeDef b
 
         _ ->
             []
 
 
-checkArgsWithPhantom : Config -> ModuleContext -> ( ModuleName, String ) -> List (Node TypeAnnotation) -> List (Rule.Error {})
-checkArgsWithPhantom config context ( moduleName, typeName ) args =
+checkArgsWithPhantomRecursive :
+    Config
+    -> ProjectContext
+    -> Dict ( ModuleName, String ) TypeDefInfo
+    -> Set ( ModuleName, String )
+    -> TypeDefInfo
+    -> ( ModuleName, String )
+    -> List (Node TypeAnnotation)
+    -> List (Rule.Error { useErrorForModule : () })
+checkArgsWithPhantomRecursive config context typeDefDict visited typeDef ( moduleName, typeName ) args =
     args
         |> List.indexedMap
             (\i arg ->
@@ -323,6 +416,6 @@ checkArgsWithPhantom config context ( moduleName, typeName ) args =
                     []
 
                 else
-                    checkTypeAnnotation config context arg
+                    checkTypeAnnotationRecursive config context typeDefDict visited typeDef arg
             )
         |> List.concat
