@@ -304,7 +304,7 @@ finalProjectEvaluation config context =
     in
     case Dict.get ( [ "Types" ], "ToBackend" ) typeDefDict of
         Just toBackendDef ->
-            checkTypeDefRecursively config context typeDefDict (Set.singleton ( [ "Types" ], "ToBackend" )) toBackendDef
+            checkTypeDefRecursively config context typeDefDict (Set.singleton ( [ "Types" ], "ToBackend" )) [ "ToBackend" ] toBackendDef
 
         Nothing ->
             []
@@ -325,10 +325,16 @@ checkTypeDefRecursively :
     -> ProjectContext
     -> Dict ( ModuleName, String ) TypeDefInfo
     -> Set ( ModuleName, String )
+    -> List String
     -> TypeDefInfo
     -> List (Rule.Error { useErrorForModule : () })
-checkTypeDefRecursively config context typeDefDict visited typeDef =
-    List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited typeDef) typeDef.args
+checkTypeDefRecursively config context typeDefDict visited chain typeDef =
+    List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef) typeDef.args
+
+
+formatChain : List String -> String -> String
+formatChain chain opaqueName =
+    String.join " -> " (List.reverse chain ++ [ opaqueName ])
 
 
 checkTypeAnnotationRecursive :
@@ -336,10 +342,11 @@ checkTypeAnnotationRecursive :
     -> ProjectContext
     -> Dict ( ModuleName, String ) TypeDefInfo
     -> Set ( ModuleName, String )
+    -> List String
     -> TypeDefInfo
     -> Node TypeAnnotation
     -> List (Rule.Error { useErrorForModule : () })
-checkTypeAnnotationRecursive config context typeDefDict visited typeDef typeAnnotation =
+checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef typeAnnotation =
     case Node.value typeAnnotation of
         Typed (Node range ( _, name )) args ->
             if name == "Untrusted" then
@@ -351,7 +358,7 @@ checkTypeAnnotationRecursive config context typeDefDict visited typeDef typeAnno
                         if Set.member ( actualModuleName, name ) context.opaqueTypes && not (Set.member ( actualModuleName, name ) config.exemptions) then
                             [ Rule.errorForModule typeDef.moduleKey
                                 { message = name ++ " is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via " ++ formatChain chain name ]
                                 }
                                 range
                             ]
@@ -359,7 +366,7 @@ checkTypeAnnotationRecursive config context typeDefDict visited typeDef typeAnno
                         else
                             let
                                 argErrors =
-                                    checkArgsWithPhantomRecursive config context typeDefDict visited typeDef ( actualModuleName, name ) args
+                                    checkArgsWithPhantomRecursive config context typeDefDict visited chain typeDef ( actualModuleName, name ) args
 
                                 recursiveErrors =
                                     if Set.member ( actualModuleName, name ) visited then
@@ -372,6 +379,7 @@ checkTypeAnnotationRecursive config context typeDefDict visited typeDef typeAnno
                                                     context
                                                     typeDefDict
                                                     (Set.insert ( actualModuleName, name ) visited)
+                                                    (name :: chain)
                                                     referencedTypeDef
 
                                             Nothing ->
@@ -380,20 +388,20 @@ checkTypeAnnotationRecursive config context typeDefDict visited typeDef typeAnno
                             argErrors ++ recursiveErrors
 
                     Nothing ->
-                        List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited typeDef) args
+                        List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef) args
 
         Tupled nodes ->
-            List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited typeDef) nodes
+            List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef) nodes
 
         Record fields ->
-            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotationRecursive config context typeDefDict visited typeDef field) fields
+            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef field) fields
 
         GenericRecord _ (Node _ fields) ->
-            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotationRecursive config context typeDefDict visited typeDef field) fields
+            List.concatMap (\(Node _ ( _, field )) -> checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef field) fields
 
         FunctionTypeAnnotation a b ->
-            checkTypeAnnotationRecursive config context typeDefDict visited typeDef a
-                ++ checkTypeAnnotationRecursive config context typeDefDict visited typeDef b
+            checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef a
+                ++ checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef b
 
         _ ->
             []
@@ -404,11 +412,12 @@ checkArgsWithPhantomRecursive :
     -> ProjectContext
     -> Dict ( ModuleName, String ) TypeDefInfo
     -> Set ( ModuleName, String )
+    -> List String
     -> TypeDefInfo
     -> ( ModuleName, String )
     -> List (Node TypeAnnotation)
     -> List (Rule.Error { useErrorForModule : () })
-checkArgsWithPhantomRecursive config context typeDefDict visited typeDef ( moduleName, typeName ) args =
+checkArgsWithPhantomRecursive config context typeDefDict visited chain typeDef ( moduleName, typeName ) args =
     args
         |> List.indexedMap
             (\i arg ->
@@ -416,6 +425,6 @@ checkArgsWithPhantomRecursive config context typeDefDict visited typeDef ( modul
                     []
 
                 else
-                    checkTypeAnnotationRecursive config context typeDefDict visited typeDef arg
+                    checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef arg
             )
         |> List.concat

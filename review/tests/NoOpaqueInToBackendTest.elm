@@ -39,7 +39,7 @@ type ToBackend
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> Email" ]
                             , under = "Email"
                             }
                             |> Review.Test.atExactly { start = { row = 9, column = 17 }, end = { row = 9, column = 22 } }
@@ -77,7 +77,7 @@ type ToBackend
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "MyRecord is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> MyRecord" ]
                             , under = "MyRecord"
                             }
                             |> Review.Test.atExactly { start = { row = 9, column = 18 }, end = { row = 9, column = 26 } }
@@ -103,7 +103,7 @@ type ToBackend
                         [ ( "Types"
                           , [ Review.Test.error
                                 { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> Email" ]
                                 , under = "Email"
                                 }
                                 |> Review.Test.atExactly { start = { row = 5, column = 17 }, end = { row = 5, column = 22 } }
@@ -126,7 +126,7 @@ type ToBackend
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> Email" ]
                             , under = "Email"
                             }
                             |> Review.Test.atExactly { start = { row = 9, column = 24 }, end = { row = 9, column = 29 } }
@@ -181,7 +181,7 @@ type ToBackend
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> Email" ]
                             , under = "Email"
                             }
                             |> Review.Test.atExactly { start = { row = 12, column = 28 }, end = { row = 12, column = 33 } }
@@ -210,7 +210,7 @@ type ToBackend
                     |> Review.Test.expectErrors
                         [ Review.Test.error
                             { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> Email" ]
                             , under = "Email"
                             }
                             |> Review.Test.atExactly { start = { row = 17, column = 31 }, end = { row = 17, column = 36 } }
@@ -260,7 +260,7 @@ type ToBackend
                         [ ( "Admin"
                           , [ Review.Test.error
                                 { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> ToBackend -> Email" ]
                                 , under = "Email"
                                 }
                                 |> Review.Test.atExactly { start = { row = 9, column = 19 }, end = { row = 9, column = 24 } }
@@ -341,7 +341,7 @@ type ToBackend
                         [ ( "Middle"
                           , [ Review.Test.error
                                 { message = "Secret is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via ToBackend -> Data -> Secret" ]
                                 , under = "Secret"
                                 }
                                 |> Review.Test.atExactly { start = { row = 5, column = 12 }, end = { row = 5, column = 18 } }
