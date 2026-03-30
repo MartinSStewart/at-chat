@@ -141,4 +141,95 @@ type Msg
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectNoErrors
+        , test "should allow opaque types in phantom type parameter positions" <|
+            \() ->
+                """module MyModule exposing (..)
+
+{-| OpaqueVariants
+-}
+type PageId
+    = PageId Never
+
+type Id a
+    = Id Int
+
+type ToBackend
+    = GetPage (Id PageId)
+"""
+                    |> Review.Test.run rule
+                    |> Review.Test.expectNoErrors
+        , test "should report opaque types in non-phantom type parameter positions" <|
+            \() ->
+                """module MyModule exposing (..)
+
+{-| OpaqueVariants
+-}
+type Email
+    = Email String
+
+type Wrapper a
+    = Wrapper a
+
+type ToBackend
+    = SendWrapped (Wrapper Email)
+"""
+                    |> Review.Test.run rule
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , under = "Email"
+                            }
+                            |> Review.Test.atExactly { start = { row = 12, column = 28 }, end = { row = 12, column = 33 } }
+                        ]
+        , test "should allow opaque type in phantom position but report in non-phantom position" <|
+            \() ->
+                """module MyModule exposing (..)
+
+{-| OpaqueVariants
+-}
+type PageId
+    = PageId Never
+
+{-| OpaqueVariants
+-}
+type Email
+    = Email String
+
+type Mixed phantom real
+    = Mixed real
+
+type ToBackend
+    = SendMixed (Mixed PageId Email)
+"""
+                    |> Review.Test.run rule
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "Email is an opaque type and must be wrapped in Untrusted when used in ToBackend."
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
+                            , under = "Email"
+                            }
+                            |> Review.Test.atExactly { start = { row = 17, column = 31 }, end = { row = 17, column = 36 } }
+                        ]
+        , test "should allow phantom type params from imported module" <|
+            \() ->
+                [ """module Id exposing (..)
+
+type Id a
+    = Id Int
+"""
+                , """module Types exposing (..)
+import Id exposing (Id)
+
+{-| OpaqueVariants
+-}
+type PageId
+    = PageId Never
+
+type ToBackend
+    = GetPage (Id PageId)
+"""
+                ]
+                    |> Review.Test.runOnModules rule
+                    |> Review.Test.expectNoErrors
         ]
