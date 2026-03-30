@@ -267,6 +267,35 @@ type ToBackend
                             ]
                           )
                         ]
+        , test "should not report types not referenced from ToBackend" <|
+            \() ->
+                [ """module Admin exposing (..)
+
+{-| OpaqueVariants
+-}
+type Email
+    = Email String
+
+type ToBackend
+    = DoSomething
+    
+type Msg
+    = CreatedEmail Email
+    | Abc ToBackend
+"""
+                , """module Types exposing (..)
+import Admin
+
+type ToBackend
+    = AdminToBackend Admin.ToBackend
+
+type Logs
+    = FailedToSendEmail Email
+"""
+                ]
+                    |> Review.Test.runOnModules defaultRule
+                    |> Review.Test.expectErrorsForModules
+                        []
         , test "should not report errors for ToBackend in non-Types module" <|
             \() ->
                 """module Admin exposing (..)
@@ -311,7 +340,7 @@ type ToBackend
                                 , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend." ]
                                 , under = "Secret"
                                 }
-                                |> Review.Test.atExactly { start = { row = 5, column = 11 }, end = { row = 5, column = 17 } }
+                                |> Review.Test.atExactly { start = { row = 5, column = 12 }, end = { row = 5, column = 18 } }
                             ]
                           )
                         ]
