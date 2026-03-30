@@ -474,7 +474,11 @@ playNotificationSound :
     Id UserId
     -> GuildOrDmId
     -> ThreadRouteWithMaybeMessage
-    -> FrontendChannel
+    ->
+        { a
+            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
+        }
     -> LocalState
     -> Nonempty (RichText (Id UserId))
     -> LoadedFrontend
@@ -495,6 +499,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                         GuildOrDmId_Dm _ ->
                             False
 
+                isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
                         |> SeqSet.member local.localUser.session.userId

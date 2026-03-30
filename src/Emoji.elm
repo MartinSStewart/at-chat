@@ -524,7 +524,7 @@ selector searchHasFocus isMobile width model userData emojiData =
                         )
                         emojis
                     )
-                    |> Ui.el [ Ui.background MyUi.background3, Ui.scrollable ]
+                    |> Ui.el [ Ui.background MyUi.background3, Ui.scrollable, Ui.heightMin 0 ]
                 , Ui.row
                     [ Ui.height (Ui.px emojiHeight)
                     , Ui.contentCenterY

@@ -4684,71 +4684,84 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _ ->
+                                    let
+                                        helper channel =
+                                            Command.batch
+                                                [ FrontendExtra.playNotificationSound
+                                                    senderId
+                                                    guildOrDmId
+                                                    maybeRepliedTo
+                                                    channel
+                                                    local
+                                                    content
+                                                    model
+                                                , case loggedIn2.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        if MyUi.isMobile model then
+                                                            Scroll.toBottomOfChannelSmooth
+
+                                                        else
+                                                            Scroll.toBottomOfChannel
+
+                                                    ScrolledToMiddle ->
+                                                        Command.none
+
+                                                    ScrolledToTop ->
+                                                        Command.none
+                                                ]
+                                    in
                                     ( loggedIn2
                                     , case guildOrDmId of
                                         GuildOrDmId_Guild guildId channelId ->
                                             case LocalState.getGuildAndChannel guildId channelId local of
                                                 Just ( _, channel ) ->
-                                                    Command.batch
-                                                        [ FrontendExtra.playNotificationSound
-                                                            senderId
-                                                            guildOrDmId
-                                                            maybeRepliedTo
-                                                            channel
-                                                            local
-                                                            content
-                                                            model
-                                                        , case loggedIn2.channelScrollPosition of
-                                                            ScrolledToBottom ->
-                                                                if MyUi.isMobile model then
-                                                                    Scroll.toBottomOfChannelSmooth
-
-                                                                else
-                                                                    Scroll.toBottomOfChannel
-
-                                                            ScrolledToMiddle ->
-                                                                Command.none
-
-                                                            ScrolledToTop ->
-                                                                Command.none
-                                                        ]
+                                                    helper channel
 
                                                 Nothing ->
                                                     Command.none
 
-                                        GuildOrDmId_Dm _ ->
-                                            Command.none
+                                        GuildOrDmId_Dm otherUserId ->
+                                            case SeqDict.get otherUserId local.dmChannels of
+                                                Just channel ->
+                                                    helper channel
+
+                                                Nothing ->
+                                                    Command.none
                                     )
 
                                 Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _ ->
+                                    let
+                                        helper senderId channel =
+                                            Command.batch
+                                                [ FrontendExtra.playNotificationSoundForDiscordMessage
+                                                    senderId
+                                                    guildOrDmId
+                                                    maybeRepliedTo
+                                                    channel
+                                                    local
+                                                    content
+                                                    model
+                                                , case loggedIn2.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        if MyUi.isMobile model then
+                                                            Scroll.toBottomOfChannelSmooth
+
+                                                        else
+                                                            Scroll.toBottomOfChannel
+
+                                                    ScrolledToMiddle ->
+                                                        Command.none
+
+                                                    ScrolledToTop ->
+                                                        Command.none
+                                                ]
+                                    in
                                     ( loggedIn2
                                     , case guildOrDmId of
                                         DiscordGuildOrDmId_Guild senderId guildId channelId ->
                                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                                                 Just ( _, channel ) ->
-                                                    Command.batch
-                                                        [ FrontendExtra.playNotificationSoundForDiscordMessage
-                                                            senderId
-                                                            guildOrDmId
-                                                            maybeRepliedTo
-                                                            channel
-                                                            local
-                                                            content
-                                                            model
-                                                        , case loggedIn2.channelScrollPosition of
-                                                            ScrolledToBottom ->
-                                                                if MyUi.isMobile model then
-                                                                    Scroll.toBottomOfChannelSmooth
-
-                                                                else
-                                                                    Scroll.toBottomOfChannel
-
-                                                            ScrolledToMiddle ->
-                                                                Command.none
-
-                                                            ScrolledToTop ->
-                                                                Command.none
-                                                        ]
+                                                    helper senderId channel
 
                                                 Nothing ->
                                                     Command.none
@@ -4756,29 +4769,9 @@ updateLoadedFromBackend msg model =
                                         DiscordGuildOrDmId_Dm data ->
                                             case SeqDict.get data.channelId local.discordDmChannels of
                                                 Just channel ->
-                                                    Command.batch
-                                                        [ FrontendExtra.playNotificationSoundForDiscordMessage
-                                                            data.currentUserId
-                                                            guildOrDmId
-                                                            maybeRepliedTo
-                                                            { messages = channel.messages, threads = SeqDict.empty }
-                                                            local
-                                                            content
-                                                            model
-                                                        , case loggedIn2.channelScrollPosition of
-                                                            ScrolledToBottom ->
-                                                                if MyUi.isMobile model then
-                                                                    Scroll.toBottomOfChannelSmooth
-
-                                                                else
-                                                                    Scroll.toBottomOfChannel
-
-                                                            ScrolledToMiddle ->
-                                                                Command.none
-
-                                                            ScrolledToTop ->
-                                                                Command.none
-                                                        ]
+                                                    helper
+                                                        data.currentUserId
+                                                        { messages = channel.messages, threads = SeqDict.empty }
 
                                                 Nothing ->
                                                     Command.none
