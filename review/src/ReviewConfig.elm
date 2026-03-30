@@ -126,6 +126,9 @@ config =
             , ( [ "SecretId" ], "SecretId" )
             , ( [ "Local" ], "ChangeId" )
             , ( [ "AiChat" ], "Message" )
+            , ( [ "Discord" ], "Id" )
+            , ( [ "Emoji" ], "SkinTone" )
+            , ( [ "Discord" ], "Id" )
             ]
         }
     , EncoderDecoderNaming.rule
