@@ -39,7 +39,6 @@ import Ui.Font
 -}
 type Msg
     = TypedText String
-    | MovedCursor Range
     | PressedReset
     | UndoChange
     | RedoChange
@@ -165,20 +164,19 @@ update currentUserId msg model local =
                 Nothing ->
                     ( model, Nothing )
 
-        MovedCursor range ->
-            case SeqDict.get currentUserId local.cursorPosition of
-                Just previousRange ->
-                    ( model
-                    , if range == previousRange then
-                        Nothing
-
-                      else
-                        Local_MovedCursor range |> Just
-                    )
-
-                Nothing ->
-                    ( model, Local_MovedCursor range |> Just )
-
+        --MovedCursor range ->
+        --    case SeqDict.get currentUserId local.cursorPosition of
+        --        Just previousRange ->
+        --            ( model
+        --            , if range == previousRange then
+        --                Nothing
+        --
+        --              else
+        --                Local_MovedCursor range |> Just
+        --            )
+        --
+        --        Nothing ->
+        --            ( model, Local_MovedCursor range |> Just )
         PressedReset ->
             ( model, Just Local_Reset )
 
@@ -492,9 +490,6 @@ isPress msg =
         TypedText _ ->
             False
 
-        MovedCursor _ ->
-            False
-
         PressedReset ->
             True
 
@@ -531,7 +526,6 @@ textarea local currentUserId placeholderText editorState =
             , Html.Attributes.style "outline" "none"
             , Html.Events.onInput TypedText
             , Html.Attributes.value editorState.text
-            , MyUi.onSelectionChanged MovedCursor
             , Dom.idToAttribute inputId
             , Html.Events.preventDefaultOn
                 "keydown"

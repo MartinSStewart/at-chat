@@ -1,5 +1,6 @@
 module MyUi exposing
     ( Range
+    , SelectionDirection(..)
     , alertColor
     , background1
     , background2
@@ -48,7 +49,6 @@ module MyUi exposing
     , montserrat
     , noPointerEvents
     , noShrinking
-    , onSelectionChanged
     , prewrap
     , radioColumn
     , radioRowWithSeparators
@@ -704,6 +704,11 @@ type alias Range =
     { start : Int, end : Int }
 
 
+type SelectionDirection
+    = SelectForward
+    | SelectBackward
+
+
 rangeSize : Range -> Int
 rangeSize range =
     range.end - range.start
@@ -714,11 +719,6 @@ decodeSelection =
     Json.Decode.map2 (\start end -> Range (min start end) (max start end))
         (Json.Decode.at [ "target", "selectionStart" ] Json.Decode.int)
         (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
-
-
-onSelectionChanged : (Range -> value) -> Html.Attribute value
-onSelectionChanged onSelectionChange =
-    Html.Events.on "selectionchange" (Json.Decode.map onSelectionChange decodeSelection)
 
 
 focusEffect : Ui.Attribute msg

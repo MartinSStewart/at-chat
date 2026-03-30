@@ -445,7 +445,7 @@ logout model =
                 model2 =
                     { model
                         | loginStatus =
-                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
+                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing, textInputFocus = Nothing }
                     }
             in
             if Route.requiresLogin model2.route then
@@ -1386,6 +1386,9 @@ isPressMsg msg =
             True
 
         EnableToFrontendLogging ->
+            False
+
+        TextSelectionChanged maybeHtmlId maybe ->
             False
 
 

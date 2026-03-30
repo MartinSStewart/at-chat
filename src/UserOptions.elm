@@ -12,7 +12,7 @@ import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
-import MyUi
+import MyUi exposing (Range)
 import PersonName
 import RichText
 import Route
@@ -142,8 +142,16 @@ gotoAdmin =
         )
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn loaded model =
+view :
+    Bool
+    -> Maybe { a | htmlId : HtmlId, selection : Range }
+    -> Time.Posix
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> UserOptionsModel
+    -> Element FrontendMsg
+view isMobile textInputFocus time local loggedIn loaded model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -205,7 +213,7 @@ view isMobile time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view isMobile time loggedIn.twoFactor
+                , TwoFactorAuthentication.view isMobile textInputFocus time loggedIn.twoFactor
                     |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1

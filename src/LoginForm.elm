@@ -35,7 +35,7 @@ import EmailAddress exposing (EmailAddress)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import MyUi
+import MyUi exposing (Range)
 import PersonName exposing (PersonName)
 import Ports exposing (PwaStatus(..))
 import SeqDict exposing (SeqDict)
@@ -368,8 +368,8 @@ mobileWarning =
         ]
 
 
-view : LoginForm -> Bool -> PwaStatus -> Element Msg
-view loginForm isMobile pwaStatus =
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Bool -> PwaStatus -> Element Msg
+view textSelection loginForm isMobile pwaStatus =
     Ui.column
         [ MyUi.montserrat
         , Ui.padding 16
@@ -398,10 +398,10 @@ view loginForm isMobile pwaStatus =
                 enterEmailView enterEmail2
 
             EnterLoginCode enterLoginCode ->
-                enterLoginCodeView enterLoginCode
+                enterLoginCodeView textSelection enterLoginCode
 
             EnterTwoFactorCode enterTwoFactorCode ->
-                enterTwoFactorCodeView enterTwoFactorCode
+                enterTwoFactorCodeView textSelection enterTwoFactorCode
 
             EnterUserData data ->
                 let
@@ -461,10 +461,11 @@ twoFactorCodeLength =
 loginCodeInput :
     Int
     -> (String -> msg)
+    -> Maybe { a | htmlId : HtmlId, selection : Range }
     -> String
     -> { element : Element msg, id : Ui.Input.Label }
     -> Element msg
-loginCodeInput codeLength onInput loginCode label =
+loginCodeInput codeLength onInput textInputFocus loginCode label =
     Ui.el
         [ Ui.Font.size 36
         , Ui.Prose.paragraph
@@ -562,8 +563,8 @@ inputFont =
     Ui.Font.family [ Ui.Font.typeface "Consolas", Ui.Font.monospace ]
 
 
-enterLoginCodeView : EnterLoginCode2 -> Element Msg
-enterLoginCodeView model =
+enterLoginCodeView : Maybe { a | htmlId : HtmlId, selection : Range } -> EnterLoginCode2 -> Element Msg
+enterLoginCodeView textSelection model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -595,7 +596,7 @@ enterLoginCodeView model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput loginCodeLength TypedLoginCode model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput loginCodeLength TypedLoginCode textSelection model.code label)
             , if SeqDict.size model.attempts < maxLoginAttempts then
                 case validateCode loginCodeLength model.code of
                     Ok loginCode ->
@@ -617,8 +618,8 @@ enterLoginCodeView model =
         ]
 
 
-enterTwoFactorCodeView : EnterTwoFactorCode2 -> Element Msg
-enterTwoFactorCodeView model =
+enterTwoFactorCodeView : Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
+enterTwoFactorCodeView textSelection model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -643,7 +644,7 @@ enterTwoFactorCodeView model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput twoFactorCodeLength TypedTwoFactorCode model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput twoFactorCodeLength TypedTwoFactorCode textSelection model.code label)
             , if model.attemptCount < maxLoginAttempts then
                 case validateCode twoFactorCodeLength model.code of
                     Ok loginCode ->

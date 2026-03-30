@@ -43,7 +43,7 @@ import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMe
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
-import MyUi exposing (Range)
+import MyUi exposing (Range, SelectionDirection(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -121,6 +121,7 @@ subscriptions model =
         , Ports.userAgentSub GotUserAgent
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , Ports.visualViewportResized VisualViewportResized
+        , Ports.selectionChanged TextSelectionChanged
         , case model of
             Loading _ ->
                 Subscription.none
@@ -266,6 +267,7 @@ initLoadedFrontend loading time userAgent loginResult =
                     ( NotLoggedIn
                         { loginForm = Nothing
                         , useInviteAfterLoggedIn = Nothing
+                        , textInputFocus = Nothing
                         }
                     , Command.none
                     )
@@ -2936,9 +2938,6 @@ updateLoaded msg model =
                 MessageInput.OnPasteFiles files ->
                     editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
 
-                MessageInput.OnSelectionChanged htmlId range ->
-                    messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
-
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
                     , Dom.getElement MessageMenu.editMessageTextInputId
@@ -3357,9 +3356,6 @@ updateLoaded msg model =
                 MessageInput.OnPasteFiles files ->
                     gotFiles guildOrDmId threadRoute files model
 
-                MessageInput.OnSelectionChanged htmlId range ->
-                    messageInputSelectionChanged guildOrDmId threadRoute htmlId range model
-
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
 
@@ -3377,6 +3373,9 @@ updateLoaded msg model =
 
         EnableToFrontendLogging ->
             ( { model | toFrontendLogs = Just Array.empty }, Command.none )
+
+        TextSelectionChanged maybeHtmlId maybeRange ->
+            selectionChanged maybeHtmlId maybeRange model
 
 
 messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
@@ -3525,82 +3524,116 @@ insertEmoji inputId maybeSelection emoji model loggedIn =
     )
 
 
-messageInputSelectionChanged : AnyGuildOrDmId -> ThreadRoute -> HtmlId -> Range -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-messageInputSelectionChanged guildOrDmId threadRoute htmlId range model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            let
-                showDropdown : Bool
-                showDropdown =
-                    ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
-                        && (case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
-                                Just (NameSoFar nameSoFar) ->
-                                    case guildOrDmId of
-                                        GuildOrDmId guildOrDmId2 ->
-                                            MessageInput.userDropdownList
-                                                (MyUi.isMobile model)
-                                                nameSoFar
-                                                guildOrDmId2
-                                                (Local.model loggedIn.localState)
-                                                |> List.isEmpty
-                                                |> not
+selectionChanged :
+    Maybe HtmlId
+    -> Maybe ( Range, SelectionDirection )
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+selectionChanged maybeHtmlId maybeRange model =
+    case ( maybeHtmlId, maybeRange ) of
+        ( Just htmlId, Just ( range, direction ) ) ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        showDropdown : Bool
+                        showDropdown =
+                            ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
+                                && (case Route.toGuildOrDmId model.route of
+                                        Just ( guildOrDmId, threadRoute ) ->
+                                            case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
+                                                Just (NameSoFar nameSoFar) ->
+                                                    case guildOrDmId of
+                                                        GuildOrDmId guildOrDmId2 ->
+                                                            MessageInput.userDropdownList
+                                                                (MyUi.isMobile model)
+                                                                nameSoFar
+                                                                guildOrDmId2
+                                                                (Local.model loggedIn.localState)
+                                                                |> List.isEmpty
+                                                                |> not
 
-                                        DiscordGuildOrDmId guildOrDmId2 ->
-                                            MessageInput.discordUserDropdownList
-                                                (MyUi.isMobile model)
-                                                nameSoFar
-                                                guildOrDmId2
-                                                (Local.model loggedIn.localState)
-                                                |> List.isEmpty
-                                                |> not
+                                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                                            MessageInput.discordUserDropdownList
+                                                                (MyUi.isMobile model)
+                                                                nameSoFar
+                                                                guildOrDmId2
+                                                                (Local.model loggedIn.localState)
+                                                                |> List.isEmpty
+                                                                |> not
 
-                                Just (EmojiSoFar emojiSoFar) ->
-                                    case model.emojiData of
-                                        Just emojiData2 ->
-                                            MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
-                                                |> List.isEmpty
-                                                |> not
+                                                Just (EmojiSoFar emojiSoFar) ->
+                                                    case model.emojiData of
+                                                        Just emojiData2 ->
+                                                            MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
+                                                                |> List.isEmpty
+                                                                |> not
+
+                                                        Nothing ->
+                                                            False
+
+                                                Nothing ->
+                                                    False
 
                                         Nothing ->
                                             False
+                                   )
+                    in
+                    ( { model
+                        | loginStatus =
+                            { loggedIn
+                                | textInputFocus =
+                                    case loggedIn.textInputFocus of
+                                        Just textInputFocus ->
+                                            if htmlId == textInputFocus.htmlId then
+                                                { textInputFocus
+                                                    | selection = range
+                                                    , dropdown =
+                                                        if showDropdown then
+                                                            textInputFocus.dropdown
 
-                                Nothing ->
-                                    False
-                           )
-            in
-            ( { loggedIn
-                | textInputFocus =
-                    case loggedIn.textInputFocus of
-                        Just textInputFocus ->
-                            if htmlId == textInputFocus.htmlId then
-                                { textInputFocus
-                                    | selection = range
-                                    , dropdown =
-                                        if showDropdown then
-                                            textInputFocus.dropdown
+                                                        else
+                                                            Nothing
+                                                }
+                                                    |> Just
 
-                                        else
-                                            Nothing
-                                }
-                                    |> Just
+                                            else
+                                                Just
+                                                    { htmlId = htmlId
+                                                    , selection = range
+                                                    , direction = direction
+                                                    , dropdown = Nothing
+                                                    }
 
-                            else
-                                Just { htmlId = htmlId, selection = range, dropdown = Nothing }
+                                        Nothing ->
+                                            Just
+                                                { htmlId = htmlId
+                                                , selection = range
+                                                , direction = direction
+                                                , dropdown = Nothing
+                                                }
+                                , previousTextInputFocus = loggedIn.textInputFocus
+                            }
+                                |> LoggedIn
+                      }
+                    , if showDropdown then
+                        Dom.getElement htmlId
+                            |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                            |> Task.attempt (GotPingUserPosition htmlId)
 
-                        Nothing ->
-                            Just { htmlId = htmlId, selection = range, dropdown = Nothing }
-                , previousTextInputFocus = loggedIn.textInputFocus
-              }
-            , if showDropdown then
-                Dom.getElement htmlId
-                    |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
-                    |> Task.attempt (GotPingUserPosition htmlId)
+                      else
+                        Command.none
+                    )
 
-              else
-                Command.none
-            )
-        )
-        model
+                NotLoggedIn notLoggedIn ->
+                    ( { model
+                        | loginStatus =
+                            NotLoggedIn { notLoggedIn | textInputFocus = Just { htmlId = htmlId, selection = range, direction = direction } }
+                      }
+                    , Command.none
+                    )
+
+        _ ->
+            ( model, Command.none )
 
 
 textInputGotFocus : HtmlId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3608,7 +3641,13 @@ textInputGotFocus htmlId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             ( { loggedIn
-                | textInputFocus = Just { htmlId = htmlId, selection = { start = 0, end = 0 }, dropdown = Nothing }
+                | textInputFocus =
+                    Just
+                        { htmlId = htmlId
+                        , selection = { start = 0, end = 0 }
+                        , direction = SelectForward
+                        , dropdown = Nothing
+                        }
                 , previousTextInputFocus = loggedIn.textInputFocus
               }
             , Command.batch
@@ -3786,7 +3825,10 @@ pressedReply guildOrDmId threadRoute model =
                             (Id.threadRouteToMessageId threadRoute)
                             loggedIn.replyTo
                 }
-            , FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+            , Command.batch
+                [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+                , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                ]
             )
         )
         model
@@ -4977,6 +5019,7 @@ view model =
                                         Just userOptions ->
                                             UserOptions.view
                                                 (MyUi.isMobile loaded)
+                                                loggedIn.textInputFocus
                                                 loaded.time
                                                 local
                                                 loggedIn
@@ -5014,9 +5057,10 @@ view model =
                                     ]
                                     (page loggedIn local)
 
-                            NotLoggedIn { loginForm } ->
+                            NotLoggedIn notLoggedIn ->
                                 LoginForm.view
-                                    (Maybe.withDefault LoginForm.init loginForm)
+                                    notLoggedIn.textInputFocus
+                                    (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                     (MyUi.isMobile loaded)
                                     loaded.pwaStatus
                                     |> Ui.map LoginFormMsg
@@ -5040,6 +5084,7 @@ view model =
                                         Just userOptions ->
                                             UserOptions.view
                                                 (MyUi.isMobile loaded)
+                                                loggedIn.textInputFocus
                                                 loaded.time
                                                 local
                                                 loggedIn
@@ -5061,14 +5106,15 @@ view model =
                                         loggedIn
                                         (Local.model loggedIn.localState)
 
-                                NotLoggedIn { loginForm } ->
+                                NotLoggedIn notLoggedIn ->
                                     Ui.el
                                         [ Ui.inFront (Pages.Home.header isMobile loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
-                                        (case loginForm of
+                                        (case notLoggedIn.loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
+                                                LoginForm.view notLoggedIn.textInputFocus loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus
+                                                    |> Ui.map LoginFormMsg
 
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth
@@ -5172,6 +5218,7 @@ view model =
                                             [ Ui.Font.size 20, Ui.Font.center, Ui.widthMax 400, Ui.centerX ]
                                             (Ui.text "You aren't logged in here. Please log in and then we can link your Discord account.")
                                         , LoginForm.view
+                                            notLoggedIn.textInputFocus
                                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                                             (MyUi.isMobile loaded)
                                             -- Don't show PWA warning on this login screen
