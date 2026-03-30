@@ -32,20 +32,18 @@ exports.init = async function init(app)
         }
     });
 
+    document.addEventListener('focusout', (event) => {
+        app.ports.focus_changed_from_js.send({ id : null });
+    });
 
-    // Store the original getTargetRanges method
-//    const originalGetTargetRanges = InputEvent.prototype.getTargetRanges;
-//    Object.defineProperty(InputEvent.prototype, 'targetRanges', {
-//        get: function () {
-//
-//            console.log(this);
-//            return {
-//                selectionStart: this.target.selectionStart,
-//                selectionEnd: this.target.selectionEnd
-//            }
-//        },
-//        configurable: true,
-//    });
+    document.addEventListener('focusin', (event) => {
+        app.ports.focus_changed_from_js.send(event.target);
+    });
+
+    document.addEventListener('selectionchange', (event) => {
+        app.ports.selection_changed_from_js.send(event.target);
+    });
+
     app.ports.exec_command_to_js.subscribe((data) => {
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();

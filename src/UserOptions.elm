@@ -12,7 +12,7 @@ import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
-import MyUi
+import MyUi exposing (Range)
 import PersonName
 import RichText
 import Route
@@ -22,7 +22,6 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
-import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
@@ -142,8 +141,16 @@ gotoAdmin =
         )
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn loaded model =
+view :
+    Bool
+    -> Maybe { a | htmlId : HtmlId, selection : Range }
+    -> Time.Posix
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> UserOptionsModel
+    -> Element FrontendMsg
+view isMobile textInputFocus time local loggedIn loaded model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -205,7 +212,7 @@ view isMobile time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
+                , TwoFactorAuthentication.view isMobile textInputFocus time loggedIn.twoFactor
                     |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1
@@ -398,7 +405,6 @@ view isMobile time local loggedIn loaded model =
                                                 , Ui.borderColor MyUi.inputBorder
                                                 , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
                                                 , Ui.height Ui.fill
-                                                , Ui.Events.onFocus (TextInputGotFocus discordBookmarkletId)
                                                 ]
                                                 { onChange = \_ -> TypedDiscordLinkBookmarklet
                                                 , text = bookmarklet

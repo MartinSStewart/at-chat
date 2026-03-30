@@ -35,7 +35,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MembersAndOwner
-import MyUi exposing (Range)
+import MyUi exposing (Range, SelectionDirection)
 import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
@@ -56,7 +56,7 @@ type alias MentionUserDropdown =
 
 
 type alias TextInputFocus =
-    { htmlId : HtmlId, selection : Range, dropdown : Maybe MentionUserDropdown }
+    { htmlId : HtmlId, selection : Range, direction : SelectionDirection, dropdown : Maybe MentionUserDropdown }
 
 
 type NameSoFar
@@ -69,9 +69,7 @@ type alias NameSoFarData =
 
 
 type Msg
-    = TextInputGotFocus HtmlId
-    | TextInputLostFocus HtmlId
-    | PressedTextInput
+    = PressedTextInput
     | TypedMessage String
     | PressedSendMessage
     | PressedArrowInDropdown Int
@@ -81,18 +79,11 @@ type Msg
     | PressedUploadFile
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
-    | OnSelectionChanged HtmlId Range
 
 
 isPress : Msg -> Bool
 isPress msg =
     case msg of
-        TextInputGotFocus _ ->
-            False
-
-        TextInputLostFocus _ ->
-            False
-
         PressedTextInput ->
             True
 
@@ -121,9 +112,6 @@ isPress msg =
             True
 
         OnPasteFiles _ ->
-            False
-
-        OnSelectionChanged _ _ ->
             False
 
 
@@ -197,8 +185,6 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                                     Json.Decode.fail ""
                         )
                 )
-            , Html.Events.onFocus (TextInputGotFocus channelTextInputId)
-            , Html.Events.onBlur (TextInputLostFocus channelTextInputId)
             , case textInputFocus of
                 Just textInputFocus2 ->
                     case textInputFocus2.dropdown of
@@ -230,7 +216,6 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                 Nothing ->
                     keyDownNoDropdown
             , Html.Events.onInput TypedMessage
-            , MyUi.onSelectionChanged (OnSelectionChanged channelTextInputId)
             , Html.Attributes.value text
             ]
             []

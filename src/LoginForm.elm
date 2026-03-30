@@ -35,17 +35,17 @@ import EmailAddress exposing (EmailAddress)
 import Html
 import Html.Attributes
 import Icons
-import MyUi
+import MyUi exposing (Range)
 import PersonName exposing (PersonName)
 import Ports exposing (PwaStatus(..))
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Ui.Shadow
-import UserAgent exposing (Browser(..), UserAgent)
 
 
 {-| OpaqueVariants
@@ -245,23 +245,27 @@ typedCode :
     -> { a | attempts : SeqDict Int CodeStatus, code : String }
     -> ( { a | attempts : SeqDict Int CodeStatus, code : String }, Command FrontendOnly toMsg msg )
 typedCode digitCount onSubmitLoginCode text model =
-    case validateCode digitCount text of
+    let
+        text2 =
+            String.filter Char.isDigit text
+    in
+    case validateCode digitCount text2 of
         Ok loginCode ->
             if SeqDict.member loginCode model.attempts then
-                ( { model | code = String.left digitCount text }
+                ( { model | code = String.left digitCount text2 }
                 , Command.none
                 )
 
             else
                 ( { model
-                    | code = String.left digitCount text
+                    | code = String.left digitCount text2
                     , attempts = SeqDict.insert loginCode Checking model.attempts
                   }
                 , onSubmitLoginCode loginCode
                 )
 
         Err _ ->
-            ( { model | code = String.left digitCount text }
+            ( { model | code = String.left digitCount text2 }
             , Command.none
             )
 
@@ -368,8 +372,8 @@ mobileWarning =
         ]
 
 
-view : UserAgent -> LoginForm -> Bool -> PwaStatus -> Element Msg
-view userAgent loginForm isMobile pwaStatus =
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Bool -> PwaStatus -> Element Msg
+view textSelection loginForm isMobile pwaStatus =
     Ui.column
         [ MyUi.montserrat
         , Ui.padding 16
@@ -398,10 +402,10 @@ view userAgent loginForm isMobile pwaStatus =
                 enterEmailView enterEmail2
 
             EnterLoginCode enterLoginCode ->
-                enterLoginCodeView userAgent enterLoginCode
+                enterLoginCodeView textSelection enterLoginCode
 
             EnterTwoFactorCode enterTwoFactorCode ->
-                enterTwoFactorCodeView userAgent enterTwoFactorCode
+                enterTwoFactorCodeView textSelection enterTwoFactorCode
 
             EnterUserData data ->
                 let
@@ -458,14 +462,26 @@ twoFactorCodeLength =
     6
 
 
+cursorBlinking : Ui.Attribute msg
+cursorBlinking =
+    Ui.Anim.keyframes
+        [ Ui.Anim.loop
+            [ Ui.Anim.set [ Ui.Anim.opacity 1 ]
+            , Ui.Anim.step (Ui.Anim.ms 999) [ Ui.Anim.opacity 1 ]
+            , Ui.Anim.step (Ui.Anim.ms 1) [ Ui.Anim.opacity 0 ]
+            , Ui.Anim.step (Ui.Anim.ms 999) [ Ui.Anim.opacity 0 ]
+            ]
+        ]
+
+
 loginCodeInput :
-    UserAgent
-    -> Int
+    Int
     -> (String -> msg)
+    -> Maybe { a | htmlId : HtmlId, selection : Range }
     -> String
     -> { element : Element msg, id : Ui.Input.Label }
     -> Element msg
-loginCodeInput userAgent codeLength onInput loginCode label =
+loginCodeInput codeLength onInput textInputFocus loginCode label =
     Ui.el
         [ Ui.Font.size 36
         , Ui.Prose.paragraph
@@ -477,15 +493,36 @@ loginCodeInput userAgent codeLength onInput loginCode label =
             (List.range 0 (codeLength - 1)
                 |> List.map
                     (\index ->
+                        let
+                            char =
+                                if String.length loginCode > index then
+                                    case String.slice index (index + 1) loginCode |> String.uncons of
+                                        Just ( head, _ ) ->
+                                            Html.div [ Html.Attributes.style "display" "flex" ] [ Icons.number 20 head ]
+                                                |> Ui.html
+                                                |> Ui.el
+                                                    [ Ui.width Ui.shrink
+                                                    , Ui.centerX
+                                                    , Ui.centerY
+                                                    , MyUi.noPointerEvents
+                                                    ]
+
+                                        Nothing ->
+                                            Ui.none
+
+                                else
+                                    Ui.none
+                        in
                         Ui.el
                             [ Ui.paddingXY -1 -1
                             , Ui.behindContent
                                 (Ui.el
-                                    [ Ui.height (Ui.px 54)
-                                    , Ui.paddingXY 0 24
-                                    , Ui.width (Ui.px 32)
-                                    , Ui.Font.color MyUi.font1
-                                    , if index == (codeLength - 1) // 2 then
+                                    ([ Ui.height (Ui.px 54)
+                                     , Ui.paddingXY 0 24
+                                     , Ui.width (Ui.px 32)
+                                     , Ui.Font.color MyUi.font1
+                                     , Ui.inFront char
+                                     , if index == (codeLength - 1) // 2 then
                                         Ui.onRight
                                             (Ui.el
                                                 [ Ui.borderWith
@@ -501,15 +538,49 @@ loginCodeInput userAgent codeLength onInput loginCode label =
                                                 Ui.none
                                             )
 
-                                      else
+                                       else
                                         Ui.noAttr
-                                    , Ui.border 1
-                                    , Ui.rounded 8
-                                    , Ui.borderColor MyUi.inputBorder
-                                    , Ui.background MyUi.inputBackground
-                                    , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.2 } ]
-                                    , MyUi.noPointerEvents
-                                    ]
+                                     , Ui.border 1
+                                     , Ui.rounded 8
+                                     , Ui.borderColor MyUi.inputBorder
+                                     , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.2 } ]
+                                     , MyUi.noPointerEvents
+                                     ]
+                                        ++ (case textInputFocus of
+                                                Just textInputFocus2 ->
+                                                    let
+                                                        range =
+                                                            textInputFocus2.selection
+                                                    in
+                                                    if range.start == range.end && index == range.start then
+                                                        [ Ui.background MyUi.inputBackground
+                                                        , Ui.inFront
+                                                            (Ui.el
+                                                                [ Ui.paddingXY 4 0
+                                                                , Ui.height Ui.fill
+                                                                , MyUi.noPointerEvents
+                                                                ]
+                                                                (Ui.el
+                                                                    [ Ui.height Ui.fill
+                                                                    , Ui.background (Ui.rgb 255 255 255)
+                                                                    , Ui.borderWith { left = 2, right = 0, top = 0, bottom = 0 }
+                                                                    , cursorBlinking
+                                                                    ]
+                                                                    Ui.none
+                                                                )
+                                                            )
+                                                        ]
+
+                                                    else if range.start <= index && index < range.end then
+                                                        [ Ui.background MyUi.selectedTextBackground ]
+
+                                                    else
+                                                        [ Ui.background MyUi.inputBackground ]
+
+                                                Nothing ->
+                                                    [ Ui.background MyUi.inputBackground ]
+                                           )
+                                    )
                                     Ui.none
                                 )
                             , Ui.Font.color (Ui.rgba 0 0 0 0)
@@ -527,28 +598,7 @@ loginCodeInput userAgent codeLength onInput loginCode label =
             , inputFont
             , MyUi.htmlStyle "inputmode" "numeric"
             , Ui.border 0
-            , Ui.background (Ui.rgba 0 0 0 0)
-            , Ui.Font.color MyUi.font1
-            , Ui.move
-                (case userAgent.browser of
-                    Safari ->
-                        { x = 0, y = 0, z = 0 }
-
-                    Chrome ->
-                        { x = 0, y = 4, z = 0 }
-
-                    Firefox ->
-                        { x = -1, y = 8, z = 0 }
-
-                    Edge ->
-                        { x = 0, y = 4, z = 0 }
-
-                    Opera ->
-                        { x = 0, y = 4, z = 0 }
-
-                    UnknownBrowser ->
-                        { x = 0, y = 0, z = 0 }
-                )
+            , Ui.opacity 0
             ]
             { onChange = onInput
             , text = loginCode
@@ -563,8 +613,8 @@ inputFont =
     Ui.Font.family [ Ui.Font.typeface "Consolas", Ui.Font.monospace ]
 
 
-enterLoginCodeView : UserAgent -> EnterLoginCode2 -> Element Msg
-enterLoginCodeView userAgent model =
+enterLoginCodeView : Maybe { a | htmlId : HtmlId, selection : Range } -> EnterLoginCode2 -> Element Msg
+enterLoginCodeView textSelection model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -596,7 +646,7 @@ enterLoginCodeView userAgent model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput userAgent loginCodeLength TypedLoginCode model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput loginCodeLength TypedLoginCode textSelection model.code label)
             , if SeqDict.size model.attempts < maxLoginAttempts then
                 case validateCode loginCodeLength model.code of
                     Ok loginCode ->
@@ -618,8 +668,8 @@ enterLoginCodeView userAgent model =
         ]
 
 
-enterTwoFactorCodeView : UserAgent -> EnterTwoFactorCode2 -> Element Msg
-enterTwoFactorCodeView userAgent model =
+enterTwoFactorCodeView : Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
+enterTwoFactorCodeView textSelection model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -644,7 +694,7 @@ enterTwoFactorCodeView userAgent model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput userAgent twoFactorCodeLength TypedTwoFactorCode model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput twoFactorCodeLength TypedTwoFactorCode textSelection model.code label)
             , if model.attemptCount < maxLoginAttempts then
                 case validateCode twoFactorCodeLength model.code of
                     Ok loginCode ->

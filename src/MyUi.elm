@@ -1,5 +1,6 @@
 module MyUi exposing
     ( Range
+    , SelectionDirection(..)
     , alertColor
     , background1
     , background2
@@ -48,7 +49,6 @@ module MyUi exposing
     , montserrat
     , noPointerEvents
     , noShrinking
-    , onSelectionChanged
     , prewrap
     , radioColumn
     , radioRowWithSeparators
@@ -57,6 +57,7 @@ module MyUi exposing
     , rowButton
     , secondaryButton
     , secondaryGrayBorder
+    , selectedTextBackground
     , simpleButton
     , textLinkColor
     , textLinkColorOnDarkBackground
@@ -78,7 +79,6 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress exposing (EmailAddress)
 import Html exposing (Html)
 import Html.Attributes
-import Html.Events
 import Html.Events.Extra.Touch
 import Icons
 import Json.Decode
@@ -704,21 +704,14 @@ type alias Range =
     { start : Int, end : Int }
 
 
+type SelectionDirection
+    = SelectForward
+    | SelectBackward
+
+
 rangeSize : Range -> Int
 rangeSize range =
     range.end - range.start
-
-
-decodeSelection : Json.Decode.Decoder Range
-decodeSelection =
-    Json.Decode.map2 (\start end -> Range (min start end) (max start end))
-        (Json.Decode.at [ "target", "selectionStart" ] Json.Decode.int)
-        (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
-
-
-onSelectionChanged : (Range -> value) -> Html.Attribute value
-onSelectionChanged onSelectionChange =
-    Html.Events.on "selectionchange" (Json.Decode.map onSelectionChange decodeSelection)
 
 
 focusEffect : Ui.Attribute msg
@@ -798,11 +791,15 @@ css =
                 ++ fontFace 300 "Montserrat-Light"
                 ++ """
 textarea::selection {
-    background-color: rgb(0,120,215);
+    background-color: """
+                ++ colorToStyle selectedTextBackground
+                ++ """;
     color: rgba(0,0,0,0);
 }
 textarea::-moz-selection {
-    background-color: rgb(0,120,215);
+    background-color: """
+                ++ colorToStyle selectedTextBackground
+                ++ """;
     color: rgba(0,0,0,0);
 }
 
@@ -961,6 +958,11 @@ inputBackground =
 inputBorder : Ui.Color
 inputBorder =
     Ui.rgb 97 104 124
+
+
+selectedTextBackground : Ui.Color
+selectedTextBackground =
+    Ui.rgb 0 120 215
 
 
 buttonBackground : Ui.Color

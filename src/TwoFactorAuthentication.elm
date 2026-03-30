@@ -17,12 +17,12 @@ module TwoFactorAuthentication exposing
     )
 
 import Duration
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera
 import Effect.Time as Time
 import LoginForm exposing (CodeStatus(..))
-import MyUi
+import MyUi exposing (Range)
 import Ports
 import QRCode
 import SecretId exposing (SecretId)
@@ -33,7 +33,6 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import UserAgent exposing (UserAgent)
 
 
 type alias TwoFactorAuthentication =
@@ -202,8 +201,8 @@ updateFromBackend toFrontend model =
                     model
 
 
-view : UserAgent -> Bool -> Time.Posix -> TwoFactorState -> Element Msg
-view userAgent isMobile time twoFactorStatus =
+view : Bool -> Maybe { a | htmlId : HtmlId, selection : Range } -> Time.Posix -> TwoFactorState -> Element Msg
+view isMobile textInputFocus time twoFactorStatus =
     MyUi.container
         MyUi.background1
         isMobile
@@ -222,7 +221,7 @@ view userAgent isMobile time twoFactorStatus =
                     (Ui.text "Loading...")
 
             TwoFactorSetup data ->
-                setupView userAgent isMobile data
+                setupView isMobile textInputFocus data
 
             TwoFactorComplete ->
                 Ui.column
@@ -241,8 +240,8 @@ view userAgent isMobile time twoFactorStatus =
         ]
 
 
-setupView : UserAgent -> Bool -> TwoFactorSetupData -> Element Msg
-setupView userAgent isMobile { qrCodeUrl, code, attempts } =
+setupView : Bool -> Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorSetupData -> Element Msg
+setupView isMobile textInputFocus { qrCodeUrl, code, attempts } =
     case QRCode.fromString qrCodeUrl of
         Ok qrCode ->
             let
@@ -324,7 +323,7 @@ setupView userAgent isMobile { qrCodeUrl, code, attempts } =
                     (Ui.column
                         [ Ui.spacing 8 ]
                         [ label.element
-                        , LoginForm.loginCodeInput userAgent LoginForm.twoFactorCodeLength TypedTwoFactorCode code label
+                        , LoginForm.loginCodeInput LoginForm.twoFactorCodeLength TypedTwoFactorCode textInputFocus code label
                         , case LoginForm.validateCode LoginForm.twoFactorCodeLength code of
                             Ok code2 ->
                                 case SeqDict.get code2 attempts of

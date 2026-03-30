@@ -445,7 +445,7 @@ logout model =
                 model2 =
                     { model
                         | loginStatus =
-                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
+                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing, textInputFocus = Nothing }
                     }
             in
             if Route.requiresLogin model2.route then
@@ -1157,9 +1157,6 @@ isPressMsg msg =
         RemoveFocus ->
             False
 
-        TextInputGotFocus _ ->
-            False
-
         KeyDown _ ->
             False
 
@@ -1386,6 +1383,12 @@ isPressMsg msg =
             True
 
         EnableToFrontendLogging ->
+            False
+
+        TextSelectionChanged _ ->
+            False
+
+        DomFocusChanged _ ->
             False
 
 

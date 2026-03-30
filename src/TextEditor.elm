@@ -39,7 +39,6 @@ import Ui.Font
 -}
 type Msg
     = TypedText String
-    | MovedCursor Range
     | PressedReset
     | UndoChange
     | RedoChange
@@ -50,7 +49,6 @@ type LocalChange
     | Local_Reset
     | Local_Undo
     | Local_Redo
-    | Local_MovedCursor Range
 
 
 {-| OpaqueVariants
@@ -60,7 +58,6 @@ type ServerChange
     | Server_Reset
     | Server_Undo (Id UserId)
     | Server_Redo (Id UserId)
-    | Server_MovedCursor (Id UserId) Range
 
 
 {-| Opaque
@@ -165,20 +162,19 @@ update currentUserId msg model local =
                 Nothing ->
                     ( model, Nothing )
 
-        MovedCursor range ->
-            case SeqDict.get currentUserId local.cursorPosition of
-                Just previousRange ->
-                    ( model
-                    , if range == previousRange then
-                        Nothing
-
-                      else
-                        Local_MovedCursor range |> Just
-                    )
-
-                Nothing ->
-                    ( model, Local_MovedCursor range |> Just )
-
+        --MovedCursor range ->
+        --    case SeqDict.get currentUserId local.cursorPosition of
+        --        Just previousRange ->
+        --            ( model
+        --            , if range == previousRange then
+        --                Nothing
+        --
+        --              else
+        --                Local_MovedCursor range |> Just
+        --            )
+        --
+        --        Nothing ->
+        --            ( model, Local_MovedCursor range |> Just )
         PressedReset ->
             ( model, Just Local_Reset )
 
@@ -204,9 +200,6 @@ localChangeUpdate currentUserId change local =
         Local_Redo ->
             redoChange currentUserId local
 
-        Local_MovedCursor range ->
-            moveCursor currentUserId range local
-
 
 changeUpdate : ServerChange -> LocalState -> LocalState
 changeUpdate change local =
@@ -222,14 +215,6 @@ changeUpdate change local =
 
         Server_Redo userId ->
             redoChange userId local
-
-        Server_MovedCursor userId range ->
-            moveCursor userId range local
-
-
-moveCursor : Id UserId -> Range -> LocalState -> LocalState
-moveCursor userId range local =
-    { local | cursorPosition = SeqDict.insert userId range local.cursorPosition }
 
 
 undoChange : Id UserId -> LocalState -> LocalState
@@ -417,9 +402,6 @@ backendChangeUpdate currentUserId change local =
         Local_Redo ->
             ( redoChange currentUserId local, Server_Redo currentUserId )
 
-        Local_MovedCursor range ->
-            ( moveCursor currentUserId range local, Server_MovedCursor currentUserId range )
-
 
 inputId : HtmlId
 inputId =
@@ -492,9 +474,6 @@ isPress msg =
         TypedText _ ->
             False
 
-        MovedCursor _ ->
-            False
-
         PressedReset ->
             True
 
@@ -531,7 +510,6 @@ textarea local currentUserId placeholderText editorState =
             , Html.Attributes.style "outline" "none"
             , Html.Events.onInput TypedText
             , Html.Attributes.value editorState.text
-            , MyUi.onSelectionChanged MovedCursor
             , Dom.idToAttribute inputId
             , Html.Events.preventDefaultOn
                 "keydown"

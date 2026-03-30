@@ -25,6 +25,7 @@ module Icons exposing
     , map
     , mobile
     , number
+    , numbers
     , openEye
     , pencil
     , person
@@ -721,56 +722,54 @@ spinner =
         Ui.none
 
 
-number : Int -> String -> List (Html msg)
-number width value =
+numbers : Int -> String -> List (Html msg)
+numbers width value =
     numberHelper width [] (String.toList value)
         |> List.reverse
+
+
+number : Int -> Char -> Html msg
+number width char =
+    case char of
+        '0' ->
+            zero width
+
+        '1' ->
+            one width
+
+        '2' ->
+            two width
+
+        '3' ->
+            three width
+
+        '4' ->
+            four width
+
+        '5' ->
+            five width
+
+        '6' ->
+            six width
+
+        '7' ->
+            seven width
+
+        '8' ->
+            eight width
+
+        '9' ->
+            nine width
+
+        _ ->
+            Html.span [ Html.Attributes.style "width" (String.fromInt width ++ "px") ] []
 
 
 numberHelper : Int -> List (Html msg) -> List Char -> List (Html msg)
 numberHelper width html int =
     case int of
-        head :: rest ->
-            let
-                html2 : List (Html msg)
-                html2 =
-                    (case head of
-                        '0' ->
-                            zero width
-
-                        '1' ->
-                            one width
-
-                        '2' ->
-                            two width
-
-                        '3' ->
-                            three width
-
-                        '4' ->
-                            four width
-
-                        '5' ->
-                            five width
-
-                        '6' ->
-                            six width
-
-                        '7' ->
-                            seven width
-
-                        '8' ->
-                            eight width
-
-                        '9' ->
-                            nine width
-
-                        _ ->
-                            Html.span [ Html.Attributes.style "width" (String.fromInt width ++ "px") ] []
-                    )
-                        :: html
-            in
-            numberHelper width html2 rest
+        char :: rest ->
+            numberHelper width (number width char :: html) rest
 
         [] ->
             html

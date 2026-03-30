@@ -30,6 +30,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
+import MyUi exposing (Range)
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
@@ -468,14 +469,43 @@ connectTwoUsersAndJoinNewGuild continueFunc =
         )
 
 
+focusEvent :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> DelayInMs
+    -> Maybe HtmlId
+    -> Maybe Range
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+focusEvent user delayInMs maybeHtmlId maybeSelection =
+    user.portEvent
+        delayInMs
+        "focus_changed_from_js"
+        (( "id"
+         , case maybeHtmlId of
+            Just htmlId ->
+                Json.Encode.string (Dom.idToString htmlId)
+
+            Nothing ->
+                Json.Encode.null
+         )
+            :: (case maybeSelection of
+                    Just { start, end } ->
+                        [ ( "selectionStart", Json.Encode.int start ), ( "selectionEnd", Json.Encode.int end ) ]
+
+                    Nothing ->
+                        []
+               )
+            |> Json.Encode.object
+        )
+
+
 writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessage user text =
     T.group
-        [ user.focus 200 (Dom.id "channel_textinput")
+        [ focusEvent user 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
         , user.click 1005 (Dom.id "channel_textinput")
         , user.input 100 (Dom.id "channel_textinput") text
         , user.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-        , user.blur 100 (Dom.id "channel_textinput")
+        , focusEvent user 100 Nothing Nothing
         ]
 
 
@@ -525,7 +555,6 @@ handleHttpRequests overrides fileData requestAndData =
             requestAndData.currentRequest.method
                 ++ "_"
                 ++ requestAndData.currentRequest.url
-                |> Debug.log "key"
 
         getData : String -> HttpResponse
         getData path =
@@ -1382,13 +1411,13 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                                             (\request ->
                                                 case ( request.url, decodeCustomRequest request ) of
                                                     ( "http://localhost:3000/file/custom-request", Just ( method, url ) ) ->
-                                                        (Debug.log "url" url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
+                                                        (url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
                                                             && (method == "PUT")
 
                                                     _ ->
                                                         False
                                             )
-                                            (Debug.log "request" data.httpRequests)
+                                            data.httpRequests
                                     of
                                         [ _ ] ->
                                             [ T.websocketSendString
@@ -2059,17 +2088,17 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.click 1747 (Dom.id "guild_openGuild_0")
                         , writeMessage tabA "Test"
                         , tabB.click 111 (Dom.id "guild_openGuild_0")
-                        , tabB.focus 25 (Dom.id "channel_textinput")
+                        , focusEvent tabB 25 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                         , tabA.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
-                        , tabA.focus 921 (Dom.id "channel_textinput")
-                        , tabA.blur 4 (Dom.id "channel_textinput")
-                        , tabB.blur 17 (Dom.id "channel_textinput")
+                        , focusEvent tabA 921 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                        , focusEvent tabA 4 Nothing Nothing
+                        , focusEvent tabB 17 Nothing Nothing
                         , tabA.click 28 (Dom.id "miniView_reply")
-                        , tabA.focus 8 (Dom.id "channel_textinput")
+                        , focusEvent tabA 8 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
                         , tabA.mouseLeave 375 (Dom.id "guild_message_0") ( 1286, 57 ) []
                         , tabA.click 457 (Dom.id "channel_textinput")
                         , tabA.input 781 (Dom.id "channel_textinput") "Test2"
-                        , tabA.blur 2357 (Dom.id "channel_textinput")
+                        , focusEvent tabA 4 Nothing Nothing
                         , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
                         , T.collapsableGroup
                             "Add emoji to guild channel message"
@@ -2099,7 +2128,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
                         , tabA.click 457 (Dom.id "channel_textinput")
                         , tabA.input 781 (Dom.id "channel_textinput") "Test3"
-                        , tabA.blur 2357 (Dom.id "channel_textinput")
+                        , focusEvent tabA 2357 Nothing Nothing
                         , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
                         , tabB.click 100 (Dom.id "guild_viewThread_0_0")
                         , tabA.mouseEnter 1 (Dom.id "thread_message_0") ( 1036, 55 ) []
@@ -2130,15 +2159,15 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
             (Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")
             "/g/1/c/0"
             { width = 1615, height = 820 }
-            (\tab1 ->
-                [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
-                , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
-                , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tab1
-                , tab1.click 17660 (Dom.id "guild_openGuild_0")
-                , tab1.focus 17 (Dom.id "channel_textinput")
-                , tab1.blur 3994 (Dom.id "channel_textinput")
-                , tab1.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unable to reach the server." ])
+            (\tabA ->
+                [ tabA.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , tabA.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tabA.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
+                , handleLogin "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0" adminEmail tabA
+                , tabA.click 17660 (Dom.id "guild_openGuild_0")
+                , focusEvent tabA 17 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , focusEvent tabA 3994 Nothing Nothing
+                , tabA.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unable to reach the server." ])
                 ]
             )
         ]

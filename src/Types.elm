@@ -76,7 +76,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
-import MyUi exposing (Range)
+import MyUi exposing (Range, SelectionDirection)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -162,7 +162,11 @@ type Drag
 
 type LoginStatus
     = LoggedIn LoggedIn2
-    | NotLoggedIn { loginForm : Maybe LoginForm, useInviteAfterLoggedIn : Maybe (SecretId InviteLinkId) }
+    | NotLoggedIn
+        { loginForm : Maybe LoginForm
+        , useInviteAfterLoggedIn : Maybe (SecretId InviteLinkId)
+        , textInputFocus : Maybe { htmlId : HtmlId, selection : Range, direction : SelectionDirection }
+        }
 
 
 type GuildChannelNameHover
@@ -384,7 +388,6 @@ type FrontendMsg
     | GotPingUserPosition HtmlId (Result Dom.Error MentionUserDropdown)
     | SetFocus
     | RemoveFocus
-    | TextInputGotFocus HtmlId
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
     | MessageMenu_PressedReactionEmoji Emoji
@@ -460,6 +463,8 @@ type FrontendMsg
     | GotEmojiData (Result Http.Error CachedEmojiData)
     | GotEditMessageTextInputPositionForEmojiSelector (Result Dom.Error Dom.Element)
     | EnableToFrontendLogging
+    | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
+    | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
 
 
 type ScrollPosition
