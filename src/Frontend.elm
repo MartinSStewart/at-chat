@@ -3913,7 +3913,10 @@ pressedEditMessage guildOrDmId threadRoute model =
 
                 Nothing ->
                     loggedIn
-            , FrontendExtra.setFocus model MessageMenu.editMessageTextInputId
+            , Command.batch
+                [ FrontendExtra.setFocus model MessageMenu.editMessageTextInputId
+                , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                ]
             )
         )
         model
@@ -4889,6 +4892,12 @@ updateLoadedFromBackend msg model =
                                     )
 
                                 Server_AddReactionEmoji _ _ _ _ ->
+                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
+
+                                Server_DiscordAddReactionGuildEmoji _ _ _ _ _ ->
+                                    ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
+
+                                Server_DiscordAddReactionDmEmoji _ _ _ _ ->
                                     ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
 
                                 _ ->
