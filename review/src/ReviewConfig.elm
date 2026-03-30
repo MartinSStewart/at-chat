@@ -129,6 +129,9 @@ config =
             , ( [ "Discord" ], "Id" )
             , ( [ "Emoji" ], "SkinTone" )
             , ( [ "Discord" ], "Id" )
+            , ( [ "Pages", "Admin" ], "AdminChange" )
+            , ( [ "UserSession" ], "ToBeFilledInByBackend" )
+            , ( [ "CssPixels" ], "CssPixels" )
             ]
         }
     , EncoderDecoderNaming.rule

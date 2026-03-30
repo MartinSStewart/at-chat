@@ -349,46 +349,48 @@ checkTypeAnnotationRecursive :
 checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef typeAnnotation =
     case Node.value typeAnnotation of
         Typed (Node range ( _, name )) args ->
-            if name == "Untrusted" then
-                []
+            case resolveModuleNameWith typeDef range of
+                Just actualModuleName ->
+                    if
+                        (actualModuleName == [ "Untrusted" ] && name == "Untrusted")
+                            || Set.member ( actualModuleName, name ) config.exemptions
+                    then
+                        []
 
-            else
-                case resolveModuleNameWith typeDef range of
-                    Just actualModuleName ->
-                        if Set.member ( actualModuleName, name ) context.opaqueTypes && not (Set.member ( actualModuleName, name ) config.exemptions) then
-                            [ Rule.errorForModule typeDef.moduleKey
-                                { message = name ++ " is an opaque type and must be wrapped in Untrusted when used in ToBackend."
-                                , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via " ++ formatChain chain name ]
-                                }
-                                range
-                            ]
+                    else if Set.member ( actualModuleName, name ) context.opaqueTypes then
+                        [ Rule.errorForModule typeDef.moduleKey
+                            { message = name ++ " is an opaque type and must be wrapped in Untrusted when used in ToBackend."
+                            , details = [ "Opaque types sent from the frontend could be tampered with. Wrap this type in Untrusted to ensure it gets validated on the backend. Referenced via " ++ formatChain chain name ]
+                            }
+                            range
+                        ]
 
-                        else
-                            let
-                                argErrors =
-                                    checkArgsWithPhantomRecursive config context typeDefDict visited chain typeDef ( actualModuleName, name ) args
+                    else
+                        let
+                            argErrors =
+                                checkArgsWithPhantomRecursive config context typeDefDict visited chain typeDef ( actualModuleName, name ) args
 
-                                recursiveErrors =
-                                    if Set.member ( actualModuleName, name ) visited then
-                                        []
+                            recursiveErrors =
+                                if Set.member ( actualModuleName, name ) visited then
+                                    []
 
-                                    else
-                                        case Dict.get ( actualModuleName, name ) typeDefDict of
-                                            Just referencedTypeDef ->
-                                                checkTypeDefRecursively config
-                                                    context
-                                                    typeDefDict
-                                                    (Set.insert ( actualModuleName, name ) visited)
-                                                    (name :: chain)
-                                                    referencedTypeDef
+                                else
+                                    case Dict.get ( actualModuleName, name ) typeDefDict of
+                                        Just referencedTypeDef ->
+                                            checkTypeDefRecursively config
+                                                context
+                                                typeDefDict
+                                                (Set.insert ( actualModuleName, name ) visited)
+                                                (name :: chain)
+                                                referencedTypeDef
 
-                                            Nothing ->
-                                                []
-                            in
-                            argErrors ++ recursiveErrors
+                                        Nothing ->
+                                            []
+                        in
+                        argErrors ++ recursiveErrors
 
-                    Nothing ->
-                        List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef) args
+                Nothing ->
+                    List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef) args
 
         Tupled nodes ->
             List.concatMap (checkTypeAnnotationRecursive config context typeDefDict visited chain typeDef) nodes
