@@ -568,8 +568,8 @@ type BackendMsg
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool
     | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
-    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
-    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
+    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
+    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | ExportBackendStep
@@ -727,6 +727,7 @@ type ServerChange
     | Server_DiscordGuildJoinedOrCreated (Discord.Id Discord.GuildId) DiscordFrontendGuild
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
+    | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
 
 
 type LocalChange

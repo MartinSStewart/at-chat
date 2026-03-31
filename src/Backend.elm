@@ -799,14 +799,14 @@ update msg model =
         DiscordMessageCreate_AttachmentsUploaded message results ->
             let
                 ( attachments, discordAttachments ) =
-                    attachmentsUploadedHelper model message results
+                    attachmentsUploadedHelper model message (List.Nonempty.toList results)
             in
-            DiscordSync.handleCreateMessage message attachments { model | discordAttachments = discordAttachments }
+            DiscordSync.handleCreateMessage "" message attachments { model | discordAttachments = discordAttachments }
 
         DiscordMessageUpdate_AttachmentsUploaded message results ->
             let
                 ( attachments, discordAttachments ) =
-                    attachmentsUploadedHelper model message results
+                    attachmentsUploadedHelper model message (List.Nonempty.toList results)
             in
             DiscordSync.handleEditMessage message attachments { model | discordAttachments = discordAttachments }
 

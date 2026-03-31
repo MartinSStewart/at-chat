@@ -29,7 +29,7 @@ import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import LoginForm
 import MembersAndOwner
-import Message exposing (ChangeAttachments(..), MessageState)
+import Message exposing (ChangeAttachments(..), Message(..), MessageState)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
@@ -3098,6 +3098,50 @@ changeUpdate localMsg local =
                                 guildId
                                 (\guild -> { guild | membersAndOwner = members })
                                 local.discordGuilds
+                    }
+
+                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId name ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild ->
+                                    { guild
+                                        | membersAndOwner =
+                                            MembersAndOwner.addMember userJoinedId { joinedAt = Just time } guild.membersAndOwner
+                                                |> Result.withDefault guild.membersAndOwner
+                                        , channels =
+                                            SeqDict.updateIfExists
+                                                channelId
+                                                (LocalState.createChannelMessageFrontend
+                                                    (UserJoinedMessage time userJoinedId SeqDict.empty)
+                                                )
+                                                guild.channels
+                                    }
+                                )
+                                local.discordGuilds
+                        , localUser =
+                            if SeqDict.member userJoinedId localUser.linkedDiscordUsers then
+                                localUser
+
+                            else
+                                { localUser
+                                    | otherDiscordUsers =
+                                        SeqDict.update userJoinedId
+                                            (\maybe ->
+                                                case maybe of
+                                                    Just user ->
+                                                        Just { user | name = name }
+
+                                                    Nothing ->
+                                                        Just { name = name, icon = Nothing }
+                                            )
+                                            localUser.otherDiscordUsers
+                                }
                     }
 
 
