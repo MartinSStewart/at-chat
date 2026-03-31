@@ -859,7 +859,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         attachments
                                                         |> ServerChange
                                                     )
-                                                    model
+                                                    model2
                                                 ]
 
                                         Nothing ->
@@ -874,7 +874,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         attachments
                                                         |> ServerChange
                                                     )
-                                                    model
+                                                    model2
                                                 ]
                                     , notification
                                     , Command.map identity (DiscordGotDmMessageEmbed dmChannelId messageId) embedCmds
