@@ -104,7 +104,7 @@ shouldNotifyAdmin log =
         JoinedDiscordThreadFailed _ _ ->
             Nothing
 
-        EmptyDiscordMessage message ->
+        EmptyDiscordMessage _ ->
             Nothing
 
 
