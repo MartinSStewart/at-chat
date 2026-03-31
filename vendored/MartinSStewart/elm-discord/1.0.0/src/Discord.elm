@@ -5067,6 +5067,13 @@ decodeGatewayEvent eventDecoder =
                                             )
                                 )
 
+                    1 ->
+                        JD.map3
+                            (\() () () -> OpHeartbeat)
+                            (JD.field "d" (JD.null ()))
+                            (JD.field "t" (JD.null ()))
+                            (JD.field "s" (JD.null ()))
+
                     7 ->
                         JD.succeed OpReconnect
 
@@ -5128,6 +5135,8 @@ type GatewayUserCommand
 
 type GatewayEvent event
     = OpHello { heartbeatInterval : Duration }
+    | -- Not sure about this one. Payload always looks like this { "t": null, "s": null, "op": 1, "d": null }
+      OpHeartbeat
     | OpAck
     | OpDispatch SequenceCounter event
     | OpReconnect
@@ -5987,6 +5996,9 @@ handleGateway authToken intents response model =
                       ]
                     )
 
+                OpHeartbeat ->
+                    ( model, [] )
+
                 OpAck ->
                     ( model
                     , [ SendWebsocketDataWithDelay
@@ -6105,6 +6117,9 @@ handleUserGateway authToken intents response model =
                       , UserOutMsg_SendWebsocketData connection command
                       ]
                     )
+
+                OpHeartbeat ->
+                    ( model, [] )
 
                 OpAck ->
                     ( model
