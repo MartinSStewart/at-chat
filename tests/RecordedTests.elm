@@ -2883,6 +2883,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_UpdateDiscordMembers _ _ ->
                             True
 
+                        Types.Server_DiscordGuildMemberJoined posix id _ _ personName ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 

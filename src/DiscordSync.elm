@@ -737,6 +737,11 @@ taskResult task =
     Task.map Ok task |> Task.onError (\error -> Task.succeed (Err error))
 
 
+nonemptyTaskSequence : Nonempty (Task restriction x a) -> Task restriction x (Nonempty a)
+nonemptyTaskSequence nonempty =
+    Task.map2 Nonempty (List.Nonempty.head nonempty) (Task.sequence (List.Nonempty.tail nonempty))
+
+
 joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.MessageId -> Command restriction toMsg BackendMsg
 joinThread authentication guildId threadId =
     Discord.joinThreadPayload (Discord.userToken authentication) threadId
@@ -1320,31 +1325,32 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         _ ->
                                             Command.none
                             in
-                            if SeqDict.size attachments == List.length message.attachments then
-                                let
-                                    ( model3, cmd2 ) =
-                                        handleCreateMessage
-                                            (case discordMsg of
-                                                Discord.GotWebsocketData data ->
-                                                    data
+                            case ( SeqDict.size attachments == List.length message.attachments, List.Nonempty.fromList message.attachments ) of
+                                ( False, Just nonempty ) ->
+                                    ( model2
+                                    , joinThreadCmd
+                                        :: Task.perform
+                                            (DiscordMessageCreate_AttachmentsUploaded message)
+                                            (nonemptyTaskSequence (List.Nonempty.map loadMessageAttachment nonempty))
+                                        :: cmds
+                                    )
 
-                                                Discord.WebsocketClosed data ->
-                                                    data
-                                            )
-                                            message
-                                            attachments
-                                            model2
-                                in
-                                ( model3, joinThreadCmd :: cmd2 :: cmds )
+                                _ ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleCreateMessage
+                                                (case discordMsg of
+                                                    Discord.GotWebsocketData data ->
+                                                        data
 
-                            else
-                                ( model2
-                                , joinThreadCmd
-                                    :: Task.perform
-                                        (DiscordMessageCreate_AttachmentsUploaded message)
-                                        (Task.sequence (List.map loadMessageAttachment message.attachments))
-                                    :: cmds
-                                )
+                                                    Discord.WebsocketClosed data ->
+                                                        data
+                                                )
+                                                message
+                                                attachments
+                                                model2
+                                    in
+                                    ( model3, joinThreadCmd :: cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
@@ -1375,21 +1381,22 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         _ ->
                                             Command.none
                             in
-                            if SeqDict.size attachments == List.length edit.attachments then
-                                let
-                                    ( model3, cmd2 ) =
-                                        handleEditMessage edit attachments model2
-                                in
-                                ( model3, cmd2 :: joinThreadCmd :: cmds )
+                            case ( SeqDict.size attachments == List.length edit.attachments, List.Nonempty.fromList edit.attachments ) of
+                                ( False, Just nonempty ) ->
+                                    ( model2
+                                    , Task.perform
+                                        (DiscordMessageUpdate_AttachmentsUploaded edit)
+                                        (nonemptyTaskSequence (List.Nonempty.map loadMessageAttachment nonempty))
+                                        :: joinThreadCmd
+                                        :: cmds
+                                    )
 
-                            else
-                                ( model2
-                                , Task.perform
-                                    (DiscordMessageUpdate_AttachmentsUploaded edit)
-                                    (Task.sequence (List.map loadMessageAttachment edit.attachments))
-                                    :: joinThreadCmd
-                                    :: cmds
-                                )
+                                _ ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleEditMessage edit attachments model2
+                                    in
+                                    ( model3, cmd2 :: joinThreadCmd :: cmds )
 
                         Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let

@@ -3100,7 +3100,7 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId user ->
+                Server_DiscordGuildMemberJoined time guildId channelId userJoinedId name ->
                     let
                         localUser =
                             local.localUser
@@ -3131,7 +3131,16 @@ changeUpdate localMsg local =
                             else
                                 { localUser
                                     | otherDiscordUsers =
-                                        SeqDict.insert userJoinedId user localUser.otherDiscordUsers
+                                        SeqDict.update userJoinedId
+                                            (\maybe ->
+                                                case maybe of
+                                                    Just user ->
+                                                        Just { user | name = name }
+
+                                                    Nothing ->
+                                                        Just { name = name, icon = Nothing }
+                                            )
+                                            localUser.otherDiscordUsers
                                 }
                     }
 
