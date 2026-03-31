@@ -38,6 +38,7 @@ type Log
     | FailedToParseDiscordWebsocket (Maybe String) String
     | FailedToGetDataForJoinedOrCreatedDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) Discord.HttpError
     | JoinedDiscordThreadFailed (Discord.Id Discord.GuildId) Discord.HttpError
+    | EmptyDiscordMessage String
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -101,6 +102,9 @@ shouldNotifyAdmin log =
             Nothing
 
         JoinedDiscordThreadFailed _ _ ->
+            Nothing
+
+        EmptyDiscordMessage message ->
             Nothing
 
 
@@ -425,6 +429,13 @@ logContent onPressCopy log =
                 [ tag errorTag "Joining Discord thread failed"
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        EmptyDiscordMessage message ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord message has no content"
+                , MyUi.errorBox (Dom.id "admin_DiscordMessageNoContent") onPressCopy message
                 ]
 
 

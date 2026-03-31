@@ -8,6 +8,7 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , domainToString
+    , emptyPlaceholder
     , escapedCharToString
     , fromDiscord
     , fromNonemptyString
@@ -2023,7 +2024,12 @@ fromDiscord text attachments =
                     List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
 
                 Nothing ->
-                    Nonempty (NormalText '<' "empty>") []
+                    emptyPlaceholder
+
+
+emptyPlaceholder : Nonempty (RichText userId)
+emptyPlaceholder =
+    Nonempty (NormalText '<' "empty>") []
 
 
 type DiscordModifiers
