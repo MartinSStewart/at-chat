@@ -52,6 +52,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
+import PersonName
 import Quantity
 import RichText exposing (RichText(..))
 import SeqDict exposing (SeqDict)
@@ -953,42 +954,15 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                         case discordMessage.type_ of
                             Discord.GuildMemberJoin ->
                                 let
-                                    channelResult : Result DiscordMessageAlreadyExists DiscordBackendChannel
-                                    channelResult =
-                                        case threadRoute of
-                                            ViewThreadWithMaybeMessage threadId _ ->
-                                                let
-                                                    message2 : Message messageId (Discord.Id Discord.UserId)
-                                                    message2 =
-                                                        UserJoinedMessage
-                                                            discordMessage.timestamp
-                                                            discordMessage.author.id
-                                                            SeqDict.empty
-                                                in
-                                                LocalState.createDiscordThreadMessageBackend
-                                                    discordMessage.id
-                                                    threadId
-                                                    message2
-                                                    channel
-                                                    |> Result.map Tuple.second
-
-                                            NoThreadWithMaybeMessage _ ->
-                                                let
-                                                    message : Message messageId (Discord.Id Discord.UserId)
-                                                    message =
-                                                        UserJoinedMessage
-                                                            discordMessage.timestamp
-                                                            discordMessage.author.id
-                                                            SeqDict.empty
-                                                in
-                                                LocalState.createDiscordChannelMessageBackend
-                                                    discordMessage.id
-                                                    message
-                                                    channel
-                                                    |> Result.map Tuple.second
+                                    message : Message messageId (Discord.Id Discord.UserId)
+                                    message =
+                                        UserJoinedMessage
+                                            discordMessage.timestamp
+                                            discordMessage.author.id
+                                            SeqDict.empty
                                 in
-                                case channelResult of
-                                    Ok channel4 ->
+                                case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
+                                    Ok ( _, channel4 ) ->
                                         ( { model
                                             | discordGuilds =
                                                 SeqDict.insert
@@ -998,7 +972,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         , membersAndOwner =
                                                             MembersAndOwner.addMember
                                                                 discordMessage.author.id
-                                                                { joinedAt = Nothing }
+                                                                { joinedAt = Just discordMessage.timestamp }
                                                                 guild.membersAndOwner
                                                                 |> Result.withDefault guild.membersAndOwner
                                                     }
@@ -1014,7 +988,9 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                 (Server_DiscordGuildMemberJoined
                                                     discordMessage.timestamp
                                                     discordGuildId
+                                                    discordMessage.channelId
                                                     discordMessage.author.id
+                                                    (PersonName.fromStringLossy discordMessage.author.username)
                                                     |> ServerChange
                                                 )
                                                 model

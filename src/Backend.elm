@@ -801,7 +801,7 @@ update msg model =
                 ( attachments, discordAttachments ) =
                     attachmentsUploadedHelper model message results
             in
-            DiscordSync.handleCreateMessage message attachments { model | discordAttachments = discordAttachments }
+            DiscordSync.handleCreateMessage "" message attachments { model | discordAttachments = discordAttachments }
 
         DiscordMessageUpdate_AttachmentsUploaded message results ->
             let
