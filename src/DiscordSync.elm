@@ -214,7 +214,7 @@ handleDiscordDmEditMessage edit attachments model =
                     let
                         richText : Nonempty (RichText (Discord.Id Discord.UserId))
                         richText =
-                            RichText.fromDiscord edit.content attachments
+                            RichText.fromDiscord edit.content attachments []
                     in
                     case
                         LocalState.editMessageHelperNoThread
@@ -335,7 +335,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
         richText : Nonempty (RichText (Discord.Id Discord.UserId))
         richText =
-            RichText.fromDiscord edit.content attachments
+            RichText.fromDiscord edit.content attachments []
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
@@ -671,7 +671,7 @@ messagesAndLinks messages discordAttachments =
             Message.userTextMessageNoEmbeds
                 message.timestamp
                 message.author.id
-                (RichText.fromDiscord message.content attachments)
+                (RichText.fromDiscord message.content attachments message.embeds)
                 (case message.referencedMessage of
                     Discord.Referenced referenced ->
                         OneToOne.second referenced.id linkedMessageIds
@@ -774,7 +774,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                         let
                             richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
-                                RichText.fromDiscord discordMessage.content attachments
+                                RichText.fromDiscord discordMessage.content attachments discordMessage.embeds
 
                             replyTo : Maybe (Id ChannelMessageId)
                             replyTo =
@@ -1020,7 +1020,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                 let
                                     richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                     richText =
-                                        RichText.fromDiscord content attachments
+                                        RichText.fromDiscord content attachments discordMessage.embeds
 
                                     threadOrChannelId : Discord.Id Discord.ChannelId
                                     threadOrChannelId =
