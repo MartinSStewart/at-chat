@@ -1,5 +1,7 @@
 module RateLimit exposing
     ( checkAndUpdateRateLimit
+    , longWindowDuration
+    , longWindowMaxMessages
     , shortWindowDuration
     , shortWindowMaxMessages
     )
@@ -58,7 +60,7 @@ checkAndUpdateRateLimit now key limits =
                             else
                                 ( ( Just index, index + 1 ), longRemaining2, shortRemaining2 )
                         )
-                        ( ( Nothing, 0 ), longWindowMaxMessages, shortWindowMaxMessages )
+                        ( ( Nothing, 1 ), longWindowMaxMessages, shortWindowMaxMessages )
                         value
             in
             if longRemaining > 0 && shortRemaining > 0 then

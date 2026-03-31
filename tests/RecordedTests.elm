@@ -2287,7 +2287,7 @@ sendMessageRateLimitTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 sendMessageRateLimitTest config =
-    T.start
+    startTest
         "SendMessage rate limiting"
         startTime
         config
@@ -2320,9 +2320,9 @@ sendMessageRateLimitTest config =
                                 )
                             )
 
-                    getMessageCount : T.Data FrontendModel BackendModel -> Int
-                    getMessageCount data =
-                        case SeqDict.get guildId data.backend.guilds of
+                    getMessageCount : BackendModel -> Int
+                    getMessageCount backend =
+                        case SeqDict.get guildId backend.guilds of
                             Just guild ->
                                 case SeqDict.get channelId guild.channels of
                                     Just channel ->
@@ -2336,12 +2336,12 @@ sendMessageRateLimitTest config =
 
                     checkMessageCount : String -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                     checkMessageCount label expected =
-                        T.checkState
+                        T.checkBackend
                             100
-                            (\data ->
+                            (\backend ->
                                 let
                                     actual =
-                                        getMessageCount data
+                                        getMessageCount backend
                                 in
                                 if actual == expected then
                                     Ok ()
@@ -2355,7 +2355,7 @@ sendMessageRateLimitTest config =
                     (\dataBefore ->
                         let
                             initialCount =
-                                getMessageCount dataBefore
+                                getMessageCount dataBefore.backend
                         in
                         [ List.range 0 (RateLimit.shortWindowMaxMessages - 1)
                             |> List.map (sendMessage admin 0)
@@ -2372,6 +2372,25 @@ sendMessageRateLimitTest config =
                             "After rate limit window, sending works again"
                             [ sendMessage admin (Duration.inMilliseconds RateLimit.shortWindowDuration + 1) 100 ]
                         , checkMessageCount "After window reset" (initialCount + RateLimit.shortWindowMaxMessages + 2)
+                        , List.range 101 (RateLimit.longWindowMaxMessages + 101)
+                            |> List.map (sendMessage admin 2000)
+                            |> T.collapsableGroup "Send messages exceeding rate limit"
+                        , checkMessageCount "After long rate limit" (initialCount + RateLimit.longWindowMaxMessages + 1)
+                        , sendMessage admin (Duration.inMilliseconds RateLimit.longWindowDuration) 1000
+                        , checkMessageCount "After long rate limit has expired" (initialCount + RateLimit.longWindowMaxMessages + 2)
+                        , T.checkBackend
+                            100
+                            (\backend ->
+                                let
+                                    actual =
+                                        SeqDict.foldl (\_ array count -> Array.length array + count) 0 backend.sendMessageRateLimits
+                                in
+                                if actual == 2 then
+                                    Ok ()
+
+                                else
+                                    Err ("Old rate limit logs aren't being filtered. Expected 2 but got " ++ String.fromInt actual)
+                            )
                         ]
                     )
                 ]
