@@ -1999,8 +1999,36 @@ formatText text =
 --        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : String -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments =
+fromDiscord : String -> SeqDict (Id FileId) FileData -> List Discord.Embed -> Nonempty (RichText (Discord.Id Discord.UserId))
+fromDiscord text attachments embeds =
+    let
+        embedSet : SeqSet Url
+        embedSet =
+            List.filterMap
+                (\embed ->
+                    case embed.url of
+                        Discord.Included url ->
+                            Url.fromString url
+
+                        Discord.Missing ->
+                            Nothing
+                )
+                embeds
+                |> SeqSet.fromList
+
+        applyExtraEmbeds richText =
+            case
+                List.foldl SeqSet.remove embedSet (hyperlinks richText)
+                    |> SeqSet.toList
+                    |> List.concatMap (\url -> [ NormalText ' ' "", Hyperlink url ])
+                    |> List.Nonempty.fromList
+            of
+                Just nonempty ->
+                    List.Nonempty.append richText nonempty
+
+                Nothing ->
+                    richText
+    in
     case String.Nonempty.fromString text of
         Just nonempty ->
             NonemptyExtra.appendList
@@ -2017,14 +2045,25 @@ fromDiscord text attachments =
                         Nonempty (normalTextFromNonempty nonempty) []
                 )
                 (List.map AttachedFile (SeqDict.keys attachments))
+                |> applyExtraEmbeds
 
         Nothing ->
             case NonemptyDict.fromSeqDict attachments of
                 Just attachments2 ->
-                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
+                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2) |> applyExtraEmbeds
 
                 Nothing ->
-                    emptyPlaceholder
+                    case
+                        SeqSet.toList embedSet
+                            |> List.map Hyperlink
+                            |> List.intersperse (NormalText ' ' "")
+                            |> List.Nonempty.fromList
+                    of
+                        Just nonempty ->
+                            nonempty
+
+                        Nothing ->
+                            emptyPlaceholder
 
 
 emptyPlaceholder : Nonempty (RichText userId)
