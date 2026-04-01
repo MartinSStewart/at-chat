@@ -5,7 +5,6 @@
 * Typing indicator not appearing for Discord guilds
 * Changing tabs and then returning to a channel causes it to unload all old messages
 * Two messages get sent if a linked Discord user starts a thread
-* Handle Discord user joined messages
 * Clicking on a message reply should scroll to the original message
 * 4 Discord messages DM restriction not removed until after the page is refreshed
 
