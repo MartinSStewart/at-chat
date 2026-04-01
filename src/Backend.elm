@@ -2936,7 +2936,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     (Server_MemberEditTyping
                                                         time
                                                         userId
-                                                        guildOrDmId
+                                                        (GuildOrDmId (GuildOrDmId_Dm userId))
                                                         threadRoute
                                                         |> ServerChange
                                                     )
