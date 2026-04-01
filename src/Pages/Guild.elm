@@ -6428,6 +6428,36 @@ friendLabelNotMobile time isSelected localUser otherUserId otherUser channel =
     friendLabel False time isSelected localUser otherUserId otherUser channel
 
 
+type SomeoneIsTyping
+    = SomeoneIsTyping
+    | SomeoneIsEditing
+    | NoOneIsTyping
+
+
+someoneIsTyping : Time.Posix -> SeqDict userId (LastTypedAt messageId) -> SomeoneIsTyping
+someoneIsTyping time lastTypedAt =
+    SeqDict.foldl
+        (\_ a state ->
+            case state of
+                SomeoneIsTyping ->
+                    state
+
+                _ ->
+                    if Duration.from a.time time |> Quantity.lessThan (Quantity.plus Duration.second typingDebouncerDelay) then
+                        case a.messageIndex of
+                            Just _ ->
+                                SomeoneIsEditing
+
+                            Nothing ->
+                                SomeoneIsTyping
+
+                    else
+                        state
+        )
+        NoOneIsTyping
+        lastTypedAt
+
+
 friendLabel :
     Bool
     -> Time.Posix
@@ -6449,27 +6479,35 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
 
         messagePreview : String
         messagePreview =
-            case message of
-                MessageLoaded message2 ->
-                    case message2 of
-                        UserTextMessage a ->
-                            (if a.createdBy == localUser.session.userId then
-                                "You: "
+            case someoneIsTyping time (SeqDict.remove localUser.session.userId channel.lastTypedAt) of
+                SomeoneIsTyping ->
+                    "Typing..."
 
-                             else
-                                ""
-                            )
-                                ++ RichText.toString allUsers a.content
+                SomeoneIsEditing ->
+                    "Editing..."
 
-                        UserJoinedMessage _ userId _ ->
-                            User.toString userId allUsers
-                                ++ " joined!"
+                NoOneIsTyping ->
+                    case message of
+                        MessageLoaded message2 ->
+                            case message2 of
+                                UserTextMessage a ->
+                                    (if a.createdBy == localUser.session.userId then
+                                        "You: "
 
-                        DeletedMessage _ ->
-                            LocalState.messageDeleted
+                                     else
+                                        ""
+                                    )
+                                        ++ RichText.toString allUsers a.content
 
-                MessageUnloaded ->
-                    ""
+                                UserJoinedMessage _ userId _ ->
+                                    User.toString userId allUsers
+                                        ++ " joined!"
+
+                                DeletedMessage _ ->
+                                    LocalState.messageDeleted
+
+                        MessageUnloaded ->
+                            ""
     in
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
@@ -6554,26 +6592,34 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
         messagePreview : String
         messagePreview =
-            case message of
-                MessageLoaded message2 ->
-                    case message2 of
-                        UserTextMessage a ->
-                            (if SeqDict.member a.createdBy localUser.linkedDiscordUsers then
-                                "You: "
+            case someoneIsTyping time (SeqDict.diff channel.lastTypedAt localUser.linkedDiscordUsers) of
+                SomeoneIsTyping ->
+                    "Typing..."
 
-                             else
-                                ""
-                            )
-                                ++ RichText.toString (LocalState.allDiscordUsers localUser) a.content
+                SomeoneIsEditing ->
+                    "Editing..."
 
-                        UserJoinedMessage _ userId _ ->
-                            User.toString userId (LocalState.allDiscordUsers localUser) ++ " joined!"
+                NoOneIsTyping ->
+                    case message of
+                        MessageLoaded message2 ->
+                            case message2 of
+                                UserTextMessage a ->
+                                    (if SeqDict.member a.createdBy localUser.linkedDiscordUsers then
+                                        "You: "
 
-                        DeletedMessage _ ->
-                            LocalState.messageDeleted
+                                     else
+                                        ""
+                                    )
+                                        ++ RichText.toString (LocalState.allDiscordUsers localUser) a.content
 
-                MessageUnloaded ->
-                    ""
+                                UserJoinedMessage _ userId _ ->
+                                    User.toString userId (LocalState.allDiscordUsers localUser) ++ " joined!"
+
+                                DeletedMessage _ ->
+                                    LocalState.messageDeleted
+
+                        MessageUnloaded ->
+                            ""
 
         maybeCurrentUserId : Maybe (Discord.Id Discord.UserId)
         maybeCurrentUserId =
