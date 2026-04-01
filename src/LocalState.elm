@@ -2349,7 +2349,7 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DmRoute otherUserId threadRoute ->
+        DmRoute { otherUserId, threadRoute } ->
             if SeqDict.member otherUserId local.dmChannels then
                 case threadRoute of
                     NoThreadWithFriends _ _ ->

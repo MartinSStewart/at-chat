@@ -883,14 +883,15 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                         otherUser.icon
                         (RichText.toString (NonemptyDict.toSeqDict model.users) text)
                         (DmRoute
-                            otherUserId
-                            (case threadRouteWithReplyTo of
-                                NoThreadWithMaybeMessage _ ->
-                                    NoThreadWithFriends Nothing HideMembersTab
+                            { otherUserId = otherUserId
+                            , threadRoute =
+                                case threadRouteWithReplyTo of
+                                    NoThreadWithMaybeMessage _ ->
+                                        NoThreadWithFriends Nothing HideMembersTab
 
-                                ViewThreadWithMaybeMessage threadId _ ->
-                                    ViewThreadWithFriends threadId Nothing HideMembersTab
-                            )
+                                    ViewThreadWithMaybeMessage threadId _ ->
+                                        ViewThreadWithFriends threadId Nothing HideMembersTab
+                            }
                             |> Just
                         )
                         model

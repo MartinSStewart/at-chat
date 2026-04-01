@@ -945,7 +945,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
 
-        DmRoute _ threadRoute ->
+        DmRoute dmRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -962,7 +962,7 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
+                    , Command.batch [ viewCmd, openChannelCmds dmRoute.threadRoute model3 ]
                     )
                 )
                 model3

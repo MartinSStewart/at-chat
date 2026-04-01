@@ -55,7 +55,7 @@ import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (Domain)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -287,7 +287,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                 Just count ->
                                     elLinkButton
                                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                                        (DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
+                                        (DmRoute { otherUserId = otherUserId, threadRoute = NoThreadWithFriends Nothing HideMembersTab })
                                         []
                                         (case SeqDict.get otherUserId allUsers of
                                             Just otherUser ->
@@ -302,8 +302,8 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                     Nothing
                     in
                     case route of
-                        DmRoute otherUserIdRoute _ ->
-                            if otherUserId == otherUserIdRoute then
+                        DmRoute dmRoute ->
+                            if otherUserId == dmRoute.otherUserId then
                                 Nothing
 
                             else
@@ -454,7 +454,7 @@ loggedInAsView local =
 
 
 type DmChannelSelection
-    = SelectedDmChannel (Id UserId) ThreadRouteWithFriends
+    = SelectedDmChannel DmRouteData
     | SelectedDiscordDmChannel DiscordDmRouteData
     | NoDmChannelSelected
 
@@ -482,8 +482,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     [ Ui.column
                         [ Ui.height Ui.fill
                         , case maybeOtherUserId of
-                            SelectedDmChannel otherUserId threadRoute ->
-                                dmChannelView otherUserId threadRoute loggedIn local model
+                            SelectedDmChannel dmRoute ->
+                                dmChannelView dmRoute loggedIn local model
                                     |> Ui.el
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
@@ -514,7 +514,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy True model local
-                            , friendsColumn (canScroll model.drag) True model.time maybeOtherUserId local
+                            , friendsColumnLazy (canScroll model.drag) True model.time maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -530,13 +530,13 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy False model local
-                            , friendsColumn (canScroll model.drag) False model.time maybeOtherUserId local
+                            , friendsColumnLazy (canScroll model.drag) False model.time maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
                     , case maybeOtherUserId of
-                        SelectedDmChannel otherUserId threadRoute ->
-                            dmChannelView otherUserId threadRoute loggedIn local model
+                        SelectedDmChannel dmRoute ->
+                            dmChannelView dmRoute loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
@@ -615,8 +615,8 @@ guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds
     guildColumn isMobile route localUser dmChannels guilds discordGuilds False
 
 
-dmChannelView : Id UserId -> ThreadRouteWithFriends -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-dmChannelView otherUserId threadRoute loggedIn local model =
+dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView { otherUserId, threadRoute } loggedIn local model =
     case LocalState.getUser otherUserId local.localUser of
         Just otherUser ->
             let
@@ -1308,7 +1308,7 @@ memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
 memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
-        (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
+        (DmRoute { otherUserId = userId, threadRoute = NoThreadWithFriends Nothing HideMembersTab })
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
@@ -6299,26 +6299,108 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
         ]
 
 
-friendsColumn : Bool -> Bool -> Time.Posix -> DmChannelSelection -> LocalState -> Element FrontendMsg
-friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
+friendsColumnLazy :
+    Bool
+    -> Bool
+    -> Time.Posix
+    -> DmChannelSelection
+    -> LocalState
+    -> Element FrontendMsg
+friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
     let
-        dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
-        dmChannelsIncludingCurrentUser =
-            SeqDict.update
-                local.localUser.session.userId
-                (\maybe -> Maybe.withDefault DmChannel.frontendInit maybe |> Just)
-                local.dmChannels
-
-        discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
-        discordDmChannelsIncludingLinkedUsers =
-            local.discordDmChannels
-
         msInMinute =
             1000 * 60
 
         currentTimeRoundedToMinute : Int
         currentTimeRoundedToMinute =
             Time.posixToMillis currentTime // msInMinute |> (*) msInMinute
+    in
+    case openedOtherUserId of
+        NoDmChannelSelected ->
+            Ui.Lazy.lazy6
+                friendsColumn_NoDmChannelSelected
+                canScroll2
+                isMobile
+                currentTimeRoundedToMinute
+                local.dmChannels
+                local.discordDmChannels
+                local.localUser
+
+        SelectedDmChannel dmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedDmChannel_Mobile
+
+                 else
+                    friendsColumn_SelectedDmChannel_NotMobile
+                )
+                canScroll2
+                currentTimeRoundedToMinute
+                dmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.localUser
+
+        SelectedDiscordDmChannel discordDmRouteData ->
+            Ui.Lazy.lazy6
+                (if isMobile then
+                    friendsColumn_SelectedDiscordDmChannel_Mobile
+
+                 else
+                    friendsColumn_SelectedDiscordDmChannel_NotMobile
+                )
+                canScroll2
+                currentTimeRoundedToMinute
+                discordDmRouteData
+                local.dmChannels
+                local.discordDmChannels
+                local.localUser
+
+
+friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
+    friendsColumn canScroll2 isMobile currentTime NoDmChannelSelected dmChannels discordDmChannels localUser
+
+
+friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
+    friendsColumn canScroll2 True currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+
+
+friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
+    friendsColumn canScroll2 False currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
+
+
+friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
+    friendsColumn canScroll2 True currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+
+
+friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
+    friendsColumn canScroll2 False currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
+
+
+friendsColumn :
+    Bool
+    -> Bool
+    -> Int
+    -> DmChannelSelection
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+    -> LocalUser
+    -> Element FrontendMsg
+friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels discordDmChannels localUser =
+    let
+        _ =
+            Debug.log "friendsColumn rerendered" ()
+
+        dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
+        dmChannelsIncludingCurrentUser =
+            SeqDict.update
+                localUser.session.userId
+                (\maybe -> Maybe.withDefault DmChannel.frontendInit maybe |> Just)
+                dmChannels
+
+        discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
+        discordDmChannelsIncludingLinkedUsers =
+            discordDmChannels
     in
     channelColumnContainer
         [ Ui.el
@@ -6330,7 +6412,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
         ]
         ((List.filterMap
             (\( otherUserId, dmChannel ) ->
-                case LocalState.getUser otherUserId local.localUser of
+                case LocalState.getUser otherUserId localUser of
                     Just otherUser ->
                         ( case Array.Extra.last dmChannel.messages of
                             Just (MessageLoaded message2) ->
@@ -6345,15 +6427,15 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                              else
                                 friendLabelNotMobile
                             )
-                            currentTimeRoundedToMinute
+                            currentTime
                             (case openedOtherUserId of
-                                SelectedDmChannel a _ ->
-                                    a == otherUserId
+                                SelectedDmChannel dmRoute ->
+                                    dmRoute.otherUserId == otherUserId
 
                                 _ ->
                                     False
                             )
-                            local.localUser
+                            localUser
                             otherUserId
                             otherUser
                             dmChannel
@@ -6379,7 +6461,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                          else
                             discordFriendLabelNotMobile
                         )
-                        currentTimeRoundedToMinute
+                        currentTime
                         (case openedOtherUserId of
                             SelectedDiscordDmChannel routeData ->
                                 routeData.channelId == channelId
@@ -6389,7 +6471,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                         )
                         channelId
                         dmChannel
-                        local.localUser
+                        localUser
                     )
                 )
                 (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
@@ -6507,7 +6589,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     in
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
-        (Route.DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
+        (Route.DmRoute { otherUserId = otherUserId, threadRoute = NoThreadWithFriends Nothing HideMembersTab })
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4

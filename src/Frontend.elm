@@ -1242,10 +1242,15 @@ updateLoaded msg model =
                             (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
                         )
 
-                ( DmRoute otherUserId (NoThreadWithFriends _ _), LoggedIn loggedIn ) ->
-                    FrontendExtra.routePush
-                        { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (DmRoute otherUserId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
+                ( DmRoute dmRoute, LoggedIn loggedIn ) ->
+                    case dmRoute.threadRoute of
+                        NoThreadWithFriends _ _ ->
+                            FrontendExtra.routePush
+                                { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
+                                (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends messageIndex Nothing HideMembersTab })
+
+                        ViewThreadWithFriends _ _ _ ->
+                            ( model, Command.none )
 
                 ( DiscordGuildRoute guildRoute, LoggedIn loggedIn ) ->
                     case guildRoute.channelRoute of
@@ -1470,8 +1475,8 @@ updateLoaded msg model =
                                                 NoThreadWithFriends _ showMembers2 ->
                                                     showMembers2
 
-                                        DmRoute _ threadRoute ->
-                                            case threadRoute of
+                                        DmRoute dmRoute ->
+                                            case dmRoute.threadRoute of
                                                 ViewThreadWithFriends _ _ showMembers2 ->
                                                     showMembers2
 
@@ -2183,8 +2188,10 @@ updateLoaded msg model =
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
-                                                            otherUserId
-                                                            (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                            { otherUserId = otherUserId
+                                                            , threadRoute =
+                                                                NoThreadWithFriends (Just repliedTo) HideMembersTab
+                                                            }
                                                         )
 
                                                 _ ->
@@ -2302,9 +2309,9 @@ updateLoaded msg model =
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
-                            FrontendExtra.routePush
-                                model
-                                (DmRoute otherUserId (ViewThreadWithFriends messageId Nothing HideMembersTab))
+                            { otherUserId = otherUserId, threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab }
+                                |> DmRoute
+                                |> FrontendExtra.routePush model
 
                         ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId), NoThreadWithMessage messageId ) ->
                             FrontendExtra.routePush
@@ -3710,13 +3717,15 @@ setShowMembers showMembers model =
                             (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers))
                         )
 
-        DmRoute otherUserId threadRoute ->
-            case threadRoute of
+        DmRoute dmRoute ->
+            case dmRoute.threadRoute of
                 NoThreadWithFriends a _ ->
-                    FrontendExtra.routePush model (DmRoute otherUserId (NoThreadWithFriends a showMembers))
+                    FrontendExtra.routePush model (DmRoute { dmRoute | threadRoute = NoThreadWithFriends a showMembers })
 
                 ViewThreadWithFriends threadId a _ ->
-                    FrontendExtra.routePush model (DmRoute otherUserId (ViewThreadWithFriends threadId a showMembers))
+                    FrontendExtra.routePush
+                        model
+                        (DmRoute { dmRoute | threadRoute = ViewThreadWithFriends threadId a showMembers })
 
         _ ->
             ( model, Command.none )
@@ -5190,9 +5199,9 @@ view model =
                     DiscordGuildRoute data ->
                         requiresLogin (Pages.Guild.discordGuildView loaded data)
 
-                    DmRoute otherUserId thread ->
+                    DmRoute dmRoute ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView (SelectedDmChannel otherUserId thread) loaded)
+                            (Pages.Guild.homePageLoggedInView (SelectedDmChannel dmRoute) loaded)
 
                     SlackOAuthRedirect result ->
                         FrontendExtra.layout
@@ -5294,7 +5303,7 @@ routeToInitialDataRequest route =
                         NoThread
                 )
 
-        DmRoute otherUserId threadRoute ->
+        DmRoute { otherUserId, threadRoute } ->
             InitialLoadRequested_Channel
                 (GuildOrDmId_Dm otherUserId |> GuildOrDmId)
                 (case threadRoute of

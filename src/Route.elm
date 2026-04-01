@@ -3,6 +3,7 @@ module Route exposing
     , DiscordChannelRoute(..)
     , DiscordDmRouteData
     , DiscordGuildRouteData
+    , DmRouteData
     , LinkDiscordError(..)
     , Route(..)
     , ShowMembersTab(..)
@@ -34,7 +35,7 @@ type Route
     | AdminRoute { highlightLog : Maybe (Id Pagination.ItemId) }
     | GuildRoute (Id GuildId) ChannelRoute
     | DiscordGuildRoute DiscordGuildRouteData
-    | DmRoute (Id UserId) ThreadRouteWithFriends
+    | DmRoute DmRouteData
     | DiscordDmRoute DiscordDmRouteData
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
@@ -54,6 +55,10 @@ type alias DiscordDmRouteData =
     , viewingMessage : Maybe (Id ChannelMessageId)
     , showMembersTab : ShowMembersTab
     }
+
+
+type alias DmRouteData =
+    { otherUserId : Id UserId, threadRoute : ThreadRouteWithFriends }
 
 
 type alias DiscordGuildRouteData =
@@ -250,18 +255,20 @@ decode url =
         "d" :: userId :: rest ->
             case Id.fromString userId of
                 Just userId2 ->
-                    case rest of
+                    (case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
-                            DmRoute userId2 (stringToThread showMembers threadMessageIndex messageIndex)
+                            { otherUserId = userId2, threadRoute = stringToThread showMembers threadMessageIndex messageIndex }
 
                         [ "t", threadMessageIndex ] ->
-                            DmRoute userId2 (stringToThread showMembers threadMessageIndex "")
+                            { otherUserId = userId2, threadRoute = stringToThread showMembers threadMessageIndex "" }
 
                         [ "m", messageIndex ] ->
-                            DmRoute userId2 (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                            { otherUserId = userId2, threadRoute = NoThreadWithFriends (Id.fromString messageIndex) showMembers }
 
                         _ ->
-                            DmRoute userId2 (NoThreadWithFriends Nothing showMembers)
+                            { otherUserId = userId2, threadRoute = NoThreadWithFriends Nothing showMembers }
+                    )
+                        |> DmRoute
 
                 Nothing ->
                     HomePageRoute
@@ -424,16 +431,16 @@ encode route =
                             , []
                             )
 
-                DmRoute userId thread ->
-                    case thread of
+                DmRoute { otherUserId, threadRoute } ->
+                    case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
-                            ( [ "d", Id.toString userId, "t", Id.toString threadMessageIndex ]
+                            ( [ "d", Id.toString otherUserId, "t", Id.toString threadMessageIndex ]
                                 ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers
                             )
 
                         NoThreadWithFriends maybeMessageId showMembers ->
-                            ( [ "d", Id.toString userId ] ++ maybeMessageIdToString maybeMessageId
+                            ( [ "d", Id.toString otherUserId ] ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers
                             )
 
@@ -508,7 +515,7 @@ requiresLogin route =
         DiscordGuildRoute _ ->
             True
 
-        DmRoute _ _ ->
+        DmRoute _ ->
             True
 
         SlackOAuthRedirect _ ->
@@ -538,7 +545,7 @@ toGuildOrDmId route =
             )
                 |> Just
 
-        DmRoute otherUserId threadRoute ->
+        DmRoute { otherUserId, threadRoute } ->
             ( GuildOrDmId_Dm otherUserId |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
