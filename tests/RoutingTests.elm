@@ -46,7 +46,10 @@ routeFuzzer =
         , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe idFuzzer))
         , Fuzz.constant AiChatRoute
         , Fuzz.map2 GuildRoute idFuzzer channelRouteFuzzer
-        , Fuzz.map2 DmRoute idFuzzer threadRouteFuzzer
+        , Fuzz.map2
+            (\otherUserId threadRoute -> DmRoute { otherUserId = otherUserId, threadRoute = threadRoute })
+            idFuzzer
+            threadRouteFuzzer
         ]
 
 
