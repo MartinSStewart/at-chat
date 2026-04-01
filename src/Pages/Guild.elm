@@ -6312,10 +6312,6 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
         discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
         discordDmChannelsIncludingLinkedUsers =
             local.discordDmChannels
-
-        allUsers : SeqDict (Id UserId) FrontendUser
-        allUsers =
-            LocalState.allUsers local.localUser
     in
     channelColumnContainer
         [ Ui.el
@@ -6329,18 +6325,19 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
             (\( otherUserId, dmChannel ) ->
                 case LocalState.getUser otherUserId local.localUser of
                     Just otherUser ->
-                        let
-                            message =
-                                Array.Extra.last dmChannel.messages |> Maybe.withDefault MessageUnloaded
-                        in
-                        ( case message of
-                            MessageLoaded message2 ->
+                        ( case Array.Extra.last dmChannel.messages of
+                            Just (MessageLoaded message2) ->
                                 Message.createdAt message2
 
-                            MessageUnloaded ->
+                            _ ->
                                 Time.millisToPosix 0
-                        , friendLabel
-                            isMobile
+                        , Ui.Lazy.lazy6
+                            (if isMobile then
+                                friendLabelMobile
+
+                             else
+                                friendLabelNotMobile
+                            )
                             currentTime
                             (case openedOtherUserId of
                                 SelectedDmChannel a _ ->
@@ -6349,12 +6346,10 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                                 _ ->
                                     False
                             )
-                            local.localUser.session.userId
+                            local.localUser
                             otherUserId
-                            otherUser.name
-                            otherUser.icon
-                            allUsers
-                            message
+                            otherUser
+                            dmChannel
                         )
                             |> Just
 
@@ -6364,18 +6359,14 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
             (SeqDict.toList dmChannelsIncludingCurrentUser)
             ++ List.map
                 (\( channelId, dmChannel ) ->
-                    let
-                        message =
-                            Array.Extra.last dmChannel.messages |> Maybe.withDefault MessageUnloaded
-                    in
-                    ( case message of
-                        MessageLoaded message2 ->
+                    ( case Array.Extra.last dmChannel.messages of
+                        Just (MessageLoaded message2) ->
                             Message.createdAt message2
 
-                        MessageUnloaded ->
+                        _ ->
                             Time.millisToPosix 0
                     , if isMobile then
-                        Ui.Lazy.lazy6
+                        Ui.Lazy.lazy5
                             discordFriendLabelMobile
                             currentTime
                             (case openedOtherUserId of
@@ -6386,12 +6377,11 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                                     False
                             )
                             channelId
-                            dmChannel.members
+                            dmChannel
                             local.localUser
-                            message
 
                       else
-                        Ui.Lazy.lazy6
+                        Ui.Lazy.lazy5
                             discordFriendLabelNotMobile
                             currentTime
                             (case openedOtherUserId of
@@ -6402,9 +6392,8 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                                     False
                             )
                             channelId
-                            dmChannel.members
+                            dmChannel
                             local.localUser
-                            message
                     )
                 )
                 (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
@@ -6415,26 +6404,56 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
         )
 
 
+friendLabelMobile :
+    Time.Posix
+    -> Bool
+    -> LocalUser
+    -> Id UserId
+    -> FrontendUser
+    -> FrontendDmChannel
+    -> Element FrontendMsg
+friendLabelMobile time isSelected localUser otherUserId otherUser channel =
+    friendLabel True time isSelected localUser otherUserId otherUser channel
+
+
+friendLabelNotMobile :
+    Time.Posix
+    -> Bool
+    -> LocalUser
+    -> Id UserId
+    -> FrontendUser
+    -> FrontendDmChannel
+    -> Element FrontendMsg
+friendLabelNotMobile time isSelected localUser otherUserId otherUser channel =
+    friendLabel False time isSelected localUser otherUserId otherUser channel
+
+
 friendLabel :
     Bool
     -> Time.Posix
     -> Bool
+    -> LocalUser
     -> Id UserId
-    -> Id UserId
-    -> PersonName
-    -> Maybe FileHash
-    -> SeqDict (Id UserId) { a | name : PersonName }
-    -> MessageState ChannelMessageId (Id UserId)
+    -> FrontendUser
+    -> FrontendDmChannel
     -> Element FrontendMsg
-friendLabel isMobile time isSelected currentUserId otherUserId name icon allUsers message =
+friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     let
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers localUser
+
+        message : MessageState ChannelMessageId (Id UserId)
+        message =
+            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+
         messagePreview : String
         messagePreview =
             case message of
                 MessageLoaded message2 ->
                     case message2 of
                         UserTextMessage a ->
-                            (if a.createdBy == currentUserId then
+                            (if a.createdBy == localUser.session.userId then
                                 "You: "
 
                              else
@@ -6469,10 +6488,10 @@ friendLabel isMobile time isSelected currentUserId otherUserId name icon allUser
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
-        [ User.profileImage icon
+        [ User.profileImage otherUser.icon
         , Ui.column
             []
-            [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString name))
+            [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
             , friendLabelMessagePreview time messagePreview message
             ]
         ]
@@ -6498,24 +6517,22 @@ discordFriendLabelMobile :
     Time.Posix
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    -> DiscordFrontendDmChannel
     -> LocalUser
-    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
-discordFriendLabelMobile time isSelected dmChannelId members localUser message =
-    discordFriendLabel True time isSelected dmChannelId members localUser message
+discordFriendLabelMobile time isSelected dmChannelId channel localUser =
+    discordFriendLabel True time isSelected dmChannelId channel localUser
 
 
 discordFriendLabelNotMobile :
     Time.Posix
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    -> DiscordFrontendDmChannel
     -> LocalUser
-    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
-discordFriendLabelNotMobile time isSelected dmChannelId members localUser message =
-    discordFriendLabel False time isSelected dmChannelId members localUser message
+discordFriendLabelNotMobile time isSelected dmChannelId channel localUser =
+    discordFriendLabel False time isSelected dmChannelId channel localUser
 
 
 discordFriendLabel :
@@ -6523,14 +6540,17 @@ discordFriendLabel :
     -> Time.Posix
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
-    -> NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
+    -> DiscordFrontendDmChannel
     -> LocalUser
-    -> MessageState ChannelMessageId (Discord.Id Discord.UserId)
     -> Element FrontendMsg
-discordFriendLabel isMobile time isSelected dmChannelId members localUser message =
+discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
     let
         _ =
             Debug.log "rerender discord friendLabel" ()
+
+        message : MessageState ChannelMessageId (Discord.Id Discord.UserId)
+        message =
+            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =
@@ -6559,7 +6579,7 @@ discordFriendLabel isMobile time isSelected dmChannelId members localUser messag
         maybeCurrentUserId =
             List.Extra.findMap
                 (\( userId, _ ) ->
-                    if NonemptyDict.member userId members then
+                    if NonemptyDict.member userId channel.members then
                         Just userId
 
                     else
@@ -6572,7 +6592,7 @@ discordFriendLabel isMobile time isSelected dmChannelId members localUser messag
             let
                 members2 : List (Discord.Id Discord.UserId)
                 members2 =
-                    NonemptyDict.remove currentUserId members |> SeqDict.keys
+                    NonemptyDict.remove currentUserId channel.members |> SeqDict.keys
             in
             MyUi.rowButton
                 ("guild_discordFriendLabel_" ++ Discord.idToString dmChannelId |> Dom.id)
