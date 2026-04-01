@@ -829,6 +829,9 @@ html, body {
 }
 body {
   overflow: hidden;
+  scrollbar-color: """
+                ++ colorToStyle font1
+                ++ """ transparent
 }
 """
             )

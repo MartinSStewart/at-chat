@@ -6312,6 +6312,13 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
         discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel
         discordDmChannelsIncludingLinkedUsers =
             local.discordDmChannels
+
+        msInMinute =
+            1000 * 60
+
+        currentTimeRoundedToMinute : Int
+        currentTimeRoundedToMinute =
+            Time.posixToMillis currentTime // msInMinute |> (*) msInMinute
     in
     channelColumnContainer
         [ Ui.el
@@ -6338,7 +6345,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
                              else
                                 friendLabelNotMobile
                             )
-                            currentTime
+                            currentTimeRoundedToMinute
                             (case openedOtherUserId of
                                 SelectedDmChannel a _ ->
                                     a == otherUserId
@@ -6365,35 +6372,24 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
 
                         _ ->
                             Time.millisToPosix 0
-                    , if isMobile then
-                        Ui.Lazy.lazy5
+                    , Ui.Lazy.lazy5
+                        (if isMobile then
                             discordFriendLabelMobile
-                            currentTime
-                            (case openedOtherUserId of
-                                SelectedDiscordDmChannel routeData ->
-                                    routeData.channelId == channelId
 
-                                _ ->
-                                    False
-                            )
-                            channelId
-                            dmChannel
-                            local.localUser
-
-                      else
-                        Ui.Lazy.lazy5
+                         else
                             discordFriendLabelNotMobile
-                            currentTime
-                            (case openedOtherUserId of
-                                SelectedDiscordDmChannel routeData ->
-                                    routeData.channelId == channelId
+                        )
+                        currentTimeRoundedToMinute
+                        (case openedOtherUserId of
+                            SelectedDiscordDmChannel routeData ->
+                                routeData.channelId == channelId
 
-                                _ ->
-                                    False
-                            )
-                            channelId
-                            dmChannel
-                            local.localUser
+                            _ ->
+                                False
+                        )
+                        channelId
+                        dmChannel
+                        local.localUser
                     )
                 )
                 (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
@@ -6405,7 +6401,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId local =
 
 
 friendLabelMobile :
-    Time.Posix
+    Int
     -> Bool
     -> LocalUser
     -> Id UserId
@@ -6413,11 +6409,11 @@ friendLabelMobile :
     -> FrontendDmChannel
     -> Element FrontendMsg
 friendLabelMobile time isSelected localUser otherUserId otherUser channel =
-    friendLabel True time isSelected localUser otherUserId otherUser channel
+    friendLabel True (Time.millisToPosix time) isSelected localUser otherUserId otherUser channel
 
 
 friendLabelNotMobile :
-    Time.Posix
+    Int
     -> Bool
     -> LocalUser
     -> Id UserId
@@ -6425,7 +6421,7 @@ friendLabelNotMobile :
     -> FrontendDmChannel
     -> Element FrontendMsg
 friendLabelNotMobile time isSelected localUser otherUserId otherUser channel =
-    friendLabel False time isSelected localUser otherUserId otherUser channel
+    friendLabel False (Time.millisToPosix time) isSelected localUser otherUserId otherUser channel
 
 
 type SomeoneIsTyping
@@ -6552,25 +6548,25 @@ friendLabelMessagePreview time messagePreview message =
 
 
 discordFriendLabelMobile :
-    Time.Posix
+    Int
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
     -> DiscordFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg
 discordFriendLabelMobile time isSelected dmChannelId channel localUser =
-    discordFriendLabel True time isSelected dmChannelId channel localUser
+    discordFriendLabel True (Time.millisToPosix time) isSelected dmChannelId channel localUser
 
 
 discordFriendLabelNotMobile :
-    Time.Posix
+    Int
     -> Bool
     -> Discord.Id Discord.PrivateChannelId
     -> DiscordFrontendDmChannel
     -> LocalUser
     -> Element FrontendMsg
 discordFriendLabelNotMobile time isSelected dmChannelId channel localUser =
-    discordFriendLabel False time isSelected dmChannelId channel localUser
+    discordFriendLabel False (Time.millisToPosix time) isSelected dmChannelId channel localUser
 
 
 discordFriendLabel :
