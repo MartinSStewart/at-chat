@@ -6357,22 +6357,27 @@ friendsColumnLazy canScroll2 isMobile currentTime openedOtherUserId local =
                 local.localUser
 
 
+friendsColumn_NoDmChannelSelected : Bool -> Bool -> Int -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
 friendsColumn_NoDmChannelSelected canScroll2 isMobile currentTime dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 isMobile currentTime NoDmChannelSelected dmChannels discordDmChannels localUser
 
 
+friendsColumn_SelectedDiscordDmChannel_Mobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
 friendsColumn_SelectedDiscordDmChannel_Mobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 True currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
+friendsColumn_SelectedDiscordDmChannel_NotMobile : Bool -> Int -> DiscordDmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
 friendsColumn_SelectedDiscordDmChannel_NotMobile canScroll2 currentTime discordDmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 False currentTime (SelectedDiscordDmChannel discordDmRoute) dmChannels discordDmChannels localUser
 
 
+friendsColumn_SelectedDmChannel_Mobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
 friendsColumn_SelectedDmChannel_Mobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 True currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
 
+friendsColumn_SelectedDmChannel_NotMobile : Bool -> Int -> DmRouteData -> SeqDict (Id UserId) FrontendDmChannel -> SeqDict (Discord.Id Discord.PrivateChannelId) DiscordFrontendDmChannel -> LocalUser -> Element FrontendMsg
 friendsColumn_SelectedDmChannel_NotMobile canScroll2 currentTime dmRoute dmChannels discordDmChannels localUser =
     friendsColumn canScroll2 False currentTime (SelectedDmChannel dmRoute) dmChannels discordDmChannels localUser
 
