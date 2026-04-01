@@ -1,0 +1,7 @@
+module Evergreen.V183.Point2d exposing (..)
+
+import Evergreen.V183.Geometry.Types
+
+
+type alias Point2d units coordinates =
+    Evergreen.V183.Geometry.Types.Point2d units coordinates
