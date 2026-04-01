@@ -1203,17 +1203,66 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "Typing..." ]
                     )
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "Editing..." ]
+                    )
+
+                -- Admin types in DM, user sees "Typing..." but admin does not
                 , admin.input 100 (Dom.id "channel_textinput") "I am typing"
                 , user.checkView
                     100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "Typing..." ]
                     )
+                , admin.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "Typing..." ]
+                    )
+
+                -- Admin sends the message, typing indicator disappears
+                , admin.click 100 (Dom.id "guild_friendLabel_1")
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , user.checkView
                     100
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "Typing..." ]
+                    )
+
+                -- Admin edits a message, user sees "Editing..." but admin does not
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_0")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 200 (Dom.id "editMessageTextInput") "Edited message"
+                , user.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "Editing..." ]
+                    )
+                , admin.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "Editing..." ]
+                    )
+
+                -- Admin finishes editing, editing indicator disappears
+                , admin.click 100 (Dom.id "guild_friendLabel_1")
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "Editing..." ]
                     )
                 ]
             )
