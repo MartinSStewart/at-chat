@@ -4981,6 +4981,7 @@ type alias UserMessageUpdate =
     , author : User
     , content : String
     , timestamp : Time.Posix
+    , embeds : List Embed
     , attachments : List Attachment
     , flags : MessageFlags
     }
@@ -5045,6 +5046,7 @@ decodeUserMessageUpdate =
         |> JD.andMap (JD.field "author" decodeUser)
         |> JD.andMap (JD.field "content" JD.string)
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
+        |> JD.andMap (JD.field "embeds" (JD.list decodeEmbed))
         |> JD.andMap (JD.field "attachments" (JD.list decodeAttachment))
         |> JD.andMap (JD.field "flags" decodeMessageFlags)
 
