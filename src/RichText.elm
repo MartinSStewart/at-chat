@@ -1999,7 +1999,7 @@ formatText text =
 --        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : String -> SeqDict (Id FileId) FileData -> List Discord.Embed -> Nonempty (RichText (Discord.Id Discord.UserId))
+fromDiscord : String -> SeqDict (Id FileId) FileData -> Discord.OptionalData (List Discord.Embed) -> Nonempty (RichText (Discord.Id Discord.UserId))
 fromDiscord text attachments embeds =
     let
         embedSet : SeqSet Url
@@ -2013,7 +2013,13 @@ fromDiscord text attachments embeds =
                         Discord.Missing ->
                             Nothing
                 )
-                embeds
+                (case embeds of
+                    Discord.Included embeds2 ->
+                        embeds2
+
+                    Discord.Missing ->
+                        []
+                )
                 |> SeqSet.fromList
 
         applyExtraEmbeds richText =

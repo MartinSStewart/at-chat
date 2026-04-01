@@ -214,7 +214,7 @@ handleDiscordDmEditMessage edit attachments model =
                     let
                         richText : Nonempty (RichText (Discord.Id Discord.UserId))
                         richText =
-                            RichText.fromDiscord edit.content attachments []
+                            RichText.fromDiscord edit.content attachments Missing
                     in
                     case
                         LocalState.editMessageHelperNoThread
@@ -335,7 +335,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
         richText : Nonempty (RichText (Discord.Id Discord.UserId))
         richText =
-            RichText.fromDiscord edit.content attachments []
+            RichText.fromDiscord edit.content attachments Missing
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->

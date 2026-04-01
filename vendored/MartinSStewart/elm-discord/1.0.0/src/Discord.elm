@@ -3060,7 +3060,7 @@ type alias Message =
 
     -- mention_channels field is excluded
     , attachments : List Attachment
-    , embeds : List Embed
+    , embeds : OptionalData (List Embed)
     , reactions : OptionalData (List Reaction)
 
     -- nonce field is excluded
@@ -3491,7 +3491,7 @@ decodeMessage =
         |> JD.andMap (JD.field "mention_everyone" JD.bool)
         |> JD.andMap (JD.field "mention_roles" (JD.list decodeId))
         |> JD.andMap (JD.field "attachments" (JD.list decodeAttachment))
-        |> JD.andMap (JD.field "embeds" (JD.list decodeEmbed))
+        |> JD.andMap (decodeOptionalData "embeds" (JD.list decodeEmbed))
         |> JD.andMap (decodeOptionalData "reactions" (JD.list decodeReaction))
         |> JD.andMap (JD.field "pinned" JD.bool)
         |> JD.andMap (decodeOptionalData "webhook_id" decodeId)
