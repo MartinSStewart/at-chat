@@ -3185,7 +3185,13 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.exactText "at0232 is typing..." ]
                             )
-                        , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            ("{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"1072828564317159465\",\"guild_id\":\"705745250815311942\",\"user_id\":\"161098476632014848\",\"timestamp\":"
+                                ++ String.fromInt (Time.posixToMillis (Duration.addTo startTime (Duration.seconds 3)))
+                                ++ "}}"
+                            )
                         , admin.checkView
                             100
                             (Test.Html.Query.has

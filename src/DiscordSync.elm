@@ -1812,6 +1812,7 @@ handleTypingStarted typingStart model =
                                             )
                             in
                             if
+                                -- If we just got a typing indicator two seconds ago then skip this new one
                                 Duration.from (Maybe.withDefault (Time.millisToPosix 0) lastTypedAt) typingStart.timestamp
                                     |> Quantity.lessThan (Duration.seconds 2)
                             then
