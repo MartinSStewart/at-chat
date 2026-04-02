@@ -1,6 +1,7 @@
 module RichTextTests exposing (test)
 
 import Expect
+import Fuzz exposing (Fuzzer)
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
@@ -14,7 +15,7 @@ import Url exposing (Protocol(..), Url)
 
 users : SeqDict.SeqDict (Id.Id a) { name : PersonName }
 users =
-    SeqDict.fromList [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ), ( Id.fromInt 123, { name = Unsafe.personName "a" } ) ]
+    SeqDict.fromList [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ), ( Id.fromInt 123, { name = Unsafe.personName "a" } ), ( Id.fromInt 12345, { name = Unsafe.personName "aa" } ) ]
 
 
 unsafeUrl : String -> Url
@@ -27,38 +28,36 @@ unsafeUrl url =
             Debug.todo "Invalid url"
 
 
+stringFuzzer : Fuzzer String
+stringFuzzer =
+    Fuzz.oneOfValues
+        [ "*"
+        , "|"
+        , "b"
+        , "h"
+        , "~"
+        , "_"
+        , " "
+        , "https://abc.com"
+        , "http://abc.com"
+        , "https://abc.com/"
+        , "@"
+        , "@a "
+        , "@a1 "
+        , "`"
+        , "```"
+        , "\n"
+        , "\u{000D}"
+        , "\\"
+        , "["
+        , "[!1]"
+        ]
 
---stringFuzzer : Fuzzer String
---stringFuzzer =
---    Fuzz.oneOfValues
---        [ "*"
---        , "|"
---        , "b"
---        , "h"
---        , "~"
---        , "_"
---        , " "
---        , "https://abc.com"
---        , "http://abc.com"
---        , "https://abc.com/"
---        , "@"
---        , "@a "
---        , "@a1 "
---        , "`"
---        , "```"
---        , "\n"
---        , "\u{000D}"
---        , "\\"
---        , "["
---        , "[!1]"
---        ]
---
---
---fuzzer : Fuzzer NonemptyString
---fuzzer =
---    Fuzz.list stringFuzzer
---        |> Fuzz.map (\list -> String.concat list |> String.Nonempty.fromString |> Maybe.withDefault (NonemptyString ' ' ""))
---
+
+fuzzer : Fuzzer NonemptyString
+fuzzer =
+    Fuzz.list stringFuzzer
+        |> Fuzz.map (\list -> String.concat list |> String.Nonempty.fromString |> Maybe.withDefault (NonemptyString ' ' ""))
 
 
 test : Test
@@ -514,4 +513,22 @@ test =
                 RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com/...")
                     |> Expect.equal
                         (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText '.' ".." ])
+        , Test.fuzz
+            fuzzer
+            "Round trip"
+            (\text ->
+                RichText.fromNonemptyString users text
+                    |> RichText.toString users
+                    |> Expect.equal (String.Nonempty.toString text)
+            )
         ]
+
+
+fromNonemptyStringTest input expected =
+    case String.Nonempty.fromString input of
+        Just nonempty ->
+            Test.test "url with multiple trailing dots"
+                (\_ -> RichText.fromNonemptyString users nonempty |> Expect.equal expected)
+
+        Nothing ->
+            Debug.todo "Can't run a RichText parser on empty text"
