@@ -138,6 +138,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Slack
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
+import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
 import Url exposing (Url)
@@ -492,6 +493,7 @@ type alias AdminData =
     , logs : Pagination LogWithTime
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     , filesCount : Int
+    , toBackendLogs : Array ToBackendLogData
     }
 
 

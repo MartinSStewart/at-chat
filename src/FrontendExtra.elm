@@ -3262,6 +3262,7 @@ initAdminData adminData =
     , logs = adminData.logs
     , connections = adminData.connections
     , filesCount = adminData.filesCount
+    , toBackendLogs = adminData.toBackendLogs
     }
 
 

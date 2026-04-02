@@ -45,6 +45,7 @@ import Effect.Time as Time
 import EmailAddress
 import Env
 import GuildName
+import Html
 import Html.Attributes
 import Html.Events
 import Icons
@@ -67,7 +68,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Table
-import ToBackendLog exposing (ToBackendLogData)
+import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
 import Ui exposing (Element)
 import Ui.Events
@@ -1329,6 +1330,7 @@ view isMobile2 version local adminData user model =
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , filesSection user adminData
+            , toBackendLogsSection user adminData
             , exportSection user model
             ]
         )
@@ -1387,6 +1389,177 @@ filesSection user adminData =
         user.expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+
+
+toBackendLogsSection : BackendUser -> AdminData -> Element Msg
+toBackendLogsSection user adminData =
+    section
+        0
+        user.expandedSections
+        ToBackendLogsSection
+        [ pianoRollView adminData.toBackendLogs ]
+
+
+pianoRollView : Array ToBackendLogData -> Element Msg
+pianoRollView logs =
+    let
+        logList =
+            Array.toList logs
+
+        graphWidth =
+            1200
+
+        graphHeight =
+            max 100 (List.length uniqueUserIds * rowHeight)
+
+        rowHeight =
+            24
+
+        barHeight =
+            16
+
+        uniqueUserIds =
+            logList
+                |> List.filterMap .userId
+                |> List.map Id.toString
+                |> Set.fromList
+                |> Set.toList
+
+        userIdToRow : String -> Int
+        userIdToRow uid =
+            uniqueUserIds
+                |> List.indexedMap Tuple.pair
+                |> List.filter (\( _, id ) -> id == uid)
+                |> List.head
+                |> Maybe.map Tuple.first
+                |> Maybe.withDefault 0
+
+        allTimes =
+            logList
+                |> List.concatMap (\log -> [ Time.posixToMillis log.startTime, Time.posixToMillis log.endTime ])
+
+        minTime =
+            List.minimum allTimes |> Maybe.withDefault 0
+
+        maxTime =
+            List.maximum allTimes |> Maybe.withDefault 1
+
+        timeRange =
+            max 1 (maxTime - minTime)
+
+        toX : Int -> Float
+        toX millis =
+            toFloat (millis - minTime) / toFloat timeRange * toFloat graphWidth
+
+        logBar : ToBackendLogData -> Html.Html Msg
+        logBar log =
+            let
+                userId =
+                    log.userId |> Maybe.map Id.toString |> Maybe.withDefault "anonymous"
+
+                row =
+                    userIdToRow userId
+
+                x =
+                    toX (Time.posixToMillis log.startTime)
+
+                width =
+                    max 2 (toX (Time.posixToMillis log.endTime) - x)
+
+                y =
+                    toFloat (row * rowHeight) + toFloat ((rowHeight - barHeight) // 2)
+
+                color =
+                    logColor (toBackendLogToString log.toBackendLog)
+            in
+            Html.div
+                [ Html.Attributes.style "position" "absolute"
+                , Html.Attributes.style "left" (String.fromFloat x ++ "px")
+                , Html.Attributes.style "top" (String.fromFloat y ++ "px")
+                , Html.Attributes.style "width" (String.fromFloat width ++ "px")
+                , Html.Attributes.style "height" (String.fromInt barHeight ++ "px")
+                , Html.Attributes.style "background-color" color
+                , Html.Attributes.style "border-radius" "2px"
+                , Html.Attributes.title (toBackendLogToString log.toBackendLog ++ " (user: " ++ userId ++ ")")
+                ]
+                []
+
+        rowLabels =
+            uniqueUserIds
+                |> List.indexedMap
+                    (\i uid ->
+                        Html.div
+                            [ Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style "left" "0"
+                            , Html.Attributes.style "top" (String.fromInt (i * rowHeight) ++ "px")
+                            , Html.Attributes.style "height" (String.fromInt rowHeight ++ "px")
+                            , Html.Attributes.style "line-height" (String.fromInt rowHeight ++ "px")
+                            , Html.Attributes.style "font-size" "11px"
+                            , Html.Attributes.style "color" "#ccc"
+                            , Html.Attributes.style "width" "80px"
+                            , Html.Attributes.style "overflow" "hidden"
+                            , Html.Attributes.style "text-overflow" "ellipsis"
+                            , Html.Attributes.style "white-space" "nowrap"
+                            ]
+                            [ Html.text (String.left 8 uid) ]
+                    )
+
+        rowLines =
+            uniqueUserIds
+                |> List.indexedMap
+                    (\i _ ->
+                        Html.div
+                            [ Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style "left" "0"
+                            , Html.Attributes.style "top" (String.fromInt (i * rowHeight + rowHeight - 1) ++ "px")
+                            , Html.Attributes.style "width" "100%"
+                            , Html.Attributes.style "height" "1px"
+                            , Html.Attributes.style "background-color" "rgba(255,255,255,0.1)"
+                            ]
+                            []
+                    )
+
+        labelWidth =
+            90
+    in
+    if Array.isEmpty logs then
+        Ui.text "No toBackend logs"
+
+    else
+        Html.div
+            [ Html.Attributes.style "display" "flex"
+            , Html.Attributes.style "overflow-x" "auto"
+            ]
+            [ Html.div
+                [ Html.Attributes.style "position" "relative"
+                , Html.Attributes.style "width" (String.fromInt labelWidth ++ "px")
+                , Html.Attributes.style "min-width" (String.fromInt labelWidth ++ "px")
+                , Html.Attributes.style "height" (String.fromInt graphHeight ++ "px")
+                ]
+                rowLabels
+            , Html.div
+                [ Html.Attributes.style "position" "relative"
+                , Html.Attributes.style "width" (String.fromInt graphWidth ++ "px")
+                , Html.Attributes.style "min-width" (String.fromInt graphWidth ++ "px")
+                , Html.Attributes.style "height" (String.fromInt graphHeight ++ "px")
+                , Html.Attributes.style "background-color" "rgba(0,0,0,0.3)"
+                , Html.Attributes.style "border-radius" "4px"
+                ]
+                (rowLines ++ List.map logBar logList)
+            ]
+            |> Ui.html
+
+
+logColor : String -> String
+logColor name =
+    let
+        hash =
+            String.foldl (\c acc -> acc * 31 + Char.toCode c) 0 name
+
+        hue =
+            modBy 360 hash
+    in
+    "hsl(" ++ String.fromInt hue ++ ", 70%, 50%)"
 
 
 exportProgressText : ExportProgress -> String

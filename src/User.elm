@@ -409,6 +409,7 @@ type AdminUiSection
     | ExportSection
     | ConnectionsSection
     | FilesSection
+    | ToBackendLogsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -443,6 +444,9 @@ sectionToString section2 =
 
         FilesSection ->
             "Files"
+
+        ToBackendLogsSection ->
+            "ToBackend logs"
 
 
 {-| User containing only publicly visible data
