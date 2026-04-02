@@ -1,10 +1,12 @@
 module RichTextTests exposing (test)
 
 import Expect
+import Fuzz exposing (Fuzzer)
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), RichText(..))
+import RichTextOld
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -27,11 +29,47 @@ unsafeUrl url =
             Debug.todo "Invalid url"
 
 
+stringFuzzer : Fuzzer String
+stringFuzzer =
+    Fuzz.oneOfValues
+        [ "*"
+        , "|"
+        , "b"
+        , "h"
+        , "~"
+        , "_"
+        , " "
+        , "https://abc.com"
+        , "http://abc.com"
+        , "https://abc.com/"
+        , "@"
+        , "@a "
+        , "@a1 "
+        , "`"
+        , "```"
+        , "\n"
+        , "\u{000D}"
+        , "\\"
+        , "["
+        , "[!1]"
+        ]
+
+
+fuzzer : Fuzz.Fuzzer NonemptyString
+fuzzer =
+    Fuzz.list stringFuzzer
+        |> Fuzz.map (\list -> String.concat list |> String.Nonempty.fromString |> Maybe.withDefault (NonemptyString ' ' ""))
+
+
 test : Test
 test =
     Test.describe
         "Rich text tests"
-        [ Test.test "text" <|
+        [ Test.fuzz
+            fuzzer
+            "Check for regressions"
+            (\text -> Expect.equal (RichTextOld.fromNonemptyString users text) (RichText.fromNonemptyString users text))
+        , Test.test "text" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString ' ' "abc ")
                     |> Expect.equal (Nonempty (NormalText ' ' "abc ") [])
@@ -45,6 +83,16 @@ test =
                 RichText.fromNonemptyString users (NonemptyString ' ' "@a1 ")
                     |> Expect.equal
                         (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 1234), NormalText ' ' "" ])
+        , Test.test "mention3" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString ' ' "@a \\")
+                    |> Expect.equal
+                        (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "\\" ])
+        , Test.test "attachment" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '[' "!1]\\")
+                    |> Expect.equal
+                        (Nonempty (AttachedFile (Id.fromInt 1)) [ NormalText '\\' "" ])
         , Test.test "not bold" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString ' ' "* abc *")

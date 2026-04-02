@@ -19,8 +19,8 @@ fromString text =
             if String.Nonempty.length nonempty > maxLength then
                 Err "Too long"
 
-            else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}') nonempty then
-                Err "Name can't contain line breaks"
+            else if String.Nonempty.any (\char -> char == '\n' || char == '\u{000D}' || char == '@') nonempty then
+                Err "Name can't contain line breaks or @ symbol"
 
             else
                 PersonName nonempty |> Ok
@@ -34,7 +34,7 @@ fromStringLossy text =
     case
         String.trim text
             |> String.left maxLength
-            |> String.filter (\char -> not (char == '\n' || char == '\u{000D}'))
+            |> String.filter (\char -> not (char == '\n' || char == '\u{000D}' || char == '@'))
             |> String.Nonempty.fromString
     of
         Just nonempty ->

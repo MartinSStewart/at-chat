@@ -35,6 +35,7 @@
             "elm/virtual-dom": "1.0.3",
             "elm-community/easing-functions": "2.0.0",
             "elm-community/json-extra": "4.3.0",
+            "elm-explorations/benchmark": "1.0.2",
             "elm-explorations/test": "2.1.1",
             "elmcraft/core-extra": "2.2.0",
             "ianmackenzie/elm-units": "2.10.0",
@@ -56,6 +57,7 @@
             "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         },
         "indirect": {
+            "BrianHicks/elm-trend": "2.1.3",
             "TSFoster/elm-bytes-extra": "1.3.0",
             "TSFoster/elm-sha1": "2.1.1",
             "elm/file": "1.0.5",
@@ -72,7 +74,9 @@
             "justgook/elm-image": "5.0.0",
             "ktonon/elm-crypto": "1.1.2",
             "ktonon/elm-word": "2.1.2",
+            "mdgriffith/style-elements": "5.0.2",
             "rlopzc/elm-hmac-sha1": "1.0.0",
+            "robinheghan/murmur3": "1.0.0",
             "waratuman/elm-coder": "3.0.1"
         }
     },
