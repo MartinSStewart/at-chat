@@ -63,11 +63,11 @@ async fn options_endpoint() -> Response<String> {
 }
 
 fn filepath(hash: &str) -> String {
-    format!("./var/lib/atchat/{hash}")
+    format!("./var/lib/atchat/storage/{hash}")
 }
 
 fn thumbnail_filepath(hash: &str) -> String {
-    format!("./var/lib/atchat/{hash}_thumbnail")
+    format!("./var/lib/atchat/storage/{hash}_thumbnail")
 }
 
 async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
