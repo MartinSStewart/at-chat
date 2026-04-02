@@ -32,6 +32,7 @@ import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
 import Discord
+import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -61,6 +62,7 @@ import NonemptyDict exposing (NonemptyDict)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
+import Quantity
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -1403,16 +1405,13 @@ toBackendLogsSection user adminData =
 toBackendLogsTable : Array ToBackendLogData -> Element Msg
 toBackendLogsTable logs =
     let
-        logList =
-            Array.toList logs
-
-        duration : ToBackendLogData -> Int
+        duration : ToBackendLogData -> Duration
         duration log =
-            Time.posixToMillis log.endTime - Time.posixToMillis log.startTime
+            Duration.from log.startTime log.endTime
 
-        grouped : SeqDict String (List Int)
+        grouped : SeqDict String (List Duration)
         grouped =
-            List.foldl
+            Array.foldl
                 (\log acc ->
                     let
                         key =
@@ -1424,28 +1423,34 @@ toBackendLogsTable logs =
                     SeqDict.insert key (duration log :: durations) acc
                 )
                 SeqDict.empty
-                logList
+                logs
 
+        sorted : List { name : String, count : Int, fastest : Duration, median : Duration, slowest : Duration }
         sorted =
             SeqDict.toList grouped
                 |> List.map
                     (\( name, durations ) ->
                         let
+                            sortedDurations : List Duration
                             sortedDurations =
-                                List.sort durations
+                                Quantity.sort durations
 
+                            count : Int
                             count =
                                 List.length sortedDurations
 
+                            fastest : Duration
                             fastest =
-                                List.minimum sortedDurations |> Maybe.withDefault 0
+                                Quantity.minimum sortedDurations |> Maybe.withDefault Quantity.zero
 
+                            slowest : Duration
                             slowest =
-                                List.maximum sortedDurations |> Maybe.withDefault 0
+                                Quantity.maximum sortedDurations |> Maybe.withDefault Quantity.zero
 
+                            median : Duration
                             median =
                                 if count == 0 then
-                                    0
+                                    Quantity.zero
 
                                 else
                                     let
@@ -1455,51 +1460,60 @@ toBackendLogsTable logs =
                                     sortedDurations
                                         |> List.drop mid
                                         |> List.head
-                                        |> Maybe.withDefault 0
+                                        |> Maybe.withDefault Quantity.zero
                         in
                         { name = name, count = count, fastest = fastest, median = median, slowest = slowest }
                     )
                 |> List.sortBy (\row -> negate row.count)
 
-        headerStyle =
-            [ Ui.Font.bold, Ui.Font.size 13, Ui.paddingXY 8 4 ]
+        header alignRight width content =
+            Ui.el
+                [ Ui.Font.bold
+                , Ui.Font.size 13
+                , Ui.paddingXY 8 4
+                , Ui.width (Ui.px width)
+                , Ui.attrIf alignRight Ui.Font.alignRight
+                ]
+                content
 
-        cellStyle =
-            [ Ui.Font.size 13, Ui.paddingXY 8 4 ]
-
-        rightAlignCell =
-            cellStyle ++ [ Ui.Font.alignRight ]
+        cell alignRight width content =
+            Ui.el
+                [ Ui.Font.size 13
+                , Ui.paddingXY 8 4
+                , Ui.width (Ui.px width)
+                , Ui.attrIf alignRight Ui.Font.alignRight
+                ]
+                content
 
         msText ms =
-            String.fromInt ms ++ "ms"
+            String.fromInt (round (Duration.inMilliseconds ms)) ++ "ms"
     in
     if Array.isEmpty logs then
         Ui.text "No toBackend logs"
 
     else
-        Ui.column
-            [ Ui.spacing 0 ]
-            (Ui.row
-                []
-                [ Ui.el (headerStyle ++ [ Ui.widthMin 200 ]) (Ui.text "Log type")
-                , Ui.el (headerStyle ++ [ Ui.widthMin 60, Ui.Font.alignRight ]) (Ui.text "Count")
-                , Ui.el (headerStyle ++ [ Ui.widthMin 80, Ui.Font.alignRight ]) (Ui.text "Fastest")
-                , Ui.el (headerStyle ++ [ Ui.widthMin 80, Ui.Font.alignRight ]) (Ui.text "Median")
-                , Ui.el (headerStyle ++ [ Ui.widthMin 80, Ui.Font.alignRight ]) (Ui.text "Slowest")
-                ]
-                :: List.map
-                    (\row ->
-                        Ui.row
-                            []
-                            [ Ui.el (cellStyle ++ [ Ui.widthMin 200 ]) (Ui.text row.name)
-                            , Ui.el (rightAlignCell ++ [ Ui.widthMin 60 ]) (Ui.text (String.fromInt row.count))
-                            , Ui.el (rightAlignCell ++ [ Ui.widthMin 80 ]) (Ui.text (msText row.fastest))
-                            , Ui.el (rightAlignCell ++ [ Ui.widthMin 80 ]) (Ui.text (msText row.median))
-                            , Ui.el (rightAlignCell ++ [ Ui.widthMin 80 ]) (Ui.text (msText row.slowest))
-                            ]
-                    )
-                    sorted
-            )
+        (Ui.row
+            []
+            [ header False 200 (Ui.text "Log type")
+            , header True 100 (Ui.text ("Count\u{00A0}(" ++ String.fromInt (Array.length logs) ++ ")"))
+            , header True 80 (Ui.text "Fastest")
+            , header True 80 (Ui.text "Median")
+            , header True 80 (Ui.text "Slowest")
+            ]
+            :: List.map
+                (\row ->
+                    Ui.row
+                        []
+                        [ cell False 200 (Ui.text row.name)
+                        , cell True 100 (Ui.text (String.fromInt row.count))
+                        , cell True 80 (Ui.text (msText row.fastest))
+                        , cell True 80 (Ui.text (msText row.median))
+                        , cell True 80 (Ui.text (msText row.slowest))
+                        ]
+                )
+                sorted
+        )
+            |> Ui.column []
 
 
 exportProgressText : ExportProgress -> String
