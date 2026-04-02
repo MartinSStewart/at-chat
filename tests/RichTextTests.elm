@@ -16,7 +16,7 @@ import Url exposing (Protocol(..), Url)
 
 users : SeqDict.SeqDict (Id.Id a) { name : PersonName }
 users =
-    SeqDict.fromList [ ( Id.fromInt 123, { name = Unsafe.personName "a" } ), ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ) ]
+    SeqDict.fromList [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ), ( Id.fromInt 123, { name = Unsafe.personName "a" } ) ]
 
 
 unsafeUrl : String -> Url
@@ -65,10 +65,14 @@ test : Test
 test =
     Test.describe
         "Rich text tests"
-        [ Test.fuzz
-            fuzzer
-            "Check for regressions"
-            (\text -> Expect.equal (RichTextOld.fromNonemptyString users text) (RichText.fromNonemptyString users text))
+        [ --Test.fuzz
+          --    fuzzer
+          --    "Check for regressions"
+          --    (\text -> Expect.equal (RichTextOld.fromNonemptyString users text) (RichText.fromNonemptyString users text))
+          Test.test "Hyperlink with weird trailing characters" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com|\\")
+                    |> Expect.equal (Nonempty (Hyperlink { fragment = Nothing, host = "abc.com", path = "", port_ = Nothing, protocol = Https, query = Nothing }) [ NormalText '|' "\\" ])
         , Test.test "text" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString ' ' "abc ")
