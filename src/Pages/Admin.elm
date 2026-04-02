@@ -46,7 +46,6 @@ import Effect.Time as Time
 import EmailAddress
 import Env
 import GuildName
-import Html
 import Html.Attributes
 import Html.Events
 import Icons
