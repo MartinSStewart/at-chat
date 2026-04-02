@@ -4849,18 +4849,11 @@ handleExportBackendStep exportState model =
 
                                 [] ->
                                     let
-                                        encodeLengthPrefixed : Bytes -> Bytes.Encode.Encoder
-                                        encodeLengthPrefixed bytes =
-                                            Bytes.Encode.sequence
-                                                [ Bytes.Encode.unsignedInt32 Bytes.BE (Bytes.width bytes)
-                                                , Bytes.Encode.bytes bytes
-                                                ]
-
                                         encodeItemList : List Bytes -> Bytes.Encode.Encoder
                                         encodeItemList items =
                                             Bytes.Encode.sequence
                                                 (Bytes.Encode.unsignedInt32 Bytes.BE (List.length items)
-                                                    :: List.map encodeLengthPrefixed (List.reverse items)
+                                                    :: List.map Bytes.Encode.bytes (List.reverse items)
                                                 )
                                     in
                                     ( { model | exportState = Nothing }
@@ -4870,7 +4863,7 @@ handleExportBackendStep exportState model =
                                             |> Lamdera.sendToFrontend exportState.clientId
                                         , Bytes.Encode.encode
                                             (Bytes.Encode.sequence
-                                                [ encodeLengthPrefixed exportState.baseModel
+                                                [ Bytes.Encode.bytes exportState.baseModel
                                                 , encodeItemList exportState.encodedGuilds
                                                 , encodeItemList exportState.encodedDmChannels
                                                 , encodeItemList exportState.encodedDiscordGuilds
