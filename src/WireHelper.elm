@@ -92,48 +92,22 @@ decodeDiscordDmChannel =
         DmChannel.w3_decode_DiscordDmChannel
 
 
-{-| Decode the streamed export format. The input bytes should NOT include the version byte.
-Format: [baseModelLen:u32][baseModel][nGuilds:u32][guild1Len:u32][guild1]...[nDm:u32][dm1Len:u32][dm1]...[nDg:u32]...[nDdm:u32]...
--}
 decodeStreamedBackendModel : Decoder BackendModel
 decodeStreamedBackendModel =
-    decodeLengthPrefixedBytes
-        |> Bytes.Decode.andThen
-            (\baseBytes ->
-                case Bytes.Decode.decode decodeBackendModel baseBytes of
-                    Just baseModel ->
-                        decodeLengthPrefixedList decodeGuild
-                            |> Bytes.Decode.andThen
-                                (\guilds ->
-                                    decodeLengthPrefixedList decodeDmChannel
-                                        |> Bytes.Decode.andThen
-                                            (\dmChannels ->
-                                                decodeLengthPrefixedList decodeDiscordGuild
-                                                    |> Bytes.Decode.andThen
-                                                        (\discordGuilds ->
-                                                            decodeLengthPrefixedList decodeDiscordDmChannel
-                                                                |> Bytes.Decode.map
-                                                                    (\discordDmChannels ->
-                                                                        { baseModel
-                                                                            | guilds = SeqDict.fromList guilds
-                                                                            , dmChannels = SeqDict.fromList dmChannels
-                                                                            , discordGuilds = SeqDict.fromList discordGuilds
-                                                                            , discordDmChannels = SeqDict.fromList discordDmChannels
-                                                                        }
-                                                                    )
-                                                        )
-                                            )
-                                )
-
-                    Nothing ->
-                        Bytes.Decode.fail
-            )
-
-
-decodeLengthPrefixedBytes : Decoder Bytes.Bytes
-decodeLengthPrefixedBytes =
-    Bytes.Decode.unsignedInt32 Bytes.BE
-        |> Bytes.Decode.andThen (\len -> Bytes.Decode.bytes len)
+    Bytes.Decode.map5
+        (\baseModel guilds dmChannels discordGuilds discordDmChannels ->
+            { baseModel
+                | guilds = SeqDict.fromList guilds
+                , dmChannels = SeqDict.fromList dmChannels
+                , discordGuilds = SeqDict.fromList discordGuilds
+                , discordDmChannels = SeqDict.fromList discordDmChannels
+            }
+        )
+        decodeBackendModel
+        (decodeLengthPrefixedList decodeGuild)
+        (decodeLengthPrefixedList decodeDmChannel)
+        (decodeLengthPrefixedList decodeDiscordGuild)
+        (decodeLengthPrefixedList decodeDiscordDmChannel)
 
 
 decodeLengthPrefixedList : Decoder a -> Decoder (List a)
@@ -141,23 +115,13 @@ decodeLengthPrefixedList itemDecoder =
     Bytes.Decode.unsignedInt32 Bytes.BE
         |> Bytes.Decode.andThen
             (\count ->
-                decodeLengthPrefixedListHelp count itemDecoder []
+                Bytes.Decode.loop
+                    ( count, [] )
+                    (\( remaining, acc ) ->
+                        if remaining > 0 then
+                            Bytes.Decode.map (\item -> Bytes.Decode.Loop ( remaining - 1, item :: acc )) itemDecoder
+
+                        else
+                            Bytes.Decode.succeed (Bytes.Decode.Done (List.reverse acc))
+                    )
             )
-
-
-decodeLengthPrefixedListHelp : Int -> Decoder a -> List a -> Decoder (List a)
-decodeLengthPrefixedListHelp remaining itemDecoder acc =
-    if remaining <= 0 then
-        Bytes.Decode.succeed (List.reverse acc)
-
-    else
-        decodeLengthPrefixedBytes
-            |> Bytes.Decode.andThen
-                (\itemBytes ->
-                    case Bytes.Decode.decode itemDecoder itemBytes of
-                        Just item ->
-                            decodeLengthPrefixedListHelp (remaining - 1) itemDecoder (item :: acc)
-
-                        Nothing ->
-                            Bytes.Decode.fail
-                )
