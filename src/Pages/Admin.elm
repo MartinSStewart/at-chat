@@ -32,6 +32,7 @@ import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
 import Discord
+import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -60,6 +61,7 @@ import NonemptyDict exposing (NonemptyDict)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
+import Quantity
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -67,7 +69,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Table
-import ToBackendLog exposing (ToBackendLogData)
+import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
 import Ui exposing (Element)
 import Ui.Events
@@ -1329,6 +1331,7 @@ view isMobile2 version local adminData user model =
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , filesSection user adminData
+            , toBackendLogsSection user adminData
             , exportSection user model
             ]
         )
@@ -1387,6 +1390,129 @@ filesSection user adminData =
         user.expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+
+
+toBackendLogsSection : BackendUser -> AdminData -> Element Msg
+toBackendLogsSection user adminData =
+    section
+        8
+        user.expandedSections
+        ToBackendLogsSection
+        [ toBackendLogsTable adminData.toBackendLogs ]
+
+
+toBackendLogsTable : Array ToBackendLogData -> Element Msg
+toBackendLogsTable logs =
+    let
+        duration : ToBackendLogData -> Duration
+        duration log =
+            Duration.from log.startTime log.endTime
+
+        grouped : SeqDict String (List Duration)
+        grouped =
+            Array.foldl
+                (\log acc ->
+                    let
+                        key =
+                            toBackendLogToString log.toBackendLog
+
+                        durations =
+                            SeqDict.get key acc |> Maybe.withDefault []
+                    in
+                    SeqDict.insert key (duration log :: durations) acc
+                )
+                SeqDict.empty
+                logs
+
+        sorted : List { name : String, count : Int, fastest : Duration, median : Duration, slowest : Duration }
+        sorted =
+            SeqDict.toList grouped
+                |> List.map
+                    (\( name, durations ) ->
+                        let
+                            sortedDurations : List Duration
+                            sortedDurations =
+                                Quantity.sort durations
+
+                            count : Int
+                            count =
+                                List.length sortedDurations
+
+                            fastest : Duration
+                            fastest =
+                                Quantity.minimum sortedDurations |> Maybe.withDefault Quantity.zero
+
+                            slowest : Duration
+                            slowest =
+                                Quantity.maximum sortedDurations |> Maybe.withDefault Quantity.zero
+
+                            median : Duration
+                            median =
+                                if count == 0 then
+                                    Quantity.zero
+
+                                else
+                                    let
+                                        mid =
+                                            count // 2
+                                    in
+                                    sortedDurations
+                                        |> List.drop mid
+                                        |> List.head
+                                        |> Maybe.withDefault Quantity.zero
+                        in
+                        { name = name, count = count, fastest = fastest, median = median, slowest = slowest }
+                    )
+                |> List.sortBy (\row -> negate row.count)
+
+        header alignRight width content =
+            Ui.el
+                [ Ui.Font.bold
+                , Ui.Font.size 13
+                , Ui.paddingXY 8 4
+                , Ui.width (Ui.px width)
+                , Ui.attrIf alignRight Ui.Font.alignRight
+                ]
+                content
+
+        cell alignRight width content =
+            Ui.el
+                [ Ui.Font.size 13
+                , Ui.paddingXY 8 4
+                , Ui.width (Ui.px width)
+                , Ui.attrIf alignRight Ui.Font.alignRight
+                ]
+                content
+
+        msText ms =
+            String.fromInt (round (Duration.inMilliseconds ms)) ++ "ms"
+    in
+    if Array.isEmpty logs then
+        Ui.text "No toBackend logs"
+
+    else
+        (Ui.row
+            []
+            [ header False 200 (Ui.text "Log type")
+            , header True 100 (Ui.text ("Count\u{00A0}(" ++ String.fromInt (Array.length logs) ++ ")"))
+            , header True 80 (Ui.text "Fastest")
+            , header True 80 (Ui.text "Median")
+            , header True 80 (Ui.text "Slowest")
+            ]
+            :: List.map
+                (\row ->
+                    Ui.row
+                        []
+                        [ cell False 200 (Ui.text row.name)
+                        , cell True 100 (Ui.text (String.fromInt row.count))
+                        , cell True 80 (Ui.text (msText row.fastest))
+                        , cell True 80 (Ui.text (msText row.median))
+                        , cell True 80 (Ui.text (msText row.slowest))
+                        ]
+                )
+                sorted
+        )
+            |> Ui.column []
 
 
 exportProgressText : ExportProgress -> String

@@ -285,6 +285,11 @@ update msg model =
             disconnectClient sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
+            let
+                oldModel : BackendModel
+                oldModel =
+                    model
+            in
             updateFromFrontendWithTime
                 time
                 sessionId
@@ -299,17 +304,21 @@ update msg model =
                 }
                 |> (\( model2, cmds ) ->
                         ( model2
-                        , Command.batch
-                            [ Task.perform
-                                (\endTime ->
-                                    ToBackendCompleted
-                                        (BackendExtra.toBackendLog toBackend)
-                                        (SeqDict.get sessionId model.sessions |> Maybe.map .userId)
-                                        { startTime = time, endTime = endTime }
-                                )
-                                Time.now
-                            , cmds
-                            ]
+                        , if Env.isProduction then
+                            Command.batch
+                                [ Task.perform
+                                    (\endTime ->
+                                        ToBackendCompleted
+                                            (BackendExtra.toBackendLog toBackend)
+                                            (SeqDict.get sessionId oldModel.sessions |> Maybe.map .userId)
+                                            { startTime = time, endTime = endTime }
+                                    )
+                                    Time.now
+                                , cmds
+                                ]
+
+                          else
+                            cmds
                         )
                    )
 
