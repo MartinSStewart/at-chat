@@ -68,451 +68,194 @@ test =
           --    fuzzer
           --    "Check for regressions"
           --    (\text -> Expect.equal (RichTextOld.fromNonemptyString users text) (RichText.fromNonemptyString users text))
-          Test.test "Hyperlink with weird trailing characters" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com|\\")
-                    |> Expect.equal (Nonempty (Hyperlink { fragment = Nothing, host = "abc.com", path = "", port_ = Nothing, protocol = Https, query = Nothing }) [ NormalText '|' "\\" ])
-        , Test.test "text" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "abc ")
-                    |> Expect.equal (Nonempty (NormalText ' ' "abc ") [])
-        , Test.test "mention" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "@a ")
-                    |> Expect.equal
-                        (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "" ])
-        , Test.test "mention2" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "@a1 ")
-                    |> Expect.equal
-                        (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 1234), NormalText ' ' "" ])
-        , Test.test "mention3" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "@a \\")
-                    |> Expect.equal
-                        (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "\\" ])
-        , Test.test "attachment" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '[' "!1]\\")
-                    |> Expect.equal
-                        (Nonempty (AttachedFile (Id.fromInt 1)) [ NormalText '\\' "" ])
-        , Test.test "not bold" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "* abc *")
-                    |> Expect.equal (Nonempty (NormalText ' ' "* abc *") [])
-        , Test.test "bold" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "*abc *")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText ' ' "")
-                            [ Bold (Nonempty (NormalText 'a' "bc ") []) ]
-                        )
-        , Test.test "*abc_123" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "abc_123")
-                    |> Expect.equal (Nonempty (NormalText '*' "abc_123") [])
-        , Test.test "*a*b" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "a*b")
-                    |> Expect.equal (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
-        , Test.test "_a*a_" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '_' "a*a_")
-                    |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
-        , Test.test "_*abc*_" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '_' "*abc*_")
-                    |> Expect.equal
-                        (Nonempty
-                            (Italic
-                                (Nonempty
-                                    (Bold (Nonempty (NormalText 'a' "bc") []))
-                                    []
-                                )
-                            )
-                            []
-                        )
-        , Test.test "[!1]" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '[' "!1]")
-                    |> Expect.equal
-                        (Nonempty (AttachedFile (Id.fromInt 1)) [])
-        , Test.test "👨\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '👨' "\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText '👨' "\u{200D}👩\u{200D}👧\u{200D}👦")
-                            [ Italic
-                                (Nonempty
-                                    (Bold (Nonempty (NormalText 'a' "bc") []))
-                                    []
-                                )
-                            ]
-                        )
-        , Test.test "strikethrough" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '~' "~abc~~")
-                    |> Expect.equal
-                        (Nonempty
-                            (Strikethrough (Nonempty (NormalText 'a' "bc") []))
-                            []
-                        )
-        , Test.test "not strikethrough" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '~' " abc ~")
-                    |> Expect.equal (Nonempty (NormalText '~' " abc ~") [])
-        , Test.test "~~a~~b" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '~' "~a~~b")
-                    |> Expect.equal (Nonempty (Strikethrough (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
-        , Test.test "_~~abc~~_" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '_' "~~abc~~_")
-                    |> Expect.equal
-                        (Nonempty
-                            (Italic
-                                (Nonempty
-                                    (Strikethrough (Nonempty (NormalText 'a' "bc") []))
-                                    []
-                                )
-                            )
-                            []
-                        )
-        , Test.test "Parser url with trailing punctuation" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'G' "o to https://abc.com/. Click on the sign up.")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText 'G' "o to ")
-                            [ Hyperlink (unsafeUrl "https://abc.com/")
-                            , NormalText '.' " Click on the sign up."
-                            ]
-                        )
-        , Test.test "Parser slightly malformed url with trailing punctuation" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'G' "o to https://abc.com?a=4. Click on the sign up.")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText 'G' "o to ")
-                            [ Hyperlink { protocol = Https, host = "abc.com", path = "", port_ = Nothing, fragment = Nothing, query = Just "a=4" }
-                            , NormalText '.' " Click on the sign up."
-                            ]
-                        )
-        , Test.test "Parser url with trailing punctuation and no slash" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'G' "o to https://abc.com. Click on the sign up.")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText 'G' "o to ")
-                            [ Hyperlink { protocol = Https, host = "abc.com", path = "", port_ = Nothing, fragment = Nothing, query = Nothing }
-                            , NormalText '.' " Click on the sign up."
-                            ]
-                        )
-        , Test.test "Parser spoilered url" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'G' "o to ||https://abc.com/||. Click on the sign up.")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText 'G' "o to ")
-                            [ Spoiler (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [])
-                            , NormalText '.' " Click on the sign up."
-                            ]
-                        )
-        , Test.test "Escape characters" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "*Bullet point 1\n\\*Bullet point 2")
-                    |> Expect.equal
-                        (Nonempty
-                            (EscapedChar EscapedBold)
-                            [ NormalText 'B' "ullet point 1\n"
-                            , EscapedChar EscapedBold
-                            , NormalText 'B' "ullet point 2"
-                            ]
-                        )
-        , Test.test "Escape characters 2" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "**Bullet point 1*\n\\*Bullet point 2")
-                    |> Expect.equal
-                        (Nonempty
-                            (EscapedChar EscapedBold)
-                            [ Bold (Nonempty (NormalText 'B' "ullet point 1") [])
-                            , NormalText '\n' ""
-                            , EscapedChar EscapedBold
-                            , NormalText 'B' "ullet point 2"
-                            ]
-                        )
-        , Test.test "inline code" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "hello`")
-                    |> Expect.equal (Nonempty (InlineCode 'h' "ello") [])
-        , Test.test "inline code with surrounding text" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'a' " `code` b")
-                    |> Expect.equal
-                        (Nonempty (NormalText 'a' " ") [ InlineCode 'c' "ode", NormalText ' ' "b" ])
-        , Test.test "empty inline code" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "`")
-                    |> Expect.equal (Nonempty (NormalText '`' "`") [])
-        , Test.test "code block no language" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "``hello```")
-                    |> Expect.equal (Nonempty (CodeBlock RichText.NoLanguage "hello") [])
-        , Test.test "code block with language" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "``elm\nx = 1```")
-                    |> Expect.equal
-                        (Nonempty
-                            (CodeBlock (RichText.Language (NonemptyString 'e' "lm")) "x = 1")
-                            []
-                        )
-        , Test.test "empty code block" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "`````")
-                    |> Expect.equal (Nonempty (NormalText '`' "`````") [])
-        , Test.test "spoiler" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '|' "|secret||")
-                    |> Expect.equal
-                        (Nonempty (Spoiler (Nonempty (NormalText 's' "ecret") [])) [])
-        , Test.test "not spoiler - no closing" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '|' "|hello")
-                    |> Expect.equal (Nonempty (NormalText '|' "|hello") [])
-        , Test.test "underline" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '_' "_hello__")
-                    |> Expect.equal
-                        (Nonempty (Underline (Nonempty (NormalText 'h' "ello") [])) [])
-        , Test.test "bold inside strikethrough" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '~' "~*abc*~~")
-                    |> Expect.equal
-                        (Nonempty
-                            (Strikethrough (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) []))
-                            []
-                        )
-        , Test.test "mention at start" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '@' "a rest")
-                    |> Expect.equal
-                        (Nonempty (UserMention (Id.fromInt 123)) [ NormalText ' ' "rest" ])
-        , Test.test "mention not matching any user" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '@' "zzz")
-                    |> Expect.equal (Nonempty (NormalText '@' "zzz") [])
-        , Test.test "mention longest match wins" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '@' "a1 end")
-                    |> Expect.equal
-                        (Nonempty (UserMention (Id.fromInt 1234)) [ NormalText ' ' "end" ])
-        , Test.test "multiple mentions" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '@' "a @a1")
-                    |> Expect.equal
-                        (Nonempty (UserMention (Id.fromInt 123))
-                            [ NormalText ' ' ""
-                            , UserMention (Id.fromInt 1234)
-                            ]
-                        )
-        , Test.test "url standalone" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://example.com/")
-                    |> Expect.equal
-                        (Nonempty (Hyperlink (unsafeUrl "https://example.com/")) [])
-        , Test.test "http url" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttp://example.com/")
-                    |> Expect.equal
-                        (Nonempty (Hyperlink { protocol = Http, host = "example.com", path = "/", port_ = Nothing, fragment = Nothing, query = Nothing }) [])
-        , Test.test "url with trailing comma" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com/,")
-                    |> Expect.equal
-                        (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText ',' "" ])
-        , Test.test "url with trailing paren" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com/)")
-                    |> Expect.equal
-                        (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText ')' "" ])
-        , Test.test "url with query and fragment" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com/path?q=1#frag")
-                    |> Expect.equal
-                        (Nonempty
-                            (Hyperlink
-                                { protocol = Https
-                                , host = "abc.com"
-                                , path = "/path"
-                                , port_ = Nothing
-                                , fragment = Just "frag"
-                                , query = Just "q=1"
-                                }
-                            )
-                            []
-                        )
-        , Test.test "bold with mention inside" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "@a*")
-                    |> Expect.equal
-                        (Nonempty (Bold (Nonempty (UserMention (Id.fromInt 123)) [])) [])
-        , Test.test "escape backslash" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "\\hello")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedBackslash) [ NormalText 'h' "ello" ])
-        , Test.test "escape backtick" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "`hello")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedBacktick) [ NormalText 'h' "ello" ])
-        , Test.test "escape at symbol" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "@a rest")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedAtSymbol) [ NormalText 'a' " rest" ])
-        , Test.test "escape square bracket" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "[hello")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedSquareBracket) [ NormalText 'h' "ello" ])
-        , Test.test "escape italic" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "_hello")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedItalic) [ NormalText 'h' "ello" ])
-        , Test.test "escape strikethrough" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "~hello")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedStrikethrough) [ NormalText 'h' "ello" ])
-        , Test.test "backslash before non-special char" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "nhello")
-                    |> Expect.equal
-                        (Nonempty (NormalText '\\' "nhello") [])
-        , Test.test "attached file with larger id" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '[' "!999]")
-                    |> Expect.equal
-                        (Nonempty (AttachedFile (Id.fromInt 999)) [])
-        , Test.test "attached file with surrounding text" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "i [!5] bye")
-                    |> Expect.equal
-                        (Nonempty (NormalText 'h' "i ") [ AttachedFile (Id.fromInt 5), NormalText ' ' "bye" ])
-        , Test.test "just bold markers no content" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "*")
-                    |> Expect.equal (Nonempty (NormalText '*' "*") [])
-        , Test.test "just italic markers no content" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '_' "_")
-                    |> Expect.equal (Nonempty (NormalText '_' "_") [])
-        , Test.test "nested bold inside italic inside strikethrough" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '~' "~_*abc*_~~")
-                    |> Expect.equal
-                        (Nonempty
-                            (Strikethrough
-                                (Nonempty
-                                    (Italic
-                                        (Nonempty
-                                            (Bold (Nonempty (NormalText 'a' "bc") []))
-                                            []
-                                        )
-                                    )
-                                    []
-                                )
-                            )
-                            []
-                        )
-        , Test.test "bold then italic separate" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "a*_b_")
-                    |> Expect.equal
-                        (Nonempty (Bold (Nonempty (NormalText 'a' "") []))
-                            [ Italic (Nonempty (NormalText 'b' "") []) ]
-                        )
-        , Test.test "newlines in text" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'a' "\nb\nc")
-                    |> Expect.equal (Nonempty (NormalText 'a' "\nb\nc") [])
-        , Test.test "bold across newline" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "a\nb*")
-                    |> Expect.equal
-                        (Nonempty (Bold (Nonempty (NormalText 'a' "\nb") [])) [])
-        , Test.test "inline code preserves special chars" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "*bold* _italic_`")
-                    |> Expect.equal (Nonempty (InlineCode '*' "bold* _italic_") [])
-        , Test.test "multiple attached files" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '[' "!1][!2]")
-                    |> Expect.equal
-                        (Nonempty (AttachedFile (Id.fromInt 1)) [ AttachedFile (Id.fromInt 2) ])
-        , Test.test "spoiler with bold inside" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '|' "|*abc*||")
-                    |> Expect.equal
-                        (Nonempty
-                            (Spoiler (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) []))
-                            []
-                        )
-        , Test.test "single char bold" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "a*")
-                    |> Expect.equal (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [])
-        , Test.test "single char italic" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '_' "a_")
-                    |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "") [])) [])
-        , Test.test "url between text" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'a' " https://x.com/ b")
-                    |> Expect.equal
-                        (Nonempty (NormalText 'a' " ")
-                            [ Hyperlink (unsafeUrl "https://x.com/")
-                            , NormalText ' ' "b"
-                            ]
-                        )
-        , Test.test "code block with multiline content" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '`' "``elm\nx = 1\ny = 2```")
-                    |> Expect.equal
-                        (Nonempty
-                            (CodeBlock (RichText.Language (NonemptyString 'e' "lm")) "x = 1\ny = 2")
-                            []
-                        )
-        , Test.test "escape prevents bold" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "*abc")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedBold) [ NormalText 'a' "bc" ])
-        , Test.test "multiple escapes in a row" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '\\' "*\\*")
-                    |> Expect.equal
-                        (Nonempty (EscapedChar EscapedBold)
-                            [ EscapedChar EscapedBold ]
-                        )
-        , Test.test "bold with spaces inside" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '*' "a b c*")
-                    |> Expect.equal
-                        (Nonempty (Bold (Nonempty (NormalText 'a' " b c") [])) [])
-        , Test.test "incomplete attached file syntax" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString '[' "!abc]")
-                    |> Expect.equal (Nonempty (NormalText '[' "!abc]") [])
-        , Test.test "url with multiple trailing dots" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString 'h' "ttps://abc.com/...")
-                    |> Expect.equal
-                        (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText '.' ".." ])
+          fromNonemptyStringTest "https://abc.com|\\" (Nonempty (Hyperlink { fragment = Nothing, host = "abc.com", path = "", port_ = Nothing, protocol = Https, query = Nothing }) [ NormalText '|' "\\" ])
+        , fromNonemptyStringTest " abc " (Nonempty (NormalText ' ' "abc ") [])
+        , fromNonemptyStringTest
+            " @a "
+            (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "" ])
+        , fromNonemptyStringTest
+            " @a1 "
+            (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 1234), NormalText ' ' "" ])
+        , fromNonemptyStringTest
+            " @a \\"
+            (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "\\" ])
+        , fromNonemptyStringTest "[!1]\\" (Nonempty (AttachedFile (Id.fromInt 1)) [ NormalText '\\' "" ])
+        , fromNonemptyStringTest " * abc *" (Nonempty (NormalText ' ' "* abc *") [])
+        , fromNonemptyStringTest " *abc *" (Nonempty (NormalText ' ' "") [ Bold (Nonempty (NormalText 'a' "bc ") []) ])
+        , fromNonemptyStringTest "*abc_123" (Nonempty (NormalText '*' "abc_123") [])
+        , fromNonemptyStringTest "*a*b" (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
+        , fromNonemptyStringTest "_a*a_" (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
+        , fromNonemptyStringTest
+            "_*abc*_"
+            (Nonempty (Italic (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) [])) [])
+        , fromNonemptyStringTest "[!1]" (Nonempty (AttachedFile (Id.fromInt 1)) [])
+        , fromNonemptyStringTest "👨\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_"
+            (Nonempty
+                (NormalText '👨' "\u{200D}👩\u{200D}👧\u{200D}👦")
+                [ Italic (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) []) ]
+            )
+        , fromNonemptyStringTest
+            "~~abc~~"
+            (Nonempty
+                (Strikethrough (Nonempty (NormalText 'a' "bc") []))
+                []
+            )
+        , fromNonemptyStringTest "~ abc ~" (Nonempty (NormalText '~' " abc ~") [])
+        , fromNonemptyStringTest "~~a~~b" (Nonempty (Strikethrough (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
+        , fromNonemptyStringTest
+            "_~~abc~~_"
+            (Nonempty (Italic (Nonempty (Strikethrough (Nonempty (NormalText 'a' "bc") [])) [])) [])
+        , fromNonemptyStringTest
+            "Go to https://abc.com/. Click on the sign up."
+            (Nonempty
+                (NormalText 'G' "o to ")
+                [ Hyperlink (unsafeUrl "https://abc.com/")
+                , NormalText '.' " Click on the sign up."
+                ]
+            )
+        , fromNonemptyStringTest
+            "Go to https://abc.com?a=4. Click on the sign up."
+            (Nonempty
+                (NormalText 'G' "o to ")
+                [ Hyperlink { protocol = Https, host = "abc.com", path = "", port_ = Nothing, fragment = Nothing, query = Just "a=4" }
+                , NormalText '.' " Click on the sign up."
+                ]
+            )
+        , fromNonemptyStringTest
+            "Go to https://abc.com. Click on the sign up."
+            (Nonempty
+                (NormalText 'G' "o to ")
+                [ Hyperlink { protocol = Https, host = "abc.com", path = "", port_ = Nothing, fragment = Nothing, query = Nothing }
+                , NormalText '.' " Click on the sign up."
+                ]
+            )
+        , fromNonemptyStringTest
+            "Go to ||https://abc.com/||. Click on the sign up."
+            (Nonempty
+                (NormalText 'G' "o to ")
+                [ Spoiler (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [])
+                , NormalText '.' " Click on the sign up."
+                ]
+            )
+        , fromNonemptyStringTest
+            "\\*Bullet point 1\n\\*Bullet point 2"
+            (Nonempty
+                (EscapedChar EscapedBold)
+                [ NormalText 'B' "ullet point 1\n"
+                , EscapedChar EscapedBold
+                , NormalText 'B' "ullet point 2"
+                ]
+            )
+        , fromNonemptyStringTest
+            "\\**Bullet point 1*\n\\*Bullet point 2"
+            (Nonempty
+                (EscapedChar EscapedBold)
+                [ Bold (Nonempty (NormalText 'B' "ullet point 1") [])
+                , NormalText '\n' ""
+                , EscapedChar EscapedBold
+                , NormalText 'B' "ullet point 2"
+                ]
+            )
+        , fromNonemptyStringTest "`hello`" (Nonempty (InlineCode 'h' "ello") [])
+        , fromNonemptyStringTest
+            "a `code` b"
+            (Nonempty (NormalText 'a' " ") [ InlineCode 'c' "ode", NormalText ' ' "b" ])
+        , fromNonemptyStringTest "``" (Nonempty (NormalText '`' "`") [])
+        , fromNonemptyStringTest "```hello```" (Nonempty (CodeBlock RichText.NoLanguage "hello") [])
+        , fromNonemptyStringTest
+            "```elm\nx = 1```"
+            (Nonempty (CodeBlock (RichText.Language (NonemptyString 'e' "lm")) "x = 1") [])
+        , fromNonemptyStringTest "``````" (Nonempty (NormalText '`' "`````") [])
+        , fromNonemptyStringTest "||secret||" (Nonempty (Spoiler (Nonempty (NormalText 's' "ecret") [])) [])
+        , fromNonemptyStringTest "||hello" (Nonempty (NormalText '|' "|hello") [])
+        , fromNonemptyStringTest "__hello__"
+            (Nonempty (Underline (Nonempty (NormalText 'h' "ello") [])) [])
+        , fromNonemptyStringTest
+            "~~*abc*~~"
+            (Nonempty (Strikethrough (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) [])) [])
+        , fromNonemptyStringTest "@a rest" (Nonempty (UserMention (Id.fromInt 123)) [ NormalText ' ' "rest" ])
+        , fromNonemptyStringTest "@zzz" (Nonempty (NormalText '@' "zzz") [])
+        , fromNonemptyStringTest "@a1 end" (Nonempty (UserMention (Id.fromInt 1234)) [ NormalText ' ' "end" ])
+        , fromNonemptyStringTest
+            "@a @a1"
+            (Nonempty (UserMention (Id.fromInt 123)) [ NormalText ' ' "", UserMention (Id.fromInt 1234) ])
+        , fromNonemptyStringTest "https://example.com/" (Nonempty (Hyperlink (unsafeUrl "https://example.com/")) [])
+        , fromNonemptyStringTest
+            "http://example.com/"
+            (Nonempty
+                (Hyperlink
+                    { protocol = Http
+                    , host = "example.com"
+                    , path = "/"
+                    , port_ = Nothing
+                    , fragment = Nothing
+                    , query = Nothing
+                    }
+                )
+                []
+            )
+        , fromNonemptyStringTest
+            "https://abc.com/,"
+            (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText ',' "" ])
+        , fromNonemptyStringTest
+            "https://abc.com/)"
+            (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText ')' "" ])
+        , fromNonemptyStringTest
+            "https://abc.com/path?q=1#frag"
+            (Nonempty
+                (Hyperlink
+                    { protocol = Https
+                    , host = "abc.com"
+                    , path = "/path"
+                    , port_ = Nothing
+                    , fragment = Just "frag"
+                    , query = Just "q=1"
+                    }
+                )
+                []
+            )
+        , fromNonemptyStringTest "*@a*" (Nonempty (Bold (Nonempty (UserMention (Id.fromInt 123)) [])) [])
+        , fromNonemptyStringTest "\\\\hello" (Nonempty (EscapedChar EscapedBackslash) [ NormalText 'h' "ello" ])
+        , fromNonemptyStringTest "\\`hello" (Nonempty (EscapedChar EscapedBacktick) [ NormalText 'h' "ello" ])
+        , fromNonemptyStringTest "\\@a rest" (Nonempty (EscapedChar EscapedAtSymbol) [ NormalText 'a' " rest" ])
+        , fromNonemptyStringTest "\\[hello" (Nonempty (EscapedChar EscapedSquareBracket) [ NormalText 'h' "ello" ])
+        , fromNonemptyStringTest "\\_hello" (Nonempty (EscapedChar EscapedItalic) [ NormalText 'h' "ello" ])
+        , fromNonemptyStringTest "\\~hello" (Nonempty (EscapedChar EscapedStrikethrough) [ NormalText 'h' "ello" ])
+        , fromNonemptyStringTest "\\nhello" (Nonempty (NormalText '\\' "nhello") [])
+        , fromNonemptyStringTest "[!999]" (Nonempty (AttachedFile (Id.fromInt 999)) [])
+        , fromNonemptyStringTest
+            "hi [!5] bye"
+            (Nonempty (NormalText 'h' "i ") [ AttachedFile (Id.fromInt 5), NormalText ' ' "bye" ])
+        , fromNonemptyStringTest "**" (Nonempty (NormalText '*' "*") [])
+        , fromNonemptyStringTest "__" (Nonempty (NormalText '_' "_") [])
+        , fromNonemptyStringTest
+            "~~_*abc*_~~"
+            (Nonempty (Strikethrough (Nonempty (Italic (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) [])) [])) [])
+        , fromNonemptyStringTest
+            "*a*_b_"
+            (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ Italic (Nonempty (NormalText 'b' "") []) ])
+        , fromNonemptyStringTest "a\nb\nc" (Nonempty (NormalText 'a' "\nb\nc") [])
+        , fromNonemptyStringTest "*a\nb*" (Nonempty (Bold (Nonempty (NormalText 'a' "\nb") [])) [])
+        , fromNonemptyStringTest "`*bold* _italic_`" (Nonempty (InlineCode '*' "bold* _italic_") [])
+        , fromNonemptyStringTest "[!1][!2]" (Nonempty (AttachedFile (Id.fromInt 1)) [ AttachedFile (Id.fromInt 2) ])
+        , fromNonemptyStringTest
+            "||*abc*||"
+            (Nonempty (Spoiler (Nonempty (Bold (Nonempty (NormalText 'a' "bc") [])) [])) [])
+        , fromNonemptyStringTest "*a*" (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [])
+        , fromNonemptyStringTest "_a_" (Nonempty (Italic (Nonempty (NormalText 'a' "") [])) [])
+        , fromNonemptyStringTest
+            "a https://x.com/ b"
+            (Nonempty (NormalText 'a' " ") [ Hyperlink (unsafeUrl "https://x.com/"), NormalText ' ' "b" ])
+        , fromNonemptyStringTest
+            "```elm\nx = 1\ny = 2```"
+            (Nonempty (CodeBlock (RichText.Language (NonemptyString 'e' "lm")) "x = 1\ny = 2") [])
+        , fromNonemptyStringTest "\\*abc" (Nonempty (EscapedChar EscapedBold) [ NormalText 'a' "bc" ])
+        , fromNonemptyStringTest "\\*\\*" (Nonempty (EscapedChar EscapedBold) [ EscapedChar EscapedBold ])
+        , fromNonemptyStringTest "*a b c*" (Nonempty (Bold (Nonempty (NormalText 'a' " b c") [])) [])
+        , fromNonemptyStringTest "[!abc]" (Nonempty (NormalText '[' "!abc]") [])
+        , fromNonemptyStringTest
+            "https://abc.com/..."
+            (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText '.' ".." ])
         , Test.fuzz
             fuzzer
             "Round trip"
@@ -524,11 +267,11 @@ test =
         ]
 
 
+fromNonemptyStringTest : String -> Nonempty (RichText (Id.Id a)) -> Test
 fromNonemptyStringTest input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
-            Test.test "url with multiple trailing dots"
-                (\_ -> RichText.fromNonemptyString users nonempty |> Expect.equal expected)
+            Test.test input (\_ -> RichText.fromNonemptyString users nonempty |> Expect.equal expected)
 
         Nothing ->
             Debug.todo "Can't run a RichText parser on empty text"
