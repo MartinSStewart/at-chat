@@ -3261,6 +3261,7 @@ initAdminData adminData =
     , signupsEnabled = adminData.signupsEnabled
     , logs = adminData.logs
     , connections = adminData.connections
+    , filesCount = adminData.filesCount
     }
 
 

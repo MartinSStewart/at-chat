@@ -749,6 +749,7 @@ adminData model lastLogPageViewed =
                     )
                 )
             |> SeqDict.fromList
+    , filesCount = SeqDict.size model.files
     }
 
 

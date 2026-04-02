@@ -491,6 +491,7 @@ type alias AdminData =
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
+    , filesCount : Int
     }
 
 

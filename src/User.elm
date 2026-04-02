@@ -408,6 +408,7 @@ type AdminUiSection
     | ApiKeysSection
     | ExportSection
     | ConnectionsSection
+    | FilesSection
 
 
 sectionToString : AdminUiSection -> String
@@ -439,6 +440,9 @@ sectionToString section2 =
 
         ConnectionsSection ->
             "Connections"
+
+        FilesSection ->
+            "Files"
 
 
 {-| User containing only publicly visible data

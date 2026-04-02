@@ -207,6 +207,7 @@ type alias InitAdminData =
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
+    , filesCount : Int
     }
 
 
@@ -1325,6 +1326,7 @@ view isMobile2 version local adminData user model =
             , logSection isMobile2 local.localUser.timezone user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
+            , filesSection user adminData
             , exportSection user model
             ]
         )
@@ -1374,6 +1376,15 @@ connectionsSection timezone user adminData =
                     (SeqDict.toList adminData.connections)
                 )
         ]
+
+
+filesSection : BackendUser -> AdminData -> Element Msg
+filesSection user adminData =
+    section
+        8
+        user.expandedSections
+        FilesSection
+        [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
 exportProgressText : ExportProgress -> String
