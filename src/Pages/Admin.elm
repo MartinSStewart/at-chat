@@ -67,6 +67,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Table
+import ToBackendLog exposing (ToBackendLogData)
 import Toop exposing (T2(..), T3(..))
 import Ui exposing (Element)
 import Ui.Events
@@ -208,6 +209,7 @@ type alias InitAdminData =
     , logs : Pagination LogWithTime
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     , filesCount : Int
+    , toBackendLogs : Array ToBackendLogData
     }
 
 

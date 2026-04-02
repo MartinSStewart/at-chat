@@ -213,6 +213,7 @@ init =
       , signupsEnabled = True
       , exportState = Nothing
       , sendMessageRateLimits = SeqDict.empty
+      , toBackendLogs = Array.empty
       }
     , Command.none
     )
@@ -296,6 +297,21 @@ update msg model =
                             (NonemptyDict.updateIfExists clientId (\_ -> LastRequest time))
                             model.connections
                 }
+                |> (\( model2, cmds ) ->
+                        ( model2
+                        , Command.batch
+                            [ Task.perform
+                                (\endTime ->
+                                    ToBackendCompleted
+                                        (BackendExtra.toBackendLog toBackend)
+                                        (SeqDict.get sessionId model.sessions |> Maybe.map .userId)
+                                        { startTime = time, endTime = endTime }
+                                )
+                                Time.now
+                            , cmds
+                            ]
+                        )
+                   )
 
         SentLoginEmail time emailAddress result ->
             BackendExtra.addLog time (Log.LoginEmail result emailAddress) model
@@ -1261,6 +1277,20 @@ update msg model =
 
                 Err error ->
                     BackendExtra.addLog time (Log.JoinedDiscordThreadFailed guildId error) model
+
+        ToBackendCompleted toBackendLog maybeUserId { startTime, endTime } ->
+            ( { model
+                | toBackendLogs =
+                    Array.push
+                        { toBackendLog = toBackendLog
+                        , userId = maybeUserId
+                        , startTime = startTime
+                        , endTime = endTime
+                        }
+                        model.toBackendLogs
+              }
+            , Command.none
+            )
 
 
 addDiscordGuildData :

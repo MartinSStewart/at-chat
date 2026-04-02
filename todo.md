@@ -7,6 +7,7 @@
 * Two messages get sent if a linked Discord user starts a thread
 * Clicking on a message reply should scroll to the original message
 * 4 Discord messages DM restriction not removed until after the page is refreshed
+* Prevent messages longer than 2000 chars from being sent
 
 Requested features:
 

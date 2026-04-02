@@ -16,6 +16,7 @@ module BackendExtra exposing
     , sendGuildMessage
     , sendLoginEmail
     , shouldRateLimit
+    , toBackendLog
     , validateAttachedFiles
     )
 
@@ -62,7 +63,8 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
+import ToBackendLog exposing (ToBackendLog(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
@@ -750,6 +752,7 @@ adminData model lastLogPageViewed =
                 )
             |> SeqDict.fromList
     , filesCount = SeqDict.size model.files
+    , toBackendLogs = Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
     }
 
 
@@ -998,3 +1001,159 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
 
         _ ->
             ( model, invalidChangeResponse changeId clientId )
+
+
+toBackendLog : ToBackend -> ToBackendLog
+toBackendLog toBackend =
+    case toBackend of
+        CheckLoginRequest _ ->
+            ToBackendLog_CheckLoginRequest
+
+        LoginWithTokenRequest _ _ _ ->
+            ToBackendLog_LoginWithTokenRequest
+
+        LoginWithTwoFactorRequest _ _ _ ->
+            ToBackendLog_LoginWithTwoFactorRequest
+
+        GetLoginTokenRequest _ ->
+            ToBackendLog_GetLoginTokenRequest
+
+        AdminToBackend _ ->
+            ToBackendLog_AdminToBackend
+
+        LogOutRequest ->
+            ToBackendLog_LogOutRequest
+
+        LocalModelChangeRequest _ localChange ->
+            case localChange of
+                Local_Invalid ->
+                    ToBackendLog_Local_Invalid
+
+                Local_Admin _ ->
+                    ToBackendLog_Local_Admin
+
+                Local_SendMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_SendMessage
+
+                Local_Discord_SendMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_Discord_SendMessage
+
+                Local_NewChannel _ _ _ ->
+                    ToBackendLog_Local_NewChannel
+
+                Local_EditChannel _ _ _ ->
+                    ToBackendLog_Local_EditChannel
+
+                Local_DeleteChannel _ _ ->
+                    ToBackendLog_Local_DeleteChannel
+
+                Local_NewInviteLink _ _ _ ->
+                    ToBackendLog_Local_NewInviteLink
+
+                Local_NewGuild _ _ _ ->
+                    ToBackendLog_Local_NewGuild
+
+                Local_MemberTyping _ _ ->
+                    ToBackendLog_Local_MemberTyping
+
+                Local_AddReactionEmoji _ _ _ ->
+                    ToBackendLog_Local_AddReactionEmoji
+
+                Local_RemoveReactionEmoji _ _ _ ->
+                    ToBackendLog_Local_RemoveReactionEmoji
+
+                Local_SendEditMessage _ _ _ _ _ ->
+                    ToBackendLog_Local_SendEditMessage
+
+                Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
+                    ToBackendLog_Local_Discord_SendEditGuildMessage
+
+                Local_Discord_SendEditDmMessage _ _ _ _ ->
+                    ToBackendLog_Local_Discord_SendEditDmMessage
+
+                Local_MemberEditTyping _ _ _ ->
+                    ToBackendLog_Local_MemberEditTyping
+
+                Local_SetLastViewed _ _ ->
+                    ToBackendLog_Local_SetLastViewed
+
+                Local_DeleteMessage _ _ ->
+                    ToBackendLog_Local_DeleteMessage
+
+                Local_CurrentlyViewing _ ->
+                    ToBackendLog_Local_CurrentlyViewing
+
+                Local_SetName _ ->
+                    ToBackendLog_Local_SetName
+
+                Local_LoadChannelMessages _ _ _ ->
+                    ToBackendLog_Local_LoadChannelMessages
+
+                Local_LoadThreadMessages _ _ _ _ ->
+                    ToBackendLog_Local_LoadThreadMessages
+
+                Local_Discord_LoadChannelMessages _ _ _ ->
+                    ToBackendLog_Local_Discord_LoadChannelMessages
+
+                Local_Discord_LoadThreadMessages _ _ _ _ ->
+                    ToBackendLog_Local_Discord_LoadThreadMessages
+
+                Local_SetGuildNotificationLevel _ _ ->
+                    ToBackendLog_Local_SetGuildNotificationLevel
+
+                Local_SetDiscordGuildNotificationLevel _ _ ->
+                    ToBackendLog_Local_SetDiscordGuildNotificationLevel
+
+                Local_SetNotificationMode _ ->
+                    ToBackendLog_Local_SetNotificationMode
+
+                Local_RegisterPushSubscription _ ->
+                    ToBackendLog_Local_RegisterPushSubscription
+
+                Local_TextEditor _ ->
+                    ToBackendLog_Local_TextEditor
+
+                Local_UnlinkDiscordUser _ ->
+                    ToBackendLog_Local_UnlinkDiscordUser
+
+                Local_StartReloadingDiscordUser _ _ ->
+                    ToBackendLog_Local_StartReloadingDiscordUser
+
+                Local_LinkDiscordAcknowledgementIsChecked _ ->
+                    ToBackendLog_Local_LinkDiscordAcknowledgementIsChecked
+
+                Local_SetDomainWhitelist _ _ ->
+                    ToBackendLog_Local_SetDomainWhitelist
+
+                Local_SetEmojiCategory _ ->
+                    ToBackendLog_Local_SetEmojiCategory
+
+                Local_SetEmojiSkinTone _ ->
+                    ToBackendLog_Local_SetEmojiSkinTone
+
+        TwoFactorToBackend _ ->
+            ToBackendLog_TwoFactorToBackend
+
+        JoinGuildByInviteRequest _ _ ->
+            ToBackendLog_JoinGuildByInviteRequest
+
+        FinishUserCreationRequest _ _ _ ->
+            ToBackendLog_FinishUserCreationRequest
+
+        AiChatToBackend _ ->
+            ToBackendLog_AiChatToBackend
+
+        ReloadDataRequest _ ->
+            ToBackendLog_ReloadDataRequest
+
+        LinkSlackOAuthCode _ _ ->
+            ToBackendLog_LinkSlackOAuthCode
+
+        LinkDiscordRequest _ ->
+            ToBackendLog_LinkDiscordRequest
+
+        ProfilePictureEditorToBackend _ ->
+            ToBackendLog_ProfilePictureEditorToBackend
+
+        AdminDataRequest _ ->
+            ToBackendLog_AdminDataRequest

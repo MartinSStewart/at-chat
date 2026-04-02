@@ -94,6 +94,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
+import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
@@ -316,6 +317,7 @@ type alias BackendModel =
     , signupsEnabled : Bool
     , exportState : Maybe ExportState
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
+    , toBackendLogs : Array ToBackendLogData
     }
 
 
@@ -589,6 +591,7 @@ type BackendMsg
             { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
         )
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
+    | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
 
 
 type alias ExportState =
