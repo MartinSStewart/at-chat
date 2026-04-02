@@ -1288,6 +1288,10 @@ update msg model =
                     BackendExtra.addLog time (Log.JoinedDiscordThreadFailed guildId error) model
 
         ToBackendCompleted toBackendLog maybeUserId { startTime, endTime } ->
+            let
+                count =
+                    Array.length model.toBackendLogs
+            in
             ( { model
                 | toBackendLogs =
                     Array.push
@@ -1296,7 +1300,12 @@ update msg model =
                         , startTime = startTime
                         , endTime = endTime
                         }
-                        model.toBackendLogs
+                        (if count > 10000 then
+                            Array.slice (count - 5000) count model.toBackendLogs
+
+                         else
+                            model.toBackendLogs
+                        )
               }
             , Command.none
             )
