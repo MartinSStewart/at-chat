@@ -654,7 +654,10 @@ parseLoop source index len users modifiers accText revNodes =
                         parseLoop source inner.nextIndex len users modifiers "" newRevNodes
 
             "_" ->
-                if String.slice index (index + 2) source == "__" then
+                if String.slice index (index + 4) source == "____" then
+                    parseLoop source (index + 4) len users modifiers (accText ++ "____") revNodes
+
+                else if String.slice index (index + 2) source == "__" then
                     let
                         afterSymbol =
                             index + 2
@@ -703,7 +706,10 @@ parseLoop source index len users modifiers accText revNodes =
                         parseLoop source inner.nextIndex len users modifiers "" newRevNodes
 
             "~" ->
-                if String.slice index (index + 2) source == "~~" then
+                if String.slice index (index + 4) source == "~~~~" then
+                    parseLoop source (index + 4) len users modifiers (accText ++ "~~~~") revNodes
+
+                else if String.slice index (index + 2) source == "~~" then
                     let
                         afterSymbol =
                             index + 2
@@ -731,7 +737,10 @@ parseLoop source index len users modifiers accText revNodes =
                     parseLoop source (index + 1) len users modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if String.slice index (index + 2) source == "||" then
+                if String.slice index (index + 4) source == "||||" then
+                    parseLoop source (index + 4) len users modifiers (accText ++ "||||") revNodes
+
+                else if String.slice index (index + 2) source == "||" then
                     let
                         afterSymbol =
                             index + 2
@@ -764,10 +773,10 @@ parseLoop source index len users modifiers accText revNodes =
                         Just closeIndex ->
                             let
                                 content =
-                                    String.slice (index + 3) closeIndex source
+                                    String.slice (index + 3) closeIndex source |> Debug.log "content"
 
                                 ( language, codeContent ) =
-                                    parseCodeBlockContent content
+                                    parseCodeBlockContent content |> Debug.log "content2"
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
@@ -986,7 +995,15 @@ parseCodeBlockContent text =
             else
                 case String.Nonempty.fromString head of
                     Just nonempty ->
-                        ( Language nonempty, String.join "\n" rest )
+                        let
+                            rest2 =
+                                String.join "\n" rest
+                        in
+                        if String.isEmpty (String.trim rest2) then
+                            ( NoLanguage, text )
+
+                        else
+                            ( Language nonempty, rest2 )
 
                     Nothing ->
                         ( NoLanguage, text )

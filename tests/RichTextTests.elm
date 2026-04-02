@@ -5,7 +5,7 @@ import Fuzz exposing (Fuzzer)
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
-import RichText exposing (EscapedChar(..), RichText(..))
+import RichText exposing (EscapedChar(..), Language(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -256,6 +256,24 @@ test =
         , fromNonemptyStringTest
             "https://abc.com/..."
             (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText '.' ".." ])
+        , fromNonemptyStringTest
+            "```a\n```"
+            (Nonempty (CodeBlock NoLanguage "a\n") [])
+        , fromNonemptyStringTest
+            "````\n```"
+            (Nonempty (CodeBlock NoLanguage "`\n") [])
+        , fromNonemptyStringTest
+            "```*\n```"
+            (Nonempty (CodeBlock NoLanguage "*\n") [])
+        , fromNonemptyStringTest
+            "||||"
+            (Nonempty (NormalText '|' "|||") [])
+        , fromNonemptyStringTest
+            "~~~~"
+            (Nonempty (NormalText '~' "~~~") [])
+        , fromNonemptyStringTest
+            "____"
+            (Nonempty (NormalText '_' "___") [])
         , Test.fuzz
             fuzzer
             "Round trip"
