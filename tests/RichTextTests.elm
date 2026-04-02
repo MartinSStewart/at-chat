@@ -55,7 +55,7 @@ stringFuzzer =
         ]
 
 
-fuzzer : Fuzz.Fuzzer NonemptyString
+fuzzer : Fuzzer NonemptyString
 fuzzer =
     Fuzz.list stringFuzzer
         |> Fuzz.map (\list -> String.concat list |> String.Nonempty.fromString |> Maybe.withDefault (NonemptyString ' ' ""))

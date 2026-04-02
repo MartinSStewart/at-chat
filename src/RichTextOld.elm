@@ -1,17 +1,15 @@
 module RichTextOld exposing (fromNonemptyString)
 
 import Array exposing (Array)
-import Benchmark exposing (Benchmark)
+import Benchmark
 import Benchmark.Runner exposing (BenchmarkProgram)
 import Dict exposing (Dict)
-import FileStatus exposing (FileData, FileId)
-import Id exposing (Id)
+import Id
 import List.Nonempty exposing (Nonempty(..))
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), Language(..), Modifiers(..), RichText(..))
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
 import Url exposing (Protocol(..), Url)
 
@@ -70,219 +68,6 @@ normalTextFromString text =
 normalTextFromNonempty : NonemptyString -> RichText userId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
-
-
-removeAttachedFile : Id FileId -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
-removeAttachedFile fileId list =
-    List.filterMap
-        (\richText ->
-            case richText of
-                NormalText _ _ ->
-                    Just richText
-
-                UserMention _ ->
-                    Just richText
-
-                Bold nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Bold
-
-                Italic nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Italic
-
-                Underline nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Underline
-
-                Strikethrough nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Strikethrough
-
-                Spoiler nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Spoiler
-
-                Hyperlink _ ->
-                    Just richText
-
-                InlineCode _ _ ->
-                    Just richText
-
-                CodeBlock _ _ ->
-                    Just richText
-
-                AttachedFile id ->
-                    if id == fileId then
-                        Nothing
-
-                    else
-                        Just richText
-
-                EscapedChar _ ->
-                    Just richText
-        )
-        (List.Nonempty.toList list)
-        |> List.Nonempty.fromList
-
-
-hyperlinks : Nonempty (RichText userId) -> List Url
-hyperlinks nonempty =
-    List.concatMap
-        (\richText ->
-            case richText of
-                Hyperlink data ->
-                    [ data ]
-
-                UserMention _ ->
-                    []
-
-                NormalText _ _ ->
-                    []
-
-                Bold nonempty2 ->
-                    hyperlinks nonempty2
-
-                Italic nonempty2 ->
-                    hyperlinks nonempty2
-
-                Underline nonempty2 ->
-                    hyperlinks nonempty2
-
-                Strikethrough nonempty2 ->
-                    hyperlinks nonempty2
-
-                Spoiler nonempty2 ->
-                    hyperlinks nonempty2
-
-                InlineCode _ _ ->
-                    []
-
-                CodeBlock _ _ ->
-                    []
-
-                AttachedFile _ ->
-                    []
-
-                EscapedChar _ ->
-                    []
-        )
-        (List.Nonempty.toList nonempty)
-
-
-toStringWithGetter : (a -> String) -> SeqDict userId a -> Nonempty (RichText userId) -> String
-toStringWithGetter userToString users nonempty =
-    List.Nonempty.map
-        (\richText ->
-            case richText of
-                NormalText char rest ->
-                    String.cons char rest
-
-                UserMention userId ->
-                    case SeqDict.get userId users of
-                        Just user ->
-                            "@" ++ userToString user
-
-                        Nothing ->
-                            "@<missing>"
-
-                Bold a ->
-                    "*" ++ toStringWithGetter userToString users a ++ "*"
-
-                Italic a ->
-                    "_" ++ toStringWithGetter userToString users a ++ "_"
-
-                Underline a ->
-                    "__" ++ toStringWithGetter userToString users a ++ "__"
-
-                Strikethrough a ->
-                    "~~" ++ toStringWithGetter userToString users a ++ "~~"
-
-                Spoiler a ->
-                    "||" ++ toStringWithGetter userToString users a ++ "||"
-
-                Hyperlink data ->
-                    Url.toString data
-
-                InlineCode char rest ->
-                    "`" ++ String.cons char rest ++ "`"
-
-                CodeBlock language string ->
-                    "```"
-                        ++ (case language of
-                                Language unknown ->
-                                    String.Nonempty.toString unknown ++ "\n"
-
-                                NoLanguage ->
-                                    ""
-                           )
-                        ++ string
-                        ++ "```"
-
-                AttachedFile fileId ->
-                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
-
-                EscapedChar char ->
-                    "\\" ++ escapedCharToString char
-        )
-        nonempty
-        |> List.Nonempty.toList
-        |> String.concat
-
-
-toString : SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
-toString users nonempty =
-    List.Nonempty.map
-        (\richText ->
-            case richText of
-                NormalText char rest ->
-                    String.cons char rest
-
-                UserMention userId ->
-                    case SeqDict.get userId users of
-                        Just user ->
-                            "@" ++ PersonName.toString user.name
-
-                        Nothing ->
-                            "@<missing>"
-
-                Bold a ->
-                    "*" ++ toString users a ++ "*"
-
-                Italic a ->
-                    "_" ++ toString users a ++ "_"
-
-                Underline a ->
-                    "__" ++ toString users a ++ "__"
-
-                Strikethrough a ->
-                    "~~" ++ toString users a ++ "~~"
-
-                Spoiler a ->
-                    "||" ++ toString users a ++ "||"
-
-                Hyperlink data ->
-                    Url.toString data
-
-                InlineCode char rest ->
-                    "`" ++ String.cons char rest ++ "`"
-
-                CodeBlock language string ->
-                    "```"
-                        ++ (case language of
-                                Language unknown ->
-                                    String.Nonempty.toString unknown ++ "\n"
-
-                                NoLanguage ->
-                                    ""
-                           )
-                        ++ string
-                        ++ "```"
-
-                AttachedFile fileId ->
-                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
-
-                EscapedChar char ->
-                    "\\" ++ escapedCharToString char
-        )
-        nonempty
-        |> List.Nonempty.toList
-        |> String.concat
 
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
@@ -847,51 +632,6 @@ parserHelper state =
 
         Nothing ->
             Array.empty
-
-
-mentionsUserHelper : SeqSet userId -> Nonempty (RichText userId) -> SeqSet userId
-mentionsUserHelper set nonempty =
-    List.Nonempty.foldl
-        (\richText set2 ->
-            case richText of
-                NormalText _ _ ->
-                    set2
-
-                UserMention mentionedUser ->
-                    SeqSet.insert mentionedUser set2
-
-                Bold nonempty2 ->
-                    mentionsUserHelper set2 nonempty2
-
-                Italic nonempty2 ->
-                    mentionsUserHelper set2 nonempty2
-
-                Underline nonempty2 ->
-                    mentionsUserHelper set2 nonempty2
-
-                Strikethrough nonempty2 ->
-                    mentionsUserHelper set2 nonempty2
-
-                Spoiler nonempty2 ->
-                    mentionsUserHelper set2 nonempty2
-
-                Hyperlink _ ->
-                    set2
-
-                InlineCode _ _ ->
-                    set2
-
-                CodeBlock _ _ ->
-                    set2
-
-                AttachedFile _ ->
-                    set2
-
-                EscapedChar _ ->
-                    set2
-        )
-        set
-        nonempty
 
 
 main : BenchmarkProgram
