@@ -1,12 +1,10 @@
 module RichTextTests exposing (test)
 
 import Expect
-import Fuzz exposing (Fuzzer)
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), RichText(..))
-import RichTextOld
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -29,36 +27,38 @@ unsafeUrl url =
             Debug.todo "Invalid url"
 
 
-stringFuzzer : Fuzzer String
-stringFuzzer =
-    Fuzz.oneOfValues
-        [ "*"
-        , "|"
-        , "b"
-        , "h"
-        , "~"
-        , "_"
-        , " "
-        , "https://abc.com"
-        , "http://abc.com"
-        , "https://abc.com/"
-        , "@"
-        , "@a "
-        , "@a1 "
-        , "`"
-        , "```"
-        , "\n"
-        , "\u{000D}"
-        , "\\"
-        , "["
-        , "[!1]"
-        ]
 
-
-fuzzer : Fuzzer NonemptyString
-fuzzer =
-    Fuzz.list stringFuzzer
-        |> Fuzz.map (\list -> String.concat list |> String.Nonempty.fromString |> Maybe.withDefault (NonemptyString ' ' ""))
+--stringFuzzer : Fuzzer String
+--stringFuzzer =
+--    Fuzz.oneOfValues
+--        [ "*"
+--        , "|"
+--        , "b"
+--        , "h"
+--        , "~"
+--        , "_"
+--        , " "
+--        , "https://abc.com"
+--        , "http://abc.com"
+--        , "https://abc.com/"
+--        , "@"
+--        , "@a "
+--        , "@a1 "
+--        , "`"
+--        , "```"
+--        , "\n"
+--        , "\u{000D}"
+--        , "\\"
+--        , "["
+--        , "[!1]"
+--        ]
+--
+--
+--fuzzer : Fuzzer NonemptyString
+--fuzzer =
+--    Fuzz.list stringFuzzer
+--        |> Fuzz.map (\list -> String.concat list |> String.Nonempty.fromString |> Maybe.withDefault (NonemptyString ' ' ""))
+--
 
 
 test : Test
