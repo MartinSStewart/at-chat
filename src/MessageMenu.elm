@@ -326,12 +326,20 @@ view model extraOptions local loggedIn =
             height =
                 desktopMenuHeightHelper (List.length menuItems2)
 
+            x =
+                Coord.xRaw extraOptions.position
+
             y =
                 Coord.yRaw extraOptions.position
         in
         Ui.column
             [ Ui.move
-                { x = Coord.xRaw extraOptions.position
+                { x =
+                    if width + x > Coord.xRaw model.windowSize then
+                        x - width
+
+                    else
+                        x
                 , y =
                     if height + y > Coord.yRaw model.windowSize then
                         y - height
