@@ -146,7 +146,7 @@ pendingChangesText localChange =
                 NotifyOnMention ->
                     "Disabled notifications for all messages"
 
-        Local_SetDiscordGuildNotificationLevel _ notificationLevel ->
+        Local_SetDiscordGuildNotificationLevel _ _ notificationLevel ->
             case notificationLevel of
                 NotifyOnEveryMessage ->
                     "Enabled notifications for all messages"
@@ -1352,7 +1352,7 @@ isPressMsg msg =
         GotVersionNumber _ ->
             False
 
-        PressedDiscordGuildNotificationLevel _ _ ->
+        PressedDiscordGuildNotificationLevel _ _ _ ->
             True
 
         PressedCloseExternalLinkWarning ->
@@ -2084,7 +2084,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Local_SetDiscordGuildNotificationLevel guildId notificationLevel ->
+                Local_SetDiscordGuildNotificationLevel _ guildId notificationLevel ->
                     let
                         localUser =
                             local.localUser

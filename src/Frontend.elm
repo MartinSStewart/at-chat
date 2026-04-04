@@ -2420,12 +2420,12 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedDiscordGuildNotificationLevel guildId notificationLevel ->
+        PressedDiscordGuildNotificationLevel userId guildId notificationLevel ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Local_SetDiscordGuildNotificationLevel guildId notificationLevel |> Just)
+                        (Local_SetDiscordGuildNotificationLevel userId guildId notificationLevel |> Just)
                         loggedIn
                         Command.none
                 )
