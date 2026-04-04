@@ -1,12 +1,10 @@
 module MessageMenu exposing
     ( close
-    , desktopMenuHeight
     , editMessageTextInputId
     , messageMenuSpeed
     , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
     , view
-    , width
     )
 
 import Array exposing (Array)
@@ -117,17 +115,6 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
 messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
 messageMenuSpeed =
     Quantity.rate (CssPixels.cssPixels 800) Duration.second
-
-
-desktopMenuHeight :
-    { a | guildOrDmId : AnyGuildOrDmId, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
-    -> LocalState
-    -> LoadedFrontend
-    -> Int
-desktopMenuHeight extraOptions local model =
-    menuItems False extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.position local model
-        |> List.length
-        |> desktopMenuHeightHelper
 
 
 desktopMenuHeightHelper : Int -> Int
