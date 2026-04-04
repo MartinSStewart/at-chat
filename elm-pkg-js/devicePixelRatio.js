@@ -33,20 +33,14 @@ exports.init = async function init(app)
     });
 
     document.addEventListener('focusout', (event) => {
-        console.log("focusout");
-        console.log(event);
         app.ports.focus_changed_from_js.send({ id : null });
     });
 
     document.addEventListener('focusin', (event) => {
-        console.log("focusin");
-        console.log(event);
         app.ports.focus_changed_from_js.send(event.target);
     });
 
     document.addEventListener('selectionchange', (event) => {
-        console.log("selectionchange");
-        console.log(event);
         const node = document.activeElement;
         if (node) {
             app.ports.selection_changed_from_js.send(node);
