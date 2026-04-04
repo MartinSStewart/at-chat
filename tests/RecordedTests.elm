@@ -2599,134 +2599,134 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Invalid ->
                     False
 
-                Local_Admin adminChange ->
+                Local_Admin _ ->
                     True
 
-                Local_SendMessage posix guildOrDmId nonempty threadRouteWithMaybeMessage seqDict ->
+                Local_SendMessage _ _ _ _ _ ->
                     True
 
-                Local_Discord_SendMessage posix discordGuildOrDmId nonempty threadRouteWithMaybeMessage seqDict ->
+                Local_Discord_SendMessage _ _ _ _ _ ->
                     True
 
-                Local_NewChannel posix id channelName ->
+                Local_NewChannel _ _ _ ->
                     True
 
-                Local_EditChannel id _ channelName ->
+                Local_EditChannel _ _ _ ->
                     True
 
-                Local_DeleteChannel id _ ->
+                Local_DeleteChannel _ _ ->
                     True
 
-                Local_NewInviteLink posix id toBeFilledInByBackend ->
+                Local_NewInviteLink _ _ _ ->
                     True
 
-                Local_NewGuild posix guildName toBeFilledInByBackend ->
+                Local_NewGuild _ _ _ ->
                     False
 
-                Local_MemberTyping posix ( anyGuildOrDmId, threadRoute ) ->
+                Local_MemberTyping _ _ ->
                     True
 
-                Local_AddReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji ->
+                Local_AddReactionEmoji _ _ _ ->
                     True
 
-                Local_RemoveReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji ->
+                Local_RemoveReactionEmoji _ _ _ ->
                     True
 
-                Local_SendEditMessage posix guildOrDmId threadRouteWithMessage nonempty seqDict ->
+                Local_SendEditMessage _ _ _ _ _ ->
                     True
 
-                Local_Discord_SendEditGuildMessage posix id _ _ threadRouteWithMessage nonempty ->
+                Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
                     True
 
-                Local_Discord_SendEditDmMessage posix discordGuildOrDmId_DmData id nonempty ->
+                Local_Discord_SendEditDmMessage _ _ _ _ ->
                     True
 
-                Local_MemberEditTyping posix anyGuildOrDmId threadRouteWithMessage ->
+                Local_MemberEditTyping _ _ _ ->
                     True
 
-                Local_SetLastViewed anyGuildOrDmId threadRouteWithMessage ->
+                Local_SetLastViewed _ _ ->
                     True
 
-                Local_DeleteMessage anyGuildOrDmId threadRouteWithMessage ->
+                Local_DeleteMessage _ _ ->
                     True
 
                 Local_CurrentlyViewing setViewing ->
                     case setViewing of
-                        ViewDm id toBeFilledInByBackend ->
+                        ViewDm _ _ ->
                             False
 
-                        ViewDmThread id _ toBeFilledInByBackend ->
+                        ViewDmThread _ _ _ ->
                             False
 
-                        ViewDiscordDm id _ toBeFilledInByBackend ->
+                        ViewDiscordDm _ _ _ ->
                             True
 
-                        ViewChannel guildId _ toBeFilledInByBackend ->
+                        ViewChannel guildId _ _ ->
                             guildId == legitGuildId
 
-                        ViewChannelThread id _ _ toBeFilledInByBackend ->
+                        ViewChannelThread _ _ _ _ ->
                             True
 
-                        ViewDiscordChannel id _ _ toBeFilledInByBackend ->
+                        ViewDiscordChannel _ _ _ _ ->
                             True
 
-                        ViewDiscordChannelThread id _ _ _ toBeFilledInByBackend ->
+                        ViewDiscordChannelThread _ _ _ _ _ ->
                             True
 
                         StopViewingChannel ->
                             False
 
-                Local_SetName personName ->
+                Local_SetName _ ->
                     False
 
-                Local_LoadChannelMessages guildOrDmId id toBeFilledInByBackend ->
+                Local_LoadChannelMessages _ _ _ ->
                     True
 
-                Local_LoadThreadMessages guildOrDmId id _ toBeFilledInByBackend ->
+                Local_LoadThreadMessages _ _ _ _ ->
                     True
 
-                Local_Discord_LoadChannelMessages discordGuildOrDmId id toBeFilledInByBackend ->
+                Local_Discord_LoadChannelMessages _ _ _ ->
                     True
 
-                Local_Discord_LoadThreadMessages discordGuildOrDmId id _ toBeFilledInByBackend ->
+                Local_Discord_LoadThreadMessages _ _ _ _ ->
                     True
 
-                Local_SetGuildNotificationLevel id notificationLevel ->
+                Local_SetGuildNotificationLevel _ _ ->
                     True
 
-                Local_SetDiscordGuildNotificationLevel id _ notificationLevel ->
+                Local_SetDiscordGuildNotificationLevel _ _ _ ->
                     True
 
-                Local_SetNotificationMode notificationMode ->
+                Local_SetNotificationMode _ ->
                     False
 
-                Local_RegisterPushSubscription subscribeData ->
+                Local_RegisterPushSubscription _ ->
                     False
 
                 Local_TextEditor _ ->
                     False
 
-                Local_UnlinkDiscordUser id ->
+                Local_UnlinkDiscordUser _ ->
                     True
 
-                Local_StartReloadingDiscordUser posix id ->
+                Local_StartReloadingDiscordUser _ _ ->
                     True
 
-                Local_LinkDiscordAcknowledgementIsChecked bool ->
+                Local_LinkDiscordAcknowledgementIsChecked _ ->
                     False
 
-                Local_SetDomainWhitelist bool _ ->
+                Local_SetDomainWhitelist _ _ ->
                     False
 
-                Local_SetEmojiCategory category ->
+                Local_SetEmojiCategory _ ->
                     False
 
-                Local_SetEmojiSkinTone maybeSkinTone ->
+                Local_SetEmojiSkinTone _ ->
                     False
 
         ChangeBroadcast localMsg ->
             case localMsg of
-                Types.LocalChange _ localChange ->
+                Types.LocalChange _ _ ->
                     True
 
                 Types.ServerChange serverChange ->

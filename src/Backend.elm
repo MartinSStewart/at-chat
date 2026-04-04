@@ -3113,7 +3113,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                     in
                     case guildOrDmId of
-                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId _) ->
                             asGuildMember model sessionId guildId (\session user _ -> helper session user)
 
                         GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
@@ -3123,7 +3123,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 { otherUserId = otherUserId }
                                 (\session user _ _ -> helper session user)
 
-                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild userId guildId channelId) ->
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild userId guildId _) ->
                             asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model
                                 sessionId
