@@ -822,7 +822,7 @@ handleCustomRequest { method, url, headers, body } =
     if String.startsWith "https://" url then
         case ( method, String.dropLeft 8 url |> String.split "/" ) of
             ( "GET", [ "discord.com", "api", "v9", "users", "@me" ] ) ->
-                if List.Extra.count (\a -> a == ( "Authorization", "legit-token" )) headers == 1 then
+                if List.Extra.count (\a -> a == ( "Authorization", "legit-token" )) headers == 1 && body == Nothing then
                     StringHttpResponse
                         { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                         """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
