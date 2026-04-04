@@ -2253,31 +2253,11 @@ updateLoaded msg model =
                                 local : LocalState
                                 local =
                                     Local.model loggedIn.localState
-
-                                menuHeight : Int
-                                menuHeight =
-                                    MessageMenu.desktopMenuHeight
-                                        { guildOrDmId = guildOrDmId
-                                        , threadRoute = threadRoute
-                                        , position = clickedAt
-                                        }
-                                        local
-                                        model
                             in
                             ( { loggedIn
                                 | messageHover =
                                     MessageMenu
-                                        { position =
-                                            -- Move the menu up if it's too close to the bottom of the screen
-                                            if Coord.yRaw clickedAt + menuHeight + 60 > Coord.yRaw model.windowSize then
-                                                Coord.plus
-                                                    (Coord.xy -MessageMenu.width menuHeight)
-                                                    clickedAt
-
-                                            else
-                                                Coord.plus
-                                                    (Coord.xy -MessageMenu.width 0)
-                                                    clickedAt
+                                        { position = clickedAt
                                         , guildOrDmId = guildOrDmId
                                         , threadRoute = threadRoute
                                         , isThreadStarter = isThreadStarter
@@ -3954,17 +3934,8 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
                         EmojiSelectorForEditMessage _ _ ->
                             EmojiSelectorHidden
                 , emojiSelector = { emojiSelectorModel | searchText = "" }
-                , messageHover =
-                    case loggedIn.messageHover of
-                        NoMessageHover ->
-                            loggedIn.messageHover
-
-                        MessageHover _ _ ->
-                            loggedIn.messageHover
-
-                        MessageMenu a ->
-                            MessageHover a.guildOrDmId a.threadRoute
               }
+                |> MessageMenu.close model
             , Command.none
             )
         )
