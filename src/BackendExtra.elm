@@ -1101,7 +1101,7 @@ toBackendLog toBackend =
                 Local_SetGuildNotificationLevel _ _ ->
                     ToBackendLog_Local_SetGuildNotificationLevel
 
-                Local_SetDiscordGuildNotificationLevel _ _ ->
+                Local_SetDiscordGuildNotificationLevel _ _ _ ->
                     ToBackendLog_Local_SetDiscordGuildNotificationLevel
 
                 Local_SetNotificationMode _ ->

@@ -2475,6 +2475,18 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                                 else
                                                                     [ "Discord user data was modified by attacker" ]
                                                                )
+                                                            ++ (if before.backend.pendingDiscordCreateMessages == after.backend.pendingDiscordCreateMessages then
+                                                                    []
+
+                                                                else
+                                                                    [ "Pending Discord guild messages modified by attacker" ]
+                                                               )
+                                                            ++ (if before.backend.pendingDiscordCreateDmMessages == after.backend.pendingDiscordCreateDmMessages then
+                                                                    []
+
+                                                                else
+                                                                    [ "Pending Discord DM messages modified by attacker" ]
+                                                               )
                                                             ++ (if before.backend.dmChannels == after.backend.dmChannels then
                                                                     []
 
@@ -2582,12 +2594,116 @@ attackerShouldNotGetThisToFrontend toFrontend =
         AdminToFrontend _ ->
             True
 
-        LocalChangeResponse _ _ ->
-            False
+        LocalChangeResponse _ localChange ->
+            case localChange of
+                Local_Invalid ->
+                    False
+
+                Local_Admin adminChange ->
+                    True
+
+                Local_SendMessage posix guildOrDmId nonempty threadRouteWithMaybeMessage seqDict ->
+                    True
+
+                Local_Discord_SendMessage posix discordGuildOrDmId nonempty threadRouteWithMaybeMessage seqDict ->
+                    True
+
+                Local_NewChannel posix id channelName ->
+                    True
+
+                Local_EditChannel id _ channelName ->
+                    True
+
+                Local_DeleteChannel id _ ->
+                    True
+
+                Local_NewInviteLink posix id toBeFilledInByBackend ->
+                    True
+
+                Local_NewGuild posix guildName toBeFilledInByBackend ->
+                    True
+
+                Local_MemberTyping posix ( anyGuildOrDmId, threadRoute ) ->
+                    True
+
+                Local_AddReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji ->
+                    True
+
+                Local_RemoveReactionEmoji anyGuildOrDmId threadRouteWithMessage emoji ->
+                    True
+
+                Local_SendEditMessage posix guildOrDmId threadRouteWithMessage nonempty seqDict ->
+                    True
+
+                Local_Discord_SendEditGuildMessage posix id _ _ threadRouteWithMessage nonempty ->
+                    True
+
+                Local_Discord_SendEditDmMessage posix discordGuildOrDmId_DmData id nonempty ->
+                    True
+
+                Local_MemberEditTyping posix anyGuildOrDmId threadRouteWithMessage ->
+                    True
+
+                Local_SetLastViewed anyGuildOrDmId threadRouteWithMessage ->
+                    True
+
+                Local_DeleteMessage anyGuildOrDmId threadRouteWithMessage ->
+                    True
+
+                Local_CurrentlyViewing setViewing ->
+                    True
+
+                Local_SetName personName ->
+                    True
+
+                Local_LoadChannelMessages guildOrDmId id toBeFilledInByBackend ->
+                    True
+
+                Local_LoadThreadMessages guildOrDmId id _ toBeFilledInByBackend ->
+                    True
+
+                Local_Discord_LoadChannelMessages discordGuildOrDmId id toBeFilledInByBackend ->
+                    True
+
+                Local_Discord_LoadThreadMessages discordGuildOrDmId id _ toBeFilledInByBackend ->
+                    True
+
+                Local_SetGuildNotificationLevel id notificationLevel ->
+                    True
+
+                Local_SetDiscordGuildNotificationLevel id _ notificationLevel ->
+                    True
+
+                Local_SetNotificationMode notificationMode ->
+                    True
+
+                Local_RegisterPushSubscription subscribeData ->
+                    True
+
+                Local_TextEditor _ ->
+                    True
+
+                Local_UnlinkDiscordUser id ->
+                    True
+
+                Local_StartReloadingDiscordUser posix id ->
+                    True
+
+                Local_LinkDiscordAcknowledgementIsChecked bool ->
+                    True
+
+                Local_SetDomainWhitelist bool _ ->
+                    True
+
+                Local_SetEmojiCategory category ->
+                    True
+
+                Local_SetEmojiSkinTone maybeSkinTone ->
+                    True
 
         ChangeBroadcast localMsg ->
             case localMsg of
-                Types.LocalChange _ _ ->
+                Types.LocalChange _ localChange ->
                     True
 
                 Types.ServerChange serverChange ->
@@ -2836,9 +2952,13 @@ attackerLocalChanges =
         guildOrDmId_guild =
             GuildOrDmId_Guild guildId channelId |> GuildOrDmId
 
-        discordGuildOrDmId : DiscordGuildOrDmId
-        discordGuildOrDmId =
+        discordGuildOrDmId_guild : DiscordGuildOrDmId
+        discordGuildOrDmId_guild =
             DiscordGuildOrDmId_Guild discordUserId discordGuildId discordChannelId
+
+        discordGuildOrDmId_dm : DiscordGuildOrDmId
+        discordGuildOrDmId_dm =
+            DiscordGuildOrDmId_Dm { currentUserId = discordUserId, channelId = discordPrivateChannelId }
 
         threadRouteWithMessage =
             NoThreadWithMessage (Id.fromInt 0)
@@ -2862,11 +2982,14 @@ attackerLocalChanges =
     , Local_DeleteChannel guildId channelId
     , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage
     , Local_DeleteMessage guildOrDmId_guild threadRouteWithMessage
-    , Local_Discord_LoadChannelMessages discordGuildOrDmId (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_LoadThreadMessages discordGuildOrDmId (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadChannelMessages discordGuildOrDmId_guild (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages discordGuildOrDmId_guild (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadChannelMessages discordGuildOrDmId_dm (Id.fromInt 0) EmptyPlaceholder
+    , Local_Discord_LoadThreadMessages discordGuildOrDmId_dm (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
     , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel guildId channelId (Unsafe.channelName "hacked")
     , Local_Invalid
     , Local_LinkDiscordAcknowledgementIsChecked True
@@ -2887,8 +3010,8 @@ attackerLocalChanges =
     , Local_SendMessage messageTime (GuildOrDmId_Guild guildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_RemoveReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
-    , Local_SendMessage messageTime (GuildOrDmId_Guild guildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
-    , Local_SetDiscordGuildNotificationLevel discordGuildId User.NotifyOnEveryMessage
+    , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
     , Local_SetEmojiCategory Emoji.Activities
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)

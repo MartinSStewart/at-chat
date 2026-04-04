@@ -3733,11 +3733,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_SetDiscordGuildNotificationLevel guildId notificationLevel ->
-                    asUser
+                Local_SetDiscordGuildNotificationLevel userId guildId notificationLevel ->
+                    asDiscordGuildMember
                         model
                         sessionId
-                        (\session user ->
+                        guildId
+                        userId
+                        (\session _ user _ ->
                             ( { model
                                 | users =
                                     NonemptyDict.insert

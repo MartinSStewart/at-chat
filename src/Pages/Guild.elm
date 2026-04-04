@@ -1580,11 +1580,11 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView routeData.guildId local
+            discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId local
 
 
-discordGuildSettingsView : Discord.Id Discord.GuildId -> LocalState -> Element FrontendMsg
-discordGuildSettingsView guildId local =
+discordGuildSettingsView : Discord.Id Discord.UserId -> Discord.Id Discord.GuildId -> LocalState -> Element FrontendMsg
+discordGuildSettingsView userId guildId local =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1598,7 +1598,7 @@ discordGuildSettingsView guildId local =
                 [ Ui.paddingXY 16 0 ]
                 (MyUi.radioColumn
                     (Dom.id "guild_discordNotificationLevel")
-                    (PressedDiscordGuildNotificationLevel guildId)
+                    (PressedDiscordGuildNotificationLevel userId guildId)
                     (if SeqSet.member guildId local.localUser.user.discordNotifyOnAllMessages then
                         Just NotifyOnEveryMessage
 
