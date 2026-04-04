@@ -4030,20 +4030,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
         LinkSlackOAuthCode oAuthCode sessionId2 ->
-            case Broadcast.getSessionFromSessionIdHash sessionId2 model of
-                Just ( _, session ) ->
-                    ( model
-                    , case model.slackClientSecret of
-                        Just clientSecret ->
-                            Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
-                                |> Task.attempt (GotSlackOAuth time session.userId)
-
-                        Nothing ->
-                            Command.none
-                    )
-
-                Nothing ->
-                    ( model, Command.none )
+            --case Broadcast.getSessionFromSessionIdHash sessionId2 model of
+            --    Just ( _, session ) ->
+            --        ( model
+            --        , case model.slackClientSecret of
+            --            Just clientSecret ->
+            --                Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
+            --                    |> Task.attempt (GotSlackOAuth time session.userId)
+            --
+            --            Nothing ->
+            --                Command.none
+            --        )
+            --
+            --    Nothing ->
+            ( model, Command.none )
 
         LinkDiscordRequest data ->
             asUser

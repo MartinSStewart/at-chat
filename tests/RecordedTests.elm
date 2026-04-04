@@ -726,7 +726,7 @@ isOp2 data =
 
 discordUserAuth : Discord.UserAuth
 discordUserAuth =
-    { token = "fake-token"
+    { token = "legit-token"
     , userAgent = "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0"
     , xSuperProperties =
         JsonObject
@@ -817,14 +817,20 @@ infoEndpointResponse =
     """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
 
-handleCustomRequest : String -> String -> HttpResponse
-handleCustomRequest method url =
+handleCustomRequest : CustomRequest -> HttpResponse
+handleCustomRequest { method, url, headers, body } =
     if String.startsWith "https://" url then
         case ( method, String.dropLeft 8 url |> String.split "/" ) of
             ( "GET", [ "discord.com", "api", "v9", "users", "@me" ] ) ->
-                StringHttpResponse
-                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
+                if List.Extra.count (\a -> a == ( "Authorization", "legit-token" )) headers == 1 then
+                    StringHttpResponse
+                        { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                        """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
+
+                else
+                    StringHttpResponse
+                        { url = url, statusCode = 403, statusText = "OK", headers = Dict.empty }
+                        ""
 
             ( "POST", [ "discord.com", "api", "v9", "channels", _, "typing" ] ) ->
                 StringHttpResponse
@@ -876,15 +882,34 @@ handleCustomRequest method url =
         UnhandledHttpRequest
 
 
-decodeCustomRequest : HttpRequest -> Maybe ( String, String )
+type alias CustomRequest =
+    { method : String
+    , url : String
+    , headers : List ( String, String )
+    , body : Maybe Json.Decode.Value
+    }
+
+
+decodeCustomRequest : HttpRequest -> Maybe CustomRequest
 decodeCustomRequest request =
     case request.body of
         T.JsonBody json ->
             Json.Decode.decodeValue
-                (Json.Decode.map2
-                    Tuple.pair
+                (Json.Decode.map4
+                    CustomRequest
                     (Json.Decode.field "method" Json.Decode.string)
                     (Json.Decode.field "url" Json.Decode.string)
+                    (Json.Decode.field
+                        "headers"
+                        (Json.Decode.list
+                            (Json.Decode.map2
+                                Tuple.pair
+                                (Json.Decode.field "key" Json.Decode.string)
+                                (Json.Decode.field "value" Json.Decode.string)
+                            )
+                        )
+                    )
+                    (Json.Decode.field "body" (Json.Decode.nullable Json.Decode.value))
                 )
                 json
                 |> Result.toMaybe
@@ -924,8 +949,8 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
 
                         "http://localhost:3000/file/custom-request" ->
                             case decodeCustomRequest currentRequest of
-                                Just ( method, url ) ->
-                                    handleCustomRequest method url
+                                Just customRequest2 ->
+                                    handleCustomRequest customRequest2
 
                                 Nothing ->
                                     let
@@ -1101,7 +1126,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [ attackerTriesToLeakSensitiveData normalConfig
+    [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , inviteUserAndDmChat config
     , startTest
         "Admin can open admin page"
@@ -2366,20 +2391,23 @@ startTest name startTime2 config actions =
 
 attackerTriesToLeakSensitiveData :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> String
+    -> String
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-attackerTriesToLeakSensitiveData config =
+attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
     T.start
         "Attacker tries to leak/modify sensitive data"
         startTime
         config
-        [ T.connectFrontend
-            100
+        [ linkDiscordAndLogin
             sessionId0
-            "/"
-            desktopWindow
+            "AT"
+            adminEmail
+            False
+            discordOpReady
+            discordOpSupplemental
             (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , inviteUser
+                [ inviteUser
                     admin
                     (\user ->
                         [ writeMessage user 100 "sensitive guild message"
@@ -2429,6 +2457,24 @@ attackerTriesToLeakSensitiveData config =
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
+                                                            ++ (if before.backend.discordGuilds == after.backend.discordGuilds then
+                                                                    []
+
+                                                                else
+                                                                    [ "Discord guild data was modified by attacker" ]
+                                                               )
+                                                            ++ (if before.backend.discordDmChannels == after.backend.discordDmChannels then
+                                                                    []
+
+                                                                else
+                                                                    [ "Discord DM data was modified by attacker" ]
+                                                               )
+                                                            ++ (if before.backend.discordUsers == after.backend.discordUsers then
+                                                                    []
+
+                                                                else
+                                                                    [ "Discord user data was modified by attacker" ]
+                                                               )
                                                             ++ (if before.backend.dmChannels == after.backend.dmChannels then
                                                                     []
 
@@ -2741,7 +2787,7 @@ attackerToBackendChanges =
     , AiChatToBackend (AiChat.AiMessageRequestSimple "model" (AiChat.RespondId 0) "hacked")
     , ReloadDataRequest InitialLoadRequested_None
     , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
-    , LinkDiscordRequest discordUserAuth
+    , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
     , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
     , AdminDataRequest Nothing
     , -- Make sure this one is last
@@ -2771,16 +2817,16 @@ attackerLocalChanges =
             Nonempty (NormalText 'h' "acked") []
 
         discordUserId =
-            Discord.idFromUInt64 (Unsafe.uint64 "0")
+            Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035")
 
         discordGuildId =
-            Discord.idFromUInt64 (Unsafe.uint64 "0")
+            Discord.idFromUInt64 (Unsafe.uint64 "705745250815311942")
 
         discordChannelId =
-            Discord.idFromUInt64 (Unsafe.uint64 "0")
+            Discord.idFromUInt64 (Unsafe.uint64 "1072828564317159465")
 
         discordPrivateChannelId =
-            Discord.idFromUInt64 (Unsafe.uint64 "0")
+            Discord.idFromUInt64 (Unsafe.uint64 "1215077285749858324")
 
         guildOrDmId_dm : AnyGuildOrDmId
         guildOrDmId_dm =
@@ -3060,9 +3106,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     List.filter
                                         (\request ->
                                             case ( request.url, decodeCustomRequest request ) of
-                                                ( "http://localhost:3000/file/custom-request", Just ( method, url ) ) ->
-                                                    (url == "https://discord.com/api/v9/channels/705745250815311942/thread-members/@me")
-                                                        && (method == "PUT")
+                                                ( "http://localhost:3000/file/custom-request", Just customRequest ) ->
+                                                    (customRequest.url == "https://discord.com/api/v9/channels/705745250815311942/thread-members/@me")
+                                                        && (customRequest.method == "PUT")
 
                                                 _ ->
                                                     False
@@ -3130,9 +3176,9 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     List.filter
                                         (\request ->
                                             case ( request.url, decodeCustomRequest request ) of
-                                                ( "http://localhost:3000/file/custom-request", Just ( method, url ) ) ->
-                                                    (url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
-                                                        && (method == "PUT")
+                                                ( "http://localhost:3000/file/custom-request", Just customRequest ) ->
+                                                    (customRequest.url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
+                                                        && (customRequest.method == "PUT")
 
                                                 _ ->
                                                     False
