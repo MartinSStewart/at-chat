@@ -47,7 +47,10 @@ exports.init = async function init(app)
     document.addEventListener('selectionchange', (event) => {
         console.log("selectionchange");
         console.log(event);
-        app.ports.selection_changed_from_js.send(event.target);
+        const node = document.activeElement;
+        if (node) {
+            app.ports.selection_changed_from_js.send(node);
+        }
     });
 
     app.ports.exec_command_to_js.subscribe((data) => {
