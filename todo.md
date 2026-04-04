@@ -8,6 +8,8 @@
 * Clicking on a message reply should scroll to the original message
 * 4 Discord messages DM restriction not removed until after the page is refreshed
 * Prevent messages longer than 2000 chars from being sent
+* On mobile, using a reaction emoji causes that message to be hover highlighted
+* Finding an emoji via text search and then trying to click it fails on mobile
 
 Requested features:
 
