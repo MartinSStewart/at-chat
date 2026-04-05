@@ -22,7 +22,7 @@ import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (Id)
+import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)

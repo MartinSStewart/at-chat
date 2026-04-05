@@ -64,7 +64,7 @@ import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -318,6 +318,7 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     , toBackendLogs : Array ToBackendLogData
+    , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     }
 
 

@@ -214,6 +214,7 @@ init =
       , exportState = Nothing
       , sendMessageRateLimits = SeqDict.empty
       , toBackendLogs = Array.empty
+      , discordStickers = OneToOne.empty
       }
     , Command.none
     )

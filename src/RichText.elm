@@ -25,6 +25,7 @@ module RichText exposing
     )
 
 import Array exposing (Array)
+import Basics.Extra
 import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Discord
@@ -34,11 +35,12 @@ import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
 import FileName
 import FileStatus exposing (FileData, FileId)
+import Hex
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (Id)
+import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyDict
@@ -66,6 +68,7 @@ type RichText userId
     | CodeBlock Language String
     | AttachedFile (Id FileId)
     | EscapedChar EscapedChar
+    | Sticker (Id StickerId)
 
 
 type EscapedChar
@@ -185,6 +188,9 @@ removeAttachedFile fileId list =
 
                 EscapedChar _ ->
                     Just richText
+
+                Sticker id ->
+                    Just richText
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -229,6 +235,9 @@ hyperlinks nonempty =
                     []
 
                 EscapedChar _ ->
+                    []
+
+                Sticker id ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -288,6 +297,9 @@ toStringWithGetter userToString users nonempty =
 
                 EscapedChar char ->
                     "\\" ++ escapedCharToString char
+
+                Sticker id ->
+                    stickerIdToString id
         )
         nonempty
         |> List.Nonempty.toList
@@ -348,10 +360,46 @@ toString users nonempty =
 
                 EscapedChar char ->
                     "\\" ++ escapedCharToString char
+
+                Sticker id ->
+                    stickerIdToString id
         )
         nonempty
         |> List.Nonempty.toList
         |> String.concat
+
+
+stickerIdToString : Id StickerId -> String
+stickerIdToString id =
+    "\n" ++ toBase4 (Id.toInt id) ++ "\n\n"
+
+
+toBase4 : Int -> String
+toBase4 n =
+    if n < 0 then
+        "-" ++ toBase4 (abs n)
+
+    else if n < 4 then
+        toBase4Helper n
+
+    else
+        toBase4 (n // 4) ++ toBase4Helper (remainderBy 4 n)
+
+
+toBase4Helper : Int -> String
+toBase4Helper int =
+    case int of
+        0 ->
+            "\u{200B}"
+
+        1 ->
+            "\u{200C}"
+
+        2 ->
+            "\u{200D}"
+
+        _ ->
+            "\u{2060}"
 
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
@@ -421,6 +469,9 @@ normalize nonempty =
 
                 EscapedChar char ->
                     List.Nonempty.cons (EscapedChar char) nonempty2
+
+                Sticker id ->
+                    List.Nonempty.cons (Sticker id) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -459,6 +510,9 @@ normalize nonempty =
 
                 EscapedChar char ->
                     EscapedChar char
+
+                Sticker id ->
+                    Sticker id
             )
             []
         )
@@ -571,6 +625,84 @@ parseInner source index len users modifiers =
     parseLoop source index len users modifiers "" []
 
 
+stringAt : Int -> String -> Maybe String
+stringAt index text =
+    if index < String.length text then
+        String.slice index (index + 1) text |> Just
+
+    else
+        Nothing
+
+
+stringAtRange : Int -> Int -> String -> Maybe String
+stringAtRange index count text =
+    if index + count <= String.length text && count >= 0 then
+        String.slice index (index + count) text |> Just
+
+    else
+        Nothing
+
+
+parseStickerId : Int -> String -> Maybe ( Id StickerId, Int )
+parseStickerId index source =
+    case stringAt index source of
+        Just char ->
+            case char of
+                "\u{200B}" ->
+                    if stringAtRange (index + 1) 2 source == Just "\n\n" then
+                        Just ( Id.fromInt 0, index + 3 )
+
+                    else
+                        Nothing
+
+                "\u{200C}" ->
+                    parseStickerIdHelper 1 (index + 1) source
+
+                "\u{200D}" ->
+                    parseStickerIdHelper 2 (index + 1) source
+
+                "\u{2060}" ->
+                    parseStickerIdHelper 3 (index + 1) source
+
+                _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+parseStickerIdHelper : Int -> Int -> String -> Maybe ( Id StickerId, Int )
+parseStickerIdHelper id index source =
+    case stringAt index source of
+        Just char ->
+            case char of
+                "\u{200B}" ->
+                    parseStickerIdHelper (4 * id) (index + 1) source
+
+                "\u{200C}" ->
+                    parseStickerIdHelper (1 + 4 * id) (index + 1) source
+
+                "\u{200D}" ->
+                    parseStickerIdHelper (2 + 4 * id) (index + 1) source
+
+                "\u{2060}" ->
+                    parseStickerIdHelper (3 + 4 * id) (index + 1) source
+
+                "\n" ->
+                    case ( stringAt (index + 1) source, id <= Basics.Extra.maxSafeInteger ) of
+                        ( Just "\n", True ) ->
+                            Just ( Id.fromInt id, index + 2 )
+
+                        _ ->
+                            Nothing
+
+                _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
 parseLoop :
     String
     -> Int
@@ -586,25 +718,30 @@ parseLoop source index len users modifiers accText revNodes =
 
     else
         case String.slice index (index + 1) source of
+            "\n" ->
+                case parseStickerId (index + 1) source of
+                    Just ( stickerId, index2 ) ->
+                        parseLoop source index2 len users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                    Nothing ->
+                        parseLoop source (index + 1) len users modifiers (accText ++ "\n") revNodes
+
             "\\" ->
                 let
                     afterBackslash =
                         index + 1
                 in
-                if afterBackslash < len then
-                    let
-                        nextChar =
-                            String.slice afterBackslash (afterBackslash + 1) source
-                    in
-                    case Dict.get nextChar charToEscaped of
-                        Just escaped ->
-                            parseLoop source (afterBackslash + 1) len users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+                case stringAt afterBackslash source of
+                    Just nextChar ->
+                        case Dict.get nextChar charToEscaped of
+                            Just escaped ->
+                                parseLoop source (afterBackslash + 1) len users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
-                        Nothing ->
-                            parseLoop source (afterBackslash + 1) len users modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            Nothing ->
+                                parseLoop source (afterBackslash + 1) len users modifiers (accText ++ "\\" ++ nextChar) revNodes
 
-                else
-                    parseLoop source afterBackslash len users modifiers (accText ++ "\\") revNodes
+                    Nothing ->
+                        parseLoop source afterBackslash len users modifiers (accText ++ "\\") revNodes
 
             "@" ->
                 let
@@ -773,10 +910,10 @@ parseLoop source index len users modifiers accText revNodes =
                         Just closeIndex ->
                             let
                                 content =
-                                    String.slice (index + 3) closeIndex source |> Debug.log "content"
+                                    String.slice (index + 3) closeIndex source
 
                                 ( language, codeContent ) =
-                                    parseCodeBlockContent content |> Debug.log "content2"
+                                    parseCodeBlockContent content
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
@@ -1085,7 +1222,7 @@ skipNormalChars source index len =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" then
+        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" then
             index
 
         else
@@ -1136,6 +1273,9 @@ mentionsUserHelper set nonempty =
                     set2
 
                 EscapedChar _ ->
+                    set2
+
+                Sticker id ->
                     set2
         )
         set
@@ -1517,6 +1657,19 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
 
                 EscapedChar char ->
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
+
+                Sticker id ->
+                    ( spoilerIndex2
+                    , embedIndex2
+                    , currentList
+                        ++ [ Html.div
+                                [ Html.Attributes.style "width" "256px"
+                                , Html.Attributes.style "height" "256px"
+                                , Html.Attributes.style "background-color" "gray"
+                                ]
+                                []
+                           ]
+                    )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -2065,6 +2218,19 @@ textInputViewHelper state allUsers attachedFiles nonempty =
 
                 EscapedChar char ->
                     [ formatText "\\", Html.text (escapedCharToString char) ]
+
+                Sticker id ->
+                    [ Html.span
+                        [ Html.Attributes.style "position" "relative" ]
+                        [ Html.div
+                            [ Html.Attributes.style "width" "48px"
+                            , Html.Attributes.style "height" "48px"
+                            , Html.Attributes.style "background-color" "gray"
+                            ]
+                            []
+                        ]
+                    , Html.text "\n\n\n"
+                    ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -2625,6 +2791,9 @@ toDiscord content =
 
                 EscapedChar char ->
                     Discord.Markdown.text (escapedCharToString char)
+
+                Sticker id ->
+                    Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)
 

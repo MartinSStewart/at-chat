@@ -17,11 +17,13 @@ import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Id
+import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
+import MessageInput
 import MyUi
 import OneOrGreater
 import Postmark
-import RichText exposing (Domain)
+import RichText exposing (Domain, RichText(..))
 import SeqDict
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
@@ -51,6 +53,41 @@ main =
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
+                ]
+            , Ui.column
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
+                , RichText.view
+                    (Dom.id "richText")
+                    800
+                    (\_ -> ())
+                    SeqSet.empty
+                    (\_ -> ())
+                    (SeqSet.fromList [])
+                    SeqDict.empty
+                    SeqDict.empty
+                    Array.empty
+                    (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
+                    |> Html.div []
+                    |> Ui.html
+
+                --, RichText.textInputView
+                --    SeqDict.empty
+                --    SeqDict.empty
+                --    (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
+                --    |> Html.div []
+                --    |> Ui.html
+                , MessageInput.view
+                    (Dom.id "input")
+                    True
+                    False
+                    (Dom.id "channel")
+                    "Placeholder"
+                    (Nonempty (NormalText 'T' "est2") [ Sticker (Id.fromInt 123) ] |> RichText.toString SeqDict.empty)
+                    SeqDict.empty
+                    Nothing
+                    SeqDict.empty
+                    |> Ui.map (\_ -> ())
                 ]
             , Ui.column
                 []

@@ -8,6 +8,7 @@ module Id exposing
     , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
+    , StickerId(..)
     , ThreadMessageId(..)
     , ThreadRoute(..)
     , ThreadRouteWithMaybeMessage(..)
@@ -117,6 +118,10 @@ type ThreadMessageId
 
 type InviteLinkId
     = InviteLinkId Never
+
+
+type StickerId
+    = StickerId Never
 
 
 type Id a

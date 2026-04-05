@@ -2740,6 +2740,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                                                     )
                                                     uploadAttachmentsResponse
                                                     attachments2
+                                            , stickers = []
                                             }
                                             |> http
                                     )
