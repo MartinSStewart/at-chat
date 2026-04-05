@@ -2184,17 +2184,27 @@ fromDiscord text attachments embeds =
                 |> SeqSet.fromList
 
         applyExtraEmbeds richText =
-            case
-                List.foldl SeqSet.remove embedSet (hyperlinks richText)
-                    |> SeqSet.toList
-                    |> List.concatMap (\url -> [ NormalText ' ' "", Hyperlink url ])
-                    |> List.Nonempty.fromList
-            of
-                Just nonempty ->
-                    List.Nonempty.append richText nonempty
+            let
+                urls : List Url
+                urls =
+                    hyperlinks richText
+            in
+            --This is to detect if we actually have embeds that are not attached to any url or if we just have embeds with canonicalized urls that don't match up with the urls in the message
+            if SeqSet.size embedSet > List.length urls then
+                case
+                    List.foldl SeqSet.remove embedSet urls
+                        |> SeqSet.toList
+                        |> List.concatMap (\url -> [ NormalText ' ' "", Hyperlink url ])
+                        |> List.Nonempty.fromList
+                of
+                    Just nonempty ->
+                        List.Nonempty.append richText nonempty
 
-                Nothing ->
-                    richText
+                    Nothing ->
+                        richText
+
+            else
+                richText
     in
     case String.Nonempty.fromString text of
         Just nonempty ->
