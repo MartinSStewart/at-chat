@@ -1538,6 +1538,7 @@ contentTypes =
     , "test/mimetype"
     , "test/mimetyp"
     , "x-conference/x-cooltalk"
+    , "image/apng"
     ]
         |> List.indexedMap (\index contentType2 -> ( ContentType index, contentType2 ))
         |> OneToOne.fromList

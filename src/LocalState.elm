@@ -26,6 +26,7 @@ module LocalState exposing
     , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
+    , StickerData
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -108,7 +109,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
-import Discord exposing (OptionalData)
+import Discord exposing (OptionalData, StickerFormatType)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Lamdera exposing (ClientId)
@@ -117,7 +118,7 @@ import Embed exposing (EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
@@ -195,6 +196,7 @@ type alias DiscordBackendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 
@@ -214,6 +216,14 @@ type alias DiscordFrontendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , stickers : SeqDict (Id StickerId) StickerData
+    }
+
+
+type alias StickerData =
+    { url : FileHash
+    , name : String
+    , format : StickerFormatType
     }
 
 

@@ -41,7 +41,7 @@ import Env
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -2193,8 +2193,13 @@ handleReadyData readyData model =
     )
 
 
-addDiscordGuild : List Discord.MergedMember -> Discord.GatewayGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-addDiscordGuild members guild discordGuilds =
+addDiscordGuild :
+    List Discord.MergedMember
+    -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    -> Discord.GatewayGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+addDiscordGuild members existingStickers guild discordGuilds =
     SeqDict.update
         guild.properties.id
         (\maybe ->
@@ -2225,6 +2230,23 @@ addDiscordGuild members guild discordGuilds =
                                 |> SeqDict.fromList
                             )
                             guild.properties.ownerId
+                    , stickers =
+                        List.map
+                            (\sticker ->
+                                case OneToOne.second sticker.id existingStickers of
+                                    Just id ->
+                                        ( id
+                                        , { url = FileHash
+                                          , name = sticker.name
+                                          , format = sticker.formatType
+                                          }
+                                        )
+                                            |> Just
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            guild.stickers
                     }
                         |> Just
         )

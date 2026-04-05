@@ -577,6 +577,7 @@ discordGuildToFrontend requestMessagesFor guild =
             )
             guild.channels
     , membersAndOwner = guild.membersAndOwner
+    , stickers = guild.stickers
     }
 
 

@@ -2223,9 +2223,9 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                     [ Html.span
                         [ Html.Attributes.style "position" "relative" ]
                         [ Html.div
-                            [ Html.Attributes.style "width" "48px"
-                            , Html.Attributes.style "height" "48px"
-                            , Html.Attributes.style "background-color" "gray"
+                            [ Html.Attributes.style "width" "3lh"
+                            , Html.Attributes.style "height" "3lh"
+                            , Html.Attributes.style "background-color" "rgba(0,0,0,0.3)"
                             ]
                             []
                         ]
