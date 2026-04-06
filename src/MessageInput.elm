@@ -28,7 +28,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
@@ -41,6 +41,7 @@ import PersonName exposing (PersonName)
 import Ports
 import RichText
 import SeqDict exposing (SeqDict)
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
@@ -121,10 +122,11 @@ textarea :
     -> String
     -> String
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -240,7 +242,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
             )
             (case String.Nonempty.fromString text of
                 Just nonempty ->
-                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView users attachedFiles stickers (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -305,7 +307,7 @@ disabledTextarea placeholderText text attachedFiles local =
                         users =
                             LocalState.allUsers local.localUser
                     in
-                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView users attachedFiles local.stickers (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -328,16 +330,17 @@ editView :
     -> String
     -> String
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -393,16 +396,17 @@ view :
     -> String
     -> String
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }

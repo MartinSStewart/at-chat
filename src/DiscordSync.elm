@@ -46,7 +46,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), StickerData, StickerUrl(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
@@ -58,6 +58,7 @@ import RichText exposing (RichText(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Sticker exposing (StickerData, StickerUrl(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User

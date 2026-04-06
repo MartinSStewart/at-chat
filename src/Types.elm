@@ -68,7 +68,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey, StickerData)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -90,9 +90,9 @@ import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
@@ -655,6 +655,7 @@ type alias LoginData =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
+    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 

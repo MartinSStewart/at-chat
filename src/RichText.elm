@@ -50,6 +50,7 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..), Url)
@@ -2056,13 +2057,15 @@ fileDownloadView fileData =
 textInputView :
     SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
+    -> SeqDict (Id StickerId) StickerData
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView users attachedFiles nonempty =
+textInputView users attachedFiles stickers nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
+        stickers
         nonempty
 
 
@@ -2083,9 +2086,10 @@ textInputViewHelper :
     RichTextState
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
+    -> SeqDict (Id StickerId) StickerData
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputViewHelper state allUsers attachedFiles nonempty =
+textInputViewHelper state allUsers attachedFiles stickers nonempty =
     List.concatMap
         (\item ->
             case item of
@@ -2120,6 +2124,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                             { state | italic = True }
                             allUsers
                             attachedFiles
+                            stickers
                             nonempty2
                         ++ [ formatText "_" ]
 
@@ -2129,6 +2134,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                             { state | underline = True }
                             allUsers
                             attachedFiles
+                            stickers
                             nonempty2
                         ++ [ formatText "__" ]
 
@@ -2138,6 +2144,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                             { state | bold = True }
                             allUsers
                             attachedFiles
+                            stickers
                             nonempty2
                         ++ [ formatText "*" ]
 
@@ -2147,6 +2154,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                             { state | strikethrough = True }
                             allUsers
                             attachedFiles
+                            stickers
                             nonempty2
                         ++ [ formatText "~~" ]
 
@@ -2156,6 +2164,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                             { state | spoiler = True }
                             allUsers
                             attachedFiles
+                            stickers
                             nonempty2
                         ++ [ formatText "||" ]
 

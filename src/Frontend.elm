@@ -437,6 +437,7 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
+    , stickers = loginData.stickers
     }
 
 

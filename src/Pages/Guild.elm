@@ -3320,6 +3320,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
+                local.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
@@ -3522,6 +3523,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
+                        local.stickers
                         loggedIn.textInputFocus
                         (LocalState.allDiscordUsers local.localUser)
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
@@ -3806,6 +3808,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
+                local.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
@@ -3993,6 +3996,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
+                local.stickers
                 loggedIn.textInputFocus
                 (LocalState.allDiscordUsers local.localUser)
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
@@ -4323,6 +4327,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         ""
                         editing.text
                         editing.attachedFiles
+                        local.stickers
                         pingUser
             in
             Ui.column
@@ -4456,6 +4461,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         ""
                         editing.text
                         editing.attachedFiles
+                        local.stickers
                         pingUser
             in
             Ui.column

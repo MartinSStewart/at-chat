@@ -26,8 +26,6 @@ module LocalState exposing
     , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
-    , StickerData
-    , StickerUrl(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -140,6 +138,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import Sticker exposing (StickerData)
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import ToBackendLog exposing (ToBackendLogData)
@@ -163,6 +162,7 @@ type alias LocalState =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
+    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 
@@ -220,19 +220,6 @@ type alias DiscordFrontendGuild =
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
-    }
-
-
-type StickerUrl
-    = StickerInternal FileHash (Maybe (Coord CssPixels))
-    | StickerExternal Url
-    | StickerLoading
-
-
-type alias StickerData =
-    { url : StickerUrl
-    , name : String
-    , format : StickerFormatType
     }
 
 

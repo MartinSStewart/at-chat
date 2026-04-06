@@ -38,7 +38,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), StickerData, StickerUrl(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -54,6 +54,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
+import Sticker
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
@@ -1320,24 +1321,7 @@ update msg model =
                             case result of
                                 Ok uploadResponse ->
                                     ( errors2
-                                    , SeqDict.updateIfExists stickerId
-                                        (\sticker ->
-                                            case sticker.url of
-                                                StickerLoading ->
-                                                    { sticker
-                                                        | url =
-                                                            StickerInternal
-                                                                uploadResponse.fileHash
-                                                                (Maybe.map .imageSize uploadResponse.imageSize)
-                                                    }
-
-                                                StickerInternal fileHash _ ->
-                                                    sticker
-
-                                                StickerExternal url ->
-                                                    sticker
-                                        )
-                                        stickers2
+                                    , SeqDict.updateIfExists stickerId (Sticker.addUrl uploadResponse) stickers2
                                     )
 
                                 Err error ->

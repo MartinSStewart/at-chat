@@ -532,6 +532,7 @@ getLoginData sessionId session user requestMessagesFor model =
             |> SeqDict.fromList
     , publicVapidKey = model.publicVapidKey
     , textEditor = model.textEditor
+    , stickers = model.stickers
     }
 
 
