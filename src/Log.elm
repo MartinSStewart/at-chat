@@ -446,9 +446,14 @@ logContent onPressCopy log =
         FailedToLoadDiscordGuildStickers nonempty totalStickers ->
             Ui.column
                 [ Ui.spacing 4 ]
-                [ tag errorTag "Discord guild stickers failed to load"
-                , Debug.todo "Show list"
-                ]
+                (tag errorTag "Discord guild stickers failed to load"
+                    :: fieldRow "Total stickers" (Ui.text (String.fromInt totalStickers))
+                    :: List.map
+                        (\( stickerId, error ) ->
+                            fieldRow ("Sticker " ++ Id.toString stickerId) (Ui.text (httpErrorToString error))
+                        )
+                        (List.Nonempty.toList nonempty)
+                )
 
 
 type alias TagStyle =
