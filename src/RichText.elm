@@ -16,6 +16,7 @@ module RichText exposing
     , mentionsUser
     , preview
     , removeAttachedFile
+    , stickers
     , textInputView
     , toDiscord
     , toString
@@ -240,6 +241,53 @@ hyperlinks nonempty =
 
                 Sticker id ->
                     []
+        )
+        (List.Nonempty.toList nonempty)
+
+
+stickers : Nonempty (RichText userId) -> List (Id StickerId)
+stickers nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink data ->
+                    []
+
+                UserMention _ ->
+                    []
+
+                NormalText _ _ ->
+                    []
+
+                Bold nonempty2 ->
+                    stickers nonempty2
+
+                Italic nonempty2 ->
+                    stickers nonempty2
+
+                Underline nonempty2 ->
+                    stickers nonempty2
+
+                Strikethrough nonempty2 ->
+                    stickers nonempty2
+
+                Spoiler nonempty2 ->
+                    stickers nonempty2
+
+                InlineCode _ _ ->
+                    []
+
+                CodeBlock _ _ ->
+                    []
+
+                AttachedFile _ ->
+                    []
+
+                EscapedChar _ ->
+                    []
+
+                Sticker stickerId ->
+                    [ stickerId ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -2104,12 +2152,12 @@ textInputView :
     -> SeqDict (Id StickerId) StickerData
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView users attachedFiles stickers nonempty =
+textInputView users attachedFiles stickers2 nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
-        stickers
+        stickers2
         nonempty
 
 
@@ -2133,7 +2181,7 @@ textInputViewHelper :
     -> SeqDict (Id StickerId) StickerData
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputViewHelper state allUsers attachedFiles stickers nonempty =
+textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
     List.concatMap
         (\item ->
             case item of
@@ -2168,7 +2216,7 @@ textInputViewHelper state allUsers attachedFiles stickers nonempty =
                             { state | italic = True }
                             allUsers
                             attachedFiles
-                            stickers
+                            stickers2
                             nonempty2
                         ++ [ formatText "_" ]
 
@@ -2178,7 +2226,7 @@ textInputViewHelper state allUsers attachedFiles stickers nonempty =
                             { state | underline = True }
                             allUsers
                             attachedFiles
-                            stickers
+                            stickers2
                             nonempty2
                         ++ [ formatText "__" ]
 
@@ -2188,7 +2236,7 @@ textInputViewHelper state allUsers attachedFiles stickers nonempty =
                             { state | bold = True }
                             allUsers
                             attachedFiles
-                            stickers
+                            stickers2
                             nonempty2
                         ++ [ formatText "*" ]
 
@@ -2198,7 +2246,7 @@ textInputViewHelper state allUsers attachedFiles stickers nonempty =
                             { state | strikethrough = True }
                             allUsers
                             attachedFiles
-                            stickers
+                            stickers2
                             nonempty2
                         ++ [ formatText "~~" ]
 
@@ -2208,7 +2256,7 @@ textInputViewHelper state allUsers attachedFiles stickers nonempty =
                             { state | spoiler = True }
                             allUsers
                             attachedFiles
-                            stickers
+                            stickers2
                             nonempty2
                         ++ [ formatText "||" ]
 
@@ -2385,7 +2433,7 @@ fromDiscord :
     -> Discord.OptionalData (List Discord.Embed)
     -> List (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments embeds stickers =
+fromDiscord text attachments embeds stickers2 =
     let
         embedSet : SeqSet Url
         embedSet =
@@ -2433,7 +2481,7 @@ fromDiscord text attachments embeds stickers =
 
         applyStickers : List (RichText userId) -> Nonempty (RichText userId)
         applyStickers richText =
-            case richText ++ List.map Sticker stickers |> List.Nonempty.fromList of
+            case richText ++ List.map Sticker stickers2 |> List.Nonempty.fromList of
                 Just nonempty ->
                     nonempty
 

@@ -2791,9 +2791,10 @@ sendMessage :
     -> Discord.Id Discord.ChannelId
     -> Maybe (Discord.Id Discord.MessageId)
     -> SeqDict (Id FileId) FileData
+    -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
-sendMessage discordUser channelId maybeReplyTo attachedFiles text =
+sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers text =
     List.map
         (\attachment ->
             Http.task
@@ -2873,7 +2874,13 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                                                     )
                                                     uploadAttachmentsResponse
                                                     attachments2
-                                            , stickers = []
+                                            , stickers =
+                                                RichText.stickers text
+                                                    |> List.filterMap (\stickerId -> OneToOne.first stickerId discordStickers)
+                                                    |> SeqSet.fromList
+                                                    |> SeqSet.toList
+                                                    -- Discord will reject the message if it has more than 3 stickers
+                                                    |> List.take 3
                                             }
                                             |> http
                                     )

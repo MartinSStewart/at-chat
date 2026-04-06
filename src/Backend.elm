@@ -1982,6 +1982,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 Nothing
                                                         )
                                                         attachedFiles2
+                                                        model.discordStickers
                                                         text
                                                         |> Task.attempt
                                                             (SentDiscordGuildMessage
@@ -2044,6 +2045,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                                     Nothing
                                                                             )
                                                                             attachedFiles2
+                                                                            model.discordStickers
                                                                             text
                                                                     )
                                                                 |> Task.attempt
@@ -2102,6 +2104,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         Nothing
                                                 )
                                                 attachedFiles2
+                                                model.discordStickers
                                                 text
                                                 |> Task.attempt
                                                     (SentDiscordDmMessage
