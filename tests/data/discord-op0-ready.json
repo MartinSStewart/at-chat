@@ -3,167 +3,11 @@
   "s": 1,
   "op": 0,
   "d": {
-    "users": [
-      {
-        "username": "purplelite",
-        "public_flags": 0,
-        "primary_guild": null,
-        "id": "137748026084163584",
-        "global_name": "Purplelite",
-        "display_name_styles": null,
-        "display_name": "Purplelite",
-        "discriminator": "0",
-        "collectibles": null,
-        "clan": null,
-        "bot": false,
-        "avatar_decoration_data": null,
-        "avatar": "71168d94b72ac84d360c6563b3f1e362"
-      },
-      {
-        "username": "at0232",
-        "public_flags": 0,
-        "primary_guild": null,
-        "id": "161098476632014848",
-        "global_name": "AT",
-        "display_name_styles": null,
-        "display_name": "AT",
-        "discriminator": "0",
-        "collectibles": null,
-        "clan": null,
-        "bot": false,
-        "avatar_decoration_data": null,
-        "avatar": "3d7b1aa7b5149fe06971b6dedf682d82"
-      },
-      {
-        "username": "kess",
-        "public_flags": 0,
-        "primary_guild": {
-          "tag": "Dog",
-          "identity_guild_id": "1436398011755401228",
-          "identity_enabled": true,
-          "badge": "92793b49ba65005789d51de91913e265"
-        },
-        "id": "168547048902098944",
-        "global_name": "Kess",
-        "display_name_styles": {
-          "font_id": 10,
-          "effect_id": 3,
-          "colors": [
-            16711935
-          ]
-        },
-        "discriminator": "0",
-        "collectibles": {
-          "nameplate": {
-            "sku_id": "1409983105577783410",
-            "palette": "violet",
-            "label": "COLLECTIBLES_SEPTEMBER_2025_MARKETING_NAMEPLATE_A11Y",
-            "expires_at": null,
-            "asset": "nameplates/special_events_2/nitro_rocketfuel_nameplate/"
-          }
-        },
-        "clan": {
-          "tag": "Dog",
-          "identity_guild_id": "1436398011755401228",
-          "identity_enabled": true,
-          "badge": "92793b49ba65005789d51de91913e265"
-        },
-        "avatar_decoration_data": {
-          "sku_id": "1416071145068957747",
-          "expires_at": null,
-          "asset": "a_857486cef7543257ed8d60adbce4728f"
-        },
-        "avatar": "3e00277cfa8d0a40e05c8cda1b0dffd9"
-      },
-      {
-        "username": "at28727",
-        "public_flags": 0,
-        "primary_guild": null,
-        "id": "184437096813953035",
-        "global_name": "AT2",
-        "display_name_styles": null,
-        "display_name": "AT2",
-        "discriminator": "0",
-        "collectibles": null,
-        "bot": false,
-        "avatar_decoration_data": null,
-        "avatar": "7c40cb63ea11096169c5a4dcb5825a3d"
-      },
-      {
-        "username": "TesterBot",
-        "public_flags": 0,
-        "primary_guild": null,
-        "id": "304157401937084416",
-        "global_name": null,
-        "display_name_styles": null,
-        "discriminator": "2707",
-        "collectibles": null,
-        "clan": null,
-        "bot": true,
-        "avatar_decoration_data": null,
-        "avatar": "5f6f7cc3540b5d41d980ccc3c5e38bad"
-      },
-      {
-        "username": "discord",
-        "system": true,
-        "public_flags": 1,
-        "primary_guild": null,
-        "id": "643945264868098049",
-        "global_name": "Discord",
-        "display_name_styles": null,
-        "discriminator": "0000",
-        "collectibles": null,
-        "clan": null,
-        "bot": true,
-        "avatar_decoration_data": null,
-        "avatar": "c6a249645d46209f337279cd2ca998c7"
-      },
-      {
-        "username": "AT",
-        "public_flags": 0,
-        "primary_guild": null,
-        "id": "1401255355928936478",
-        "global_name": null,
-        "display_name_styles": null,
-        "display_name": null,
-        "discriminator": "0275",
-        "collectibles": null,
-        "bot": true,
-        "avatar_decoration_data": null,
-        "avatar": "34f894fcc2d53b98b2d6c99228b814a7"
-      }
+    "_trace": [
+      "[\"gateway-prd-arm-us-east1-c-zw1l\",{\"micros\":1221664,\"calls\":[\"id_created\",{\"micros\":1225,\"calls\":[]},\"session_lookup_time\",{\"micros\":259,\"calls\":[]},\"session_lookup_finished\",{\"micros\":10,\"calls\":[]},\"sessions-prd-gcp-us-east1-c-99\",{\"micros\":1219456,\"calls\":[\"start_session\",{\"micros\":1194827,\"calls\":[\"prd-rpc-856f5d9f84-7vbws\",{\"micros\":993533,\"calls\":[\"get_user\",{\"micros\":28700},\"get_guilds\",{\"micros\":45911},\"user_settings_proto\",{\"micros\":11451},\"relationships\",{\"micros\":118885},\"game_relationships\",{\"micros\":4},\"friend_suggestion\",{\"micros\":37},\"connections\",{\"micros\":13},\"serialized_read_states\",{\"micros\":4},\"send_scheduled_deletion_message\",{\"micros\":2},\"sanitize_premium_perks\",{\"micros\":2},\"guild_join_requests\",{\"micros\":1},\"user_guild_settings\",{\"micros\":10},\"serialized_private_channels\",{\"micros\":11505},\"user_segments\",{\"micros\":50387},\"game_invites\",{\"micros\":8},\"blocker_ids\",{\"micros\":2},\"affine_user_ids\",{\"micros\":404225},\"experiments\",{\"micros\":440449},\"required_action\",{\"micros\":8},\"authorized_ip_coro\",{\"micros\":17},\"pending_payments\",{\"micros\":4294},\"apex_experiments\",{\"micros\":182631},\"sessions_experiments\",{\"micros\":8},\"played_application_ids\",{\"micros\":5},\"linked_users\",{\"micros\":5},\"ad_personalization_toggles_disabled\",{\"micros\":15},\"regional_feature_config\",{\"micros\":5}]}]},\"starting_guild_connect\",{\"micros\":46,\"calls\":[]},\"presence_started\",{\"micros\":401,\"calls\":[]},\"guilds_started\",{\"micros\":84,\"calls\":[]},\"lobbies_started\",{\"micros\":0,\"calls\":[]},\"guilds_connect\",{\"micros\":1120,\"calls\":[]},\"presence_connect\",{\"micros\":22403,\"calls\":[]},\"connect_finished\",{\"micros\":23910,\"calls\":[]},\"build_ready\",{\"micros\":29,\"calls\":[]},\"clean_ready\",{\"micros\":1,\"calls\":[]},\"optimize_ready\",{\"micros\":149,\"calls\":[]},\"split_ready\",{\"micros\":7,\"calls\":[]}]}]}]"
     ],
-    "user_guild_settings": {
-      "version": 0,
-      "partial": false,
-      "entries": [
-        {
-          "version": 0,
-          "suppress_roles": false,
-          "suppress_everyone": false,
-          "notify_highlights": 0,
-          "muted": false,
-          "mute_scheduled_events": false,
-          "mute_config": null,
-          "mobile_push": true,
-          "message_notifications": 0,
-          "hide_muted_channels": false,
-          "guild_id": "213136010802888706",
-          "flags": 0,
-          "channel_overrides": [
-            {
-              "muted": true,
-              "mute_config": null,
-              "message_notifications": 3,
-              "collapsed": false,
-              "channel_id": "213136010802888706"
-            }
-          ]
-        }
-      ]
-    },
-    "analytics_token": "MTg0NDM3MDk2ODEzOTUzMDM1.nJlRonRLwZKw5wx9yTsSvHzw1QI",
-    "ad_personalization_toggles_disabled": false,
+    "session_id": "6d59cfbfb4b2759747dacbd22d86d1dd",
+    "friend_suggestion_count": 0,
     "regional_feature_config": {
       "teen_by_default_settings": 0,
       "age_gated_features": 0
@@ -709,122 +553,6 @@
         0
       ],
       [
-        2014775304,
-        null,
-        3,
-        [
-          [
-            [
-              [
-                4,
-                [
-                  {
-                    "s": 0,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                1604612045,
-                [
-                  [
-                    1183251248,
-                    [
-                      "INTERNAL_EMPLOYEE_ONLY"
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ],
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 2000,
-                    "e": 10000
-                  }
-                ]
-              ],
-              [
-                1,
-                [
-                  {
-                    "s": 0,
-                    "e": 100
-                  },
-                  {
-                    "s": 200,
-                    "e": 600
-                  }
-                ]
-              ],
-              [
-                4,
-                [
-                  {
-                    "s": 100,
-                    "e": 200
-                  },
-                  {
-                    "s": 600,
-                    "e": 1000
-                  },
-                  {
-                    "s": 1000,
-                    "e": 1500
-                  },
-                  {
-                    "s": 1500,
-                    "e": 2000
-                  }
-                ]
-              ]
-            ],
-            []
-          ]
-        ],
-        [
-          {
-            "k": [
-              "886812261455368233",
-              "315263844207558671",
-              "268982240569065472",
-              "1007668375159320607",
-              "943265993613008967",
-              "992539246835535943",
-              "1008822885378433105",
-              "1001114660524806205",
-              "1037856262144135230",
-              "642500834516664331",
-              "900193715962912819",
-              "533420789547139077",
-              "928454829079138344",
-              "169256939211980800",
-              "348185509484298240",
-              "132251458665054209",
-              "942897714956472401",
-              "917594655414181898",
-              "775023113645064253",
-              "1009606240546066473",
-              "81384788765712384",
-              "1073747669937299567",
-              "401220874742661121"
-            ],
-            "b": 4
-          }
-        ],
-        [],
-        null,
-        null,
-        0,
-        0
-      ],
-      [
         1727857487,
         null,
         1,
@@ -911,124 +639,6 @@
               "993957185493160057"
             ],
             "b": 1
-          }
-        ],
-        [],
-        null,
-        null,
-        0,
-        0
-      ],
-      [
-        3101260054,
-        null,
-        0,
-        [
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 0,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                188952590,
-                [
-                  [
-                    188952590,
-                    false
-                  ]
-                ]
-              ],
-              [
-                2918402255,
-                [
-                  [
-                    3399957344,
-                    1
-                  ],
-                  [
-                    1238858341,
-                    50
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        [],
-        [],
-        null,
-        null,
-        0,
-        0
-      ],
-      [
-        4083096281,
-        null,
-        3,
-        [
-          [
-            [
-              [
-                5,
-                [
-                  {
-                    "s": 0,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                1604612045,
-                [
-                  [
-                    1183251248,
-                    [
-                      "INTERNAL_EMPLOYEE_ONLY"
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        [
-          {
-            "k": [
-              "860609921602682910",
-              "993957185493160057"
-            ],
-            "b": 1
-          },
-          {
-            "k": [
-              "856605399154688045"
-            ],
-            "b": 3
-          },
-          {
-            "k": [
-              "1137085468287172620",
-              "1153731881238548480",
-              "847184799365857331",
-              "743397937870143559",
-              "869267695911194645",
-              "1014406560954466384",
-              "1064959560890204271",
-              "869772539071713340",
-              "1090403397204713603",
-              "690040107322966037"
-            ],
-            "b": 5
           }
         ],
         [],
@@ -1489,256 +1099,6 @@
         0
       ],
       [
-        2701598838,
-        "2023-05_clyde_ai_guild_personality",
-        0,
-        [
-          [
-            [
-              [
-                1,
-                [
-                  {
-                    "s": 0,
-                    "e": 2000
-                  },
-                  {
-                    "s": 2000,
-                    "e": 5000
-                  },
-                  {
-                    "s": 5000,
-                    "e": 7500
-                  },
-                  {
-                    "s": 7500,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                2294888943,
-                [
-                  [
-                    2690752156,
-                    2701598838
-                  ],
-                  [
-                    1982804121,
-                    10000
-                  ]
-                ]
-              ]
-            ]
-          ],
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 0,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            []
-          ]
-        ],
-        [],
-        [
-          [
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "378270734587396097",
-                        "856605399154688045",
-                        "1115761496710975601",
-                        "869267695911194645",
-                        "869772539071713340"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ],
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  1604612045,
-                  [
-                    [
-                      1183251248,
-                      [
-                        "INTERNAL_EMPLOYEE_ONLY"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        null,
-        null,
-        0,
-        0
-      ],
-      [
-        3143066071,
-        "2023-06_clyde_ai_channel_based_personality",
-        0,
-        [
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 5000,
-                    "e": 10000
-                  }
-                ]
-              ],
-              [
-                1,
-                [
-                  {
-                    "s": 0,
-                    "e": 2000
-                  },
-                  {
-                    "s": 2000,
-                    "e": 5000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                2294888943,
-                [
-                  [
-                    2690752156,
-                    3143066071
-                  ],
-                  [
-                    1982804121,
-                    10000
-                  ]
-                ]
-              ]
-            ]
-          ],
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 0,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            []
-          ]
-        ],
-        [],
-        [
-          [
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  1604612045,
-                  [
-                    [
-                      1183251248,
-                      [
-                        "INTERNAL_EMPLOYEE_ONLY"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ],
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "847184799365857331",
-                        "869267695911194645"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        null,
-        null,
-        0,
-        0
-      ],
-      [
         45257730,
         null,
         0,
@@ -1949,86 +1309,6 @@
         0
       ],
       [
-        3997016690,
-        "2023-12_voice_lockscreen_widget",
-        1,
-        [
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 0,
-                    "e": 8000
-                  }
-                ]
-              ],
-              [
-                2,
-                [
-                  {
-                    "s": 8000,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                2918402255,
-                [
-                  [
-                    3399957344,
-                    2
-                  ],
-                  [
-                    1238858341,
-                    50
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        [
-          {
-            "k": [
-              "1136423398608744588",
-              "705666251560583168",
-              "993957185493160057",
-              "1166858631170494604",
-              "858926570113728543",
-              "1157495187275255848",
-              "886315327229677628",
-              "780875876325261352",
-              "1112849445814554727",
-              "1150848592945352766",
-              "606514965565931531",
-              "1142537243542696008",
-              "739519334669484074",
-              "751564306142986360",
-              "176502497534410761",
-              "363154169294618625",
-              "663155546471268378",
-              "108806998211969024",
-              "313840371274874880",
-              "750184906981638214",
-              "499817104422207519",
-              "1156681801700491334",
-              "877357265034805298",
-              "936317138904440892"
-            ],
-            "b": 2
-          }
-        ],
-        [],
-        null,
-        null,
-        0,
-        0
-      ],
-      [
         1060797397,
         null,
         1,
@@ -2075,115 +1355,6 @@
         null,
         0,
         0
-      ],
-      [
-        3294787359,
-        null,
-        5,
-        [
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 0,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                2918402255,
-                [
-                  [
-                    3399957344,
-                    2
-                  ],
-                  [
-                    1238858341,
-                    200
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        [],
-        [
-          [
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "121012449292976128",
-                        "895433068389752902",
-                        "689949103198961671",
-                        "1138217295597011016",
-                        "763838479293349899",
-                        "1345154197250637914",
-                        "1199152226233483358"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ],
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "21154681615024128",
-                        "281683040739262465",
-                        "1208103252436983808",
-                        "1095810146761973830",
-                        "943265993613008967",
-                        "847184799365857331",
-                        "834846951068532756",
-                        "822219052402606132"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        null,
-        null,
-        0,
-        1
       ],
       [
         3789602720,
@@ -2300,88 +1471,14 @@
         1
       ],
       [
-        3227959587,
-        null,
-        3,
-        [
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 4000,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                2404720969,
-                [
-                  [
-                    3399957344,
-                    null
-                  ],
-                  [
-                    1238858341,
-                    "1400196680280998888"
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        [],
-        [
-          [
-            [
-              [
-                [
-                  0,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "267054589960912898",
-                        "1281682955432890501",
-                        "816055247952150598",
-                        "1402399652342534154",
-                        "1361441457449341082"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        null,
-        null,
-        0,
-        1
-      ],
-      [
         194801641,
         "2025-08_voice_channel_duration",
-        3,
+        4,
         [
           [
             [
               [
-                1,
+                5,
                 [
                   {
                     "s": 700,
@@ -2416,7 +1513,7 @@
                   ],
                   [
                     1238858341,
-                    100
+                    1000
                   ]
                 ]
               ]
@@ -2631,74 +1728,21 @@
       [
         2290096418,
         null,
-        0,
+        1,
         [
           [
             [
               [
-                -1,
-                [
-                  {
-                    "s": 2800,
-                    "e": 10000
-                  }
-                ]
-              ],
-              [
-                1,
-                [
-                  {
-                    "s": 100,
-                    "e": 200
-                  },
-                  {
-                    "s": 1000,
-                    "e": 1600
-                  }
-                ]
-              ],
-              [
-                2,
-                [
-                  {
-                    "s": 200,
-                    "e": 300
-                  },
-                  {
-                    "s": 1600,
-                    "e": 2200
-                  }
-                ]
-              ],
-              [
                 3,
                 [
                   {
-                    "s": 300,
-                    "e": 400
-                  },
-                  {
-                    "s": 2200,
-                    "e": 2800
+                    "s": 0,
+                    "e": 10000
                   }
                 ]
               ]
             ],
-            [
-              [
-                2404720969,
-                [
-                  [
-                    3399957344,
-                    null
-                  ],
-                  [
-                    1238858341,
-                    "1410247478476800000"
-                  ]
-                ]
-              ]
-            ]
+            []
           ]
         ],
         [],
@@ -2967,101 +2011,6 @@
         0
       ],
       [
-        505708914,
-        null,
-        2,
-        [
-          [
-            [
-              [
-                -1,
-                [
-                  {
-                    "s": 3000,
-                    "e": 10000
-                  }
-                ]
-              ],
-              [
-                1,
-                [
-                  {
-                    "s": 100,
-                    "e": 200
-                  },
-                  {
-                    "s": 300,
-                    "e": 400
-                  },
-                  {
-                    "s": 700,
-                    "e": 1000
-                  },
-                  {
-                    "s": 2000,
-                    "e": 3000
-                  }
-                ]
-              ]
-            ],
-            [
-              [
-                3730341874,
-                [
-                  [
-                    3399957344,
-                    90
-                  ],
-                  [
-                    1238858341,
-                    null
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        [],
-        [
-          [
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "1348732604584562698",
-                        "1362902310535303311",
-                        "1474551971116744787",
-                        "1361441457449341082",
-                        "1474552223269654651"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        null,
-        null,
-        0,
-        1
-      ],
-      [
         1059343150,
         null,
         2,
@@ -3118,74 +2067,6 @@
         null,
         0,
         1
-      ],
-      [
-        2534870185,
-        null,
-        4,
-        [
-          [
-            [
-              [
-                1,
-                [
-                  {
-                    "s": 0,
-                    "e": 2500
-                  },
-                  {
-                    "s": 2500,
-                    "e": 5000
-                  },
-                  {
-                    "s": 5000,
-                    "e": 7500
-                  },
-                  {
-                    "s": 7500,
-                    "e": 10000
-                  }
-                ]
-              ]
-            ],
-            []
-          ]
-        ],
-        [],
-        [
-          [
-            [
-              [
-                [
-                  1,
-                  [
-                    {
-                      "s": 0,
-                      "e": 10000
-                    }
-                  ]
-                ]
-              ],
-              [
-                [
-                  3013771838,
-                  [
-                    [
-                      3013771838,
-                      [
-                        "1379947376764256378"
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        ],
-        null,
-        null,
-        0,
-        0
       ],
       [
         2453702596,
@@ -3258,21 +2139,17 @@
         1
       ],
       [
-        1819903986,
+        2368146848,
         null,
-        1,
+        0,
         [
           [
             [
               [
-                1,
+                -1,
                 [
                   {
-                    "s": 500,
-                    "e": 1000
-                  },
-                  {
-                    "s": 5500,
+                    "s": 0,
                     "e": 10000
                   }
                 ]
@@ -3288,11 +2165,82 @@
                   ],
                   [
                     1238858341,
-                    "1468648786476662784"
+                    "1476624802163720192"
                   ]
                 ]
               ]
             ]
+          ]
+        ],
+        [],
+        [
+          [
+            [
+              [
+                [
+                  1,
+                  [
+                    {
+                      "s": 0,
+                      "e": 10000
+                    }
+                  ]
+                ]
+              ],
+              [
+                [
+                  3013771838,
+                  [
+                    [
+                      3013771838,
+                      [
+                        "1390077800467271760",
+                        "267054589960912898",
+                        "1298029341099425842",
+                        "1199152226233483358"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        null,
+        null,
+        0,
+        1
+      ],
+      [
+        1819903986,
+        null,
+        2,
+        [
+          [
+            [
+              [
+                1,
+                [
+                  {
+                    "s": 0,
+                    "e": 500
+                  },
+                  {
+                    "s": 500,
+                    "e": 1000
+                  },
+                  {
+                    "s": 1000,
+                    "e": 5500
+                  },
+                  {
+                    "s": 5500,
+                    "e": 10000
+                  }
+                ]
+              ]
+            ],
+            []
           ]
         ],
         [],
@@ -3330,6 +2278,78 @@
         null,
         0,
         1
+      ],
+      [
+        3747270261,
+        null,
+        2,
+        [
+          [
+            [
+              [
+                -1,
+                [
+                  {
+                    "s": 0,
+                    "e": 10000
+                  }
+                ]
+              ]
+            ],
+            [
+              [
+                2404720969,
+                [
+                  [
+                    3399957344,
+                    null
+                  ],
+                  [
+                    1238858341,
+                    "1486792171116822528"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [],
+        [
+          [
+            [
+              [
+                [
+                  1,
+                  [
+                    {
+                      "s": 0,
+                      "e": 10000
+                    }
+                  ]
+                ]
+              ],
+              [
+                [
+                  3013771838,
+                  [
+                    [
+                      3013771838,
+                      [
+                        "1379947376764256378",
+                        "1488279639016345610",
+                        "1339367154960564326"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        null,
+        null,
+        0,
+        0
       ],
       [
         2577730170,
@@ -3402,9 +2422,65 @@
         1
       ],
       [
-        1177718622,
+        210010796,
+        "2025-08_default_invite_expiration_guild",
+        0,
+        [
+          [
+            [
+              [
+                -1,
+                [
+                  {
+                    "s": 0,
+                    "e": 10000
+                  }
+                ]
+              ]
+            ],
+            []
+          ]
+        ],
+        [],
+        [
+          [
+            [
+              [
+                [
+                  1,
+                  [
+                    {
+                      "s": 0,
+                      "e": 10000
+                    }
+                  ]
+                ]
+              ],
+              [
+                [
+                  3013771838,
+                  [
+                    [
+                      3013771838,
+                      [
+                        "1487100900508958770"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        null,
         null,
         0,
+        1
+      ],
+      [
+        1975824754,
+        null,
+        1,
         [
           [
             [
@@ -3428,7 +2504,7 @@
                   ],
                   [
                     1238858341,
-                    "1478130921067511808"
+                    "1489322960123592704"
                   ]
                 ]
               ]
@@ -3457,10 +2533,7 @@
                     [
                       3013771838,
                       [
-                        "1404495740503588944",
-                        "243852602809384961",
-                        "267054589960912898",
-                        "1408174198471528590"
+                        "1199152226233483358"
                       ]
                     ]
                   ]
@@ -3471,30 +2544,16 @@
         ],
         null,
         null,
-        0,
+        1,
         1
       ]
     ],
-    "user_settings_proto": "CgIYHyKcAQpQUAABAAAAAAAAACAAADAAAAAAAAAAQAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAgCAAQAAAQAAEAAAAggAEaCwjNxu+dBhDAkeZgMXgAwHE/GuETOhAI1AMSCwgGENfOp5zDMyAEOg4IrgQSCRDX9t+HrTMgAToQCLQEEgsIAhCM0YarrzMgASoNMgMI2AQ6AggBQgIIATIvSgIIAVICCAFaAggBYgIIAWoCCAFyAggBegCCAQIIAYoBAJoBAggBogEAqgECCAFCE0ICCAFKAggBUgBaAggOYgCSAQBSAhoAWhcKCAoGb25saW5lGgIIASoHCI7Dze2bM2IWCgcKBWVuLVVTEgsIxP//////////AWoECAMQAXIiEiAAAADYclFWAgAAwMpqjlcCAgDAlBI29QIMAMI5+hlgBYIBgRIKGQkNAALuwA+yARIOFU3gBUMZ5+BQ0JoBAAAKGQkAAABMZNviAhIOFT02z0IZ5+BQ0JoBAAAKGQkAAID47VdXAhIOFYv8y0IZ5+BQ0JoBAAAKGQkKAEDnURzxBBIOFY8aFUIZ5+BQ0JoBAAAKGQkBAAQWPFy2BBIOFbkkTEIZ5+BQ0JoBAAAKGQkNAAIDQb8JAxIOFVDfM0MZ5+BQ0JoBAAAKGQkGAMBiu2HQBxIOFVqSOEMZ5+BQ0JoBAAAKGQkVAE5wAfTBCxIOFbeGR0MZ5+BQ0JoBAAAKGQkAAAKo2Kq9AhIOFeBfcUEZ5+BQ0JoBAAAKGQk1AFBgy6m0ChIOFbeGR0MZ5+BQ0JoBAAAKGQkAAMDhpcxWAhIOFZoF80IZ5+BQ0JoBAAAKGQkAAIBppyOPAhIOFVYe1EAZ5+BQ0JoBAAAKGQkAAIL2DXTQAhIOFTPiIUIZ5+BQ0JoBAAAKGQkAAEAbbd5qAhIOFejvj0IZ5+BQ0JoBAAAKGQkAAMJv0xDcARIOFQyv1kIZ5+BQ0JoBAAAKGQlIAMDA6YRHChIOFWN3BkMZ5+BQ0JoBAAAKGQkDAACPn16wAhIOFV3B7kIZ5+BQ0JoBAAAKGQkBAAT50DIvBBIOFTPiIUIZ5+BQ0JoBAAAKGQkBAMLzj/2WAxIOFV3B7kIZ5+BQ0JoBAAAKGQkAAEKneETmAhIOFY8aFUIZ5+BQ0JoBAAAKGQkAAILy2HkXAhIOFeRHAkIZ5+BQ0JoBAAAKGQkAAELpeAZMAhIOFbeGR0MZ5+BQ0JoBAAAKGQkAAERc8CgjBBIOFbeGR0MZ5+BQ0JoBAAAKGQkAAIBPURJcAhIOFbeGR0MZ5+BQ0JoBAAAKGQkUAM68ljDWChIOFbeGR0MZ5+BQ0JoBAAAKGQkAAAIUCUvCARIOFXLHyUIZ5+BQ0JoBAAAKGQkAAAJH//qyAxIOFbeGR0MZ5+BQ0JoBAAAKGQkLAAQOd+YlBBIOFcDvYEIZ5+BQ0JoBAAAKGQkBAEBatkdiAhIOFbeGR0MZ5+BQ0JoBAAAKGQkAAIS/w/SMBRIOFZBSJEIZ5+BQ0JoBAAAKGQkAAIIGdUTKBBIOFWZaC0MZ5+BQ0JoBAAAKGQkAAEDqYox7AhIOFdkSLEMZ5+BQ0JoBAAAKGQkAAEINFf93AxIOFSpDjkEZ5+BQ0JoBAAAKGQkAAMAJCB2yAhIOFTx+G0AZ5+BQ0JoBAAAKGQkAEEIqm4w8DBIOFY8aFUIZ5+BQ0JoBAAAKGQkAAMI3z5C0AhIOFQT+KEMZ5+BQ0JoBAAAKGQkaAET7EBkMCBIOFYoG/UIZ5+BQ0JoBAAAKGQkAAIAYTqvJAxIOFbF0mkEZ5+BQ0JoBAAAKGQkAEMCsk4oPARIOFTPiIUIZ5+BQ0JoBAAAKGQkAAIJnBDRDAxIOFc4xsEAZ5+BQ0JoBAAAKGQkAAIKqO1g7CBIOFcJTCUMZ5+BQ0JoBAAAKGQlJAEQp8/8YChIOFYfjEUMZ5+BQ0JoBAAAKGQkBAMKHTtNWAhIOFbeGR0MZ5+BQ0JoBAAAKGQkAAEKTGWHpARIOFbeGR0MZ5+BQ0JoBAAAKGQkAAIK9wTv7ARIOFVMRtkEZ5+BQ0JoBAAAKGQkAAIIBNlY8AhIOFUuO4UIZ5+BQ0JoBAAAKGQkBAELRkmF1AhIOFc1B4UIZ5+BQ0JoBAAAKGQkPAALAIwbyBxIOFf9Q/kIZ5+BQ0JoBAAAKGQkLAIK7qj3MCBIOFbeGR0MZ5+BQ0JoBAAAKGQkAAAD/GtVXAhIOFRnaN0IZ5+BQ0JoBAAAKGQkAAICMun2KAhIOFYPFsEEZ5+BQ0JoBAAAKGQkfAAovZlOzCxIOFfBh2UIZ5+BQ0JoBAAAKGQkDAASTTvxtBBIOFXXsBUMZ5+BQ0JoBAAAKGQkCAMISIc2uARIOFbeGR0MZ5+BQ0JoBAAAKGQkAAET74QWxBxIOFbi6zUIZ5+BQ0JoBAAAKGQkJAICrns5bAhIOFeI5P0IZ5+BQ0JoBAAAKGQkBAMDfaj7/ARIOFTS5HkMZ5+BQ0JoBAAAKGQkKAMSuatOEBRIOFbeGR0MZ5+BQ0JoBAAAKGQkCAMRxKKCZBBIOFY8aFUIZ5+BQ0JoBAAAKGQkAAECN7GVYBBIOFRgm5EEZ5+BQ0JoBAAAKGQkAIECBPsZcARIOFVHE3kEZ5+BQ0JoBAAAKGQkAEALPd78tDBIOFTlIAUMZ5+BQ0JoBAAAKGQkBAAT0edfHAxIOFTJVCUIZ5+BQ0JoBAAAKGQkAAALIUQSXAhIOFWFHoEIZ5+BQ0JoBAAASGQkDAACPn16wAhIOFbeGR0MZ6OBQ0JoBAAASGQkAEMCsk4oPARIOFbeGR0MZ6OBQ0JoBAAASGQkAAMACOwDGBRIOFby1vUEZ6OBQ0JoBAAASGwkAAILhfb1gAhIQCAEVagKHQRno4FDQmgEAABIbCQAAgvLYeRcCEhAIARVy9E9CGejgUNCaAQAAEhkJAABCVF1+XwISDhWg1xdBGejgUNCaAQAAEhsJAgDCEiHNrgESEAgBFQAAkEEZ6OBQ0JoBAAASGQkAAEKTGWHpARIOFeebzEIZ6OBQ0JoBAAASGwkJAICrns5bAhIQCAEV1rusPxno4FDQmgEAABIbCQAAAqjYqr0CEhAIARXVKEVAGejgUNCaAQAAEhkJAACCvcE7+wESDhVKQlVAGejgUNCaAQAAEhkJAACCATZWPAISDhW3hkdDGejgUNCaAQAAEhkJAQDA32o+/wESDhUmpBhCGejgUNCaAQAAEhkJAQBC0ZJhdQISDhV39JlCGejgUNCaAQAAEhkJNQBQYMuptAoSDhVQs+1CGejgUNCaAQAAEhkJAACAWupemAISDhVV7PFCGejgUNCaAQAAEhkJAADA4aXMVgISDhW3hkdDGejgUNCaAQAAEhkJACBAgT7GXAESDhVLXaZAGejgUNCaAQAAEhkJAABAG23eagISDhW3hkdDGejgUNCaAQAAEhkJCwAEDnfmJQQSDhUhYc5CGejgUNCaAQAAEhkJAACCBnVEygQSDhW3hkdDGejgUNCaAQAA",
-    "tutorial": null,
-    "pending_payments": null,
-    "guild_join_requests": [],
-    "notification_settings": {
-      "flags": 0
-    },
-    "geo_ordered_rtc_regions": [
-      "stockholm",
-      "helsinki",
-      "denmark",
-      "finland",
-      "warsaw"
-    ],
-    "game_relationships": [],
-    "resume_gateway_url": "wss://gateway-us-east1-b.discord.gg",
+    "auth_session_id_hash": "hHnauaw5XjMDpWqHCl84kTaRb1X4+qud3yN9HPF/SBU=",
+    "explicit_content_scan_version": 4,
     "sessions": [
       {
         "status": "online",
-        "session_id": "170fccfb006a6422b2bbfe795474e1ec",
+        "session_id": "0cad2254062e8e46776770c1e544a907",
         "processed_at_timestamp": 0,
         "hidden_activities": [],
         "client_info": {
@@ -3506,7 +2565,7 @@
       },
       {
         "status": "online",
-        "session_id": "74f41f679414900768177be6e873dede",
+        "session_id": "6d59cfbfb4b2759747dacbd22d86d1dd",
         "processed_at_timestamp": 0,
         "hidden_activities": [],
         "client_info": {
@@ -3517,11 +2576,688 @@
         "activities": []
       }
     ],
-    "consents": {
-      "personalization": {
-        "consented": true
+    "v": 9,
+    "merged_members": [
+      [
+        {
+          "user_id": "184437096813953035",
+          "roles": [],
+          "premium_since": null,
+          "pending": false,
+          "nick": null,
+          "mute": false,
+          "joined_at": "2026-03-15T15:39:29.018000+00:00",
+          "flags": 0,
+          "deaf": false,
+          "communication_disabled_until": null,
+          "banner": null,
+          "avatar": null
+        }
+      ],
+      [
+        {
+          "user_id": "184437096813953035",
+          "roles": [],
+          "premium_since": null,
+          "pending": false,
+          "nick": null,
+          "mute": false,
+          "joined_at": "2025-10-11T19:44:51.312000+00:00",
+          "flags": 0,
+          "deaf": false,
+          "communication_disabled_until": null,
+          "banner": null,
+          "avatar": null
+        }
+      ]
+    ],
+    "linked_users": [],
+    "guilds": [
+      {
+        "version": 1775478220190,
+        "threads": [
+          {
+            "type": 11,
+            "total_message_sent": 1,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-26T13:12:44.560000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-26T13:12:44.560000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "213136010802888706",
+            "owner_id": "184437096813953035",
+            "name": "https://sheofficial.bandcamp.com/album/electric-girl",
+            "message_count": 1,
+            "member_ids_preview": [
+              "161098476632014848",
+              "184437096813953035"
+            ],
+            "member_count": 2,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-26T13:12:44.561000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1486714527184851005",
+            "id": "1485394299519504575",
+            "guild_id": "213136010802888706",
+            "flags": 0
+          },
+          {
+            "type": 11,
+            "total_message_sent": 5,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-26T13:14:06.007000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-26T13:14:06.007000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "213136010802888706",
+            "owner_id": "184437096813953035",
+            "name": "test",
+            "message_count": 5,
+            "member_ids_preview": [
+              "161098476632014848",
+              "184437096813953035"
+            ],
+            "member_count": 2,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-26T13:14:06.008000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1487454020237787317",
+            "id": "1486714718654697542",
+            "guild_id": "213136010802888706",
+            "flags": 0
+          }
+        ],
+        "stickers": [],
+        "stage_instances": [],
+        "roles": [
+          {
+            "unicode_emoji": null,
+            "tags": {},
+            "position": 0,
+            "permissions": "2248473465839169",
+            "name": "@everyone",
+            "mentionable": false,
+            "managed": false,
+            "id": "213136010802888706",
+            "icon": null,
+            "hoist": false,
+            "flags": 0,
+            "colors": {
+              "tertiary_color": null,
+              "secondary_color": null,
+              "primary_color": 0
+            },
+            "color": 0
+          },
+          {
+            "unicode_emoji": null,
+            "tags": {},
+            "position": 1,
+            "permissions": "6546783809",
+            "name": "mod",
+            "mentionable": false,
+            "managed": false,
+            "id": "213849605593497601",
+            "icon": null,
+            "hoist": false,
+            "flags": 0,
+            "colors": {
+              "tertiary_color": null,
+              "secondary_color": null,
+              "primary_color": 0
+            },
+            "color": 0
+          }
+        ],
+        "properties": {
+          "splash": null,
+          "game_application_ids": null,
+          "premium_tier": 0,
+          "premium_progress_bar_enabled": false,
+          "application_id": null,
+          "icon": null,
+          "verification_level": 0,
+          "rules_channel_id": null,
+          "profile": null,
+          "system_channel_id": null,
+          "banner": null,
+          "latest_onboarding_question_id": null,
+          "public_updates_channel_id": null,
+          "vanity_url_code": null,
+          "id": "213136010802888706",
+          "max_stage_video_channel_users": 50,
+          "name": "test",
+          "discovery_splash": null,
+          "nsfw_level": 0,
+          "hub_type": null,
+          "default_message_notifications": 0,
+          "nsfw": false,
+          "home_header": null,
+          "description": null,
+          "max_video_channel_users": 25,
+          "system_channel_flags": 0,
+          "explicit_content_filter": 0,
+          "mfa_level": 0,
+          "incidents_data": null,
+          "premium_progress_bar_enabled_user_updated_at": null,
+          "safety_alerts_channel_id": null,
+          "afk_timeout": 300,
+          "afk_channel_id": null,
+          "moderator_reporting": null,
+          "premium_features": null,
+          "preferred_locale": "en-US",
+          "features": [
+            "EXPOSED_TO_ACTIVITIES_WTP_EXPERIMENT"
+          ],
+          "owner_id": "161098476632014848",
+          "max_members": null,
+          "owner_configured_content_level": 0
+        },
+        "premium_subscription_count": 0,
+        "member_count": 2,
+        "lazy": true,
+        "large": false,
+        "joined_at": "2026-03-15T15:39:29.018000+00:00",
+        "id": "213136010802888706",
+        "guild_scheduled_events": [],
+        "emojis": [
+          {
+            "roles": [],
+            "require_colons": true,
+            "name": "l_",
+            "managed": false,
+            "id": "366194360657903618",
+            "available": true,
+            "animated": false
+          },
+          {
+            "roles": [],
+            "require_colons": true,
+            "name": "cringe",
+            "managed": false,
+            "id": "411986240947093514",
+            "available": true,
+            "animated": false
+          },
+          {
+            "roles": [],
+            "require_colons": true,
+            "name": "icon",
+            "managed": false,
+            "id": "438425167287287808",
+            "available": true,
+            "animated": false
+          }
+        ],
+        "data_mode": "full",
+        "channels": [
+          {
+            "type": 0,
+            "topic": "TÍÌ¿ÌÌÍÌÍÍÌÌ Ì¬oÌ¿ÍÒÌµÌ§ÌÌ¯Ì² ÌÍ­ÍÌÌÌÍ¨Ì¿ÌÌ«Ì¯ÌºiÍ§ÌÍÌÌÍÌ½Í¬Ì¢ÍÌ¤ÍÌÌ¥ÌnÍ«ÌµÒÌ­ÍÌ¹ÌvÍ«ÌÌÌÌÌÌ§Ì©Ì©oÌÍ¬ÍÌÌÌ Ì©kÍÍÍÌ·Ì©Ì»Ì«Ì¼ÍeÍ¤ÌÌÍÌ Ì©ÌÍÌ¼ÍÍÌ²Í ÍÍ¡Ì¨ÍÌtÍ£ÍÌ´Í¡ÌÍÌ£Ì¯hÌÌÌ¢Ì§Ì­Ì²ÍÌ«Ì»eÍÍÌªÌªÌ°ÍÍÌÌ£ Í¯ÌÌÍÍÌ¿ÍÌÌ¨Ì·ÍÍhÍÍªÍÌÌ½ÌÌÍÍÌ·ÌÌ¹Ì«Ì®ÌªÌiÍ«Í¤Í¦Ì¾Ì¾ÌÌÍÌ´ÌµÌ°ÍÌ®",
+            "rate_limit_per_user": 0,
+            "position": 0,
+            "permission_overwrites": [],
+            "name": "general",
+            "last_message_id": "1490640499013320814",
+            "id": "213136010802888706",
+            "flags": 0
+          },
+          {
+            "user_limit": 0,
+            "type": 2,
+            "rtc_region": null,
+            "rate_limit_per_user": 0,
+            "position": 0,
+            "permission_overwrites": [],
+            "name": "General",
+            "last_message_id": null,
+            "id": "213136011440553995",
+            "flags": 0,
+            "bitrate": 64000
+          },
+          {
+            "type": 0,
+            "topic": null,
+            "rate_limit_per_user": 0,
+            "position": 1,
+            "permission_overwrites": [],
+            "name": "new",
+            "last_message_id": "780894652731359323",
+            "id": "213833320755232769",
+            "flags": 0
+          },
+          {
+            "type": 0,
+            "topic": null,
+            "rate_limit_per_user": 0,
+            "position": 2,
+            "permission_overwrites": [],
+            "name": "a",
+            "last_message_id": "1405497631165255701",
+            "id": "1402762573744574527",
+            "flags": 0
+          }
+        ],
+        "application_command_counts": {}
+      },
+      {
+        "version": 1775478220190,
+        "threads": [
+          {
+            "type": 11,
+            "total_message_sent": 0,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-09T13:32:13.844000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-09T13:32:13.844000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "1072828564317159465",
+            "owner_id": "184437096813953035",
+            "name": "test",
+            "message_count": 0,
+            "member_ids_preview": [
+              "184437096813953035"
+            ],
+            "member_count": 1,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-09T13:32:13.845000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1480558835717640354",
+            "id": "1480558796714545212",
+            "guild_id": "705745250815311942",
+            "flags": 0
+          },
+          {
+            "type": 11,
+            "total_message_sent": 0,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-09T13:42:48.186000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-09T13:42:48.186000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "1072828564317159465",
+            "owner_id": "184437096813953035",
+            "name": "hi",
+            "message_count": 0,
+            "member_ids_preview": [
+              "184437096813953035"
+            ],
+            "member_count": 1,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-09T13:42:48.187000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1480561496227581962",
+            "id": "1480558841837125696",
+            "guild_id": "705745250815311942",
+            "flags": 0
+          },
+          {
+            "type": 11,
+            "total_message_sent": 2,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-09T13:49:24.055000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-09T13:49:24.055000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "1072828564317159465",
+            "owner_id": "184437096813953035",
+            "name": "a",
+            "message_count": 2,
+            "member_ids_preview": [
+              "184437096813953035"
+            ],
+            "member_count": 1,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-09T13:49:24.055000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1480565104646033428",
+            "id": "1480561497754177546",
+            "guild_id": "705745250815311942",
+            "flags": 0
+          },
+          {
+            "type": 11,
+            "total_message_sent": 4,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-25T21:25:28.258000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-25T21:25:28.258000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "1072828564317159465",
+            "owner_id": "161098476632014848",
+            "name": "test",
+            "message_count": 4,
+            "member_ids_preview": [
+              "161098476632014848",
+              "184437096813953035"
+            ],
+            "member_count": 2,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-25T21:25:28.824000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1486476338540970047",
+            "id": "1486476100329672777",
+            "guild_id": "705745250815311942",
+            "flags": 0
+          },
+          {
+            "type": 11,
+            "total_message_sent": 1,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-26T10:56:30.898000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-26T10:56:30.898000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "1072828564317159465",
+            "owner_id": "161098476632014848",
+            "name": "Custom thread name",
+            "message_count": 1,
+            "member_ids_preview": [
+              "161098476632014848",
+              "184437096813953035"
+            ],
+            "member_count": 2,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-26T10:56:31.471000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1486680245363802275",
+            "id": "1486680175512125490",
+            "guild_id": "705745250815311942",
+            "flags": 0
+          },
+          {
+            "type": 11,
+            "total_message_sent": 1,
+            "thread_metadata": {
+              "locked": false,
+              "invitable": true,
+              "create_timestamp": "2026-03-26T12:10:08.752000+00:00",
+              "auto_archive_duration": 4320,
+              "archived": false,
+              "archive_timestamp": "2026-03-26T12:10:08.752000+00:00"
+            },
+            "rate_limit_per_user": 0,
+            "parent_id": "1072828564317159465",
+            "owner_id": "161098476632014848",
+            "name": "Thread title",
+            "message_count": 1,
+            "member_ids_preview": [
+              "161098476632014848",
+              "184437096813953035"
+            ],
+            "member_count": 2,
+            "member": {
+              "muted": false,
+              "mute_config": null,
+              "join_timestamp": "2026-03-26T12:10:09.250000+00:00",
+              "flags": 1
+            },
+            "last_message_id": "1486698775039967375",
+            "id": "1486698771915083887",
+            "guild_id": "705745250815311942",
+            "flags": 0
+          }
+        ],
+        "stickers": [
+          {
+            "type": 2,
+            "tags": "ð¬",
+            "name": "sticker1",
+            "id": "1490687750288965813",
+            "guild_id": "705745250815311942",
+            "format_type": 2,
+            "description": "Description for sticker1",
+            "available": true,
+            "asset": ""
+          },
+          {
+            "type": 2,
+            "tags": "ð",
+            "name": "sticker2",
+            "id": "1490687894946447400",
+            "guild_id": "705745250815311942",
+            "format_type": 4,
+            "description": "",
+            "available": true,
+            "asset": ""
+          }
+        ],
+        "stage_instances": [],
+        "roles": [
+          {
+            "unicode_emoji": null,
+            "tags": {},
+            "position": 0,
+            "permissions": "2248473465835073",
+            "name": "@everyone",
+            "mentionable": false,
+            "managed": false,
+            "id": "705745250815311942",
+            "icon": null,
+            "hoist": false,
+            "flags": 0,
+            "colors": {
+              "tertiary_color": null,
+              "secondary_color": null,
+              "primary_color": 0
+            },
+            "color": 0
+          },
+          {
+            "unicode_emoji": null,
+            "tags": {
+              "bot_id": "842829883185037333"
+            },
+            "position": 1,
+            "permissions": "6755399441132608",
+            "name": "AT2-development",
+            "mentionable": false,
+            "managed": true,
+            "id": "842840477475668019",
+            "icon": null,
+            "hoist": false,
+            "flags": 0,
+            "colors": {
+              "tertiary_color": null,
+              "secondary_color": null,
+              "primary_color": 0
+            },
+            "color": 0
+          },
+          {
+            "unicode_emoji": null,
+            "tags": {
+              "bot_id": "1401255355928936478"
+            },
+            "position": 1,
+            "permissions": "446744086592",
+            "name": "AT3",
+            "mentionable": false,
+            "managed": true,
+            "id": "1401290812666544173",
+            "icon": null,
+            "hoist": false,
+            "flags": 0,
+            "colors": {
+              "tertiary_color": null,
+              "secondary_color": null,
+              "primary_color": 0
+            },
+            "color": 0
+          }
+        ],
+        "properties": {
+          "splash": null,
+          "game_application_ids": null,
+          "premium_tier": 0,
+          "premium_progress_bar_enabled": false,
+          "application_id": null,
+          "icon": null,
+          "verification_level": 0,
+          "rules_channel_id": null,
+          "profile": null,
+          "system_channel_id": null,
+          "banner": null,
+          "latest_onboarding_question_id": null,
+          "public_updates_channel_id": null,
+          "vanity_url_code": null,
+          "id": "705745250815311942",
+          "max_stage_video_channel_users": 50,
+          "name": "Bot Test",
+          "discovery_splash": null,
+          "nsfw_level": 0,
+          "hub_type": null,
+          "default_message_notifications": 0,
+          "nsfw": false,
+          "home_header": null,
+          "description": null,
+          "max_video_channel_users": 25,
+          "system_channel_flags": 0,
+          "explicit_content_filter": 0,
+          "mfa_level": 0,
+          "incidents_data": null,
+          "premium_progress_bar_enabled_user_updated_at": null,
+          "safety_alerts_channel_id": null,
+          "afk_timeout": 300,
+          "afk_channel_id": null,
+          "moderator_reporting": null,
+          "premium_features": null,
+          "preferred_locale": "en-US",
+          "features": [
+            "PIN_PERMISSION_MIGRATION_COMPLETE",
+            "BYPASS_SLOWMODE_PERMISSION_MIGRATION_COMPLETE"
+          ],
+          "owner_id": "184437096813953035",
+          "max_members": null,
+          "owner_configured_content_level": 0
+        },
+        "premium_subscription_count": 0,
+        "member_count": 5,
+        "lazy": true,
+        "large": false,
+        "joined_at": "2025-10-11T19:44:51.312000+00:00",
+        "id": "705745250815311942",
+        "guild_scheduled_events": [],
+        "emojis": [
+          {
+            "roles": [],
+            "require_colons": true,
+            "name": "elm",
+            "managed": false,
+            "id": "888159336168300574",
+            "available": true,
+            "animated": false
+          }
+        ],
+        "data_mode": "full",
+        "channels": [
+          {
+            "type": 4,
+            "position": 0,
+            "permission_overwrites": [],
+            "name": "Textkanaler",
+            "id": "705745250815311945",
+            "flags": 0
+          },
+          {
+            "type": 4,
+            "position": 0,
+            "permission_overwrites": [],
+            "name": "RÃ¶stkanaler",
+            "id": "705745250815311946",
+            "flags": 0
+          },
+          {
+            "user_limit": 0,
+            "type": 2,
+            "rtc_region": null,
+            "rate_limit_per_user": 0,
+            "position": 0,
+            "permission_overwrites": [],
+            "parent_id": "705745250815311946",
+            "name": "AllmÃ¤nt",
+            "last_message_id": null,
+            "id": "705745250815311948",
+            "flags": 0,
+            "bitrate": 64000
+          },
+          {
+            "type": 0,
+            "topic": null,
+            "rate_limit_per_user": 0,
+            "position": 2,
+            "permission_overwrites": [],
+            "parent_id": "705745250815311945",
+            "name": "channel-a",
+            "last_message_id": "1490687949665468737",
+            "id": "1072828564317159465",
+            "flags": 0
+          },
+          {
+            "type": 0,
+            "topic": null,
+            "rate_limit_per_user": 0,
+            "position": 3,
+            "permission_overwrites": [],
+            "parent_id": "705745250815311945",
+            "name": "channel-b",
+            "last_message_id": "1482032121324372184",
+            "id": "1072828591382999151",
+            "flags": 0
+          }
+        ],
+        "application_command_counts": {}
       }
-    },
+    ],
     "experiments": [
       [
         3091068323,
@@ -3530,19 +3266,6 @@
         -1,
         11,
         4322,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        4179344527,
-        3,
-        1,
-        -1,
-        0,
-        2779,
         0,
         0,
         null,
@@ -3563,19 +3286,6 @@
         null
       ],
       [
-        1814483290,
-        0,
-        1,
-        -1,
-        0,
-        8822,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
         4221006726,
         0,
         1,
@@ -3589,77 +3299,12 @@
         null
       ],
       [
-        1851544364,
-        0,
-        1,
-        -1,
-        0,
-        6788,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        4136574802,
-        0,
-        1,
-        -1,
-        1,
-        8819,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        4049571159,
-        0,
-        1,
-        -1,
-        0,
-        9261,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        1443856828,
-        4,
-        11,
-        -1,
-        3,
-        5017,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
         3029387945,
         1,
         1,
         -1,
         0,
         6867,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        268309827,
-        0,
-        1,
-        -1,
-        7,
-        8211,
         0,
         0,
         null,
@@ -3712,19 +3357,6 @@
         -1,
         0,
         2923,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        1083932689,
-        0,
-        1,
-        -1,
-        0,
-        6490,
         0,
         0,
         null,
@@ -3888,25 +3520,25 @@
         null
       ],
       [
-        246340522,
-        0,
-        1,
-        -1,
-        0,
-        7654,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
         3541906113,
         25,
         0,
         -1,
         0,
         9541,
+        0,
+        1,
+        null,
+        null,
+        null
+      ],
+      [
+        2054293512,
+        0,
+        1,
+        -1,
+        0,
+        1608,
         0,
         1,
         null,
@@ -4005,19 +3637,6 @@
         null
       ],
       [
-        191973690,
-        3,
-        1,
-        -1,
-        0,
-        7641,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
         1345574151,
         0,
         1,
@@ -4078,45 +3697,6 @@
         3054,
         0,
         0,
-        null,
-        null,
-        null
-      ],
-      [
-        989591782,
-        6,
-        2,
-        -1,
-        0,
-        4770,
-        0,
-        1,
-        null,
-        null,
-        null
-      ],
-      [
-        2656369572,
-        2,
-        1,
-        -1,
-        0,
-        5653,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        4132432821,
-        5,
-        1,
-        -1,
-        0,
-        9962,
-        0,
-        1,
         null,
         null,
         null
@@ -4187,64 +3767,12 @@
         null
       ],
       [
-        1714347921,
-        0,
-        1,
-        -1,
-        0,
-        1063,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
         2897051337,
         0,
         1,
         -1,
         0,
         7821,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        2425148898,
-        4,
-        1,
-        -1,
-        0,
-        2305,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        2785732802,
-        2,
-        1,
-        -1,
-        0,
-        6459,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        351767880,
-        8,
-        2,
-        -1,
-        0,
-        3603,
         0,
         0,
         null,
@@ -4284,19 +3812,6 @@
         -1,
         0,
         976,
-        0,
-        0,
-        null,
-        null,
-        null
-      ],
-      [
-        114771571,
-        0,
-        1,
-        -1,
-        0,
-        3949,
         0,
         0,
         null,
@@ -4382,19 +3897,6 @@
         null
       ],
       [
-        2849514387,
-        0,
-        1,
-        -1,
-        0,
-        5500,
-        0,
-        1,
-        null,
-        null,
-        null
-      ],
-      [
         508110077,
         3,
         1,
@@ -4460,38 +3962,55 @@
         null
       ],
       [
-        3055706472,
-        2,
-        0,
+        1022342504,
+        1,
+        1,
         -1,
         0,
-        142,
+        3328,
         0,
-        1,
+        0,
         null,
         null,
         null
       ]
     ],
-    "connected_accounts": [],
-    "merged_members": [
-      [
-        {
-          "user_id": "184437096813953035",
-          "roles": [],
-          "premium_since": null,
-          "pending": false,
-          "nick": null,
-          "mute": false,
-          "joined_at": "2025-10-11T19:44:51.312000+00:00",
-          "flags": 0,
-          "deaf": false,
-          "communication_disabled_until": null,
-          "banner": null,
-          "avatar": null
-        }
-      ]
+    "geo_ordered_rtc_regions": [
+      "stockholm",
+      "helsinki",
+      "finland",
+      "denmark",
+      "warsaw"
     ],
+    "api_code_version": 1,
+    "broadcaster_user_ids": [],
+    "consents": {
+      "personalization": {
+        "consented": true
+      }
+    },
+    "relationships": [
+      {
+        "user_ignored": false,
+        "user_id": "161098476632014848",
+        "type": 1,
+        "since": "2016-07-22T15:45:27.651000+00:00",
+        "nickname": null,
+        "is_spam_request": false,
+        "id": "161098476632014848"
+      },
+      {
+        "user_ignored": false,
+        "user_id": "304157401937084416",
+        "type": 2,
+        "since": "2020-03-29T14:18:51.657000+00:00",
+        "nickname": null,
+        "is_spam_request": false,
+        "id": "304157401937084416"
+      }
+    ],
+    "user_settings_proto": "CgIYIiKgAQpUUAABAAAAAAAAACAAADAAAAAAAAAAQAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAgCAAQAAAQAAEAAAAggAEAAAAgGgsIzcbvnQYQwJHmYDGrEAQ6EhiQFDoQCNQDEgsIBhDXzqecwzMgBDoOCK4EEgkQ1/bfh60zIAE6EAi0BBILCAQQ1770vc4zIAIqDTIDCNgEOgIIAUICCAEyL0oCCAFSAggBWgIIAWICCAFqAggBcgIIAXoAggECCAGKAQCaAQIIAaIBAKoBAggBQhNCAggBSgIIAVIAWgIIDmIAkgEAUgIaAFoXCggKBm9ubGluZRoCCAEqBwiOw83tmzNiFgoHCgVlbi1VUxILCMT//////////wFqBAgDEAFyIhIgAAAA2HJRVgIAAMDKao5XAgIAwJQSNvUCDADCOfoZYAWCAYESChkJDQAC7sAPsgESDhVN4AVDGefgUNCaAQAAChkJAAAATGTb4gISDhU9Ns9CGefgUNCaAQAAChkJAACA+O1XVwISDhWL/MtCGefgUNCaAQAAChkJCgBA51Ec8QQSDhWPGhVCGefgUNCaAQAAChkJAQAEFjxctgQSDhW5JExCGefgUNCaAQAAChkJDQACA0G/CQMSDhVQ3zNDGefgUNCaAQAAChkJBgDAYrth0AcSDhVakjhDGefgUNCaAQAAChkJFQBOcAH0wQsSDhW3hkdDGefgUNCaAQAAChkJAAACqNiqvQISDhXgX3FBGefgUNCaAQAAChkJNQBQYMuptAoSDhW3hkdDGefgUNCaAQAAChkJAACAaacjjwISDhVWHtRAGefgUNCaAQAAChkJAADA4aXMVgISDhWaBfNCGefgUNCaAQAAChkJAACC9g100AISDhUz4iFCGefgUNCaAQAAChkJAABAG23eagISDhXo749CGefgUNCaAQAAChkJAQAE+dAyLwQSDhUz4iFCGefgUNCaAQAAChkJSADAwOmERwoSDhVjdwZDGefgUNCaAQAAChkJAwAAj59esAISDhVdwe5CGefgUNCaAQAAChkJAADCb9MQ3AESDhUMr9ZCGefgUNCaAQAAChkJAQDC84/9lgMSDhVdwe5CGefgUNCaAQAAChkJAABCp3hE5gISDhWPGhVCGefgUNCaAQAAChkJAACC8th5FwISDhXkRwJCGefgUNCaAQAAChkJAABC6XgGTAISDhW3hkdDGefgUNCaAQAAChkJAABEXPAoIwQSDhW3hkdDGefgUNCaAQAAChkJAACAT1ESXAISDhW3hkdDGefgUNCaAQAAChkJFADOvJYw1goSDhW3hkdDGefgUNCaAQAAChkJAAACFAlLwgESDhVyx8lCGefgUNCaAQAAChkJAAACR//6sgMSDhW3hkdDGefgUNCaAQAAChkJAQBAWrZHYgISDhW3hkdDGefgUNCaAQAAChkJCwAEDnfmJQQSDhXA72BCGefgUNCaAQAAChkJAACEv8P0jAUSDhWQUiRCGefgUNCaAQAAChkJAACCBnVEygQSDhVmWgtDGefgUNCaAQAAChkJAABA6mKMewISDhXZEixDGefgUNCaAQAAChkJAADACQgdsgISDhU8fhtAGefgUNCaAQAAChkJAABCDRX/dwMSDhUqQ45BGefgUNCaAQAAChkJABBCKpuMPAwSDhWPGhVCGefgUNCaAQAAChkJAADCN8+QtAISDhUE/ihDGefgUNCaAQAAChkJGgBE+xAZDAgSDhWKBv1CGefgUNCaAQAAChkJAACAGE6ryQMSDhWxdJpBGefgUNCaAQAAChkJABDArJOKDwESDhUz4iFCGefgUNCaAQAAChkJAACCZwQ0QwMSDhXOMbBAGefgUNCaAQAAChkJAACCqjtYOwgSDhXCUwlDGefgUNCaAQAAChkJSQBEKfP/GAoSDhWH4xFDGefgUNCaAQAAChkJAQDCh07TVgISDhW3hkdDGefgUNCaAQAAChkJAABCkxlh6QESDhW3hkdDGefgUNCaAQAAChkJAACCvcE7+wESDhVTEbZBGefgUNCaAQAAChkJAACCATZWPAISDhVLjuFCGefgUNCaAQAAChkJAQBC0ZJhdQISDhXNQeFCGefgUNCaAQAAChkJDwACwCMG8gcSDhX/UP5CGefgUNCaAQAAChkJAAAA/xrVVwISDhUZ2jdCGefgUNCaAQAAChkJCwCCu6o9zAgSDhW3hkdDGefgUNCaAQAAChkJAACAjLp9igISDhWDxbBBGefgUNCaAQAAChkJHwAKL2ZTswsSDhXwYdlCGefgUNCaAQAAChkJAwAEk078bQQSDhV17AVDGefgUNCaAQAAChkJCQCAq57OWwISDhXiOT9CGefgUNCaAQAAChkJAABE++EFsQcSDhW4us1CGefgUNCaAQAAChkJAgDCEiHNrgESDhW3hkdDGefgUNCaAQAAChkJAQDA32o+/wESDhU0uR5DGefgUNCaAQAAChkJCgDErmrThAUSDhW3hkdDGefgUNCaAQAAChkJAgDEcSigmQQSDhWPGhVCGefgUNCaAQAAChkJABACz3e/LQwSDhU5SAFDGefgUNCaAQAAChkJACBAgT7GXAESDhVRxN5BGefgUNCaAQAAChkJAABAjexlWAQSDhUYJuRBGefgUNCaAQAAChkJAAACyFEElwISDhVhR6BCGefgUNCaAQAAChkJAQAE9HnXxwMSDhUyVQlCGefgUNCaAQAAEhkJAwAAj59esAISDhW3hkdDGejgUNCaAQAAEhkJABDArJOKDwESDhW3hkdDGejgUNCaAQAAEhkJAADAAjsAxgUSDhW8tb1BGejgUNCaAQAAEhsJAACC4X29YAISEAgBFWoCh0EZ6OBQ0JoBAAASGQkAAEJUXX5fAhIOFaDXF0EZ6OBQ0JoBAAASGwkAAILy2HkXAhIQCAEVcvRPQhno4FDQmgEAABIbCQkAgKuezlsCEhAIARXWu6w/GejgUNCaAQAAEhkJAABCkxlh6QESDhXnm8xCGejgUNCaAQAAEhsJAgDCEiHNrgESEAgBFQAAkEEZ6OBQ0JoBAAASGwkAAAKo2Kq9AhIQCAEV1ShFQBno4FDQmgEAABIZCQAAgr3BO/sBEg4VSkJVQBno4FDQmgEAABIZCQAAggE2VjwCEg4Vt4ZHQxno4FDQmgEAABIZCQEAwN9qPv8BEg4VJqQYQhno4FDQmgEAABIZCQEAQtGSYXUCEg4Vd/SZQhno4FDQmgEAABIZCQAAgFrqXpgCEg4VVezxQhno4FDQmgEAABIZCTUAUGDLqbQKEg4VULPtQhno4FDQmgEAABIZCQAAwOGlzFYCEg4Vt4ZHQxno4FDQmgEAABIZCQAgQIE+xlwBEg4VS12mQBno4FDQmgEAABIZCQAAQBtt3moCEg4Vt4ZHQxno4FDQmgEAABIZCQsABA535iUEEg4VIWHOQhno4FDQmgEAABIZCQAAggZ1RMoEEg4Vt4ZHQxno4FDQmgEAAA==",
+    "resume_gateway_url": "wss://gateway-us-east1-c.discord.gg",
     "private_channels": [
       {
         "type": 1,
@@ -4500,7 +4019,7 @@
           "161098476632014848"
         ],
         "recipient_flags": 0,
-        "last_message_id": "1478825644061360192",
+        "last_message_id": "1482765156844048500",
         "is_spam": false,
         "is_message_request_timestamp": null,
         "is_message_request": false,
@@ -4550,6 +4069,10 @@
         "flags": 0
       }
     ],
+    "pending_payments": null,
+    "analytics_token": "MTg0NDM3MDk2ODEzOTUzMDM1.nJlRonRLwZKw5wx9yTsSvHzw1QI",
+    "tutorial": null,
+    "guild_join_requests": [],
     "user": {
       "verified": true,
       "username": "at28727",
@@ -4566,7 +4089,7 @@
       "id": "184437096813953035",
       "global_name": "AT2",
       "flags": 0,
-      "email": "a@a.se",
+      "email": "ziggler3@gmail.com",
       "display_name_styles": null,
       "discriminator": "0",
       "desktop": true,
@@ -4581,95 +4104,18 @@
       "age_verification_status": 1,
       "accent_color": null
     },
-    "read_state": {
-      "version": 304,
-      "partial": false,
-      "entries": [
-        {
-          "mention_count": 0,
-          "last_viewed": 4082,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1478825644061360192",
-          "id": "185574444641550336",
-          "flags": 0
-        },
-        {
-          "mention_count": 0,
-          "last_viewed": 4066,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1480561497754177546",
-          "id": "1072828564317159465",
-          "flags": 1
-        },
-        {
-          "mention_count": 0,
-          "last_viewed": 4066,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1395733066437365790",
-          "id": "1072828591382999151",
-          "flags": 1
-        },
-        {
-          "mention_count": 0,
-          "last_viewed": 4066,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1473267708005978234",
-          "id": "1215077285749858324",
-          "flags": 0
-        },
-        {
-          "mention_count": 0,
-          "last_viewed": 4065,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1471834813190111243",
-          "id": "1468647225528684565",
-          "flags": 2
-        },
-        {
-          "mention_count": 0,
-          "last_viewed": 4074,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1475615769176838194",
-          "id": "1472236476401057854",
-          "flags": 0
-        },
-        {
-          "mention_count": 0,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1480558835717640354",
-          "id": "1480558796714545212",
-          "flags": 0
-        },
-        {
-          "mention_count": 0,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1480561496227581962",
-          "id": "1480558841837125696",
-          "flags": 0
-        },
-        {
-          "mention_count": 0,
-          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
-          "last_message_id": "1480565104646033428",
-          "id": "1480561497754177546",
-          "flags": 0
-        }
-      ]
-    },
-    "auth_session_id_hash": "G+iUGws86JGea3jwzZNfwA52OjBakWy141Ifjp2ZuIs=",
-    "country_code": "SE",
     "auth": {
       "authenticator_types": []
     },
-    "session_id": "74f41f679414900768177be6e873dede",
-    "linked_users": [],
-    "broadcaster_user_ids": [],
-    "v": 9,
+    "notification_settings": {
+      "flags": 0
+    },
+    "ad_personalization_toggles_disabled": false,
     "apex_experiments": {
       "assignments": {
         "1": {
           "184437096813953035": {
-            "evaluation_id": "a91040c1",
+            "evaluation_id": "31cb7633",
             "assignments": [
               [
                 4240376458,
@@ -4682,18 +4128,6 @@
                 1,
                 0,
                 1
-              ],
-              [
-                1383723996,
-                1,
-                2,
-                0
-              ],
-              [
-                1581149260,
-                0,
-                0,
-                3
               ],
               [
                 13763179,
@@ -4717,13 +4151,13 @@
                 3828852526,
                 0,
                 2,
-                56
+                64
               ],
               [
                 2657741306,
                 0,
                 2,
-                56
+                64
               ],
               [
                 1228731397,
@@ -4762,12 +4196,6 @@
                 1
               ],
               [
-                3627363637,
-                1,
-                0,
-                1
-              ],
-              [
                 1441684781,
                 1,
                 0,
@@ -4775,12 +4203,6 @@
               ],
               [
                 2935839984,
-                1,
-                0,
-                1
-              ],
-              [
-                1198049525,
                 1,
                 0,
                 1
@@ -4806,7 +4228,7 @@
               [
                 1469977550,
                 1,
-                2,
+                0,
                 1
               ],
               [
@@ -4814,12 +4236,6 @@
                 1,
                 0,
                 2
-              ],
-              [
-                3418562268,
-                1,
-                0,
-                1
               ],
               [
                 100945434,
@@ -4838,12 +4254,6 @@
                 0,
                 0,
                 4
-              ],
-              [
-                1463559,
-                1,
-                0,
-                2
               ],
               [
                 3389943109,
@@ -4870,12 +4280,6 @@
                 1
               ],
               [
-                377589472,
-                1,
-                0,
-                1
-              ],
-              [
                 408601767,
                 1,
                 0,
@@ -4892,18 +4296,6 @@
                 1,
                 0,
                 1
-              ],
-              [
-                2495171633,
-                1,
-                0,
-                2
-              ],
-              [
-                1306133292,
-                2,
-                0,
-                8
               ],
               [
                 100259612,
@@ -4931,18 +4323,6 @@
               ],
               [
                 3787451528,
-                1,
-                0,
-                1
-              ],
-              [
-                3130598842,
-                1,
-                0,
-                1
-              ],
-              [
-                1573281470,
                 1,
                 0,
                 1
@@ -5022,7 +4402,7 @@
               [
                 225615481,
                 1,
-                2,
+                0,
                 1
               ],
               [
@@ -5086,13 +4466,13 @@
                 2
               ],
               [
-                3133257058,
-                2,
+                576543304,
+                1,
                 2,
                 2
               ],
               [
-                576543304,
+                624881145,
                 1,
                 2,
                 2
@@ -5100,13 +4480,31 @@
               [
                 864472509,
                 0,
-                2,
+                0,
                 1
               ],
               [
-                1738245294,
+                3761543250,
                 1,
                 2,
+                2
+              ],
+              [
+                3603766809,
+                1,
+                0,
+                1
+              ],
+              [
+                7357488,
+                1,
+                0,
+                1
+              ],
+              [
+                2470583695,
+                1,
+                0,
                 1
               ],
               [
@@ -5134,19 +4532,31 @@
                 2
               ],
               [
+                4217696865,
+                1,
+                0,
+                2
+              ],
+              [
+                1166306490,
+                1,
+                0,
+                1
+              ],
+              [
                 3750635421,
                 1,
                 0,
                 1
               ],
               [
-                2250544390,
+                3123910578,
+                1,
                 0,
-                2,
-                2
+                1
               ],
               [
-                3123910578,
+                1132337047,
                 1,
                 2,
                 1
@@ -5156,6 +4566,12 @@
                 0,
                 2,
                 1
+              ],
+              [
+                175545446,
+                1,
+                0,
+                3
               ],
               [
                 3051456417,
@@ -5170,357 +4586,363 @@
                 1
               ],
               [
-                4276977546,
+                1687398893,
+                1,
+                0,
+                1
+              ],
+              [
+                2939868717,
+                2,
+                0,
+                1
+              ],
+              [
+                2736417604,
+                1,
+                2,
+                1
+              ],
+              [
+                3383307794,
                 0,
                 2,
                 1
+              ],
+              [
+                3683969802,
+                1,
+                2,
+                1
+              ],
+              [
+                831747185,
+                0,
+                2,
+                1
+              ],
+              [
+                727185382,
+                1,
+                0,
+                1
+              ],
+              [
+                2940585441,
+                0,
+                2,
+                1
+              ],
+              [
+                357005214,
+                0,
+                2,
+                1
+              ],
+              [
+                1191234218,
+                2,
+                2,
+                1
+              ],
+              [
+                2994102938,
+                1,
+                0,
+                1
+              ],
+              [
+                1491645885,
+                1,
+                0,
+                1
+              ],
+              [
+                3355255429,
+                0,
+                2,
+                1
+              ],
+              [
+                3929126958,
+                0,
+                2,
+                1
+              ],
+              [
+                4245969235,
+                1,
+                2,
+                1
+              ],
+              [
+                2259634286,
+                1,
+                2,
+                1
+              ],
+              [
+                972013852,
+                1,
+                0,
+                3
               ]
             ]
           }
         }
       }
     },
-    "_trace": [
-      "[\"gateway-prd-arm-us-east1-b-t9z7\",{\"micros\":157108,\"calls\":[\"id_created\",{\"micros\":508,\"calls\":[]},\"session_lookup_time\",{\"micros\":2648,\"calls\":[]},\"session_lookup_finished\",{\"micros\":12,\"calls\":[]},\"discord-sessions-prd-2-197\",{\"micros\":153232,\"calls\":[\"start_session\",{\"micros\":129950,\"calls\":[\"discord-api-rpc-8c6bd84c6-9rnjm\",{\"micros\":70081,\"calls\":[\"get_user\",{\"micros\":6226},\"get_guilds\",{\"micros\":21748},\"user_settings_proto\",{\"micros\":63},\"relationships\",{\"micros\":12},\"game_relationships\",{\"micros\":3},\"friend_suggestion\",{\"micros\":31},\"connections\",{\"micros\":10},\"serialized_read_states\",{\"micros\":4},\"send_scheduled_deletion_message\",{\"micros\":2},\"sanitize_premium_perks\",{\"micros\":2},\"guild_join_requests\",{\"micros\":2},\"user_guild_settings\",{\"micros\":2},\"serialized_private_channels\",{\"micros\":5315},\"user_segments\",{\"micros\":4683},\"game_invites\",{\"micros\":4},\"blocker_ids\",{\"micros\":2},\"affine_user_ids\",{\"micros\":15},\"experiments\",{\"micros\":19361},\"required_action\",{\"micros\":11},\"authorized_ip_coro\",{\"micros\":4},\"pending_payments\",{\"micros\":5270},\"apex_experiments\",{\"micros\":45454},\"sessions_experiments\",{\"micros\":6},\"user_activities\",{\"micros\":3},\"played_application_ids\",{\"micros\":4},\"linked_users\",{\"micros\":3},\"ad_personalization_toggles_disabled\",{\"micros\":978},\"regional_feature_config\",{\"micros\":6}]}]},\"starting_guild_connect\",{\"micros\":42,\"calls\":[]},\"presence_started\",{\"micros\":10199,\"calls\":[]},\"guilds_started\",{\"micros\":47,\"calls\":[]},\"lobbies_started\",{\"micros\":0,\"calls\":[]},\"guilds_connect\",{\"micros\":936,\"calls\":[]},\"presence_connect\",{\"micros\":11565,\"calls\":[]},\"connect_finished\",{\"micros\":12836,\"calls\":[]},\"build_ready\",{\"micros\":23,\"calls\":[]},\"clean_ready\",{\"micros\":1,\"calls\":[]},\"optimize_ready\",{\"micros\":117,\"calls\":[]},\"split_ready\",{\"micros\":15,\"calls\":[]}]}]}]"
-    ],
-    "api_code_version": 1,
-    "guilds": [
-      {
-        "version": 1773229017977,
-        "threads": [
-          {
-            "type": 11,
-            "total_message_sent": 19,
-            "thread_metadata": {
-              "locked": false,
-              "invitable": true,
-              "create_timestamp": "2026-02-06T12:46:46.570000+00:00",
-              "auto_archive_duration": 4320,
-              "archived": false,
-              "archive_timestamp": "2026-02-06T12:46:46.570000+00:00"
-            },
-            "rate_limit_per_user": 0,
-            "parent_id": "1072828564317159465",
-            "owner_id": "184437096813953035",
-            "name": "hi5",
-            "message_count": 14,
-            "member_ids_preview": [
-              "161098476632014848",
-              "184437096813953035"
-            ],
-            "member_count": 2,
-            "member": {
-              "muted": false,
-              "mute_config": null,
-              "join_timestamp": "2026-02-06T12:46:46.571000+00:00",
-              "flags": 1
-            },
-            "last_message_id": "1471834813190111243",
-            "id": "1468647225528684565",
-            "guild_id": "705745250815311942",
-            "flags": 0
-          },
-          {
-            "type": 11,
-            "total_message_sent": 0,
-            "thread_metadata": {
-              "locked": false,
-              "create_timestamp": "2026-03-09T13:32:13.844154+00:00",
-              "auto_archive_duration": 4320,
-              "archived": false,
-              "archive_timestamp": "2026-03-09T13:32:13.844154+00:00"
-            },
-            "rate_limit_per_user": 0,
-            "parent_id": "1072828564317159465",
-            "owner_id": "184437096813953035",
-            "name": "test",
-            "message_count": 0,
-            "member_ids_preview": [
-              "184437096813953035"
-            ],
-            "member_count": 1,
-            "member": {
-              "muted": false,
-              "mute_config": null,
-              "join_timestamp": "2026-03-09T13:32:13.845089+00:00",
-              "flags": 1
-            },
-            "last_message_id": "1480558835717640354",
-            "id": "1480558796714545212",
-            "guild_id": "705745250815311942",
-            "flags": 0
-          },
-          {
-            "type": 11,
-            "total_message_sent": 0,
-            "thread_metadata": {
-              "locked": false,
-              "create_timestamp": "2026-03-09T13:42:48.186350+00:00",
-              "auto_archive_duration": 4320,
-              "archived": false,
-              "archive_timestamp": "2026-03-09T13:42:48.186350+00:00"
-            },
-            "rate_limit_per_user": 0,
-            "parent_id": "1072828564317159465",
-            "owner_id": "184437096813953035",
-            "name": "hi",
-            "message_count": 0,
-            "member_ids_preview": [
-              "184437096813953035"
-            ],
-            "member_count": 1,
-            "member": {
-              "muted": false,
-              "mute_config": null,
-              "join_timestamp": "2026-03-09T13:42:48.187190+00:00",
-              "flags": 1
-            },
-            "last_message_id": "1480561496227581962",
-            "id": "1480558841837125696",
-            "guild_id": "705745250815311942",
-            "flags": 0
-          },
-          {
-            "type": 11,
-            "total_message_sent": 2,
-            "thread_metadata": {
-              "locked": false,
-              "create_timestamp": "2026-03-09T13:49:24.055115+00:00",
-              "auto_archive_duration": 4320,
-              "archived": false,
-              "archive_timestamp": "2026-03-09T13:49:24.055115+00:00"
-            },
-            "rate_limit_per_user": 0,
-            "parent_id": "1072828564317159465",
-            "owner_id": "184437096813953035",
-            "name": "a",
-            "message_count": 2,
-            "member_ids_preview": [
-              "184437096813953035"
-            ],
-            "member_count": 1,
-            "member": {
-              "muted": false,
-              "mute_config": null,
-              "join_timestamp": "2026-03-09T13:49:24.055755+00:00",
-              "flags": 1
-            },
-            "last_message_id": "1480565104646033428",
-            "id": "1480561497754177546",
-            "guild_id": "705745250815311942",
-            "flags": 0
-          }
-        ],
-        "stickers": [],
-        "stage_instances": [],
-        "roles": [
-          {
-            "unicode_emoji": null,
-            "tags": {},
-            "position": 0,
-            "permissions": "2248473465835073",
-            "name": "@everyone",
-            "mentionable": false,
-            "managed": false,
-            "id": "705745250815311942",
-            "icon": null,
-            "hoist": false,
-            "flags": 0,
-            "colors": {
-              "tertiary_color": null,
-              "secondary_color": null,
-              "primary_color": 0
-            },
-            "color": 0
-          },
-          {
-            "unicode_emoji": null,
-            "tags": {
-              "bot_id": "842829883185037333"
-            },
-            "position": 1,
-            "permissions": "6755399441132608",
-            "name": "AT2-development",
-            "mentionable": false,
-            "managed": true,
-            "id": "842840477475668019",
-            "icon": null,
-            "hoist": false,
-            "flags": 0,
-            "colors": {
-              "tertiary_color": null,
-              "secondary_color": null,
-              "primary_color": 0
-            },
-            "color": 0
-          },
-          {
-            "unicode_emoji": null,
-            "tags": {
-              "bot_id": "1401255355928936478"
-            },
-            "position": 1,
-            "permissions": "446744086592",
-            "name": "AT3",
-            "mentionable": false,
-            "managed": true,
-            "id": "1401290812666544173",
-            "icon": null,
-            "hoist": false,
-            "flags": 0,
-            "colors": {
-              "tertiary_color": null,
-              "secondary_color": null,
-              "primary_color": 0
-            },
-            "color": 0
-          }
-        ],
-        "properties": {
-          "verification_level": 0,
-          "owner_id": "184437096813953035",
-          "premium_features": null,
-          "max_members": null,
-          "public_updates_channel_id": null,
-          "safety_alerts_channel_id": null,
-          "profile": null,
-          "game_application_ids": null,
-          "premium_progress_bar_enabled": false,
-          "id": "705745250815311942",
-          "premium_progress_bar_enabled_user_updated_at": null,
-          "name": "Bot Test",
-          "afk_timeout": 300,
-          "premium_tier": 0,
-          "max_video_channel_users": 25,
-          "nsfw_level": 0,
-          "description": null,
-          "rules_channel_id": null,
-          "banner": null,
-          "system_channel_id": null,
-          "home_header": null,
-          "nsfw": false,
-          "hub_type": null,
-          "features": [
-            "BYPASS_SLOWMODE_PERMISSION_MIGRATION_COMPLETE",
-            "PIN_PERMISSION_MIGRATION_COMPLETE"
-          ],
-          "splash": null,
-          "explicit_content_filter": 0,
-          "max_stage_video_channel_users": 50,
-          "preferred_locale": "en-US",
-          "owner_configured_content_level": 0,
-          "application_id": null,
-          "moderator_reporting": null,
-          "latest_onboarding_question_id": null,
-          "system_channel_flags": 0,
-          "vanity_url_code": null,
-          "afk_channel_id": null,
-          "mfa_level": 0,
-          "icon": null,
-          "default_message_notifications": 0,
-          "incidents_data": null,
-          "discovery_splash": null
+    "connected_accounts": [],
+    "country_code": "SE",
+    "game_relationships": [],
+    "read_state": {
+      "version": 352,
+      "partial": false,
+      "entries": [
+        {
+          "mention_count": 0,
+          "last_viewed": 4092,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1482765156844048500",
+          "id": "185574444641550336",
+          "flags": 0
         },
-        "premium_subscription_count": 0,
-        "member_count": 5,
-        "lazy": true,
-        "large": false,
-        "joined_at": "2025-10-11T19:44:51.312000+00:00",
-        "id": "705745250815311942",
-        "guild_scheduled_events": [],
-        "emojis": [
-          {
-            "roles": [],
-            "require_colons": true,
-            "name": "elm",
-            "managed": false,
-            "id": "888159336168300574",
-            "available": true,
-            "animated": false
-          }
-        ],
-        "data_mode": "full",
-        "channels": [
-          {
-            "type": 4,
-            "position": 0,
-            "permission_overwrites": [],
-            "name": "Textkanaler",
-            "id": "705745250815311945",
-            "flags": 0
-          },
-          {
-            "type": 4,
-            "position": 0,
-            "permission_overwrites": [],
-            "name": "RÃ¶stkanaler",
-            "id": "705745250815311946",
-            "flags": 0
-          },
-          {
-            "user_limit": 0,
-            "type": 2,
-            "rtc_region": null,
-            "rate_limit_per_user": 0,
-            "position": 0,
-            "permission_overwrites": [],
-            "parent_id": "705745250815311946",
-            "name": "AllmÃ¤nt",
-            "last_message_id": null,
-            "id": "705745250815311948",
-            "flags": 0,
-            "bitrate": 64000
-          },
-          {
-            "type": 0,
-            "topic": null,
-            "rate_limit_per_user": 0,
-            "position": 2,
-            "permission_overwrites": [],
-            "parent_id": "705745250815311945",
-            "name": "channel-a",
-            "last_message_id": "1480561497754177546",
-            "id": "1072828564317159465",
-            "flags": 0
-          },
-          {
-            "type": 0,
-            "topic": null,
-            "rate_limit_per_user": 0,
-            "position": 3,
-            "permission_overwrites": [],
-            "parent_id": "705745250815311945",
-            "name": "channel-b",
-            "last_message_id": "1395733066437365790",
-            "id": "1072828591382999151",
-            "flags": 0
-          }
-        ],
-        "application_command_counts": {}
-      }
-    ],
-    "friend_suggestion_count": 0,
-    "relationships": [
+        {
+          "mention_count": 0,
+          "last_viewed": 4092,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1490640499013320814",
+          "id": "213136010802888706",
+          "flags": 1
+        },
+        {
+          "mention_count": 0,
+          "last_viewed": 4066,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1490367677162590299",
+          "id": "1072828564317159465",
+          "flags": 1
+        },
+        {
+          "mention_count": 0,
+          "last_viewed": 4066,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1482032121324372184",
+          "id": "1072828591382999151",
+          "flags": 1
+        },
+        {
+          "mention_count": 0,
+          "last_viewed": 4066,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1473267708005978234",
+          "id": "1215077285749858324",
+          "flags": 0
+        },
+        {
+          "mention_count": 0,
+          "last_viewed": 4074,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1475615769176838194",
+          "id": "1472236476401057854",
+          "flags": 0
+        },
+        {
+          "mention_count": 0,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1480558835717640354",
+          "id": "1480558796714545212",
+          "flags": 0
+        },
+        {
+          "mention_count": 0,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1480561496227581962",
+          "id": "1480558841837125696",
+          "flags": 0
+        },
+        {
+          "mention_count": 0,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1480565104646033428",
+          "id": "1480561497754177546",
+          "flags": 0
+        },
+        {
+          "mention_count": 0,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1486714527184851005",
+          "id": "1485394299519504575",
+          "flags": 0
+        },
+        {
+          "mention_count": 0,
+          "last_pin_timestamp": "1970-01-01T00:00:00+00:00",
+          "last_message_id": "1487454020237787317",
+          "id": "1486714718654697542",
+          "flags": 0
+        }
+      ]
+    },
+    "users": [
       {
-        "user_ignored": false,
-        "user_id": "161098476632014848",
-        "type": 1,
-        "since": "2016-07-22T15:45:27.651000+00:00",
-        "nickname": null,
-        "is_spam_request": false,
-        "id": "161098476632014848"
+        "username": "purplelite",
+        "public_flags": 0,
+        "primary_guild": null,
+        "id": "137748026084163584",
+        "global_name": "Purplelite",
+        "display_name_styles": null,
+        "display_name": "Purplelite",
+        "discriminator": "0",
+        "collectibles": null,
+        "clan": null,
+        "bot": false,
+        "avatar_decoration_data": null,
+        "avatar": "71168d94b72ac84d360c6563b3f1e362"
       },
       {
-        "user_ignored": false,
-        "user_id": "304157401937084416",
-        "type": 2,
-        "since": "2020-03-29T14:18:51.657000+00:00",
-        "nickname": null,
-        "is_spam_request": false,
-        "id": "304157401937084416"
+        "username": "at0232",
+        "public_flags": 0,
+        "primary_guild": null,
+        "id": "161098476632014848",
+        "global_name": "AT",
+        "display_name_styles": null,
+        "display_name": "AT",
+        "discriminator": "0",
+        "collectibles": null,
+        "clan": null,
+        "bot": false,
+        "avatar_decoration_data": null,
+        "avatar": "3d7b1aa7b5149fe06971b6dedf682d82"
+      },
+      {
+        "username": "kess",
+        "public_flags": 0,
+        "primary_guild": {
+          "tag": "Dog",
+          "identity_guild_id": "1436398011755401228",
+          "identity_enabled": true,
+          "badge": "92793b49ba65005789d51de91913e265"
+        },
+        "id": "168547048902098944",
+        "global_name": "Kess",
+        "display_name_styles": {
+          "font_id": 10,
+          "effect_id": 3,
+          "colors": [
+            16711935
+          ]
+        },
+        "discriminator": "0",
+        "collectibles": {
+          "nameplate": {
+            "sku_id": "1409983105577783410",
+            "palette": "violet",
+            "label": "COLLECTIBLES_SEPTEMBER_2025_MARKETING_NAMEPLATE_A11Y",
+            "expires_at": null,
+            "asset": "nameplates/special_events_2/nitro_rocketfuel_nameplate/"
+          }
+        },
+        "clan": {
+          "tag": "Dog",
+          "identity_guild_id": "1436398011755401228",
+          "identity_enabled": true,
+          "badge": "92793b49ba65005789d51de91913e265"
+        },
+        "avatar_decoration_data": {
+          "sku_id": "1416071145068957747",
+          "expires_at": null,
+          "asset": "a_857486cef7543257ed8d60adbce4728f"
+        },
+        "avatar": "3e00277cfa8d0a40e05c8cda1b0dffd9"
+      },
+      {
+        "username": "at28727",
+        "public_flags": 0,
+        "primary_guild": null,
+        "id": "184437096813953035",
+        "global_name": "AT2",
+        "display_name_styles": null,
+        "display_name": "AT2",
+        "discriminator": "0",
+        "collectibles": null,
+        "bot": false,
+        "avatar_decoration_data": null,
+        "avatar": "7c40cb63ea11096169c5a4dcb5825a3d"
+      },
+      {
+        "username": "TesterBot",
+        "public_flags": 0,
+        "primary_guild": null,
+        "id": "304157401937084416",
+        "global_name": null,
+        "display_name_styles": null,
+        "discriminator": "2707",
+        "collectibles": null,
+        "clan": null,
+        "bot": true,
+        "avatar_decoration_data": null,
+        "avatar": "5f6f7cc3540b5d41d980ccc3c5e38bad"
+      },
+      {
+        "username": "discord",
+        "system": true,
+        "public_flags": 1,
+        "primary_guild": null,
+        "id": "643945264868098049",
+        "global_name": "Discord",
+        "display_name_styles": null,
+        "discriminator": "0000",
+        "collectibles": null,
+        "clan": null,
+        "bot": true,
+        "avatar_decoration_data": null,
+        "avatar": "c6a249645d46209f337279cd2ca998c7"
+      },
+      {
+        "username": "AT",
+        "public_flags": 0,
+        "primary_guild": null,
+        "id": "1401255355928936478",
+        "global_name": null,
+        "display_name_styles": null,
+        "display_name": null,
+        "discriminator": "0275",
+        "collectibles": null,
+        "bot": true,
+        "avatar_decoration_data": null,
+        "avatar": "34f894fcc2d53b98b2d6c99228b814a7"
       }
     ],
-    "static_client_session_id": "ff7ae5d1-8cda-4571-86d9-7b1b7408c528",
-    "explicit_content_scan_version": 4
+    "user_guild_settings": {
+      "version": 0,
+      "partial": false,
+      "entries": [
+        {
+          "version": 0,
+          "suppress_roles": false,
+          "suppress_everyone": false,
+          "notify_highlights": 0,
+          "muted": false,
+          "mute_scheduled_events": false,
+          "mute_config": null,
+          "mobile_push": true,
+          "message_notifications": 0,
+          "hide_muted_channels": false,
+          "guild_id": "213136010802888706",
+          "flags": 0,
+          "channel_overrides": [
+            {
+              "muted": true,
+              "mute_config": null,
+              "message_notifications": 3,
+              "collapsed": false,
+              "channel_id": "213136010802888706"
+            }
+          ]
+        }
+      ]
+    },
+    "static_client_session_id": "2e0b20c6-3688-4791-ac7c-f09ee75e28d3"
   }
 }

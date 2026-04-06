@@ -32,13 +32,13 @@ import Emoji
 import Env
 import FileStatus exposing (FileData, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), StickerData, StickerUrl(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -214,6 +214,7 @@ init =
       , exportState = Nothing
       , sendMessageRateLimits = SeqDict.empty
       , toBackendLogs = Array.empty
+      , stickers = SeqDict.empty
       , discordStickers = OneToOne.empty
       }
     , Command.none
@@ -1311,6 +1312,50 @@ update msg model =
             , Command.none
             )
 
+        GotDiscordGuildStickers results time ->
+            let
+                ( errors, stickers ) =
+                    List.foldl
+                        (\( stickerId, result ) ( errors2, stickers2 ) ->
+                            case result of
+                                Ok uploadResponse ->
+                                    ( errors2
+                                    , SeqDict.updateIfExists stickerId
+                                        (\sticker ->
+                                            case sticker.url of
+                                                StickerLoading ->
+                                                    { sticker
+                                                        | url =
+                                                            StickerInternal
+                                                                uploadResponse.fileHash
+                                                                (Maybe.map .imageSize uploadResponse.imageSize)
+                                                    }
+
+                                                StickerInternal fileHash _ ->
+                                                    sticker
+
+                                                StickerExternal url ->
+                                                    sticker
+                                        )
+                                        stickers2
+                                    )
+
+                                Err error ->
+                                    ( ( stickerId, error ) :: errors2, stickers2 )
+                        )
+                        ( [], model.stickers )
+                        results
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildStickers nonempty (List.length results))
+                        { model | stickers = stickers }
+
+                Nothing ->
+                    ( { model | stickers = stickers }, Command.none )
+
 
 addDiscordGuildData :
     Discord.Id Discord.UserId
@@ -1340,6 +1385,7 @@ addDiscordGuildData discordUserId data guild =
     , membersAndOwner =
         MembersAndOwner.addMember discordUserId { joinedAt = Nothing } guild.membersAndOwner
             |> Result.withDefault guild.membersAndOwner
+    , stickers = guild.stickers
     }
 
 

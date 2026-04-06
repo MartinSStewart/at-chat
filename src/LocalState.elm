@@ -27,6 +27,7 @@ module LocalState exposing
     , LogWithTime
     , PrivateVapidKey(..)
     , StickerData
+    , StickerUrl(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -109,6 +110,8 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Discord exposing (OptionalData, StickerFormatType)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -196,7 +199,7 @@ type alias DiscordBackendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    , stickers : SeqDict (Id StickerId) StickerData
+    , stickers : SeqSet (Id StickerId)
     }
 
 
@@ -216,12 +219,18 @@ type alias DiscordFrontendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
-    , stickers : SeqDict (Id StickerId) StickerData
+    , stickers : SeqSet (Id StickerId)
     }
 
 
+type StickerUrl
+    = StickerInternal FileHash (Maybe (Coord CssPixels))
+    | StickerExternal Url
+    | StickerLoading
+
+
 type alias StickerData =
-    { url : FileHash
+    { url : StickerUrl
     , name : String
     , format : StickerFormatType
     }

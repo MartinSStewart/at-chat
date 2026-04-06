@@ -997,6 +997,57 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                                     }
                                 )
 
+                        "http://localhost:3000/file/upload-url" ->
+                            case currentRequest.body of
+                                T.JsonBody json ->
+                                    case Codec.decodeValue FileStatus.uploadUrlCodec json of
+                                        Ok request ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 200
+                                                , statusText = "OK"
+                                                , headers = Dict.empty
+                                                }
+                                                (Codec.encodeToString
+                                                    0
+                                                    FileStatus.uploadResponseCodec
+                                                    { fileHash = FileStatus.fileHash request.url
+                                                    , imageSize =
+                                                        { imageSize = Coord.xy 128 128
+                                                        , orientation = Nothing
+                                                        , gpsLocation = Nothing
+                                                        , cameraOwner = Nothing
+                                                        , exposureTime = Nothing
+                                                        , fNumber = Nothing
+                                                        , focalLength = Nothing
+                                                        , isoSpeedRating = Nothing
+                                                        , make = Nothing
+                                                        , model = Nothing
+                                                        , software = Nothing
+                                                        , userComment = Nothing
+                                                        }
+                                                            |> Just
+                                                    }
+                                                )
+
+                                        Err _ ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 500
+                                                , statusText = "Bad request"
+                                                , headers = Dict.empty
+                                                }
+                                                ""
+
+                                _ ->
+                                    StringHttpResponse
+                                        { url = currentRequest.url
+                                        , statusCode = 500
+                                        , statusText = "Bad request"
+                                        , headers = Dict.empty
+                                        }
+                                        ""
+
                         "http://localhost:3000/file/push-notification" ->
                             StringHttpResponse
                                 { url = currentRequest.url

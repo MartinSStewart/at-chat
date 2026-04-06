@@ -6,7 +6,8 @@ import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import Icons
-import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelMessageId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import List.Nonempty exposing (Nonempty)
 import MyUi
 import Postmark
 import Time exposing (Month(..))
@@ -39,6 +40,7 @@ type Log
     | FailedToGetDataForJoinedOrCreatedDiscordGuild (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) Discord.HttpError
     | JoinedDiscordThreadFailed (Discord.Id Discord.GuildId) Discord.HttpError
     | EmptyDiscordMessage String
+    | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -105,6 +107,9 @@ shouldNotifyAdmin log =
             Nothing
 
         EmptyDiscordMessage _ ->
+            Nothing
+
+        FailedToLoadDiscordGuildStickers nonempty _ ->
             Nothing
 
 
@@ -436,6 +441,13 @@ logContent onPressCopy log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord message has no content"
                 , MyUi.errorBox (Dom.id "admin_DiscordMessageNoContent") onPressCopy message
+                ]
+
+        FailedToLoadDiscordGuildStickers nonempty totalStickers ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord guild stickers failed to load"
+                , Debug.todo "Show list"
                 ]
 
 

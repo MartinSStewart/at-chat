@@ -71,12 +71,7 @@ fn thumbnail_filepath(hash: &str) -> String {
 }
 
 async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<String> {
-    let mut options = WebpageOptions::default();
-
-    // options.useragent =
-    //     String::from("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)");
-
-    let info = Webpage::from_url(&url, options).expect("Could not read from URL");
+    let info = Webpage::from_url(&url, WebpageOptions::default()).expect("Could not read from URL");
 
     let info2 = match (info.html.meta.len(), info.html.meta.get("refresh")) {
         (1, Some(refresh)) => {

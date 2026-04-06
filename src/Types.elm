@@ -68,7 +68,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey, StickerData)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -90,6 +90,7 @@ import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)
@@ -318,6 +319,7 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     , toBackendLogs : Array ToBackendLogData
+    , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     }
 
@@ -589,10 +591,14 @@ type BackendMsg
         Time.Posix
         (Result
             Discord.HttpError
-            { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
+            { guild : Discord.GatewayGuild
+            , channels : List Discord.Channel
+            , icon : Maybe FileStatus.UploadResponse
+            }
         )
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
+    | GotDiscordGuildStickers (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
 
 
 type alias ExportState =

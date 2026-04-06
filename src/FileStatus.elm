@@ -11,6 +11,7 @@ module FileStatus exposing
     , Location
     , Orientation(..)
     , UploadResponse
+    , UploadUrlRequest
     , addFileHash
     , contentType
     , contentTypes
@@ -31,6 +32,7 @@ module FileStatus exposing
     , uploadResponseCodec
     , uploadTrackerId
     , uploadUrl
+    , uploadUrlCodec
     , webpContent
     )
 
@@ -360,22 +362,28 @@ type alias ExposureTime =
     { numerator : Int, denominator : Int }
 
 
-uploadUrl : SessionIdHash -> String -> Task restriction Http.Error UploadResponse
-uploadUrl sessionId url =
+uploadUrl : UploadUrlRequest -> Task restriction Http.Error UploadResponse
+uploadUrl request =
     Http.task
         { method = "POST"
         , headers = []
         , url = domain ++ "/file/upload-url"
-        , body =
-            Http.jsonBody
-                (Json.Encode.object
-                    [ ( "url", Json.Encode.string url )
-                    , ( "sid", Json.Encode.string (SessionIdHash.toString sessionId) )
-                    ]
-                )
+        , body = Http.jsonBody (Codec.encodeToValue uploadUrlCodec request)
         , resolver = resolver uploadResponseCodec
         , timeout = Just (Duration.seconds 30)
         }
+
+
+type alias UploadUrlRequest =
+    { url : String, sessionId : SessionIdHash }
+
+
+uploadUrlCodec : Codec UploadUrlRequest
+uploadUrlCodec =
+    Codec.object UploadUrlRequest
+        |> Codec.field "url" .url Codec.string
+        |> Codec.field "sid" .sessionId SessionIdHash.codec
+        |> Codec.buildObject
 
 
 uploadFile :

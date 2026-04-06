@@ -46,7 +46,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), StickerData, StickerUrl(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
@@ -1667,7 +1667,7 @@ handleJoinOrCreateGuild :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleJoinOrCreateGuild discordUserId gatewayGuild model =
-    ( { model | discordGuilds = addDiscordGuild [] gatewayGuild model.discordGuilds }
+    ( { model | discordGuilds = addDiscordGuild model.discordStickers [] gatewayGuild model.discordGuilds }
     , getDiscordGuildData gatewayGuild
         |> Task.map (\( _, guildData ) -> Ok guildData)
         |> Task.onError (\error -> Err error |> Task.succeed)
@@ -1907,7 +1907,7 @@ loadMessageAttachment :
     Discord.Attachment
     -> Task restriction x (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
 loadMessageAttachment attachment =
-    FileStatus.uploadUrl backendSessionIdHash attachment.url
+    FileStatus.uploadUrl { sessionId = backendSessionIdHash, url = attachment.url }
         |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
         |> Task.onError (\error -> Task.succeed (Err error))
 
@@ -2142,6 +2142,60 @@ handleReadyData readyData model =
         discordUsers : List Discord.PartialUser
         discordUsers =
             Discord.userToPartialUser readyData.user :: readyData.users
+
+        stickerData :
+            { tasks : List (Task BackendOnly x ( Id StickerId, Result Http.Error FileStatus.UploadResponse ))
+            , stickers : SeqDict (Id StickerId) StickerData
+            , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+            }
+        stickerData =
+            List.foldl
+                (\guild state ->
+                    List.foldl
+                        (\sticker { stickers, tasks, discordStickers } ->
+                            case OneToOne.second sticker.id discordStickers of
+                                Just _ ->
+                                    { tasks = tasks, stickers = stickers, discordStickers = discordStickers }
+
+                                Nothing ->
+                                    case sticker.stickerType of
+                                        Discord.StandardSticker ->
+                                            { tasks = tasks
+                                            , stickers = stickers
+                                            , discordStickers = discordStickers
+                                            }
+
+                                        Discord.GuildSticker ->
+                                            let
+                                                stickerId : Id StickerId
+                                                stickerId =
+                                                    Id.nextId stickers
+                                            in
+                                            { tasks =
+                                                (FileStatus.uploadUrl
+                                                    { sessionId = backendSessionIdHash
+                                                    , url = Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id
+                                                    }
+                                                    |> taskResult
+                                                    |> Task.map (\result -> ( stickerId, result ))
+                                                )
+                                                    :: tasks
+                                            , stickers =
+                                                SeqDict.insert
+                                                    stickerId
+                                                    { url = StickerLoading
+                                                    , name = sticker.name
+                                                    , format = sticker.formatType
+                                                    }
+                                                    stickers
+                                            , discordStickers = OneToOne.insert sticker.id stickerId discordStickers
+                                            }
+                        )
+                        state
+                        guild.stickers
+                )
+                { tasks = [], stickers = model.stickers, discordStickers = model.discordStickers }
+                readyData.guilds
     in
     ( { model
         | discordGuilds =
@@ -2149,10 +2203,10 @@ handleReadyData readyData model =
                 (\guild ( mergedMembers, guilds ) ->
                     case mergedMembers of
                         head :: rest ->
-                            ( rest, addDiscordGuild head guild guilds )
+                            ( rest, addDiscordGuild stickerData.discordStickers head guild guilds )
 
                         [] ->
-                            ( [], addDiscordGuild [] guild guilds )
+                            ( [], addDiscordGuild stickerData.discordStickers [] guild guilds )
                 )
                 ( case readyData.mergedMembers of
                     Included members2 ->
@@ -2165,9 +2219,14 @@ handleReadyData readyData model =
                 readyData.guilds
                 |> Tuple.second
         , discordUsers = List.foldl addDiscordUserData model.discordUsers discordUsers
+        , discordStickers = stickerData.discordStickers
+        , stickers = stickerData.stickers
       }
     , Command.batch
         [ getUserAvatars model.discordUsers discordUsers
+        , Task.sequence stickerData.tasks
+            |> Task.andThen (\stickers -> Task.map (GotDiscordGuildStickers stickers) Time.now)
+            |> Task.perform identity
         , (List.filterMap
             (\guild ->
                 if SeqDict.member guild.properties.id model.discordGuilds then
@@ -2194,12 +2253,12 @@ handleReadyData readyData model =
 
 
 addDiscordGuild :
-    List Discord.MergedMember
-    -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    -> List Discord.MergedMember
     -> Discord.GatewayGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-addDiscordGuild members existingStickers guild discordGuilds =
+addDiscordGuild existingStickers members guild discordGuilds =
     SeqDict.update
         guild.properties.id
         (\maybe ->
@@ -2217,6 +2276,11 @@ addDiscordGuild members existingStickers guild discordGuilds =
                                 )
                                 existingGuild.membersAndOwner
                                 members
+                        , stickers =
+                            List.filterMap
+                                (\sticker -> OneToOne.second sticker.id existingStickers)
+                                guild.stickers
+                                |> SeqSet.fromList
                     }
                         |> Just
 
@@ -2231,22 +2295,10 @@ addDiscordGuild members existingStickers guild discordGuilds =
                             )
                             guild.properties.ownerId
                     , stickers =
-                        List.map
-                            (\sticker ->
-                                case OneToOne.second sticker.id existingStickers of
-                                    Just id ->
-                                        ( id
-                                        , { url = FileHash
-                                          , name = sticker.name
-                                          , format = sticker.formatType
-                                          }
-                                        )
-                                            |> Just
-
-                                    Nothing ->
-                                        Nothing
-                            )
+                        List.filterMap
+                            (\sticker -> OneToOne.second sticker.id existingStickers)
                             guild.stickers
+                            |> SeqSet.fromList
                     }
                         |> Just
         )
@@ -2275,7 +2327,7 @@ uploadAttachmentsForMessages model messages =
         |> SeqDict.toList
         |> List.map
             (\( _, attachment ) ->
-                FileStatus.uploadUrl backendSessionIdHash attachment.url
+                FileStatus.uploadUrl { sessionId = backendSessionIdHash, url = attachment.url }
                     |> Task.map (\uploadResponse -> Ok ( DiscordAttachmentId.fromUrl attachment.url, uploadResponse ))
                     |> Task.onError (\error -> Task.succeed (Err error))
             )

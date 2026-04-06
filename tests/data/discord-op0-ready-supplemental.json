@@ -10,10 +10,31 @@
           {
             "user_id": "161098476632014848",
             "status": "online",
-            "processed_at_timestamp": 1773095534826,
+            "processed_at_timestamp": 0,
             "client_status": {
               "web": "online",
-              "desktop": "idle"
+              "mobile": "idle"
+            },
+            "activities": []
+          }
+        ],
+        [
+          {
+            "user_id": "137748026084163584",
+            "status": "online",
+            "processed_at_timestamp": 1775478067518,
+            "client_status": {
+              "desktop": "online"
+            },
+            "activities": []
+          },
+          {
+            "user_id": "161098476632014848",
+            "status": "online",
+            "processed_at_timestamp": 0,
+            "client_status": {
+              "web": "online",
+              "mobile": "idle"
             },
             "activities": []
           }
@@ -24,17 +45,33 @@
           "user_id": "161098476632014848",
           "status": "online",
           "restricted_application": null,
-          "processed_at_timestamp": 1773095534826,
+          "processed_at_timestamp": 0,
           "hidden_activities": [],
           "client_status": {
             "web": "online",
-            "desktop": "idle"
+            "mobile": "idle"
           },
           "activities": []
         }
       ]
     },
     "merged_members": [
+      [
+        {
+          "user_id": "161098476632014848",
+          "roles": [],
+          "premium_since": null,
+          "pending": false,
+          "nick": "*_.#",
+          "mute": false,
+          "joined_at": "2016-08-11T03:26:24.940000+00:00",
+          "flags": 0,
+          "deaf": false,
+          "communication_disabled_until": null,
+          "banner": null,
+          "avatar": null
+        }
+      ],
       [
         {
           "user_id": "161098476632014848",
@@ -84,6 +121,12 @@
     ],
     "lazy_private_channels": [],
     "guilds": [
+      {
+        "voice_states": [],
+        "id": "213136010802888706",
+        "embedded_activities": [],
+        "activity_instances": []
+      },
       {
         "voice_states": [],
         "id": "705745250815311942",
