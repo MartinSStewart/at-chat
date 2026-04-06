@@ -15,7 +15,8 @@ import Url exposing (Url)
 
 type StickerUrl
     = StickerInternal FileHash (Maybe (Coord CssPixels))
-    | StickerExternal Url
+    | -- For copyright reasons we don't want to store the actual images for Discord's standard stickers on our server
+      DiscordStandardSticker (Discord.Id Discord.StickerId)
     | StickerLoading
 
 
@@ -40,5 +41,5 @@ addUrl uploadResponse sticker =
         StickerInternal fileHash _ ->
             sticker
 
-        StickerExternal url ->
+        DiscordStandardSticker _ ->
             sticker

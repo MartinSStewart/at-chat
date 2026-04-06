@@ -19,6 +19,7 @@ module FileStatus exposing
     , fileHash
     , fileUploadPreview
     , fileUrl
+    , gifContent
     , imageInfoView
     , imageMaxHeight
     , onlyUploadedFiles
@@ -182,6 +183,11 @@ pngContent =
 webpContent : ContentType
 webpContent =
     contentType "image/webp"
+
+
+gifContent : ContentType
+gifContent =
+    contentType "image/gif"
 
 
 type ContentTypeType

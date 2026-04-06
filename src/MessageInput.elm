@@ -307,7 +307,11 @@ disabledTextarea placeholderText text attachedFiles local =
                         users =
                             LocalState.allUsers local.localUser
                     in
-                    RichText.textInputView users attachedFiles local.stickers (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView
+                        users
+                        attachedFiles
+                        local.localUser.stickers
+                        (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->

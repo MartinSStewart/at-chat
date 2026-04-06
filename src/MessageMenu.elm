@@ -252,7 +252,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     ""
                                     edit.text
                                     edit.attachedFiles
-                                    local.stickers
+                                    local.localUser.stickers
                                     loggedIn.textInputFocus
                         in
                         [ (case extraOptions.guildOrDmId of

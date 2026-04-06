@@ -433,11 +433,11 @@ loginDataToLocalState userAgent timezone loginData =
         , linkedDiscordUsers = loginData.linkedDiscordUsers
         , timezone = timezone
         , userAgent = userAgent
+        , stickers = loginData.stickers
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , stickers = loginData.stickers
     }
 
 

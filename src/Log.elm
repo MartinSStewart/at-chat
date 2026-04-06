@@ -41,6 +41,7 @@ type Log
     | JoinedDiscordThreadFailed (Discord.Id Discord.GuildId) Discord.HttpError
     | EmptyDiscordMessage String
     | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
+    | FailedToLoadDiscordStandardStickerPacks Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -110,6 +111,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToLoadDiscordGuildStickers nonempty _ ->
+            Nothing
+
+        FailedToLoadDiscordStandardStickerPacks httpError ->
             Nothing
 
 
@@ -454,6 +458,13 @@ logContent onPressCopy log =
                         )
                         (List.Nonempty.toList nonempty)
                 )
+
+        FailedToLoadDiscordStandardStickerPacks httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord standard sticker packs failed to load"
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
 
 
 type alias TagStyle =

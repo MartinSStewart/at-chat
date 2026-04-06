@@ -162,7 +162,6 @@ type alias LocalState =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
-    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 
@@ -175,6 +174,7 @@ type alias LocalUser =
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
+    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 

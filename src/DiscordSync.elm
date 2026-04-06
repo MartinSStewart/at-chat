@@ -215,7 +215,19 @@ handleDiscordDmEditMessage edit attachments model =
                     let
                         richText : Nonempty (RichText (Discord.Id Discord.UserId))
                         richText =
-                            RichText.fromDiscord edit.content attachments (Included edit.embeds)
+                            RichText.fromDiscord
+                                edit.content
+                                attachments
+                                (Included edit.embeds)
+                                (case edit.stickerItems of
+                                    Missing ->
+                                        []
+
+                                    Included stickers ->
+                                        List.filterMap
+                                            (\sticker -> OneToOne.second sticker.id model.discordStickers)
+                                            stickers
+                                )
                     in
                     case
                         LocalState.editMessageHelperNoThread
@@ -336,7 +348,17 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
         richText : Nonempty (RichText (Discord.Id Discord.UserId))
         richText =
-            RichText.fromDiscord edit.content attachments (Included edit.embeds)
+            RichText.fromDiscord
+                edit.content
+                attachments
+                (Included edit.embeds)
+                (case edit.stickerItems of
+                    Missing ->
+                        []
+
+                    Included stickers ->
+                        List.filterMap (\sticker -> OneToOne.second sticker.id model.discordStickers) stickers
+                )
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
@@ -651,12 +673,13 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     List Discord.Message
+    -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
         ( Array (Message messageId (Discord.Id Discord.UserId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
-messagesAndLinks messages discordAttachments =
+messagesAndLinks messages discordStickers discordAttachments =
     let
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
@@ -672,7 +695,18 @@ messagesAndLinks messages discordAttachments =
             Message.userTextMessageNoEmbeds
                 message.timestamp
                 message.author.id
-                (RichText.fromDiscord message.content attachments message.embeds)
+                (RichText.fromDiscord
+                    message.content
+                    attachments
+                    message.embeds
+                    (case message.stickerItems of
+                        Missing ->
+                            []
+
+                        Included stickers ->
+                            List.filterMap (\sticker -> OneToOne.second sticker.id discordStickers) stickers
+                    )
+                )
                 (case message.referencedMessage of
                     Discord.Referenced referenced ->
                         OneToOne.second referenced.id linkedMessageIds
@@ -775,7 +809,19 @@ handleCreateMessage websocketJson discordMessage attachments model =
                         let
                             richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
-                                RichText.fromDiscord discordMessage.content attachments discordMessage.embeds
+                                RichText.fromDiscord
+                                    discordMessage.content
+                                    attachments
+                                    discordMessage.embeds
+                                    (case discordMessage.stickerItems of
+                                        Missing ->
+                                            []
+
+                                        Included stickers ->
+                                            List.filterMap
+                                                (\sticker -> OneToOne.second sticker.id model.discordStickers)
+                                                stickers
+                                    )
 
                             replyTo : Maybe (Id ChannelMessageId)
                             replyTo =
@@ -1021,7 +1067,19 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                 let
                                     richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                     richText =
-                                        RichText.fromDiscord content attachments discordMessage.embeds
+                                        RichText.fromDiscord
+                                            content
+                                            attachments
+                                            discordMessage.embeds
+                                            (case discordMessage.stickerItems of
+                                                Missing ->
+                                                    []
+
+                                                Included stickers ->
+                                                    List.filterMap
+                                                        (\sticker -> OneToOne.second sticker.id model.discordStickers)
+                                                        stickers
+                                            )
 
                                     threadOrChannelId : Discord.Id Discord.ChannelId
                                     threadOrChannelId =

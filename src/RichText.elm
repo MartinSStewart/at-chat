@@ -50,7 +50,7 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
-import Sticker exposing (StickerData)
+import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..), Url)
@@ -1308,54 +1308,47 @@ view :
     HtmlId
     -> Int
     -> (Url -> msg)
-    -> SeqSet Domain
     -> (Int -> msg)
-    -> SeqSet Int
-    -> SeqDict userId { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
+    -> Config a userId
     -> Array Embed
     -> Nonempty (RichText userId)
     -> List (Html msg)
-view htmlIdPrefix containerWidth onPressLink domainWhitelist onPressSpoiler revealedSpoilers users attachedFiles embeds nonempty =
+view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonempty =
     viewHelper
         (ShowLargeContent containerWidth)
         (Just ( htmlIdPrefix, onPressSpoiler ))
         onPressLink
-        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
-        revealedSpoilers
-        users
-        attachedFiles
+        config
         embeds
         0
         nonempty
         |> (\( _, _, a ) -> a)
 
 
-preview :
-    (Url -> msg)
-    -> SeqSet Domain
-    -> SeqSet Int
-    -> SeqDict userId { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText userId)
-    -> List (Html msg)
-preview onPressLink domainWhitelist revealedSpoilers users attachedFiles nonempty =
+preview : (Url -> msg) -> Config a userId -> Nonempty (RichText userId) -> List (Html msg)
+preview onPressLink config nonempty =
     viewHelper
         NoLargeContent
         Nothing
         onPressLink
-        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
-        revealedSpoilers
-        users
-        attachedFiles
+        config
         Array.empty
         0
         nonempty
         |> (\( _, _, a ) -> a)
+
+
+type alias Config a userId =
+    { domainWhitelist : SeqSet Domain
+    , revealedSpoilers : SeqSet Int
+    , users : SeqDict userId { a | name : PersonName }
+    , attachedFiles : SeqDict (Id FileId) FileData
+    , stickers : SeqDict (Id StickerId) StickerData
+    }
 
 
 normalTextView : String -> RichTextState -> List (Html msg)
@@ -1375,22 +1368,19 @@ viewHelper :
     ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
     -> (Url -> msg)
-    -> SeqSet Domain
     -> Int
     -> RichTextState
-    -> SeqSet Int
-    -> SeqDict userId { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
+    -> Config a userId
     -> Array Embed
     -> Int
     -> Nonempty (RichText userId)
     -> ( Int, Int, List (Html msg) )
-viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
+viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
     List.foldl
         (\item ( spoilerIndex2, embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId allUsers ] )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
 
                 NormalText char text ->
                     ( spoilerIndex2
@@ -1405,12 +1395,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | italic = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1424,12 +1411,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | underline = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1443,12 +1427,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | bold = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1462,12 +1443,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | strikethrough = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1477,7 +1455,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                 Spoiler nonempty2 ->
                     let
                         revealed =
-                            SeqSet.member spoilerIndex2 revealedSpoilers
+                            SeqSet.member spoilerIndex2 config.revealedSpoilers
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
                         ( _, embedIndex3, list ) =
@@ -1485,7 +1463,6 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 (if revealed then
                                     state
@@ -1493,9 +1470,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                  else
                                     { state | spoiler = True }
                                 )
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1551,18 +1526,18 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                              else
                                 case Array.get embedIndex2 embeds of
                                     Just EmbedLoading ->
-                                        embedLoadingView onPressLink domainWhitelist data
+                                        embedLoadingView onPressLink config.domainWhitelist data
 
                                     Just (EmbedLoaded embed) ->
                                         case ( embed == Embed.empty, showLargeContent ) of
                                             ( False, ShowLargeContent containerWidth ) ->
-                                                embedView onPressLink containerWidth domainWhitelist data embed
+                                                embedView onPressLink containerWidth config.domainWhitelist data embed
 
                                             _ ->
-                                                inlineEmbedView showLargeContent onPressLink domainWhitelist data
+                                                inlineEmbedView showLargeContent onPressLink config.domainWhitelist data
 
                                     Nothing ->
-                                        inlineEmbedView showLargeContent onPressLink domainWhitelist data
+                                        inlineEmbedView showLargeContent onPressLink config.domainWhitelist data
                            ]
                     )
 
@@ -1611,7 +1586,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                         ShowLargeContent containerWidth2 ->
                             ( spoilerIndex2
                             , embedIndex2
-                            , case SeqDict.get fileId attachedFiles of
+                            , case SeqDict.get fileId config.attachedFiles of
                                 Just fileData ->
                                     currentList
                                         ++ [ case fileData.imageMetadata of
@@ -1659,21 +1634,90 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                 EscapedChar char ->
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
-                Sticker id ->
+                Sticker stickerId ->
                     ( spoilerIndex2
                     , embedIndex2
                     , currentList
-                        ++ [ Html.div
-                                [ Html.Attributes.style "width" "256px"
-                                , Html.Attributes.style "height" "256px"
-                                , Html.Attributes.style "background-color" "gray"
-                                ]
-                                []
+                        ++ [ case SeqDict.get stickerId config.stickers of
+                                Just sticker ->
+                                    case sticker.url of
+                                        StickerLoading ->
+                                            Html.div
+                                                [ Html.Attributes.style "width" stickerSize
+                                                , Html.Attributes.style "height" stickerSize
+                                                , Html.Attributes.style "background-color" "gray"
+                                                ]
+                                                []
+
+                                        StickerInternal fileHash _ ->
+                                            case sticker.format of
+                                                Discord.PngFormat ->
+                                                    Html.img
+                                                        [ Html.Attributes.style "width" stickerSize
+                                                        , Html.Attributes.style "height" stickerSize
+                                                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                                        ]
+                                                        []
+
+                                                Discord.ApngFormat ->
+                                                    Html.img
+                                                        [ Html.Attributes.style "width" stickerSize
+                                                        , Html.Attributes.style "height" stickerSize
+                                                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                                        ]
+                                                        []
+
+                                                Discord.LottieFormat ->
+                                                    Html.div
+                                                        [ Html.Attributes.style "width" stickerSize
+                                                        , Html.Attributes.style "height" stickerSize
+                                                        , Html.Attributes.style "background-color" "gray"
+                                                        ]
+                                                        [ Html.text "Lottie not yet supported" ]
+
+                                                Discord.GifFormat ->
+                                                    Html.img
+                                                        [ Html.Attributes.style "width" stickerSize
+                                                        , Html.Attributes.style "height" stickerSize
+                                                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.gifContent fileHash)
+                                                        ]
+                                                        []
+
+                                        DiscordStandardSticker url ->
+                                            case sticker.format of
+                                                Discord.LottieFormat ->
+                                                    Html.div
+                                                        [ Html.Attributes.style "width" stickerSize
+                                                        , Html.Attributes.style "height" stickerSize
+                                                        , Html.Attributes.style "background-color" "gray"
+                                                        ]
+                                                        [ Html.text "Lottie not yet supported" ]
+
+                                                _ ->
+                                                    Html.img
+                                                        [ Html.Attributes.style "width" stickerSize
+                                                        , Html.Attributes.style "height" stickerSize
+                                                        , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format url)
+                                                        ]
+                                                        []
+
+                                Nothing ->
+                                    Html.div
+                                        [ Html.Attributes.style "width" stickerSize
+                                        , Html.Attributes.style "height" stickerSize
+                                        , Html.Attributes.style "background-color" "gray"
+                                        ]
+                                        [ Html.text "Sticker failed to load" ]
                            ]
                     )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+stickerSize : String
+stickerSize =
+    "160px"
 
 
 embedContainerMaxWidth : number
@@ -2335,8 +2379,13 @@ formatText text =
 --        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : String -> SeqDict (Id FileId) FileData -> Discord.OptionalData (List Discord.Embed) -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments embeds =
+fromDiscord :
+    String
+    -> SeqDict (Id FileId) FileData
+    -> Discord.OptionalData (List Discord.Embed)
+    -> List (Id StickerId)
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+fromDiscord text attachments embeds stickers =
     let
         embedSet : SeqSet Url
         embedSet =
@@ -2358,6 +2407,7 @@ fromDiscord text attachments embeds =
                 )
                 |> SeqSet.fromList
 
+        applyExtraEmbeds : Nonempty (RichText userId) -> Nonempty (RichText userId)
         applyExtraEmbeds richText =
             let
                 urls : List Url
@@ -2380,6 +2430,15 @@ fromDiscord text attachments embeds =
 
             else
                 richText
+
+        applyStickers : List (RichText userId) -> Nonempty (RichText userId)
+        applyStickers richText =
+            case richText ++ List.map Sticker stickers |> List.Nonempty.fromList of
+                Just nonempty ->
+                    nonempty
+
+                Nothing ->
+                    emptyPlaceholder
     in
     case String.Nonempty.fromString text of
         Just nonempty ->
@@ -2398,24 +2457,22 @@ fromDiscord text attachments embeds =
                 )
                 (List.map AttachedFile (SeqDict.keys attachments))
                 |> applyExtraEmbeds
+                |> List.Nonempty.toList
+                |> applyStickers
 
         Nothing ->
             case NonemptyDict.fromSeqDict attachments of
                 Just attachments2 ->
-                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2) |> applyExtraEmbeds
+                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
+                        |> applyExtraEmbeds
+                        |> List.Nonempty.toList
+                        |> applyStickers
 
                 Nothing ->
-                    case
-                        SeqSet.toList embedSet
-                            |> List.map Hyperlink
-                            |> List.intersperse (NormalText ' ' "")
-                            |> List.Nonempty.fromList
-                    of
-                        Just nonempty ->
-                            nonempty
-
-                        Nothing ->
-                            emptyPlaceholder
+                    SeqSet.toList embedSet
+                        |> List.map Hyperlink
+                        |> List.intersperse (NormalText ' ' "")
+                        |> applyStickers
 
 
 emptyPlaceholder : Nonempty (RichText userId)

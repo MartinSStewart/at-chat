@@ -295,7 +295,7 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
-    , backendInitialized : Bool
+    , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
@@ -599,6 +599,8 @@ type BackendMsg
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
     | GotDiscordGuildStickers (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | HourlyUpdate Time.Posix
+    | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
 
 
 type alias ExportState =
