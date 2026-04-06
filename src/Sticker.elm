@@ -3,14 +3,7 @@ module Sticker exposing (StickerData, StickerUrl(..), addUrl)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (StickerFormatType)
-import Effect.Command exposing (BackendOnly)
-import Effect.Http as Http
-import Effect.Task as Task exposing (Task)
 import FileStatus exposing (FileHash)
-import Id exposing (Id, StickerId)
-import OneToOne exposing (OneToOne)
-import SeqDict exposing (SeqDict)
-import Url exposing (Url)
 
 
 type StickerUrl
@@ -38,7 +31,7 @@ addUrl uploadResponse sticker =
                         (Maybe.map .imageSize uploadResponse.imageSize)
             }
 
-        StickerInternal fileHash _ ->
+        StickerInternal _ _ ->
             sticker
 
         DiscordStandardSticker _ ->

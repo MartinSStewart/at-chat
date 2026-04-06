@@ -110,10 +110,10 @@ shouldNotifyAdmin log =
         EmptyDiscordMessage _ ->
             Nothing
 
-        FailedToLoadDiscordGuildStickers nonempty _ ->
+        FailedToLoadDiscordGuildStickers _ _ ->
             Nothing
 
-        FailedToLoadDiscordStandardStickerPacks httpError ->
+        FailedToLoadDiscordStandardStickerPacks _ ->
             Nothing
 
 

@@ -468,7 +468,7 @@ richTextToMessage previousText previousList nonempty =
                 RichText.EscapedChar char ->
                     ( currentText ++ "\\" ++ RichText.escapedCharToString char, list )
 
-                RichText.Sticker id ->
+                RichText.Sticker _ ->
                     ( currentText, list )
         )
         ( previousText, previousList )

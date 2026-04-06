@@ -36,7 +36,6 @@ import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
 import FileName
 import FileStatus exposing (FileData, FileId)
-import Hex
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -191,7 +190,7 @@ removeAttachedFile fileId list =
                 EscapedChar _ ->
                     Just richText
 
-                Sticker id ->
+                Sticker _ ->
                     Just richText
         )
         (List.Nonempty.toList list)
@@ -239,7 +238,7 @@ hyperlinks nonempty =
                 EscapedChar _ ->
                     []
 
-                Sticker id ->
+                Sticker _ ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -250,7 +249,7 @@ stickers nonempty =
     List.concatMap
         (\richText ->
             case richText of
-                Hyperlink data ->
+                Hyperlink _ ->
                     []
 
                 UserMention _ ->
@@ -1324,7 +1323,7 @@ mentionsUserHelper set nonempty =
                 EscapedChar _ ->
                     set2
 
-                Sticker id ->
+                Sticker _ ->
                     set2
         )
         set
@@ -1683,89 +1682,10 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
                 Sticker stickerId ->
-                    ( spoilerIndex2
-                    , embedIndex2
-                    , currentList
-                        ++ [ case SeqDict.get stickerId config.stickers of
-                                Just sticker ->
-                                    case sticker.url of
-                                        StickerLoading ->
-                                            Html.div
-                                                [ Html.Attributes.style "width" stickerSize
-                                                , Html.Attributes.style "height" stickerSize
-                                                , Html.Attributes.style "background-color" "gray"
-                                                ]
-                                                []
-
-                                        StickerInternal fileHash _ ->
-                                            case sticker.format of
-                                                Discord.PngFormat ->
-                                                    Html.img
-                                                        [ Html.Attributes.style "width" stickerSize
-                                                        , Html.Attributes.style "height" stickerSize
-                                                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                                        ]
-                                                        []
-
-                                                Discord.ApngFormat ->
-                                                    Html.img
-                                                        [ Html.Attributes.style "width" stickerSize
-                                                        , Html.Attributes.style "height" stickerSize
-                                                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                                        ]
-                                                        []
-
-                                                Discord.LottieFormat ->
-                                                    Html.div
-                                                        [ Html.Attributes.style "width" stickerSize
-                                                        , Html.Attributes.style "height" stickerSize
-                                                        , Html.Attributes.style "background-color" "gray"
-                                                        ]
-                                                        [ Html.text "Lottie not yet supported" ]
-
-                                                Discord.GifFormat ->
-                                                    Html.img
-                                                        [ Html.Attributes.style "width" stickerSize
-                                                        , Html.Attributes.style "height" stickerSize
-                                                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.gifContent fileHash)
-                                                        ]
-                                                        []
-
-                                        DiscordStandardSticker url ->
-                                            case sticker.format of
-                                                Discord.LottieFormat ->
-                                                    Html.div
-                                                        [ Html.Attributes.style "width" stickerSize
-                                                        , Html.Attributes.style "height" stickerSize
-                                                        , Html.Attributes.style "background-color" "gray"
-                                                        ]
-                                                        [ Html.text "Lottie not yet supported" ]
-
-                                                _ ->
-                                                    Html.img
-                                                        [ Html.Attributes.style "width" stickerSize
-                                                        , Html.Attributes.style "height" stickerSize
-                                                        , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format url)
-                                                        ]
-                                                        []
-
-                                Nothing ->
-                                    Html.div
-                                        [ Html.Attributes.style "width" stickerSize
-                                        , Html.Attributes.style "height" stickerSize
-                                        , Html.Attributes.style "background-color" "gray"
-                                        ]
-                                        [ Html.text "Sticker failed to load" ]
-                           ]
-                    )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ stickerView "160px" stickerId config.stickers ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
-
-
-stickerSize : String
-stickerSize =
-    "160px"
 
 
 embedContainerMaxWidth : number
@@ -2320,20 +2240,89 @@ textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
                 EscapedChar char ->
                     [ formatText "\\", Html.text (escapedCharToString char) ]
 
-                Sticker id ->
+                Sticker stickerId ->
                     [ Html.span
                         [ Html.Attributes.style "position" "relative" ]
-                        [ Html.div
-                            [ Html.Attributes.style "width" "3lh"
-                            , Html.Attributes.style "height" "3lh"
-                            , Html.Attributes.style "background-color" "rgba(0,0,0,0.3)"
-                            ]
-                            []
+                        [ Html.div [ Html.Attributes.style "position" "absolute" ] [ stickerView "3lh" stickerId stickers2 ]
                         ]
                     , Html.text "\n\n\n"
                     ]
         )
         (List.Nonempty.toList nonempty)
+
+
+stickerView : String -> Id StickerId -> SeqDict (Id StickerId) StickerData -> Html msg
+stickerView stickerSize2 stickerId stickers2 =
+    case SeqDict.get stickerId stickers2 of
+        Just sticker ->
+            case sticker.url of
+                StickerLoading ->
+                    Html.div
+                        [ Html.Attributes.style "width" stickerSize2
+                        , Html.Attributes.style "height" stickerSize2
+                        , Html.Attributes.style "background-color" "gray"
+                        ]
+                        []
+
+                StickerInternal fileHash _ ->
+                    case sticker.format of
+                        Discord.PngFormat ->
+                            Html.img
+                                [ Html.Attributes.style "width" stickerSize2
+                                , Html.Attributes.style "height" stickerSize2
+                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                ]
+                                []
+
+                        Discord.ApngFormat ->
+                            Html.img
+                                [ Html.Attributes.style "width" stickerSize2
+                                , Html.Attributes.style "height" stickerSize2
+                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                ]
+                                []
+
+                        Discord.LottieFormat ->
+                            Html.div
+                                [ Html.Attributes.style "width" stickerSize2
+                                , Html.Attributes.style "height" stickerSize2
+                                , Html.Attributes.style "background-color" "gray"
+                                ]
+                                [ Html.text "Lottie not yet supported" ]
+
+                        Discord.GifFormat ->
+                            Html.img
+                                [ Html.Attributes.style "width" stickerSize2
+                                , Html.Attributes.style "height" stickerSize2
+                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.gifContent fileHash)
+                                ]
+                                []
+
+                DiscordStandardSticker url ->
+                    case sticker.format of
+                        Discord.LottieFormat ->
+                            Html.div
+                                [ Html.Attributes.style "width" stickerSize2
+                                , Html.Attributes.style "height" stickerSize2
+                                , Html.Attributes.style "background-color" "gray"
+                                ]
+                                [ Html.text "Lottie not yet supported" ]
+
+                        _ ->
+                            Html.img
+                                [ Html.Attributes.style "width" stickerSize2
+                                , Html.Attributes.style "height" stickerSize2
+                                , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format url)
+                                ]
+                                []
+
+        Nothing ->
+            Html.div
+                [ Html.Attributes.style "width" stickerSize2
+                , Html.Attributes.style "height" stickerSize2
+                , Html.Attributes.style "background-color" "gray"
+                ]
+                [ Html.text "Sticker failed to load" ]
 
 
 formatText : String -> Html msg
@@ -2906,7 +2895,7 @@ toDiscord content =
                 EscapedChar char ->
                     Discord.Markdown.text (escapedCharToString char)
 
-                Sticker id ->
+                Sticker _ ->
                     Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)

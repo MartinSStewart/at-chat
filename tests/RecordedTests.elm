@@ -7,7 +7,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import Codec
 import Coord
-import Dict exposing (Dict)
+import Dict
 import Discord
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -63,7 +63,6 @@ import VisibleMessages
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
 setup =
     T.viewerWith tests
-        |> T.addBytesFiles (Dict.values fileRequests)
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
@@ -78,17 +77,6 @@ main =
 domain : Url
 domain =
     { protocol = Url.Http, host = "localhost", port_ = Just 8000, path = "", query = Nothing, fragment = Nothing }
-
-
-{-| Please don't modify or rename this function
--}
-fileRequests : Dict String String
-fileRequests =
-    [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
-    , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
-    , ( "GET_/compact-emoji.json", "/public/compact-emoji.json" )
-    ]
-        |> Dict.fromList
 
 
 stringToJson : String -> Json.Encode.Value
@@ -548,41 +536,6 @@ clickSpoiler user htmlId =
         ]
 
 
-handleHttpRequests : Dict String String -> Dict String Bytes -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
-handleHttpRequests overrides fileData requestAndData =
-    let
-        key : String
-        key =
-            requestAndData.currentRequest.method
-                ++ "_"
-                ++ requestAndData.currentRequest.url
-
-        getData : String -> HttpResponse
-        getData path =
-            case Dict.get path fileData of
-                Just data ->
-                    BytesHttpResponse { url = requestAndData.currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty } data
-
-                Nothing ->
-                    UnhandledHttpRequest
-    in
-    if key == "GET_/_i" then
-        StringHttpResponse
-            { url = requestAndData.currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-            infoEndpointResponse
-
-    else
-        case ( Dict.get key overrides, Dict.get key fileRequests ) of
-            ( Just path, _ ) ->
-                getData path
-
-            ( Nothing, Just path ) ->
-                getData path
-
-            _ ->
-                UnhandledHttpRequest
-
-
 scrollToTop :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -832,6 +785,11 @@ handleCustomRequest { method, url, headers, body } =
                         { url = url, statusCode = 403, statusText = "OK", headers = Dict.empty }
                         ""
 
+            ( "GET", [ "discord.com", "api", "v9", "sticker-packs" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    "[]"
+
             ( "POST", [ "discord.com", "api", "v9", "channels", _, "typing" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
@@ -918,8 +876,8 @@ decodeCustomRequest request =
             Nothing
 
 
-tests : Dict String Bytes -> String -> String -> Bytes -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
+tests : String -> String -> Bytes -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
@@ -1163,26 +1121,13 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 handleFileRequest
                 handleMultiFileUpload
                 domain
-
-        config =
-            T.Config
-                Frontend.app_
-                Backend.app_
-                (handleHttpRequests
-                    Dict.empty
-                    fileData
-                )
-                (\_ -> Nothing)
-                (\_ -> UnhandledFileUpload)
-                (\_ -> UnhandledMultiFileUpload)
-                domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
-    , inviteUserAndDmChat config
+    , inviteUserAndDmChat normalConfig
     , startTest
         "Admin can open admin page"
         startTime
-        config
+        normalConfig
         [ T.connectFrontend
             100
             sessionId0

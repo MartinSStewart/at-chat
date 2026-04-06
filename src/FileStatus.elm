@@ -56,7 +56,6 @@ import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
-import Json.Encode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)

@@ -1803,32 +1803,33 @@ customEmojiUrl { size, imageType } emojiId =
 
 stickerUrl : StickerType -> StickerFormatType -> Id StickerId -> String
 stickerUrl stickerType stickerFormat stickerId =
+    let
+        fileExtension : String
+        fileExtension =
+            case stickerFormat of
+                PngFormat ->
+                    ".png"
+
+                ApngFormat ->
+                    ".png"
+
+                LottieFormat ->
+                    ".json"
+
+                GifFormat ->
+                    ".gif"
+    in
     case stickerType of
         GuildSticker ->
             Url.Builder.crossOrigin
                 "https://media.discordapp.net"
-                [ "stickers"
-                , idToString stickerId
-                    ++ (case stickerFormat of
-                            PngFormat ->
-                                ".png"
-
-                            ApngFormat ->
-                                ".png"
-
-                            LottieFormat ->
-                                ".json"
-
-                            GifFormat ->
-                                ".gif"
-                       )
-                ]
+                [ "stickers", idToString stickerId ++ fileExtension ]
                 [ Url.Builder.int "size" 480
                 , Url.Builder.string "quality" "lossless"
                 ]
 
         StandardSticker ->
-            Url.Builder.crossOrigin "https://discord.com" [ "stickers", idToString stickerId ++ ".json" ] []
+            Url.Builder.crossOrigin "https://discord.com" [ "stickers", idToString stickerId ++ fileExtension ] []
 
 
 guildIconUrl : ImageCdnConfig (Choices Png Jpg WebP Gif) -> Id GuildId -> ImageHash IconHash -> String
