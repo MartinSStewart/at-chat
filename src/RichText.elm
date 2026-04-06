@@ -2243,7 +2243,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
                 Sticker stickerId ->
                     [ Html.span
                         [ Html.Attributes.style "position" "relative" ]
-                        [ Html.div [ Html.Attributes.style "position" "absolute" ] [ stickerView "3lh" stickerId stickers2 ]
+                        [ Html.div [ Html.Attributes.style "position" "absolute" ] [ stickerView "2lh" stickerId stickers2 ]
                         ]
                     , Html.text "\n\n\n"
                     ]
