@@ -3135,6 +3135,35 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             (\_ -> [])
         ]
     , startTest
+        "Message with sticker"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"sticker_items\":[{\"name\":\"sticker1\",\"id\":\"1490687750288965813\",\"format_type\":2}],\"pinned\":false,\"nonce\":\"1491219931943927808\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1491219932673740970\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:36:41.898000+00:00\",\"sticker_items\":[{\"name\":\"Happy\",\"id\":\"796140620111544330\",\"format_type\":3}],\"pinned\":false,\"nonce\":\"1491220202350706688\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1491220202879324241\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , startTest
         "Link Discord account with login to non-existent at-chat account"
         startTime
         normalConfig
