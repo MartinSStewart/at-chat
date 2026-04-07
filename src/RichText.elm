@@ -2283,12 +2283,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 []
 
                         Discord.LottieFormat ->
-                            Html.div
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.style "background-color" "gray"
-                                ]
-                                [ Html.text "Lottie not yet supported" ]
+                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.pngContent fileHash)
 
                         Discord.GifFormat ->
                             Html.img
@@ -2301,12 +2296,7 @@ stickerView stickerSize2 stickerId stickers2 =
                 DiscordStandardSticker url ->
                     case sticker.format of
                         Discord.LottieFormat ->
-                            Html.div
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.style "background-color" "gray"
-                                ]
-                                [ Html.text "Lottie not yet supported" ]
+                            lottieView stickerSize2 (Discord.stickerUrl Discord.StandardSticker sticker.format url)
 
                         _ ->
                             Html.img
@@ -2323,6 +2313,16 @@ stickerView stickerSize2 stickerId stickers2 =
                 , Html.Attributes.style "background-color" "gray"
                 ]
                 [ Html.text "Sticker failed to load" ]
+
+
+lottieView : String -> String -> Html msg
+lottieView stickerSize2 url =
+    Html.div
+        [ Html.Attributes.style "width" stickerSize2
+        , Html.Attributes.style "height" stickerSize2
+        , Html.Attributes.style "lottie-url" url
+        ]
+        []
 
 
 formatText : String -> Html msg

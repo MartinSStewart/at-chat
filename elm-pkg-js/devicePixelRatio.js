@@ -9,6 +9,23 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
+function loadScript(url, callback)
+{
+    // adding the script element to the head as suggested before
+   var head = document.getElementsByTagName('head')[0];
+   var script = document.createElement('script');
+   script.type = 'text/javascript';
+   script.src = url;
+
+   // then bind the event to the callback function
+   // there are several events for cross browser compatibility
+   script.onreadystatechange = callback;
+   script.onload = callback;
+
+   // fire the loading
+   head.appendChild(script);
+}
+
 exports.init = async function init(app)
 {
     // Register a Service Worker.
@@ -31,6 +48,20 @@ exports.init = async function init(app)
             });
         }
     });
+
+    loadScript("/bodymovin.js", (event) => {
+        console.log(event);
+//        var animation = bodymovin.loadAnimation({
+//          container: document.getElementById('bm'),
+//          renderer: 'svg',
+//          loop: true,
+//          autoplay: true,
+//          path: 'data.json'
+//        })
+
+     });
+
+
 
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
