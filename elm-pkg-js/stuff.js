@@ -9,23 +9,6 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
-function loadScript(url, callback)
-{
-    // adding the script element to the head as suggested before
-   var head = document.getElementsByTagName('head')[0];
-   var script = document.createElement('script');
-   script.type = 'text/javascript';
-   script.src = url;
-
-   // then bind the event to the callback function
-   // there are several events for cross browser compatibility
-   script.onreadystatechange = callback;
-   script.onload = callback;
-
-   // fire the loading
-   head.appendChild(script);
-}
-
 exports.init = async function init(app)
 {
     // Register a Service Worker.
@@ -49,19 +32,38 @@ exports.init = async function init(app)
         }
     });
 
-    loadScript("/bodymovin.js", (event) => {
-        console.log(event);
-//        var animation = bodymovin.loadAnimation({
-//          container: document.getElementById('bm'),
-//          renderer: 'svg',
-//          loop: true,
-//          autoplay: true,
-//          path: 'data.json'
-//        })
 
-     });
+    class LottiePlayer extends HTMLElement {
+      static get observedAttributes() { return ['src']; }
+      constructor() { super(); this._animation = null; }
+      connectedCallback() { this._loadAnimation(); }
+      disconnectedCallback() { this._destroyAnimation(); }
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'src' && oldValue !== newValue && this.isConnected) {
+          this._loadAnimation();
+        }
+      }
+      _destroyAnimation() {
+        if (this._animation) {
+          this._animation.destroy();
+          this._animation = null;
+        }
+      }
+      _loadAnimation() {
+        this._destroyAnimation();
+        var src = this.getAttribute('src');
+        if (!src) return;
+        this._animation = bodymovin.loadAnimation({
+          container: this,
+          renderer: 'canvas',
+          loop: true,
+          autoplay: true,
+          path: src
+        });
+      }
+    }
 
-
+    customElements.define('lottie-player', LottiePlayer);
 
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });

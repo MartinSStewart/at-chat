@@ -2320,6 +2320,7 @@ lottieView stickerSize2 url =
     Html.node "lottie-player"
         [ Html.Attributes.style "width" stickerSize2
         , Html.Attributes.style "height" stickerSize2
+        , Html.Attributes.style "display" "inline-block"
         , Html.Attributes.attribute "src" url
         ]
         []
