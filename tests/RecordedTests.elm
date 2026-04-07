@@ -65,6 +65,7 @@ setup =
     T.viewerWith tests
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
+        |> T.addStringFile "/tests/data/discord-sticker-packs.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
         |> T.addStringFile "/public/compact-emoji.json"
 
@@ -770,8 +771,8 @@ infoEndpointResponse =
     """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
 
-handleCustomRequest : CustomRequest -> HttpResponse
-handleCustomRequest { method, url, headers, body } =
+handleCustomRequest : String -> CustomRequest -> HttpResponse
+handleCustomRequest discordStickerPacks { method, url, headers, body } =
     if String.startsWith "https://" url then
         case ( method, String.dropLeft 8 url |> String.split "/" ) of
             ( "GET", [ "discord.com", "api", "v9", "users", "@me" ] ) ->
@@ -788,7 +789,7 @@ handleCustomRequest { method, url, headers, body } =
             ( "GET", [ "discord.com", "api", "v9", "sticker-packs" ] ) ->
                 StringHttpResponse
                     { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-                    "[]"
+                    discordStickerPacks
 
             ( "POST", [ "discord.com", "api", "v9", "channels", _, "typing" ] ) ->
                 StringHttpResponse
@@ -876,8 +877,14 @@ decodeCustomRequest request =
             Nothing
 
 
-tests : String -> String -> Bytes -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
+tests :
+    String
+    -> String
+    -> String
+    -> Bytes
+    -> String
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
@@ -908,7 +915,7 @@ tests discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
                         "http://localhost:3000/file/custom-request" ->
                             case decodeCustomRequest currentRequest of
                                 Just customRequest2 ->
-                                    handleCustomRequest customRequest2
+                                    handleCustomRequest discordStickerPacks customRequest2
 
                                 Nothing ->
                                     let
@@ -960,33 +967,38 @@ tests discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
                                 T.JsonBody json ->
                                     case Codec.decodeValue FileStatus.uploadUrlCodec json of
                                         Ok request ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 200
-                                                , statusText = "OK"
-                                                , headers = Dict.empty
-                                                }
-                                                (Codec.encodeToString
-                                                    0
-                                                    FileStatus.uploadResponseCodec
-                                                    { fileHash = FileStatus.fileHash request.url
-                                                    , imageSize =
-                                                        { imageSize = Coord.xy 128 128
-                                                        , orientation = Nothing
-                                                        , gpsLocation = Nothing
-                                                        , cameraOwner = Nothing
-                                                        , exposureTime = Nothing
-                                                        , fNumber = Nothing
-                                                        , focalLength = Nothing
-                                                        , isoSpeedRating = Nothing
-                                                        , make = Nothing
-                                                        , model = Nothing
-                                                        , software = Nothing
-                                                        , userComment = Nothing
-                                                        }
-                                                            |> Just
+                                            -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
+                                            if String.contains "796138864933863456" request.url then
+                                                UnhandledHttpRequest
+
+                                            else
+                                                StringHttpResponse
+                                                    { url = currentRequest.url
+                                                    , statusCode = 200
+                                                    , statusText = "OK"
+                                                    , headers = Dict.empty
                                                     }
-                                                )
+                                                    (Codec.encodeToString
+                                                        0
+                                                        FileStatus.uploadResponseCodec
+                                                        { fileHash = FileStatus.fileHash request.url
+                                                        , imageSize =
+                                                            { imageSize = Coord.xy 128 128
+                                                            , orientation = Nothing
+                                                            , gpsLocation = Nothing
+                                                            , cameraOwner = Nothing
+                                                            , exposureTime = Nothing
+                                                            , fNumber = Nothing
+                                                            , focalLength = Nothing
+                                                            , isoSpeedRating = Nothing
+                                                            , make = Nothing
+                                                            , model = Nothing
+                                                            , software = Nothing
+                                                            , userComment = Nothing
+                                                            }
+                                                                |> Just
+                                                        }
+                                                    )
 
                                         Err _ ->
                                             StringHttpResponse
@@ -1255,37 +1267,6 @@ tests discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
                 , admin.click 100 (Dom.id "guild_friendLabel_1")
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Editing..." ])
-                ]
-            )
-        ]
-    , startTest
-        "Discord friend label shows typing indicator"
-        startTime
-        normalConfig
-        [ linkDiscordAndLogin
-            sessionId0
-            (PersonName.toString Backend.adminUser.name)
-            adminEmail
-            False
-            discordOp0Ready
-            discordOp0ReadySupplemental
-            (\admin ->
-                [ andThenWebsocket
-                    (\connection _ ->
-                        [ admin.click 100 (Dom.id "guildIcon_showFriends")
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.exactText "Typing..." ]
-                            )
-                        , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"185574444641550336\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Typing..." ]
-                            )
-                        ]
-                    )
                 ]
             )
         ]
@@ -3069,6 +3050,37 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":476,"op":0,"d":{"webhook_id":"1374332266083254363","type":0,"tts":false,"timestamp":"2026-03-31T20:15:05.862000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1488632753368072280","flags":0,"embeds":[{"url":"https://github.com/lamdera/compiler/pull/92","type":"rich","title":"[lamdera/compiler] Pull request opened: #92   Allow configuring <html lang> via html-lang file","id":"1488632753368072281","description":"Read an optional html-lang file from the project root to set the lang attribute on the generated  tag.  If the file contains e.g. \\"fr\\", the output becomes .  If absent or empty, the tag is plain  as before.  Fixes #84.","content_scan_version":4,"color":38912,"author":{"url":"https://github.com/MavenRain","proxy_icon_url":"https://images-ext-1.discordapp.net/external/z5iI09eMZ6hW8pY8xflOmWevOiHuXRD-pljR_thC38Q/%3Fv%3D4/https/avatars.githubusercontent.com/u/7246681","name":"MavenRain","icon_url":"https://avatars.githubusercontent.com/u/7246681?v=4"}}],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"GitHub","id":"1374332266083254363","global_name":null,"discriminator":"0000","bot":true,"avatar":"e57fd67dc7ca0cc840a0e87a82281bc5"},"attachments":[],"guild_id":"705745250815311942"}}"""
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Title for https://github.com/lamdera/compiler/pull/92" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , startTest
+        "Discord friend label shows typing indicator"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "Typing..." ]
+                            )
+                        , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"185574444641550336\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Typing..." ]
+                            )
                         ]
                     )
                 ]
