@@ -2312,6 +2312,17 @@ inviteUserAndDmChat config =
                                 Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
                                     |> Test.Html.Query.count (Expect.equal 2)
                             )
+                        , createThread user (Id.fromInt 1)
+                        , writeMessage user 100 "Writing in thread"
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_threadStarterIndicator_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.containing [ Test.Html.Selector.exactText "Sven" ]
+                                        ]
+                            )
+                        , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
                         ]
                     )
                 ]

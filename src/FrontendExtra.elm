@@ -2280,7 +2280,7 @@ changeUpdate localMsg local =
                                                 threadId
                                                 (Message.userTextMessage
                                                     createdAt
-                                                    localUser.session.userId
+                                                    createdBy
                                                     text
                                                     maybeReplyTo
                                                     attachedFiles

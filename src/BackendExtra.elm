@@ -957,20 +957,16 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 , sendMessageRateLimits = sendMessageRateLimits
               }
             , Command.batch
-                [ if session.userId == otherUserId then
-                    Command.none
-
-                  else
-                    Broadcast.broadcastDm
-                        changeId
-                        time
-                        clientId
-                        session.userId
-                        otherUserId
-                        text
-                        threadRouteWithReplyTo
-                        attachedFiles
-                        model
+                [ Broadcast.broadcastDm
+                    changeId
+                    time
+                    clientId
+                    session.userId
+                    otherUserId
+                    text
+                    threadRouteWithReplyTo
+                    attachedFiles
+                    model
                 , Command.map identity (GotDmMessageEmbed dmChannelId (ViewThreadWithMessage threadId messageId)) embedCmds
                 ]
             )
