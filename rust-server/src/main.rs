@@ -42,6 +42,10 @@ async fn main() {
             "/file/custom-request",
             post(custom_request_endpoint).options(options_endpoint),
         )
+        .route(
+            "/file/discord-sticker/{sticker_id}",
+            get(discord_sticker_endpoint).options(options_endpoint),
+        )
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
         .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
@@ -661,6 +665,28 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(format!("{hash} is an invalid filename")))
             .unwrap()
+    }
+}
+
+async fn discord_sticker_endpoint(sticker_id: Path<String>) -> http::Response<Body> {
+    match sticker_id.parse::<usize>() {
+        Ok(sticker_id2) => {
+            match reqwest::get(format!("https://discord.com/stickers/{}.json", sticker_id2)).await {
+                Ok(bytes) => Response::builder()
+                    .status(StatusCode::OK)
+                    .body(Body::from(bytes.bytes().await.unwrap()))
+                    .unwrap(),
+                Err(_) => Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from(format!("Invalid sticker ID")))
+                    .unwrap(),
+            }
+        }
+
+        Err(_) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(format!("Invalid sticker ID")))
+            .unwrap(),
     }
 }
 

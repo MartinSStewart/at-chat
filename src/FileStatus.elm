@@ -15,6 +15,7 @@ module FileStatus exposing
     , addFileHash
     , contentType
     , contentTypes
+    , discordStickerUrl
     , domain
     , fileHash
     , fileUploadPreview
@@ -22,6 +23,7 @@ module FileStatus exposing
     , gifContent
     , imageInfoView
     , imageMaxHeight
+    , jsonContent
     , onlyUploadedFiles
     , pngContent
     , sizeToString
@@ -187,6 +189,11 @@ webpContent =
 gifContent : ContentType
 gifContent =
     contentType "image/gif"
+
+
+jsonContent : ContentType
+jsonContent =
+    contentType "application/json"
 
 
 type ContentTypeType
@@ -377,6 +384,11 @@ uploadUrl request =
         , resolver = resolver uploadResponseCodec
         , timeout = Just (Duration.seconds 30)
         }
+
+
+discordStickerUrl : Discord.Id Discord.StickerId -> String
+discordStickerUrl stickerId =
+    domain ++ "/file/discord-sticker/" ++ Discord.idToString stickerId
 
 
 type alias UploadUrlRequest =

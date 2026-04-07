@@ -2283,7 +2283,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 []
 
                         Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash)
 
                         Discord.GifFormat ->
                             Html.img
@@ -2293,16 +2293,16 @@ stickerView stickerSize2 stickerId stickers2 =
                                 ]
                                 []
 
-                DiscordStandardSticker url ->
+                DiscordStandardSticker discordStickerId ->
                     case sticker.format of
                         Discord.LottieFormat ->
-                            lottieView stickerSize2 (Discord.stickerUrl Discord.StandardSticker sticker.format url)
+                            lottieView stickerSize2 (FileStatus.discordStickerUrl discordStickerId)
 
                         _ ->
                             Html.img
                                 [ Html.Attributes.style "width" stickerSize2
                                 , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format url)
+                                , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format discordStickerId)
                                 ]
                                 []
 

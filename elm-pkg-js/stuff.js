@@ -53,13 +53,18 @@ exports.init = async function init(app)
         this._destroyAnimation();
         var src = this.getAttribute('src');
         if (!src) return;
-        this._animation = bodymovin.loadAnimation({
-          container: this,
-          renderer: 'canvas',
-          loop: true,
-          autoplay: true,
-          path: src
-        });
+        if (typeof bodymovin !== 'undefined') {
+            this._animation = bodymovin.loadAnimation({
+              container: this,
+              renderer: 'canvas',
+              loop: true,
+              autoplay: true,
+              path: src
+            });
+        }
+        else {
+            setTimeout(() => { this._loadAnimation(this); }, 1000);
+        }
       }
     }
 
