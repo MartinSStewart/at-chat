@@ -2317,10 +2317,10 @@ stickerView stickerSize2 stickerId stickers2 =
 
 lottieView : String -> String -> Html msg
 lottieView stickerSize2 url =
-    Html.div
+    Html.node "lottie-player"
         [ Html.Attributes.style "width" stickerSize2
         , Html.Attributes.style "height" stickerSize2
-        , Html.Attributes.style "lottie-url" url
+        , Html.Attributes.attribute "src" url
         ]
         []
 
