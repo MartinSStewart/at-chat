@@ -3183,6 +3183,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Test.Html.Query.findAll [ Test.Html.Selector.tag "animated-image-player" ] html
                                     |> Test.Html.Query.count (Expect.equal 3)
                             )
+                        , admin.click 100 (Dom.id "elm-ui-root-id")
                         , T.websocketSendString
                             100
                             connection
