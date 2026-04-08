@@ -34,13 +34,23 @@ exports.init = async function init(app)
 
 
     class LottiePlayer extends HTMLElement {
-      static get observedAttributes() { return ['src']; }
+      static get observedAttributes() { return ['src', 'playing']; }
       constructor() { super(); this._animation = null; }
       connectedCallback() { this._loadAnimation(); }
       disconnectedCallback() { this._destroyAnimation(); }
       attributeChangedCallback(name, oldValue, newValue) {
         if (name === 'src' && oldValue !== newValue && this.isConnected) {
           this._loadAnimation();
+        }
+        if (name === 'playing' && this._animation) {
+          this._updatePlayState();
+        }
+      }
+      _updatePlayState() {
+        if (this.getAttribute('playing') === 'true') {
+          this._animation.play();
+        } else {
+          this._animation.goToAndStop(0, true);
         }
       }
       _destroyAnimation() {
@@ -53,14 +63,20 @@ exports.init = async function init(app)
         this._destroyAnimation();
         var src = this.getAttribute('src');
         if (!src) return;
+        var shouldPlay = this.getAttribute('playing') !== 'false';
         if (typeof bodymovin !== 'undefined') {
             this._animation = bodymovin.loadAnimation({
               container: this,
               renderer: 'canvas',
               loop: true,
-              autoplay: true,
+              autoplay: shouldPlay,
               path: src
             });
+            if (!shouldPlay) {
+              this._animation.addEventListener('DOMLoaded', () => {
+                this._animation.goToAndStop(0, true);
+              });
+            }
         }
         else {
             setTimeout(() => { this._loadAnimation(this); }, 1000);
