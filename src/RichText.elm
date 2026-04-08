@@ -1374,7 +1374,7 @@ view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonemp
         |> (\( _, _, a ) -> a)
 
 
-preview : (Url -> msg) -> Config a userId -> Nonempty (RichText userId) -> List (Html msg)
+preview : (Url -> msg) -> PreviewConfig a userId -> Nonempty (RichText userId) -> List (Html msg)
 preview onPressLink config nonempty =
     viewHelper
         NoLargeContent
@@ -1382,7 +1382,13 @@ preview onPressLink config nonempty =
         onPressLink
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
-        config
+        { domainWhitelist = config.domainWhitelist
+        , revealedSpoilers = config.revealedSpoilers
+        , users = config.users
+        , attachedFiles = config.attachedFiles
+        , stickers = SeqDict.empty
+        , playAnimations = False
+        }
         Array.empty
         0
         nonempty
@@ -1395,6 +1401,15 @@ type alias Config a userId =
     , users : SeqDict userId { a | name : PersonName }
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
+    , playAnimations : Bool
+    }
+
+
+type alias PreviewConfig a userId =
+    { domainWhitelist : SeqSet Domain
+    , revealedSpoilers : SeqSet Int
+    , users : SeqDict userId { a | name : PersonName }
+    , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
@@ -1682,7 +1697,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
                 Sticker stickerId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ stickerView "160px" stickerId config.stickers ] )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ stickerView "160px" stickerId config.stickers config.playAnimations ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -2243,7 +2258,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
                 Sticker stickerId ->
                     [ Html.span
                         [ Html.Attributes.style "position" "relative" ]
-                        [ Html.div [ Html.Attributes.style "position" "absolute" ] [ stickerView "2lh" stickerId stickers2 ]
+                        [ Html.div [ Html.Attributes.style "position" "absolute" ] [ stickerView "2lh" stickerId stickers2 False ]
                         ]
                     , Html.text "\n\n\n"
                     ]
@@ -2251,8 +2266,8 @@ textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
         (List.Nonempty.toList nonempty)
 
 
-stickerView : String -> Id StickerId -> SeqDict (Id StickerId) StickerData -> Html msg
-stickerView stickerSize2 stickerId stickers2 =
+stickerView : String -> Id StickerId -> SeqDict (Id StickerId) StickerData -> Bool -> Html msg
+stickerView stickerSize2 stickerId stickers2 playAnimation =
     case SeqDict.get stickerId stickers2 of
         Just sticker ->
             case sticker.url of
@@ -2286,7 +2301,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 []
 
                         Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash)
+                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash) playAnimation
 
                         Discord.GifFormat ->
                             Html.img
@@ -2300,7 +2315,7 @@ stickerView stickerSize2 stickerId stickers2 =
                 DiscordStandardSticker discordStickerId ->
                     case sticker.format of
                         Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.discordStickerUrl discordStickerId)
+                            lottieView stickerSize2 (FileStatus.discordStickerUrl discordStickerId) playAnimation
 
                         _ ->
                             Html.img
@@ -2320,13 +2335,21 @@ stickerView stickerSize2 stickerId stickers2 =
                 [ Html.text "Sticker failed to load" ]
 
 
-lottieView : String -> String -> Html msg
-lottieView stickerSize2 url =
+lottieView : String -> String -> Bool -> Html msg
+lottieView stickerSize2 url playAnimation =
     Html.node "lottie-player"
         [ Html.Attributes.style "width" stickerSize2
         , Html.Attributes.style "height" stickerSize2
         , Html.Attributes.style "display" "inline-block"
         , Html.Attributes.attribute "src" url
+        , Html.Attributes.attribute
+            "start-playing"
+            (if playAnimation then
+                "true"
+
+             else
+                "false"
+            )
         ]
         []
 

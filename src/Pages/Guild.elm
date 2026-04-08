@@ -4821,6 +4821,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     localUser
                     revealedSpoilers
                     allUsers
+                    isHovered
                     messageIndex
                     data
                 )
@@ -4906,6 +4907,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     localUser
                     revealedSpoilers
                     allUsers
+                    isHovered
                     messageIndex
                     message2
                 )
@@ -4947,10 +4949,11 @@ userTextMessageContent :
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
+    -> IsHovered
     -> Id messageId
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo localUser revealedSpoilers allUsers messageIndex message2 =
+userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo localUser revealedSpoilers allUsers isHovered messageIndex message2 =
     Ui.row
         []
         [ Ui.el
@@ -5006,6 +5009,16 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , attachedFiles = message2.attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
                     , stickers = localUser.stickers
+                    , playAnimations =
+                        case isHovered of
+                            IsNotHovered ->
+                                False
+
+                            IsHovered ->
+                                True
+
+                            IsHoveredButNoMenu ->
+                                True
                     }
                     message2.embeds
                     message2.content
@@ -5147,7 +5160,6 @@ userTextMessagePreview allUsers revealedSpoilers message =
                 , users = allUsers
                 , attachedFiles = message.attachedFiles
                 , domainWhitelist = SeqSet.empty
-                , stickers = SeqDict.empty
                 }
                 message.content
         )
@@ -5500,7 +5512,6 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                         , users = allUsers
                                         , attachedFiles = data.attachedFiles
                                         , domainWhitelist = SeqSet.empty
-                                        , stickers = SeqDict.empty
                                         }
                                         data.content
 

@@ -34,23 +34,19 @@ exports.init = async function init(app)
 
 
     class LottiePlayer extends HTMLElement {
-      static get observedAttributes() { return ['src', 'playing']; }
-      constructor() { super(); this._animation = null; }
+      static get observedAttributes() { return ['src', 'start-playing']; }
+      constructor() { super(); this._animation = null; this._playIndex = 0; }
       connectedCallback() { this._loadAnimation(); }
       disconnectedCallback() { this._destroyAnimation(); }
       attributeChangedCallback(name, oldValue, newValue) {
         if (name === 'src' && oldValue !== newValue && this.isConnected) {
           this._loadAnimation();
         }
-        if (name === 'playing' && this._animation) {
-          this._updatePlayState();
-        }
-      }
-      _updatePlayState() {
-        if (this.getAttribute('playing') === 'true') {
+        if (name === 'start-playing' && newValue === 'true' && this._animation) {
           this._animation.play();
-        } else {
-          this._animation.goToAndStop(0, true);
+          this._playIndex += 1;
+          const currentPlayIndex = this._playIndex;
+          setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.goToAndStop(0, true); } }, 5000);
         }
       }
       _destroyAnimation() {
@@ -61,22 +57,18 @@ exports.init = async function init(app)
       }
       _loadAnimation() {
         this._destroyAnimation();
-        var src = this.getAttribute('src');
+        let src = this.getAttribute('src');
         if (!src) return;
-        var shouldPlay = this.getAttribute('playing') !== 'false';
         if (typeof bodymovin !== 'undefined') {
             this._animation = bodymovin.loadAnimation({
               container: this,
               renderer: 'canvas',
               loop: true,
-              autoplay: shouldPlay,
+              autoplay: true,
               path: src
             });
-            if (!shouldPlay) {
-              this._animation.addEventListener('DOMLoaded', () => {
-                this._animation.goToAndStop(0, true);
-              });
-            }
+            const currentPlayIndex = this._playIndex;
+            setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.goToAndStop(0, true); } }, 5000);
         }
         else {
             setTimeout(() => { this._loadAnimation(this); }, 1000);
