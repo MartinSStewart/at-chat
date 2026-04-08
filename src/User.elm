@@ -123,7 +123,7 @@ addRecentlyUsedEmoji emoji user =
     }
 
 
-setEmojiCategory : Emoji.Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 setEmojiCategory category user =
     let
         emojiConfig =

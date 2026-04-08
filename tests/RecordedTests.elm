@@ -2883,7 +2883,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordGuildMemberJoined _ _ _ _ _ ->
                             True
 
-                        Types.Server_LinkedDiscordUserStickersLoaded seqDict ->
+                        Types.Server_LinkedDiscordUserStickersLoaded _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->

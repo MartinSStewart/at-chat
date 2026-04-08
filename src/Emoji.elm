@@ -207,11 +207,6 @@ allEmojiCategories =
     ]
 
 
-allCategories : List Category
-allCategories =
-    StickerCategory :: List.map EmojiCategory allEmojiCategories
-
-
 {-| OpaqueVariants
 -}
 type SkinTone
@@ -504,7 +499,7 @@ selector searchHasFocus isMobile width model userData emojiData stickersData =
                                                 StickerInternal _ _ ->
                                                     EmojiOrSticker_Sticker stickerId |> Just
 
-                                                DiscordStandardSticker id ->
+                                                DiscordStandardSticker _ ->
                                                     EmojiOrSticker_Sticker stickerId |> Just
 
                                                 StickerLoading ->
@@ -548,7 +543,7 @@ selector searchHasFocus isMobile width model userData emojiData stickersData =
                                                     (categoryToEmojiString userData.skinTone category)
                                                     |> Just
                                     )
-                                    allCategories
+                                    (StickerCategory :: List.map EmojiCategory allEmojiCategories)
                            )
                     )
                 , Ui.row

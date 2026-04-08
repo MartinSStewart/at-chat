@@ -50,7 +50,7 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
-import Sticker exposing (StickerData, StickerUrl(..))
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..), Url)
