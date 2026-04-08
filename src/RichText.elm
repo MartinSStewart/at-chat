@@ -2261,6 +2261,7 @@ stickerView stickerSize2 stickerId stickers2 =
                         [ Html.Attributes.style "width" stickerSize2
                         , Html.Attributes.style "height" stickerSize2
                         , Html.Attributes.style "background-color" "gray"
+                        , Html.Attributes.style "display" "block"
                         ]
                         []
 
@@ -2271,6 +2272,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 [ Html.Attributes.style "width" stickerSize2
                                 , Html.Attributes.style "height" stickerSize2
                                 , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                , Html.Attributes.style "display" "block"
                                 ]
                                 []
 
@@ -2279,6 +2281,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 [ Html.Attributes.style "width" stickerSize2
                                 , Html.Attributes.style "height" stickerSize2
                                 , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                , Html.Attributes.style "display" "block"
                                 ]
                                 []
 
@@ -2290,6 +2293,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 [ Html.Attributes.style "width" stickerSize2
                                 , Html.Attributes.style "height" stickerSize2
                                 , Html.Attributes.src (FileStatus.fileUrl FileStatus.gifContent fileHash)
+                                , Html.Attributes.style "display" "block"
                                 ]
                                 []
 
@@ -2303,6 +2307,7 @@ stickerView stickerSize2 stickerId stickers2 =
                                 [ Html.Attributes.style "width" stickerSize2
                                 , Html.Attributes.style "height" stickerSize2
                                 , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format discordStickerId)
+                                , Html.Attributes.style "display" "block"
                                 ]
                                 []
 
