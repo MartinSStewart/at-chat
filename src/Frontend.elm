@@ -23,7 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -56,6 +56,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import Sticker
 import String.Nonempty
 import TextEditor
 import Thread
@@ -1151,7 +1152,7 @@ updateLoaded msg model =
 
         EmojiSelectorMsg emojiMsg ->
             case emojiMsg of
-                Emoji.PressedSelectEmoji emoji ->
+                Emoji.PressedSelectEmoji emojiOrSticker ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case loggedIn.showEmojiSelector of
@@ -1159,17 +1160,22 @@ updateLoaded msg model =
                                     ( loggedIn, Command.none )
 
                                 EmojiSelectorForReaction guildOrDmId threadRoute ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
-                                        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                        (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_Emoji emoji ->
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+
+                                        EmojiOrSticker_Sticker _ ->
+                                            ( loggedIn, Command.none )
 
                                 EmojiSelectorForMessage maybeSelection ->
-                                    insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji model loggedIn
+                                    insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
 
                                 EmojiSelectorForEditMessage _ maybeSelection ->
-                                    insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji model loggedIn
+                                    insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn
                         )
                         model
 
@@ -3473,20 +3479,29 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
         model
 
 
-insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
-insertEmoji inputId maybeSelection emoji model loggedIn =
+insertEmojiOrSticker :
+    HtmlId
+    -> Maybe Range
+    -> EmojiOrSticker
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly toMsg msg )
+insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
     let
         text : String
         text =
-            case model.emojiData of
-                Just emojiData ->
+            case ( emojiOrSticker, model.emojiData ) of
+                ( EmojiOrSticker_Emoji emoji, Just emojiData ) ->
                     Emoji.emojiWithSkinTone
                         (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
                         emoji
                         emojiData
                         ++ " "
 
-                Nothing ->
+                ( EmojiOrSticker_Sticker stickerId, _ ) ->
+                    Sticker.idToString stickerId
+
+                _ ->
                     ""
     in
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }

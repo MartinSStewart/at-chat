@@ -43,7 +43,7 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), Emoji, EmojiConfig, SkinTone)
+import Emoji exposing (Category(..), Emoji, EmojiCategory(..), EmojiConfig, SkinTone)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
@@ -123,7 +123,7 @@ addRecentlyUsedEmoji emoji user =
     }
 
 
-setEmojiCategory : Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+setEmojiCategory : Emoji.Category -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 setEmojiCategory category user =
     let
         emojiConfig =
@@ -223,7 +223,7 @@ init createdAt name email userIsAdmin =
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
-    , emojiConfig = { skinTone = Nothing, category = SmileysAndEmotion, lastUsedEmojis = Array.empty }
+    , emojiConfig = { skinTone = Nothing, category = EmojiCategory SmileysAndEmotion, lastUsedEmojis = Array.empty }
     }
 
 

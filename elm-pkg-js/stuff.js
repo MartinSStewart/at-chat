@@ -98,28 +98,30 @@ exports.init = async function init(app)
         if (name === 'src' && oldValue !== newValue && this.isConnected) {
           this._loadGif();
         }
-        if (name === 'start-playing' && newValue === 'true' && this._loaded) {
-          this._play();
+        if (name === 'start-playing' && this._loaded) {
+            switch(newValue) {
+                case '0': break;
+                case '1': { this._play(false); break; }
+                case '2': { this._play(true); break; }
+            }
+
         }
       }
-      _play() {
+      _play(loopForever) {
         // Show the animated img, hide the canvas
         this._canvas.style.display = 'none';
-        // Force the GIF to restart by re-setting src
-        const src = this.getAttribute('src');
-        this._img.src = '';
-        this._img.src = src;
+        this._img.src = this.getAttribute('src');
         this._img.style.display = 'block';
         this._playIndex += 1;
-        const currentPlayIndex = this._playIndex;
-        setTimeout(() => {
-          if (currentPlayIndex === this._playIndex) { this._pause(); }
-        }, 5000);
-      }
-      _pause() {
-        // Show the canvas (first frame), hide the animated img
-        this._img.style.display = 'none';
-        this._canvas.style.display = 'block';
+        if (!loopForever) {
+            const currentPlayIndex = this._playIndex;
+            setTimeout(() => {
+              if (currentPlayIndex === this._playIndex) {
+                this._img.style.display = 'none';
+                this._canvas.style.display = 'block';
+              }
+            }, 5000);
+        }
       }
       _loadGif() {
         this._loaded = false;
@@ -146,7 +148,8 @@ exports.init = async function init(app)
           this._canvas.style.height = '100%';
           this._loaded = true;
 
-          this._play();
+          console.log(this.getAttribute('start-playing'));
+          this._play(this.getAttribute('start-playing') === '2');
         };
         tempImg.src = src;
       }

@@ -58,6 +58,7 @@ import RichText
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Sticker
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
@@ -3081,6 +3082,7 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
                         , Ui.paddingXY paddingX 0
@@ -3102,6 +3104,7 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
                         , Ui.paddingXY paddingX 0
@@ -3127,6 +3130,7 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    local.localUser.stickers
                     |> Ui.el
                         [ Ui.paddingXY paddingX 0
                         , Ui.move
@@ -5009,16 +5013,16 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , attachedFiles = message2.attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
                     , stickers = localUser.stickers
-                    , playAnimations =
+                    , animationMode =
                         case isHovered of
                             IsNotHovered ->
-                                False
+                                Sticker.LoopAFewTimesOnLoad
 
                             IsHovered ->
-                                True
+                                Sticker.ResetAndLoopAFewTimes
 
                             IsHoveredButNoMenu ->
-                                True
+                                Sticker.ResetAndLoopAFewTimes
                     }
                     message2.embeds
                     message2.content

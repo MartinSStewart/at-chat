@@ -347,7 +347,7 @@ toStringWithGetter userToString users nonempty =
                     "\\" ++ escapedCharToString char
 
                 Sticker id ->
-                    stickerIdToString id
+                    Sticker.idToString id
         )
         nonempty
         |> List.Nonempty.toList
@@ -410,44 +410,11 @@ toString users nonempty =
                     "\\" ++ escapedCharToString char
 
                 Sticker id ->
-                    stickerIdToString id
+                    Sticker.idToString id
         )
         nonempty
         |> List.Nonempty.toList
         |> String.concat
-
-
-stickerIdToString : Id StickerId -> String
-stickerIdToString id =
-    "\n" ++ toBase4 (Id.toInt id) ++ "\n\n"
-
-
-toBase4 : Int -> String
-toBase4 n =
-    if n < 0 then
-        "-" ++ toBase4 (abs n)
-
-    else if n < 4 then
-        toBase4Helper n
-
-    else
-        toBase4 (n // 4) ++ toBase4Helper (remainderBy 4 n)
-
-
-toBase4Helper : Int -> String
-toBase4Helper int =
-    case int of
-        0 ->
-            "\u{200B}"
-
-        1 ->
-            "\u{200C}"
-
-        2 ->
-            "\u{200D}"
-
-        _ ->
-            "\u{2060}"
 
 
 fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
@@ -1387,7 +1354,7 @@ preview onPressLink config nonempty =
         , users = config.users
         , attachedFiles = config.attachedFiles
         , stickers = SeqDict.empty
-        , playAnimations = False
+        , animationMode = Sticker.LoopAFewTimesOnLoad
         }
         Array.empty
         0
@@ -1401,7 +1368,7 @@ type alias Config a userId =
     , users : SeqDict userId { a | name : PersonName }
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
-    , playAnimations : Bool
+    , animationMode : Sticker.AnimationMode
     }
 
 
@@ -1593,7 +1560,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                     Just (EmbedLoaded embed) ->
                                         case ( embed == Embed.empty, showLargeContent ) of
                                             ( False, ShowLargeContent containerWidth ) ->
-                                                embedView onPressLink containerWidth config.domainWhitelist data embed
+                                                embedView
+                                                    onPressLink
+                                                    containerWidth
+                                                    config.domainWhitelist
+                                                    config.animationMode
+                                                    data
+                                                    embed
 
                                             _ ->
                                                 inlineEmbedView showLargeContent onPressLink config.domainWhitelist data
@@ -1697,7 +1670,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
                 Sticker stickerId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ stickerView "160px" stickerId config.stickers config.playAnimations ] )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ Sticker.view "160px" stickerId config.stickers config.animationMode ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -1764,8 +1737,8 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             content
 
 
-embedView : (Url -> msg) -> Int -> SeqSet Domain -> Url -> EmbedData -> Html msg
-embedView onPressLink containerWidth domainWhitelist url embed =
+embedView : (Url -> msg) -> Int -> SeqSet Domain -> Sticker.AnimationMode -> Url -> EmbedData -> Html msg
+embedView onPressLink containerWidth domainWhitelist playAnimation url embed =
     embedContainer
         (List.filterMap
             identity
@@ -1815,17 +1788,40 @@ embedView onPressLink containerWidth domainWhitelist url embed =
 
                         ( width, height ) =
                             actualImageSize embedImageMaxHeight insideWidth imageData.imageSize
+
+                        width2 =
+                            String.fromFloat width ++ "px"
+
+                        height2 =
+                            String.fromFloat height ++ "px"
+
+                        isAnimatedImage =
+                            case imageData.format of
+                                Just format ->
+                                    case format of
+                                        Embed.Gif ->
+                                            True
+
+                                        _ ->
+                                            False
+
+                                Nothing ->
+                                    False
                     in
-                    Html.img
-                        [ Html.Attributes.src imageData.url
-                        , Html.Attributes.style "width" (String.fromFloat width ++ "px")
-                        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-                        , Html.Attributes.style "border-radius" "4px"
-                        , Html.Attributes.style "margin-top" "8px"
-                        , Html.Attributes.style "display" "block"
-                        ]
-                        []
-                        |> Just
+                    if isAnimatedImage then
+                        Sticker.animatedImageView width2 height2 imageData.url playAnimation |> Just
+
+                    else
+                        Html.img
+                            [ Html.Attributes.src imageData.url
+                            , Html.Attributes.style "width" width2
+                            , Html.Attributes.style "height" height2
+                            , Html.Attributes.style "border-radius" "4px"
+                            , Html.Attributes.style "margin-top" "8px"
+                            , Html.Attributes.style "display" "block"
+                            ]
+                            []
+                            |> Just
 
                 Nothing ->
                     Nothing
@@ -2258,112 +2254,14 @@ textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
                 Sticker stickerId ->
                     [ Html.span
                         [ Html.Attributes.style "position" "relative" ]
-                        [ Html.div [ Html.Attributes.style "position" "absolute" ] [ stickerView "2lh" stickerId stickers2 False ]
+                        [ Html.div
+                            [ Html.Attributes.style "position" "absolute" ]
+                            [ Sticker.view "2lh" stickerId stickers2 Sticker.LoopAFewTimesOnLoad ]
                         ]
                     , Html.text "\n\n\n"
                     ]
         )
         (List.Nonempty.toList nonempty)
-
-
-stickerView : String -> Id StickerId -> SeqDict (Id StickerId) StickerData -> Bool -> Html msg
-stickerView stickerSize2 stickerId stickers2 playAnimation =
-    case SeqDict.get stickerId stickers2 of
-        Just sticker ->
-            case sticker.url of
-                StickerLoading ->
-                    Html.div
-                        [ Html.Attributes.style "width" stickerSize2
-                        , Html.Attributes.style "height" stickerSize2
-                        , Html.Attributes.style "background-color" "gray"
-                        , Html.Attributes.style "display" "block"
-                        ]
-                        []
-
-                StickerInternal fileHash _ ->
-                    case sticker.format of
-                        Discord.PngFormat ->
-                            Html.img
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                , Html.Attributes.style "display" "block"
-                                ]
-                                []
-
-                        Discord.ApngFormat ->
-                            animatedImageView
-                                stickerSize2
-                                (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                playAnimation
-
-                        Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash) playAnimation
-
-                        Discord.GifFormat ->
-                            animatedImageView
-                                stickerSize2
-                                (FileStatus.fileUrl FileStatus.gifContent fileHash)
-                                playAnimation
-
-                DiscordStandardSticker discordStickerId ->
-                    case sticker.format of
-                        Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.discordStickerUrl discordStickerId) playAnimation
-
-                        _ ->
-                            animatedImageView
-                                stickerSize2
-                                (Discord.stickerUrl Discord.StandardSticker sticker.format discordStickerId)
-                                playAnimation
-
-        Nothing ->
-            Html.div
-                [ Html.Attributes.style "width" stickerSize2
-                , Html.Attributes.style "height" stickerSize2
-                , Html.Attributes.style "background-color" "gray"
-                ]
-                [ Html.text "Sticker failed to load" ]
-
-
-animatedImageView : String -> String -> Bool -> Html msg
-animatedImageView stickerSize2 url playAnimation =
-    Html.node
-        "animated-image-player"
-        [ Html.Attributes.style "width" stickerSize2
-        , Html.Attributes.style "height" stickerSize2
-        , Html.Attributes.attribute "src" (Debug.log "url" url)
-        , Html.Attributes.style "display" "block"
-        , Html.Attributes.attribute
-            "start-playing"
-            (if playAnimation then
-                "true"
-
-             else
-                "false"
-            )
-        ]
-        []
-
-
-lottieView : String -> String -> Bool -> Html msg
-lottieView stickerSize2 url playAnimation =
-    Html.node
-        "lottie-player"
-        [ Html.Attributes.style "width" stickerSize2
-        , Html.Attributes.style "height" stickerSize2
-        , Html.Attributes.style "display" "inline-block"
-        , Html.Attributes.attribute "src" url
-        , Html.Attributes.attribute
-            "start-playing"
-            (if playAnimation then
-                "true"
-
-             else
-                "false"
-            )
-        ]
-        []
 
 
 formatText : String -> Html msg
