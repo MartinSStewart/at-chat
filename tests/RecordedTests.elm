@@ -1932,7 +1932,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             [ tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                             , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                             , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                            , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                            , tabA.click 991 (Dom.id "guild_emojiSelector_131")
                             , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
                             , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
                             , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -1947,7 +1947,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_131")
                         , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
                         , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -1962,7 +1962,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
                         , tabA.click 100 (Dom.id "emoji_category_People & Body")
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_👍")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_351")
                         , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "👍" ])
                         , tabA.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -3169,6 +3169,20 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 [ andThenWebsocket
                     (\connection _ ->
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
+                        , admin.click 100 (Dom.id "emoji_category_Stickers")
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.tag "lottie-player" ] html
+                                    |> Test.Html.Query.count (Expect.equal 2)
+                            )
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.tag "animated-image-player" ] html
+                                    |> Test.Html.Query.count (Expect.equal 3)
+                            )
                         , T.websocketSendString
                             100
                             connection
@@ -3226,10 +3240,16 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
                         , admin.click 100 (Dom.id "emoji_category_Stickers")
                         , admin.click 100 (Dom.id "guild_emojiSelector_0")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
                         , T.andThen
                             30
                             (\data ->
-                                case List.filter (\request -> request.portName == "exec_command_to_js") data.portRequests of
+                                case
+                                    List.filter
+                                        (\request -> request.clientId == admin.clientId && request.portName == "exec_command_to_js")
+                                        data.portRequests
+                                of
                                     [ _ ] ->
                                         [ admin.update
                                             30
@@ -3242,8 +3262,10 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                         ]
 
                                     _ ->
-                                        []
+                                        [ admin.checkModel 100 (\_ -> Err "Didn't add sticker to text input") ]
                             )
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "animated-image-player" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "animated-image-player" ])
                         ]
                     )
                 ]
