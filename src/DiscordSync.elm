@@ -827,13 +827,14 @@ handleCreateMessage websocketJson discordMessage attachments model =
                             replyTo =
                                 referencedMessageToMessageId discordMessage channel
 
-                            ( message, embedCmds ) =
+                            ( message, embedCmds, stickersToFrontend ) =
                                 Message.userTextMessage
                                     discordMessage.timestamp
                                     discordMessage.author.id
                                     richText
                                     replyTo
                                     attachments
+                                    model.stickers
 
                             guildOrDmId : DiscordGuildOrDmId
                             guildOrDmId =
@@ -904,6 +905,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments
+                                                        stickersToFrontend
                                                         |> ServerChange
                                                     )
                                                     model2
@@ -919,6 +921,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments
+                                                        stickersToFrontend
                                                         |> ServerChange
                                                     )
                                                     model2
@@ -1116,18 +1119,19 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                     guildOrDmId =
                                         DiscordGuildOrDmId_Guild discordMessage.author.id discordGuildId channelId
 
-                                    channelResult : Result DiscordMessageAlreadyExists ( DiscordBackendChannel, Command BackendOnly ToFrontend BackendMsg )
+                                    channelResult : Result DiscordMessageAlreadyExists ( DiscordBackendChannel, Command BackendOnly ToFrontend BackendMsg, SeqDict (Id StickerId) StickerData )
                                     channelResult =
                                         case threadRoute of
                                             ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                                 let
-                                                    ( message2, embedCmds ) =
+                                                    ( message2, embedCmds, stickers ) =
                                                         Message.userTextMessage
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
                                                             maybeReplyTo
                                                             attachments
+                                                            model.stickers
                                                 in
                                                 case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId message2 channel of
                                                     Ok ( messageId, channel3 ) ->
@@ -1136,6 +1140,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             identity
                                                             (DiscordGotGuildMessageEmbed discordGuildId channelId (ViewThreadWithMessage threadId messageId))
                                                             embedCmds
+                                                        , stickers
                                                         )
                                                             |> Ok
 
@@ -1144,13 +1149,14 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                                             NoThreadWithMaybeMessage maybeReplyTo ->
                                                 let
-                                                    ( message, embedCmds ) =
+                                                    ( message, embedCmds, stickers ) =
                                                         Message.userTextMessage
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
                                                             maybeReplyTo
                                                             attachments
+                                                            model.stickers
                                                 in
                                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
                                                     Ok ( messageId, channel3 ) ->
@@ -1159,6 +1165,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             identity
                                                             (DiscordGotGuildMessageEmbed discordGuildId channelId (NoThreadWithMessage messageId))
                                                             embedCmds
+                                                        , stickers
                                                         )
                                                             |> Ok
 
@@ -1166,7 +1173,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         Err DiscordMessageAlreadyExists
                                 in
                                 case channelResult of
-                                    Ok ( channel4, embedCmds ) ->
+                                    Ok ( channel4, embedCmds, stickers ) ->
                                         let
                                             ( model2, logCmd ) =
                                                 if richText == RichText.emptyPlaceholder then
@@ -1237,7 +1244,13 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         , Broadcast.toDiscordGuildExcludingOne
                                                             clientId
                                                             discordGuildId
-                                                            (Server_Discord_SendMessage discordMessage.timestamp guildOrDmId richText threadRoute attachments
+                                                            (Server_Discord_SendMessage
+                                                                discordMessage.timestamp
+                                                                guildOrDmId
+                                                                richText
+                                                                threadRoute
+                                                                attachments
+                                                                stickers
                                                                 |> ServerChange
                                                             )
                                                             model2
@@ -1252,6 +1265,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             richText
                                                             threadRoute
                                                             attachments
+                                                            stickers
                                                             |> ServerChange
                                                         )
                                                         model2

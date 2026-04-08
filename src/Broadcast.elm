@@ -37,7 +37,7 @@ import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -49,6 +49,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), Sho
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Sticker exposing (StickerData)
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Url
 import User exposing (BackendUser)
@@ -848,9 +849,10 @@ broadcastDm :
     -> Nonempty (RichText (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id StickerId) StickerData
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model =
+broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles stickers model =
     Command.batch
         [ LocalChangeResponse
             changeId
@@ -868,6 +870,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                     text
                     threadRouteWithReplyTo
                     attachedFiles
+                    stickers
             )
             model
         , if userId == otherUserId then

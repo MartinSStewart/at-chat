@@ -2719,11 +2719,11 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ _ _ _ _ _ _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
-                        Types.Server_Discord_SendMessage _ _ _ _ _ ->
+                        Types.Server_Discord_SendMessage _ _ _ _ _ _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ ->
@@ -3038,6 +3038,21 @@ attackerLocalChanges =
     ]
 
 
+currentDiscordUserId : Discord.Id Discord.UserId
+currentDiscordUserId =
+    Unsafe.uint64 "184437096813953035" |> Discord.idFromUInt64
+
+
+botTestGuild : Discord.Id Discord.GuildId
+botTestGuild =
+    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+
+botTestGuild_ChannelA : Discord.Id Discord.ChannelId
+botTestGuild_ChannelA =
+    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
+
+
 discordTests :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> String
@@ -3153,13 +3168,43 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             100
                             connection
                             "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"sticker_items\":[{\"name\":\"sticker1\",\"id\":\"1490687750288965813\",\"format_type\":2}],\"pinned\":false,\"nonce\":\"1491219931943927808\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1491219932673740970\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Sticker failed to load"
+                                , Test.Html.Selector.tag "lottie-player"
+                                ]
+                            )
                         , T.websocketSendString
                             100
                             connection
                             "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:36:41.898000+00:00\",\"sticker_items\":[{\"name\":\"Happy\",\"id\":\"796140620111544330\",\"format_type\":3}],\"pinned\":false,\"nonce\":\"1491220202350706688\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1491220202879324241\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
-                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "lottie-player" ])
                         ]
                     )
+                ]
+            )
+        , T.connectFrontend
+            100
+            sessionId0
+            (Route.encode
+                (Route.DiscordGuildRoute
+                    { currentDiscordUserId = currentDiscordUserId
+                    , guildId = botTestGuild
+                    , channelRoute =
+                        Route.DiscordChannel_ChannelRoute
+                            botTestGuild_ChannelA
+                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                    }
+                )
+            )
+            desktopWindow
+            (\adminReloaded ->
+                [ adminReloaded.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , adminReloaded.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
+                , adminReloaded.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "lottie-player" ])
                 ]
             )
         ]
