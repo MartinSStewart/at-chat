@@ -78,6 +78,84 @@ exports.init = async function init(app)
 
     customElements.define('lottie-player', LottiePlayer);
 
+    class GifPlayer extends HTMLElement {
+      static get observedAttributes() { return ['src', 'start-playing']; }
+      constructor() {
+        super();
+        this._canvas = document.createElement('canvas');
+        this._img = document.createElement('img');
+        this._playIndex = 0;
+        this._loaded = false;
+      }
+      connectedCallback() { this._loadGif(); }
+      disconnectedCallback() {
+        this._canvas.remove();
+        this._img.remove();
+        this._loaded = false;
+      }
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'src' && oldValue !== newValue && this.isConnected) {
+          this._loadGif();
+        }
+        if (name === 'start-playing' && newValue === 'true' && this._loaded) {
+          this._play();
+        }
+      }
+      _play() {
+        // Show the animated img, hide the canvas
+        this._canvas.style.display = 'none';
+        // Force the GIF to restart by re-setting src
+        const src = this.getAttribute('src');
+        this._img.src = '';
+        this._img.src = src;
+        this._img.style.display = 'block';
+        this._playIndex += 1;
+        const currentPlayIndex = this._playIndex;
+        setTimeout(() => {
+          if (currentPlayIndex === this._playIndex) { this._pause(); }
+        }, 5000);
+      }
+      _pause() {
+        // Show the canvas (first frame), hide the animated img
+        this._img.style.display = 'none';
+        this._canvas.style.display = 'block';
+      }
+      _loadGif() {
+        this._loaded = false;
+        this.innerHTML = '';
+        const src = this.getAttribute('src');
+        if (!src) return;
+
+        this._canvas.style.display = 'block';
+        this._img.style.display = 'none';
+        this._img.style.width = '100%';
+        this._img.style.height = '100%';
+        this.appendChild(this._canvas);
+        this.appendChild(this._img);
+
+        // Load the image to capture the first frame onto the canvas
+        const tempImg = new Image();
+        tempImg.crossOrigin = 'anonymous';
+        tempImg.onload = () => {
+          this._canvas.width = tempImg.naturalWidth;
+          this._canvas.height = tempImg.naturalHeight;
+          const ctx = this._canvas.getContext('2d');
+          ctx.drawImage(tempImg, 0, 0);
+          this._canvas.style.width = '100%';
+          this._canvas.style.height = '100%';
+          this._loaded = true;
+
+          // If start-playing was already true before load finished, play now
+          if (this.getAttribute('start-playing') === 'true') {
+            this._play();
+          }
+        };
+        tempImg.src = src;
+      }
+    }
+
+    customElements.define('gif-player', GifPlayer);
+
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
     });
