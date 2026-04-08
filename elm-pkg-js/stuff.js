@@ -44,9 +44,10 @@ exports.init = async function init(app)
         }
         if (name === 'start-playing' && newValue === 'true' && this._animation) {
           this._animation.play();
+          this._animation.setLoop(true);
           this._playIndex += 1;
           const currentPlayIndex = this._playIndex;
-          setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.goToAndStop(0, true); } }, 5000);
+          setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
         }
       }
       _destroyAnimation() {
@@ -68,7 +69,7 @@ exports.init = async function init(app)
               path: src
             });
             const currentPlayIndex = this._playIndex;
-            setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.goToAndStop(0, true); } }, 5000);
+            setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
         }
         else {
             setTimeout(() => { this._loadAnimation(this); }, 1000);
@@ -78,7 +79,7 @@ exports.init = async function init(app)
 
     customElements.define('lottie-player', LottiePlayer);
 
-    class GifPlayer extends HTMLElement {
+    class AnimatedImagePlayer extends HTMLElement {
       static get observedAttributes() { return ['src', 'start-playing']; }
       constructor() {
         super();
@@ -145,16 +146,13 @@ exports.init = async function init(app)
           this._canvas.style.height = '100%';
           this._loaded = true;
 
-          // If start-playing was already true before load finished, play now
-          if (this.getAttribute('start-playing') === 'true') {
-            this._play();
-          }
+          this._play();
         };
         tempImg.src = src;
       }
     }
 
-    customElements.define('gif-player', GifPlayer);
+    customElements.define('animated-image-player', AnimatedImagePlayer);
 
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });

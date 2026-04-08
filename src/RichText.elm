@@ -2292,25 +2292,19 @@ stickerView stickerSize2 stickerId stickers2 playAnimation =
                                 []
 
                         Discord.ApngFormat ->
-                            Html.img
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                , Html.Attributes.style "display" "block"
-                                ]
-                                []
+                            animatedImageView
+                                stickerSize2
+                                (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                                playAnimation
 
                         Discord.LottieFormat ->
                             lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash) playAnimation
 
                         Discord.GifFormat ->
-                            Html.img
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.gifContent fileHash)
-                                , Html.Attributes.style "display" "block"
-                                ]
-                                []
+                            animatedImageView
+                                stickerSize2
+                                (FileStatus.fileUrl FileStatus.gifContent fileHash)
+                                playAnimation
 
                 DiscordStandardSticker discordStickerId ->
                     case sticker.format of
@@ -2318,13 +2312,10 @@ stickerView stickerSize2 stickerId stickers2 playAnimation =
                             lottieView stickerSize2 (FileStatus.discordStickerUrl discordStickerId) playAnimation
 
                         _ ->
-                            Html.img
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.src (Discord.stickerUrl Discord.StandardSticker sticker.format discordStickerId)
-                                , Html.Attributes.style "display" "block"
-                                ]
-                                []
+                            animatedImageView
+                                stickerSize2
+                                (Discord.stickerUrl Discord.StandardSticker sticker.format discordStickerId)
+                                playAnimation
 
         Nothing ->
             Html.div
@@ -2335,9 +2326,30 @@ stickerView stickerSize2 stickerId stickers2 playAnimation =
                 [ Html.text "Sticker failed to load" ]
 
 
+animatedImageView : String -> String -> Bool -> Html msg
+animatedImageView stickerSize2 url playAnimation =
+    Html.node
+        "animated-image-player"
+        [ Html.Attributes.style "width" stickerSize2
+        , Html.Attributes.style "height" stickerSize2
+        , Html.Attributes.attribute "src" (Debug.log "url" url)
+        , Html.Attributes.style "display" "block"
+        , Html.Attributes.attribute
+            "start-playing"
+            (if playAnimation then
+                "true"
+
+             else
+                "false"
+            )
+        ]
+        []
+
+
 lottieView : String -> String -> Bool -> Html msg
 lottieView stickerSize2 url playAnimation =
-    Html.node "lottie-player"
+    Html.node
+        "lottie-player"
         [ Html.Attributes.style "width" stickerSize2
         , Html.Attributes.style "height" stickerSize2
         , Html.Attributes.style "display" "inline-block"
