@@ -485,7 +485,7 @@ showEmojiSelectorButton : String -> Element Msg
 showEmojiSelectorButton htmlIdPrefix =
     Ui.el
         [ Ui.rounded 4
-        , Ui.id (htmlIdPrefix ++ "_uploadFile")
+        , Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
         , Ui.pointer
         , Ui.paddingXY 6 0
         , Ui.height (Ui.px 40)

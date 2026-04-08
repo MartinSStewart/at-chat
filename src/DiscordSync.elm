@@ -41,7 +41,7 @@ import Env
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -1534,7 +1534,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ReadyData readyData ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleReadyData readyData model2
+                                    handleReadyData userData.linkedTo readyData model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -2198,8 +2198,8 @@ handleReadySupplementalData data model =
             ( model, [] )
 
 
-handleReadyData : Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleReadyData readyData model =
+handleReadyData : Id UserId -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleReadyData userId readyData model =
     let
         discordDmChannels : List { dmChannelId : Discord.Id Discord.PrivateChannelId, members : List (Discord.Id Discord.UserId) }
         discordDmChannels =
@@ -2298,7 +2298,7 @@ handleReadyData readyData model =
     , Command.batch
         [ getUserAvatars model.discordUsers discordUsers
         , Task.sequence stickerData.tasks
-            |> Task.andThen (\stickers -> Task.map (GotDiscordGuildStickers stickers) Time.now)
+            |> Task.andThen (\stickers -> Task.map (GotDiscordGuildStickers userId stickers) Time.now)
             |> Task.perform identity
         , (List.filterMap
             (\guild ->

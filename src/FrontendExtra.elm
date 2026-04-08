@@ -3142,6 +3142,13 @@ changeUpdate localMsg local =
                                 }
                     }
 
+                Server_LinkedDiscordUserStickersLoaded newStickers ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | stickers = SeqDict.union newStickers localUser.stickers } }
+
 
 guildSendMessage :
     Id GuildId

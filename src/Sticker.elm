@@ -3,6 +3,7 @@ module Sticker exposing (AnimationMode(..), StickerData, StickerUrl(..), addUrl,
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (StickerFormatType)
+import Env
 import FileStatus exposing (FileHash)
 import Html exposing (Html)
 import Html.Attributes
@@ -30,17 +31,18 @@ type AnimationMode
     | LoopForever
 
 
-addUrl : FileStatus.UploadResponse -> StickerData -> StickerData
+addUrl : FileStatus.UploadResponse -> StickerData -> Result () StickerData
 addUrl uploadResponse sticker =
     case sticker.url of
         StickerLoading ->
             { sticker | url = StickerInternal uploadResponse.fileHash (Maybe.map .imageSize uploadResponse.imageSize) }
+                |> Ok
 
         StickerInternal _ _ ->
-            sticker
+            Err ()
 
         DiscordStandardSticker _ ->
-            sticker
+            Err ()
 
 
 view : String -> Id StickerId -> SeqDict (Id StickerId) StickerData -> AnimationMode -> Html msg
@@ -128,6 +130,15 @@ animatedImageView width height url animationMode =
         , Html.Attributes.attribute "src" url
         , Html.Attributes.style "display" "block"
         , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
+        , Html.Attributes.style
+            "background-color"
+            (if Env.isProduction then
+                "transparent"
+
+             else
+                -- Make it easier to understand what is going on in end-to-end tests where the actual animation doesn't load
+                "rgba(0,0,0,0.1)"
+            )
         ]
         []
 
@@ -141,6 +152,15 @@ lottieView stickerSize2 url animationMode =
         , Html.Attributes.style "display" "inline-block"
         , Html.Attributes.attribute "src" url
         , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
+        , Html.Attributes.style
+            "background-color"
+            (if Env.isProduction then
+                "transparent"
+
+             else
+                -- Make it easier to understand what is going on in end-to-end tests where the actual animation doesn't load
+                "rgba(0,0,0,0.1)"
+            )
         ]
         []
 

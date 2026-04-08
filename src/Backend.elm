@@ -1314,21 +1314,32 @@ update msg model =
             , Command.none
             )
 
-        GotDiscordGuildStickers results time ->
+        GotDiscordGuildStickers userId results time ->
             let
-                ( errors, stickers ) =
+                ( errors, stickers, newStickers ) =
                     List.foldl
-                        (\( stickerId, result ) ( errors2, stickers2 ) ->
+                        (\( stickerId, result ) ( errors2, stickers2, newStickers2 ) ->
                             case result of
                                 Ok uploadResponse ->
-                                    ( errors2
-                                    , SeqDict.updateIfExists stickerId (Sticker.addUrl uploadResponse) stickers2
-                                    )
+                                    case SeqDict.get stickerId stickers2 of
+                                        Just sticker ->
+                                            case Sticker.addUrl uploadResponse sticker of
+                                                Ok sticker2 ->
+                                                    ( errors2
+                                                    , SeqDict.insert stickerId sticker2 stickers2
+                                                    , SeqDict.insert stickerId sticker2 newStickers2
+                                                    )
+
+                                                Err () ->
+                                                    ( errors2, stickers2, newStickers2 )
+
+                                        Nothing ->
+                                            ( errors2, stickers2, newStickers2 )
 
                                 Err error ->
-                                    ( ( stickerId, error ) :: errors2, stickers2 )
+                                    ( ( stickerId, error ) :: errors2, stickers2, newStickers2 )
                         )
-                        ( [], model.stickers )
+                        ( [], model.stickers, SeqDict.empty )
                         results
             in
             case List.Nonempty.fromList errors of
@@ -1339,7 +1350,14 @@ update msg model =
                         { model | stickers = stickers }
 
                 Nothing ->
-                    ( { model | stickers = stickers }, Command.none )
+                    ( { model | stickers = stickers }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        userId
+                        (Server_LinkedDiscordUserStickersLoaded newStickers |> ServerChange)
+                        model
+                    )
 
         HourlyUpdate time ->
             ( model

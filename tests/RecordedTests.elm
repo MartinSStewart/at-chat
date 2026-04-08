@@ -30,6 +30,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
+import MessageInput
 import MyUi exposing (Range)
 import NonemptyDict
 import Pages.Admin
@@ -45,6 +46,7 @@ import SecretId exposing (SecretId(..))
 import SeqDict
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
+import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
@@ -2881,6 +2883,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordGuildMemberJoined _ _ _ _ _ ->
                             True
 
+                        Types.Server_LinkedDiscordUserStickersLoaded seqDict ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 
@@ -3025,7 +3030,7 @@ attackerLocalChanges =
     , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
-    , Local_SetEmojiCategory Emoji.Activities
+    , Local_SetEmojiCategory (Emoji.EmojiCategory Emoji.Activities)
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
@@ -3202,16 +3207,43 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 )
             )
             desktopWindow
-            (\adminReloaded ->
-                [ adminReloaded.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                , adminReloaded.checkView
+            (\admin ->
+                [ admin.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
-                , adminReloaded.checkView
+                , admin.checkView
                     100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.tag "lottie-player"
                         , Test.Html.Selector.exactText "Message with text and sticker!"
+                        ]
+                    )
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ admin.click 100 (Dom.id "guild_openChannel_0")
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
+                        , admin.click 100 (Dom.id "emoji_category_Stickers")
+                        , admin.click 100 (Dom.id "guild_emojiSelector_0")
+                        , T.andThen
+                            30
+                            (\data ->
+                                case List.filter (\request -> request.portName == "exec_command_to_js") data.portRequests of
+                                    [ _ ] ->
+                                        [ admin.update
+                                            30
+                                            (Types.MessageInputMsg
+                                                (GuildOrDmId (GuildOrDmId_Guild (Id.fromInt 0) (Id.fromInt 0)))
+                                                NoThread
+                                                (MessageInput.TypedMessage (Sticker.idToString (Id.fromInt 3)))
+                                            )
+                                        , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                                        ]
+
+                                    _ ->
+                                        []
+                            )
                         ]
                     )
                 ]

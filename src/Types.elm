@@ -598,7 +598,7 @@ type BackendMsg
         )
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
-    | GotDiscordGuildStickers (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordGuildStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
 
@@ -741,6 +741,7 @@ type ServerChange
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
+    | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
 
 
 type LocalChange
