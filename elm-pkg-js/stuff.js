@@ -42,12 +42,24 @@ exports.init = async function init(app)
         if (name === 'src' && oldValue !== newValue && this.isConnected) {
           this._loadAnimation();
         }
-        if (name === 'start-playing' && newValue === 'true' && this._animation) {
-          this._animation.play();
-          this._animation.setLoop(true);
-          this._playIndex += 1;
-          const currentPlayIndex = this._playIndex;
-          setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+        if (name === 'start-playing' && this._animation) {
+            switch(newValue) {
+                case '0': break;
+                case '1': {
+                    this._animation.play();
+                    this._animation.setLoop(true);
+                    this._playIndex += 1;
+                    const currentPlayIndex = this._playIndex;
+                    setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+                    break;
+                }
+                case '2': {
+                    this._animation.play();
+                    this._animation.setLoop(true);
+                    this._playIndex += 1;
+                    break;
+                }
+            }
         }
       }
       _destroyAnimation() {
@@ -68,8 +80,11 @@ exports.init = async function init(app)
               autoplay: true,
               path: src
             });
-            const currentPlayIndex = this._playIndex;
-            setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+
+            if (this.getAttribute('start-playing') !== '2') {
+                const currentPlayIndex = this._playIndex;
+                setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+            }
         }
         else {
             setTimeout(() => { this._loadAnimation(this); }, 1000);
@@ -148,7 +163,6 @@ exports.init = async function init(app)
           this._canvas.style.height = '100%';
           this._loaded = true;
 
-          console.log(this.getAttribute('start-playing'));
           this._play(this.getAttribute('start-playing') === '2');
         };
         tempImg.src = src;

@@ -505,7 +505,7 @@ selector searchHasFocus isMobile width model userData emojiData stickersData =
                                                     EmojiOrSticker_Sticker stickerId |> Just
 
                                                 DiscordStandardSticker id ->
-                                                    Nothing
+                                                    EmojiOrSticker_Sticker stickerId |> Just
 
                                                 StickerLoading ->
                                                     Nothing
