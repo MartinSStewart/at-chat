@@ -2965,13 +2965,16 @@ updateLoaded msg model =
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                                    , Ports.execCommand
-                                        { htmlId = Pages.Guild.channelTextInputId
-                                        , commands =
-                                            List.map
-                                                (\range -> { range = range, text = "" })
-                                                (RichText.partialStickers text)
-                                        }
+                                    , case RichText.partialStickers text of
+                                        [] ->
+                                            Command.none
+
+                                        list ->
+                                            Ports.execCommand
+                                                { htmlId = Pages.Guild.channelTextInputId
+                                                , commands =
+                                                    Ports.Undo :: List.map (\range -> Ports.InsertText "" range) list
+                                                }
                                     ]
                                 )
                         )
@@ -3515,12 +3518,12 @@ insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
     , case maybeSelection of
         Just range ->
-            Ports.execCommand { htmlId = inputId, commands = [ { range = range, text = text } ] }
+            Ports.execCommand { htmlId = inputId, commands = [ Ports.InsertText text range ] }
 
         Nothing ->
             Ports.execCommand
                 { htmlId = inputId
-                , commands = [ { range = { start = 99999, end = 99999 }, text = text } ]
+                , commands = [ Ports.InsertText text { start = 99999, end = 99999 } ]
                 }
     )
 

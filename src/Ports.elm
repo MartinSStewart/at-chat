@@ -1,7 +1,7 @@
 port module Ports exposing
     ( CropImageData
     , CropImageDataResponse
-    , ExecCommand
+    , ExecCommand(..)
     , ExecCommandPort
     , NotificationPermission(..)
     , PwaStatus(..)
@@ -168,11 +168,7 @@ decodeDomId =
 
 execCommand : ExecCommandPort -> Command FrontendOnly toMsg msg
 execCommand data =
-    if List.isEmpty data.commands then
-        Command.none
-
-    else
-        Command.sendToJs "exec_command_to_js" exec_command_to_js (Codec.encodeToValue execCommandPortCodec data)
+    Command.sendToJs "exec_command_to_js" exec_command_to_js (Codec.encodeToValue execCommandPortCodec data)
 
 
 type alias ExecCommandPort =
@@ -181,10 +177,9 @@ type alias ExecCommandPort =
     }
 
 
-type alias ExecCommand =
-    { text : String
-    , range : Range
-    }
+type ExecCommand
+    = InsertText String Range
+    | Undo
 
 
 execCommandPortCodec : Codec ExecCommandPort
@@ -197,10 +192,18 @@ execCommandPortCodec =
 
 execCommandCodec : Codec ExecCommand
 execCommandCodec =
-    Codec.object ExecCommand
-        |> Codec.field "text" .text Codec.string
-        |> Codec.field "range" .range Range.codec
-        |> Codec.buildObject
+    Codec.custom
+        (\insertTextEncoder undoEncoder value ->
+            case value of
+                InsertText argA argB ->
+                    insertTextEncoder argA argB
+
+                Undo ->
+                    undoEncoder
+        )
+        |> Codec.variant2 "insertText" InsertText Codec.string Range.codec
+        |> Codec.variant0 "undo" Undo
+        |> Codec.buildCustom
 
 
 fixCursorPosition : HtmlId -> Command FrontendOnly toMsg msg

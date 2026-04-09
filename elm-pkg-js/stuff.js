@@ -202,8 +202,19 @@ exports.init = async function init(app)
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();
         data.commands.forEach((item) => {
-            textarea.setSelectionRange(item.range.start, item.range.end);
-            document.execCommand('insertText', false, item.text);
+            console.log(item);
+            switch (item.tag) {
+                case 'undo': {
+                    document.execCommand(item.tag, false, null);
+                    break;
+                }
+                case 'insertText': {
+                    textarea.setSelectionRange(item.args[1].start, item.args[1].end);
+                    document.execCommand(item.tag, false, item.args[0]);
+                    break;
+                }
+            }
+
         });
     });
 

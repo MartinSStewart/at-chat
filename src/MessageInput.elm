@@ -793,7 +793,7 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
                     |> Task.attempt (\_ -> setFocusMsg)
                 , Ports.execCommand
                     { htmlId = channelTextInputId
-                    , commands = [ { range = range, text = textToInsert ++ " " } ]
+                    , commands = [ Ports.InsertText (textToInsert ++ " ") range ]
                     }
                 ]
             )
