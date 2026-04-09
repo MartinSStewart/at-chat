@@ -2692,8 +2692,19 @@ updateLoaded msg model =
                                                         }
                                                             |> MessageMenu
                                         }
-                                        (Process.sleep (Duration.seconds 1)
-                                            |> Task.perform (\() -> DebouncedTyping)
+                                        (Command.batch
+                                            [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
+                                            , case RichText.partialStickers text of
+                                                [] ->
+                                                    Command.none
+
+                                                list ->
+                                                    Ports.execCommand
+                                                        { htmlId = Pages.Guild.channelTextInputId
+                                                        , commands =
+                                                            Ports.Undo :: List.map (\range -> Ports.InsertText "" range) list
+                                                        }
+                                            ]
                                         )
 
                                 Nothing ->
