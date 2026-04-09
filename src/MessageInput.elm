@@ -248,7 +248,8 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
 
                 Nothing ->
                     [ if placeholderText == "" then
-                        Html.text " "
+                        -- A normal space doesn't prevent the textarea from being 0 lines tall for some reason
+                        Html.text "\u{00A0}"
 
                       else
                         Html.text placeholderText
