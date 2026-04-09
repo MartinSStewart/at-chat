@@ -1,7 +1,5 @@
 module MyUi exposing
-    ( Range
-    , SelectionDirection(..)
-    , alertColor
+    ( alertColor
     , background1
     , background2
     , background3
@@ -52,7 +50,6 @@ module MyUi exposing
     , prewrap
     , radioColumn
     , radioRowWithSeparators
-    , rangeSize
     , replyToColor
     , rowButton
     , secondaryButton
@@ -698,20 +695,6 @@ simpleButton htmlId onPress content =
         , Ui.Font.weight 500
         ]
         content
-
-
-type alias Range =
-    { start : Int, end : Int }
-
-
-type SelectionDirection
-    = SelectForward
-    | SelectBackward
-
-
-rangeSize : Range -> Int
-rangeSize range =
-    range.end - range.start
 
 
 focusEffect : Ui.Attribute msg

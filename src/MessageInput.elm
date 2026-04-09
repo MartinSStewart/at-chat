@@ -35,10 +35,11 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MembersAndOwner
-import MyUi exposing (Range, SelectionDirection)
+import MyUi
 import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
+import Range exposing (Range, SelectionDirection)
 import RichText
 import SeqDict exposing (SeqDict)
 import Sticker exposing (StickerData)
@@ -784,13 +785,16 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
                             Nothing
     in
     case ( pingUser, maybeTextToInsert ) of
-        ( Just _, Just ( { start, end }, textToInsert ) ) ->
+        ( Just _, Just ( range, textToInsert ) ) ->
             ( Nothing
             , inputText
             , Command.batch
                 [ Dom.focus channelTextInputId
                     |> Task.attempt (\_ -> setFocusMsg)
-                , Ports.execCommand channelTextInputId start end (textToInsert ++ " ")
+                , Ports.execCommand
+                    { htmlId = channelTextInputId
+                    , commands = [ { range = range, text = textToInsert ++ " " } ]
+                    }
                 ]
             )
 

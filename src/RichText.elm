@@ -14,6 +14,7 @@ module RichText exposing
     , fromNonemptyString
     , hyperlinks
     , mentionsUser
+    , partialStickers
     , preview
     , removeAttachedFile
     , stickers
@@ -47,6 +48,7 @@ import NonemptyDict
 import NonemptyExtra
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
+import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
@@ -658,17 +660,17 @@ stringAtRange index count text =
         Nothing
 
 
-parseStickerId : Int -> String -> Maybe ( Id StickerId, Int )
+parseStickerId : Int -> String -> ( Int, Maybe (Id StickerId) )
 parseStickerId index source =
     case stringAt index source of
         Just char ->
             case char of
                 "\u{200B}" ->
                     if stringAtRange (index + 1) 2 source == Just "\n\n" then
-                        Just ( Id.fromInt 0, index + 3 )
+                        ( index + 3, Just (Id.fromInt 0) )
 
                     else
-                        Nothing
+                        ( index + 1, Nothing )
 
                 "\u{200C}" ->
                     parseStickerIdHelper 1 (index + 1) source
@@ -680,13 +682,13 @@ parseStickerId index source =
                     parseStickerIdHelper 3 (index + 1) source
 
                 _ ->
-                    Nothing
+                    ( index, Nothing )
 
         Nothing ->
-            Nothing
+            ( index, Nothing )
 
 
-parseStickerIdHelper : Int -> Int -> String -> Maybe ( Id StickerId, Int )
+parseStickerIdHelper : Int -> Int -> String -> ( Int, Maybe (Id StickerId) )
 parseStickerIdHelper id index source =
     case stringAt index source of
         Just char ->
@@ -706,16 +708,35 @@ parseStickerIdHelper id index source =
                 "\n" ->
                     case ( stringAt (index + 1) source, id <= Basics.Extra.maxSafeInteger ) of
                         ( Just "\n", True ) ->
-                            Just ( Id.fromInt id, index + 2 )
+                            ( index + 2, Just (Id.fromInt id) )
 
                         _ ->
-                            Nothing
+                            ( index + 1, Nothing )
 
                 _ ->
-                    Nothing
+                    ( index, Nothing )
 
         Nothing ->
-            Nothing
+            ( index, Nothing )
+
+
+partialStickers : String -> List Range
+partialStickers text =
+    String.indexes "\n\u{200B}" text
+        ++ String.indexes "\n\u{200C}" text
+        ++ String.indexes "\n\u{200D}" text
+        ++ String.indexes "\n\u{2060}" text
+        |> List.foldl
+            (\index shouldRemove ->
+                case parseStickerId (index + 1) text of
+                    ( endIndex, Nothing ) ->
+                        { start = index, end = endIndex } :: shouldRemove
+
+                    ( _, Just _ ) ->
+                        shouldRemove
+            )
+            []
+        |> List.sortBy (\range -> -range.start)
 
 
 parseLoop :
@@ -735,10 +756,10 @@ parseLoop source index len users modifiers accText revNodes =
         case String.slice index (index + 1) source of
             "\n" ->
                 case parseStickerId (index + 1) source of
-                    Just ( stickerId, index2 ) ->
+                    ( index2, Just stickerId ) ->
                         parseLoop source index2 len users modifiers "" (Sticker stickerId :: flushText accText revNodes)
 
-                    Nothing ->
+                    ( _, Nothing ) ->
                         parseLoop source (index + 1) len users modifiers (accText ++ "\n") revNodes
 
             "\\" ->

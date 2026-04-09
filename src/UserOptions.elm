@@ -12,8 +12,9 @@ import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
 import LocalState exposing (AdminStatus(..), LocalState)
 import Log
-import MyUi exposing (Range)
+import MyUi
 import PersonName
+import Range exposing (Range)
 import RichText
 import Route
 import SeqDict

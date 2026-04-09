@@ -81,9 +81,20 @@ exports.init = async function init(app)
               path: src
             });
 
-            if (this.getAttribute('start-playing') !== '2') {
-                const currentPlayIndex = this._playIndex;
-                setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+            this._playIndex += 1;
+            const currentPlayIndex = this._playIndex;
+            switch(this.getAttribute('start-playing')) {
+                case '0': {
+                    setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+                    break;
+                }
+                case '1': {
+                    setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+                    break;
+                }
+                case '2': {
+                    break;
+                }
             }
         }
         else {
@@ -187,10 +198,13 @@ exports.init = async function init(app)
     });
 
     app.ports.exec_command_to_js.subscribe((data) => {
+        console.log(data);
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();
-        textarea.setSelectionRange(data.start, data.end);
-        document.execCommand('insertText', false, data.text);
+        data.commands.forEach((item) => {
+            textarea.setSelectionRange(item.range.start, item.range.end);
+            document.execCommand('insertText', false, item.text);
+        });
     });
 
     app.ports.fix_cursor_position_to_js.subscribe((htmlId) => {

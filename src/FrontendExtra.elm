@@ -33,12 +33,13 @@ import Message exposing (ChangeAttachments(..), Message(..), MessageState)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
-import MyUi exposing (Range)
+import MyUi
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
 import PersonName
 import Ports
+import Range exposing (Range)
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll

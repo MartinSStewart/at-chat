@@ -1,6 +1,8 @@
 port module Ports exposing
     ( CropImageData
     , CropImageDataResponse
+    , ExecCommand
+    , ExecCommandPort
     , NotificationPermission(..)
     , PwaStatus(..)
     , checkNotificationPermission
@@ -42,9 +44,9 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
 import Json.Encode
-import MyUi exposing (Range, SelectionDirection(..))
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
+import Range exposing (Range, SelectionDirection(..))
 import Url
 import UserAgent exposing (UserAgent)
 import UserSession exposing (SubscribeData)
@@ -164,18 +166,41 @@ decodeDomId =
     Json.Decode.map Dom.id Json.Decode.string
 
 
-execCommand : HtmlId -> Int -> Int -> String -> Command FrontendOnly toMsg msg
-execCommand htmlId start end text =
-    Command.sendToJs
-        "exec_command_to_js"
-        exec_command_to_js
-        (Json.Encode.object
-            [ ( "htmlId", Json.Encode.string (Dom.idToString htmlId) )
-            , ( "start", Json.Encode.int start )
-            , ( "end", Json.Encode.int end )
-            , ( "text", Json.Encode.string text )
-            ]
-        )
+execCommand : ExecCommandPort -> Command FrontendOnly toMsg msg
+execCommand data =
+    if List.isEmpty data.commands then
+        Command.none
+
+    else
+        Command.sendToJs "exec_command_to_js" exec_command_to_js (Codec.encodeToValue execCommandPortCodec data)
+
+
+type alias ExecCommandPort =
+    { htmlId : HtmlId
+    , commands : List ExecCommand
+    }
+
+
+type alias ExecCommand =
+    { text : String
+    , range : Range
+    }
+
+
+execCommandPortCodec : Codec ExecCommandPort
+execCommandPortCodec =
+    Codec.object ExecCommandPort
+        |> Codec.field "htmlId" .htmlId CodecExtra.htmlId
+        |> Codec.field "commands" .commands (Codec.list execCommandCodec)
+        |> Codec.buildObject
+
+
+execCommandCodec : Codec ExecCommand
+execCommandCodec =
+    Codec.object ExecCommand
+        |> Codec.field "text" .text Codec.string
+        |> Codec.field "range" .range Range.codec
+        |> Codec.buildObject
 
 
 fixCursorPosition : HtmlId -> Command FrontendOnly toMsg msg

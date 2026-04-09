@@ -3213,7 +3213,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         , Ui.el
             [ emojiSelector
                 isMobile
-                (SeqDict.keys local.localUser.stickers |> SeqSet.fromList)
+                local.localUser.user.availableStickers
                 local
                 loggedIn
                 model
@@ -3691,7 +3691,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile (SeqDict.keys local.localUser.stickers |> SeqSet.fromList) local loggedIn model
+            [ emojiSelector isMobile local.localUser.user.availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]

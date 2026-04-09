@@ -43,7 +43,7 @@ import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMe
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
-import MyUi exposing (Range, SelectionDirection)
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -52,6 +52,7 @@ import Pages.Home
 import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
+import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
@@ -2964,6 +2965,13 @@ updateLoaded msg model =
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    , Ports.execCommand
+                                        { htmlId = Pages.Guild.channelTextInputId
+                                        , commands =
+                                            List.map
+                                                (\range -> { range = range, text = "" })
+                                                (RichText.partialStickers text)
+                                        }
                                     ]
                                 )
                         )
@@ -3506,11 +3514,14 @@ insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
     in
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
     , case maybeSelection of
-        Just { start, end } ->
-            Ports.execCommand inputId start end text
+        Just range ->
+            Ports.execCommand { htmlId = inputId, commands = [ { range = range, text = text } ] }
 
         Nothing ->
-            Ports.execCommand inputId 99999 99999 text
+            Ports.execCommand
+                { htmlId = inputId
+                , commands = [ { range = { start = 99999, end = 99999 }, text = text } ]
+                }
     )
 
 

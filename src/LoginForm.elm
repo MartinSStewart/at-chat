@@ -35,9 +35,10 @@ import EmailAddress exposing (EmailAddress)
 import Html
 import Html.Attributes
 import Icons
-import MyUi exposing (Range)
+import MyUi
 import PersonName exposing (PersonName)
 import Ports exposing (PwaStatus(..))
+import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
 import Ui.Anim
