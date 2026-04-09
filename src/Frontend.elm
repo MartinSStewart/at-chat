@@ -3696,6 +3696,9 @@ adjustSelection selectionOld selection text =
         selectionOld2 : Range
         selectionOld2 =
             Maybe.withDefault { start = 0, end = 0 } selectionOld
+
+        _ =
+            Debug.log "selection" selection
     in
     List.Extra.findMap
         (\( stickerRange, maybeStickerId ) ->
@@ -3711,6 +3714,12 @@ adjustSelection selectionOld selection text =
 
                         else
                             Nothing
+
+                    else if Range.inside selection.start stickerRange then
+                        Just { start = stickerRange.start, end = selection.end }
+
+                    else if Range.inside selection.end stickerRange then
+                        Just { start = selection.start, end = stickerRange.end }
 
                     else
                         Nothing

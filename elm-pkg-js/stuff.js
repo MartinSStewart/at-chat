@@ -198,11 +198,10 @@ exports.init = async function init(app)
     });
 
     app.ports.exec_command_to_js.subscribe((data) => {
-        console.log(data);
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();
         data.commands.forEach((item) => {
-            console.log(item);
+            console.log(item.args[0]);
             switch (item.tag) {
                 case 'undo': {
                     document.execCommand(item.tag, false, null);
