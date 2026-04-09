@@ -1347,10 +1347,16 @@ update msg model =
                     BackendExtra.addLog
                         time
                         (Log.FailedToLoadDiscordGuildStickers nonempty (List.length results))
-                        { model | stickers = stickers }
+                        { model
+                            | stickers = stickers
+                            , users = NonemptyDict.updateIfExists userId (User.addNewStickers newStickers) model.users
+                        }
 
                 Nothing ->
-                    ( { model | stickers = stickers }
+                    ( { model
+                        | stickers = stickers
+                        , users = NonemptyDict.updateIfExists userId (User.addNewStickers newStickers) model.users
+                      }
                     , Broadcast.toUser
                         Nothing
                         Nothing

@@ -3173,15 +3173,12 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         , admin.click 100 (Dom.id "emoji_category_Stickers")
                         , admin.checkView
                             100
-                            (\html ->
-                                Test.Html.Query.findAll [ Test.Html.Selector.tag "lottie-player" ] html
-                                    |> Test.Html.Query.count (Expect.equal 2)
-                            )
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.tag "lottie-player" ])
                         , admin.checkView
                             100
                             (\html ->
                                 Test.Html.Query.findAll [ Test.Html.Selector.tag "animated-image-player" ] html
-                                    |> Test.Html.Query.count (Expect.equal 3)
+                                    |> Test.Html.Query.count (Expect.equal 2)
                             )
                         , admin.click 100 (Dom.id "elm-ui-root-id")
                         , T.websocketSendString

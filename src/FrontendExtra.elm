@@ -3147,7 +3147,13 @@ changeUpdate localMsg local =
                         localUser =
                             local.localUser
                     in
-                    { local | localUser = { localUser | stickers = SeqDict.union newStickers localUser.stickers } }
+                    { local
+                        | localUser =
+                            { localUser
+                                | stickers = SeqDict.union newStickers localUser.stickers
+                                , user = User.addNewStickers newStickers localUser.user
+                            }
+                    }
 
 
 guildSendMessage :

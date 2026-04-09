@@ -38,7 +38,7 @@ import Icons
 import Id exposing (Id, StickerId)
 import MyUi
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData, StickerUrl(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -453,9 +453,10 @@ selector :
     -> Model
     -> EmojiConfig
     -> Maybe CachedEmojiData
+    -> SeqSet (Id StickerId)
     -> SeqDict (Id StickerId) StickerData
     -> Element Msg
-selector searchHasFocus isMobile width model userData emojiData stickersData =
+selector searchHasFocus isMobile width model userData emojiData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -492,19 +493,7 @@ selector searchHasFocus isMobile width model userData emojiData stickersData =
                                     |> List.map EmojiOrSticker_Emoji
 
                             StickerCategory ->
-                                SeqDict.toList stickersData
-                                    |> List.filterMap
-                                        (\( stickerId, sticker ) ->
-                                            case sticker.url of
-                                                StickerInternal _ _ ->
-                                                    EmojiOrSticker_Sticker stickerId |> Just
-
-                                                DiscordStandardSticker _ ->
-                                                    EmojiOrSticker_Sticker stickerId |> Just
-
-                                                StickerLoading ->
-                                                    Nothing
-                                        )
+                                SeqSet.toList availableStickers |> List.map EmojiOrSticker_Sticker
             in
             Ui.column
                 [ Ui.width (Ui.px (min 620 width))

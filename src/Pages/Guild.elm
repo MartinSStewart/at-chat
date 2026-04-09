@@ -37,7 +37,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty
@@ -716,6 +716,7 @@ discordDmChannelView routeData loggedIn local model =
                 , lastTypedAt = dmChannel.lastTypedAt
                 , threads = SeqDict.empty
                 }
+                SeqSet.empty
 
         Nothing ->
             Ui.el
@@ -1549,6 +1550,7 @@ discordChannelView routeData guild loggedIn local model =
                                             threadMessageIndex
                                             channel
                                     )
+                                    guild.stickers
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             discordConversationView
@@ -1565,6 +1567,7 @@ discordChannelView routeData guild loggedIn local model =
                                 local
                                 (ChannelName.toString channel.name)
                                 channel
+                                (SeqSet.intersect local.localUser.user.availableStickers guild.stickers)
 
                 Nothing ->
                     pageMissing "Channel does not exist"
@@ -3050,8 +3053,8 @@ privateChatWith name =
     ]
 
 
-emojiSelector : Bool -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
-emojiSelector isMobile local loggedIn model =
+emojiSelector : Bool -> SeqSet (Id StickerId) -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
+emojiSelector isMobile availableStickers local loggedIn model =
     let
         emojiConfig : EmojiConfig
         emojiConfig =
@@ -3082,6 +3085,7 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableStickers
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
@@ -3104,6 +3108,7 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableStickers
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
@@ -3130,6 +3135,7 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableStickers
                     local.localUser.stickers
                     |> Ui.el
                         [ Ui.paddingXY paddingX 0
@@ -3205,7 +3211,12 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector
+                isMobile
+                (SeqDict.keys local.localUser.stickers |> SeqSet.fromList)
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3359,8 +3370,9 @@ discordConversationView :
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
         }
+    -> SeqSet (Id StickerId)
     -> Element FrontendMsg
-discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
+discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableStickers =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -3405,7 +3417,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector isMobile availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3679,7 +3691,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector isMobile (SeqDict.keys local.localUser.stickers |> SeqSet.fromList) local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3831,9 +3843,10 @@ discordThreadConversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
+    -> SeqSet (Id StickerId)
     -> DiscordFrontendThread
     -> Element FrontendMsg
-discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name channel =
+discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableStickers channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -3878,7 +3891,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector isMobile availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
