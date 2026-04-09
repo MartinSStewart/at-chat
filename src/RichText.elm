@@ -14,10 +14,10 @@ module RichText exposing
     , fromNonemptyString
     , hyperlinks
     , mentionsUser
-    , partialStickers
     , preview
     , removeAttachedFile
     , stickers
+    , stringToStickers
     , textInputView
     , toDiscord
     , toString
@@ -720,23 +720,22 @@ parseStickerIdHelper id index source =
             ( index, Nothing )
 
 
-partialStickers : String -> List Range
-partialStickers text =
+stringToStickers : String -> List ( Range, Maybe (Id StickerId) )
+stringToStickers text =
     String.indexes "\n\u{200B}" text
         ++ String.indexes "\n\u{200C}" text
         ++ String.indexes "\n\u{200D}" text
         ++ String.indexes "\n\u{2060}" text
         |> List.foldl
             (\index shouldRemove ->
-                case parseStickerId (index + 1) text of
-                    ( endIndex, Nothing ) ->
-                        { start = index, end = endIndex } :: shouldRemove
-
-                    ( _, Just _ ) ->
-                        shouldRemove
+                let
+                    ( endIndex, stickerId ) =
+                        parseStickerId (index + 1) text
+                in
+                ( { start = index, end = endIndex }, stickerId ) :: shouldRemove
             )
             []
-        |> List.sortBy (\range -> -range.start)
+        |> List.sortBy (\( range, _ ) -> -range.start)
 
 
 parseLoop :

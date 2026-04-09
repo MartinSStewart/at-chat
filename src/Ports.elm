@@ -180,6 +180,7 @@ type alias ExecCommandPort =
 type ExecCommand
     = InsertText String Range
     | Undo
+    | SelectRange Range
 
 
 execCommandPortCodec : Codec ExecCommandPort
@@ -193,16 +194,20 @@ execCommandPortCodec =
 execCommandCodec : Codec ExecCommand
 execCommandCodec =
     Codec.custom
-        (\insertTextEncoder undoEncoder value ->
+        (\insertTextEncoder undoEncoder selectRangeEncoder value ->
             case value of
                 InsertText argA argB ->
                     insertTextEncoder argA argB
 
                 Undo ->
                     undoEncoder
+
+                SelectRange argA ->
+                    selectRangeEncoder argA
         )
         |> Codec.variant2 "insertText" InsertText Codec.string Range.codec
         |> Codec.variant0 "undo" Undo
+        |> Codec.variant1 "selectRange" SelectRange Range.codec
         |> Codec.buildCustom
 
 

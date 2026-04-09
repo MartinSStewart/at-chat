@@ -2694,16 +2694,7 @@ updateLoaded msg model =
                                         }
                                         (Command.batch
                                             [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
-                                            , case RichText.partialStickers text of
-                                                [] ->
-                                                    Command.none
-
-                                                list ->
-                                                    Ports.execCommand
-                                                        { htmlId = Pages.Guild.channelTextInputId
-                                                        , commands =
-                                                            Ports.Undo :: List.map (\range -> Ports.InsertText "" range) list
-                                                        }
+                                            , removePartialStickers MessageMenu.editMessageTextInputId text
                                             ]
                                         )
 
@@ -2976,16 +2967,7 @@ updateLoaded msg model =
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                                    , case RichText.partialStickers text of
-                                        [] ->
-                                            Command.none
-
-                                        list ->
-                                            Ports.execCommand
-                                                { htmlId = Pages.Guild.channelTextInputId
-                                                , commands =
-                                                    Ports.Undo :: List.map (\range -> Ports.InsertText "" range) list
-                                                }
+                                    , removePartialStickers Pages.Guild.channelTextInputId text
                                     ]
                                 )
                         )
@@ -3377,8 +3359,25 @@ updateLoaded msg model =
             textInputFocusChanged maybeHtmlId maybeRange model
 
 
+removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg
+removePartialStickers htmlId text =
+    case
+        List.filterMap
+            (\( range, maybeStickerId ) ->
+                case maybeStickerId of
+                    Just _ ->
+                        Nothing
 
---selectionChanged maybeHtmlId maybeRange model
+                    Nothing ->
+                        Ports.InsertText "" range |> Just
+            )
+            (RichText.stringToStickers text)
+    of
+        [] ->
+            Command.none
+
+        list ->
+            Ports.execCommand { htmlId = htmlId, commands = list }
 
 
 messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
@@ -3630,13 +3629,53 @@ selectionChanged maybeHtmlId maybeRange model =
                             }
                                 |> LoggedIn
                       }
-                    , if showDropdown then
-                        Dom.getElement htmlId
-                            |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
-                            |> Task.attempt (GotPingUserPosition htmlId)
+                    , Command.batch
+                        [ if showDropdown then
+                            Dom.getElement htmlId
+                                |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                                |> Task.attempt (GotPingUserPosition htmlId)
 
-                      else
-                        Command.none
+                          else
+                            Command.none
+                        , case Route.toGuildOrDmId model.route of
+                            Just guildOrDmId ->
+                                if htmlId == Pages.Guild.channelTextInputId then
+                                    case SeqDict.get guildOrDmId loggedIn.drafts of
+                                        Just draft ->
+                                            case
+                                                adjustSelection
+                                                    (Maybe.map .selection loggedIn.textInputFocus)
+                                                    range
+                                                    (String.Nonempty.toString draft)
+                                            of
+                                                Just range2 ->
+                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 ] }
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        Nothing ->
+                                            Command.none
+
+                                else if htmlId == MessageMenu.editMessageTextInputId then
+                                    case SeqDict.get guildOrDmId loggedIn.editMessage of
+                                        Just edit ->
+                                            case adjustSelection (Maybe.map .selection loggedIn.textInputFocus) range edit.text of
+                                                Just range2 ->
+                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 ] }
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        Nothing ->
+                                            Command.none
+
+                                else
+                                    Command.none
+
+                            Nothing ->
+                                Command.none
+                        ]
                     )
 
                 NotLoggedIn notLoggedIn ->
@@ -3649,6 +3688,37 @@ selectionChanged maybeHtmlId maybeRange model =
 
         _ ->
             ( model, Command.none )
+
+
+adjustSelection : Maybe Range -> Range -> String -> Maybe Range
+adjustSelection selectionOld selection text =
+    let
+        selectionOld2 : Range
+        selectionOld2 =
+            Maybe.withDefault { start = 0, end = 0 } selectionOld
+    in
+    List.Extra.findMap
+        (\( stickerRange, maybeStickerId ) ->
+            case maybeStickerId of
+                Just _ ->
+                    if selection.start == selection.end then
+                        if Range.inside selection.start stickerRange then
+                            if selection.start < selectionOld2.start then
+                                Just { start = stickerRange.start, end = stickerRange.start }
+
+                            else
+                                Just { start = stickerRange.end, end = stickerRange.end }
+
+                        else
+                            Nothing
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+        )
+        (RichText.stringToStickers text)
 
 
 textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

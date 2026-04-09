@@ -213,6 +213,10 @@ exports.init = async function init(app)
                     document.execCommand(item.tag, false, item.args[0]);
                     break;
                 }
+                case 'selectRange': {
+                    textarea.setSelectionRange(item.args[0].start, item.args[0].end);
+                    break;
+                }
             }
 
         });

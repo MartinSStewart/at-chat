@@ -1,4 +1,4 @@
-module Range exposing (Range, SelectionDirection(..), codec, rangeSize)
+module Range exposing (Range, SelectionDirection(..), codec, inside, rangeSize)
 
 import Codec exposing (Codec)
 
@@ -23,3 +23,8 @@ codec =
         |> Codec.field "start" .start Codec.int
         |> Codec.field "end" .end Codec.int
         |> Codec.buildObject
+
+
+inside : Int -> Range -> Bool
+inside index range =
+    index > range.start && index < range.end
