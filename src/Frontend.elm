@@ -3713,10 +3713,18 @@ adjustSelection selectionOld selection text =
                             Nothing
 
                     else if Range.inside selection.start stickerRange then
-                        Just { start = stickerRange.start, end = selection.end }
+                        if selection.start < selectionOld2.start then
+                            Just { start = stickerRange.start, end = selection.end }
+
+                        else
+                            Just { start = stickerRange.end, end = selection.end }
 
                     else if Range.inside selection.end stickerRange then
-                        Just { start = selection.start, end = stickerRange.end }
+                        if selection.end < selectionOld2.end then
+                            Just { start = selection.start, end = stickerRange.start }
+
+                        else
+                            Just { start = selection.start, end = stickerRange.end }
 
                     else
                         Nothing
