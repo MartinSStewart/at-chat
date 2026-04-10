@@ -3649,7 +3649,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                     (String.Nonempty.toString draft)
                                             of
                                                 Just range2 ->
-                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 ] }
+                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 direction ] }
 
                                                 Nothing ->
                                                     Command.none
@@ -3662,7 +3662,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                         Just edit ->
                                             case adjustSelection (Maybe.map .selection loggedIn.textInputFocus) range edit.text of
                                                 Just range2 ->
-                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 ] }
+                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 direction ] }
 
                                                 Nothing ->
                                                     Command.none
@@ -3696,9 +3696,6 @@ adjustSelection selectionOld selection text =
         selectionOld2 : Range
         selectionOld2 =
             Maybe.withDefault { start = 0, end = 0 } selectionOld
-
-        _ =
-            Debug.log "selection" selection
     in
     List.Extra.findMap
         (\( stickerRange, maybeStickerId ) ->

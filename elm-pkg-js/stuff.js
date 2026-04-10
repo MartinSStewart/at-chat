@@ -213,7 +213,7 @@ exports.init = async function init(app)
                     break;
                 }
                 case 'selectRange': {
-                    textarea.setSelectionRange(item.args[0].start, item.args[0].end);
+                    textarea.setSelectionRange(item.args[0].start, item.args[0].end, item.args[1]);
                     break;
                 }
             }

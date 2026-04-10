@@ -1,4 +1,4 @@
-module Range exposing (Range, SelectionDirection(..), codec, inside, rangeSize)
+module Range exposing (Range, SelectionDirection(..), codec, inside, rangeSize, selectionDirectionCodec)
 
 import Codec exposing (Codec)
 
@@ -23,6 +23,11 @@ codec =
         |> Codec.field "start" .start Codec.int
         |> Codec.field "end" .end Codec.int
         |> Codec.buildObject
+
+
+selectionDirectionCodec : Codec SelectionDirection
+selectionDirectionCodec =
+    Codec.enum Codec.string [ ( "forward", SelectForward ), ( "backward", SelectBackward ) ]
 
 
 inside : Int -> Range -> Bool
