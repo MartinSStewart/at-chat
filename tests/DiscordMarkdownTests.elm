@@ -1,12 +1,17 @@
 module DiscordMarkdownTests exposing (test)
 
 import Discord
+import Discord.Markdown
 import Expect
+import Fuzz exposing (Fuzzer)
 import List.Nonempty exposing (Nonempty(..))
+import PersonName exposing (PersonName)
 import RichText exposing (RichText(..))
 import SeqDict
+import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Unsafe
+import Url exposing (Url)
 
 
 test : Test
@@ -89,7 +94,29 @@ basicFormattingTests =
                     |> Expect.equal
                         [ NormalText '*' "Bullet point 1\n*Bullet point 2"
                         ]
+
+        --, fromNonemptyStringTest "[link](https://abc.com/)" (Nonempty (MarkdownLink (NonemptyString 'l' "ink") (unsafeUrl "https://abc.com")) [])
+        --, fromNonemptyStringTest "_https://abc.com/_" (Nonempty (Italic (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [])) [])
+        , fromNonemptyStringTest "https://abc.com/," (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [ NormalText ',' "" ])
+        , fromNonemptyStringTest "https://abc.com/:" (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [ NormalText ':' "" ])
+
+        --, fromNonemptyStringTest "<https://abc.com/>" (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [])
         ]
+
+
+fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId)) -> Test
+fromNonemptyStringTest input expected =
+    Test.test (Debug.toString input) (\_ -> RichText.fromDiscord input SeqDict.empty Discord.Missing [] |> Expect.equal expected)
+
+
+unsafeUrl : String -> Url
+unsafeUrl url =
+    case Url.fromString url of
+        Just url2 ->
+            url2
+
+        Nothing ->
+            Debug.todo "Invalid url"
 
 
 userId : Discord.Id Discord.UserId

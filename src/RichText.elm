@@ -2782,7 +2782,7 @@ urlParser =
                             if stop then
                                 loopState
 
-                            else if char == '.' || char == ')' || char == ',' || char == '"' then
+                            else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' then
                                 ( index2 - 1, False )
 
                             else
