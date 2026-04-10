@@ -356,6 +356,20 @@ test =
                     |> Expect.equal "\n\u{200C}\u{200B}\n\n"
             )
         , fromNonemptyStringTest "\n\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 0)) [])
+        , fromNonemptyStringTest
+            "_[123](https://abc.com)_"
+            (Nonempty
+                (Italic
+                    (Nonempty
+                        (MarkdownLink
+                            (NonemptyString '1' "23")
+                            (unsafeUrl "https://abc.com/")
+                        )
+                        []
+                    )
+                )
+                []
+            )
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"
