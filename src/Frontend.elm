@@ -3747,18 +3747,25 @@ adjustSelection selectionOld selection text =
                             Nothing
 
                     else if Range.inside selection.start stickerRange then
-                        if selection.start < selectionOld2.start then
-                            Just { start = stickerRange.start, end = selection.end }
-
-                        else
-                            Just { start = stickerRange.end, end = selection.end }
+                        Just { start = stickerRange.start, end = selection.end }
+                        {- The commented out code fixes an issue where you can't reduce the text selection using shift+arrows.
+                           Unfortunately this fix makes it so selecting text via mouse or touch becomes unstable.
+                           Since reducing text selection with shift+arrows is a narrow use case, that's the bug we're leaving in.
+                           Both can be handled by tracking if the user is currently using the keyboard vs mouse/touch but that's a low priority feature.
+                        -}
+                        --if selection.start < selectionOld2.start then
+                        --    Just { start = stickerRange.start, end = selection.end }
+                        --
+                        --else
+                        --    Just { start = stickerRange.end, end = selection.end }
 
                     else if Range.inside selection.end stickerRange then
-                        if selection.end < selectionOld2.end then
-                            Just { start = selection.start, end = stickerRange.start }
-
-                        else
-                            Just { start = selection.start, end = stickerRange.end }
+                        Just { start = selection.start, end = stickerRange.end }
+                        --if selection.end < selectionOld2.end then
+                        --    Just { start = selection.start, end = stickerRange.start }
+                        --
+                        --else
+                        --    Just { start = selection.start, end = stickerRange.end }
 
                     else
                         Nothing
