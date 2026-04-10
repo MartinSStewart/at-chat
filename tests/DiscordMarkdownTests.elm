@@ -1,14 +1,10 @@
 module DiscordMarkdownTests exposing (test)
 
 import Discord
-import Discord.Markdown
 import Expect
-import Fuzz exposing (Fuzzer)
 import List.Nonempty exposing (Nonempty(..))
-import PersonName exposing (PersonName)
 import RichText exposing (RichText(..))
 import SeqDict
-import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Unsafe
 import Url exposing (Url)

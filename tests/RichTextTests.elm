@@ -13,7 +13,7 @@ import Unsafe
 import Url exposing (Protocol(..), Url)
 
 
-users : SeqDict.SeqDict (Id.Id a) { name : PersonName }
+users : SeqDict.SeqDict (Id a) { name : PersonName }
 users =
     SeqDict.fromList [ ( Id.fromInt 1234, { name = Unsafe.personName "a1" } ), ( Id.fromInt 123, { name = Unsafe.personName "a" } ), ( Id.fromInt 12345, { name = Unsafe.personName "aa" } ) ]
 
