@@ -11,6 +11,7 @@ module MyUi exposing
     , buttonFontColor
     , cancelButtonBackground
     , colorToStyle
+    , colorWithAlpha
     , column
     , container
     , css
@@ -67,7 +68,7 @@ module MyUi exposing
     , widthAttr
     )
 
-import Color
+import Color exposing (Color)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Date exposing (Date)
@@ -901,7 +902,7 @@ noShrinking =
     htmlStyle "flex-shrink" "0"
 
 
-colorToStyle : Ui.Color -> String
+colorToStyle : Color -> String
 colorToStyle color =
     let
         { red, green, blue, alpha } =
@@ -919,6 +920,15 @@ colorToStyle color =
         ++ ","
         ++ String.fromFloat alpha
         ++ ")"
+
+
+colorWithAlpha : Float -> Color -> Color
+colorWithAlpha alpha color =
+    let
+        color2 =
+            Color.toRgba color
+    in
+    Color.fromRgba { color2 | alpha = alpha }
 
 
 background1 : Ui.Color

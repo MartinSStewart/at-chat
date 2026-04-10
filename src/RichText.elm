@@ -2101,15 +2101,21 @@ textInputView :
     SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id StickerId) StickerData
+    -> Maybe Range
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView users attachedFiles stickers2 nonempty =
+textInputView users attachedFiles stickers2 selection nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
         stickers2
+        0
+        selection
         nonempty
+        Array.empty
+        |> Tuple.second
+        |> Array.toList
 
 
 htmlAttrIf : Bool -> Html.Attribute msg -> Html.Attribute msg
@@ -2130,130 +2136,184 @@ textInputViewHelper :
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
     -> SeqDict (Id StickerId) StickerData
+    -> Int
+    -> Maybe Range
     -> Nonempty (RichText userId)
-    -> List (Html msg)
-textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
-    List.concatMap
-        (\item ->
+    -> Array (Html msg)
+    -> ( Int, Array (Html msg) )
+textInputViewHelper state allUsers attachedFiles stickers2 index selection nonempty output =
+    List.foldl
+        (\item ( index2, output2 ) ->
             case item of
                 UserMention userId ->
-                    [ case SeqDict.get userId allUsers of
+                    case SeqDict.get userId allUsers of
                         Just user ->
-                            Html.span
-                                [ Html.Attributes.style "color" "rgb(215,235,255)"
-                                , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
-                                , Html.Attributes.style "border-radius" "2px"
-                                ]
-                                [ Html.text ("@" ++ PersonName.toString user.name) ]
+                            let
+                                text =
+                                    "@" ++ PersonName.toString user.name
+                            in
+                            ( index2 + String.length text
+                            , Array.push
+                                (Html.span
+                                    [ Html.Attributes.style "color" "rgb(215,235,255)"
+                                    , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
+                                    , Html.Attributes.style "border-radius" "2px"
+                                    ]
+                                    [ Html.text text ]
+                                )
+                                output2
+                            )
 
                         Nothing ->
-                            Html.text ""
-                    ]
+                            ( index2 + 1, output2 )
 
                 NormalText char text ->
-                    [ Html.span
-                        [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                          htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                        ]
-                        [ Html.text (String.cons char text) ]
-                    ]
+                    ( index2 + String.length text + 1
+                    , Array.push
+                        (Html.span
+                            [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                              htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                            , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                            ]
+                            [ Html.text (String.cons char text) ]
+                        )
+                        output2
+                    )
 
                 Italic nonempty2 ->
-                    formatText "_"
-                        :: textInputViewHelper
-                            { state | italic = True }
-                            allUsers
-                            attachedFiles
-                            stickers2
-                            nonempty2
-                        ++ [ formatText "_" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | italic = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 1)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "_") output2)
+                    in
+                    ( index3 + 1, Array.push (formatText "_") output3 )
 
                 Underline nonempty2 ->
-                    formatText "__"
-                        :: textInputViewHelper
-                            { state | underline = True }
-                            allUsers
-                            attachedFiles
-                            stickers2
-                            nonempty2
-                        ++ [ formatText "__" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | underline = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 2)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "__") output2)
+                    in
+                    ( index3 + 2, Array.push (formatText "__") output3 )
 
                 Bold nonempty2 ->
-                    formatText "*"
-                        :: textInputViewHelper
-                            { state | bold = True }
-                            allUsers
-                            attachedFiles
-                            stickers2
-                            nonempty2
-                        ++ [ formatText "*" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | bold = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 1)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "*") output2)
+                    in
+                    ( index3 + 1, Array.push (formatText "*") output3 )
 
                 Strikethrough nonempty2 ->
-                    formatText "~~"
-                        :: textInputViewHelper
-                            { state | strikethrough = True }
-                            allUsers
-                            attachedFiles
-                            stickers2
-                            nonempty2
-                        ++ [ formatText "~~" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | strikethrough = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 2)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "~~") output2)
+                    in
+                    ( index3 + 2, Array.push (formatText "~~") output3 )
 
                 Spoiler nonempty2 ->
-                    formatText "||"
-                        :: textInputViewHelper
-                            { state | spoiler = True }
-                            allUsers
-                            attachedFiles
-                            stickers2
-                            nonempty2
-                        ++ [ formatText "||" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | spoiler = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 2)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "||") output2)
+                    in
+                    ( index3 + 2, Array.push (formatText "||") output3 )
 
                 Hyperlink data ->
-                    [ Html.span
-                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                        , Html.Attributes.style "color" "rgb(66,93,203)"
-                        ]
-                        [ Html.text (Url.toString data) ]
-                    ]
+                    let
+                        text =
+                            Url.toString data
+                    in
+                    ( index2 + String.length text
+                    , Array.push
+                        (Html.span
+                            [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                            , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                            , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            ]
+                            [ Html.text text ]
+                        )
+                        output2
+                    )
 
                 InlineCode char rest ->
-                    [ formatText "`"
-                    , Html.span
-                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                        , if state.spoiler then
-                            Html.Attributes.style "background-color" "rgb(0,0,0)"
+                    ( index2 + String.length rest + 3
+                    , Array.append
+                        output2
+                        (Array.fromList
+                            [ formatText "`"
+                            , Html.span
+                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                                , if state.spoiler then
+                                    Html.Attributes.style "background-color" "rgb(0,0,0)"
 
-                          else
-                            Html.Attributes.style "background-color" "rgb(90,100,120)"
-                        ]
-                        [ Html.text (String.cons char rest) ]
-                    , formatText "`"
-                    ]
+                                  else
+                                    Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                ]
+                                [ Html.text (String.cons char rest) ]
+                            , formatText "`"
+                            ]
+                        )
+                    )
 
                 CodeBlock language string ->
-                    [ formatText
-                        ("```"
-                            ++ (case language of
-                                    Language language2 ->
-                                        String.Nonempty.toString language2 ++ "\n"
+                    let
+                        language2 : String
+                        language2 =
+                            case language of
+                                Language a ->
+                                    String.Nonempty.toString a ++ "\n"
 
-                                    NoLanguage ->
-                                        ""
-                               )
-                        )
-                    , Html.text string
-                    , formatText "```"
-                    ]
+                                NoLanguage ->
+                                    ""
+                    in
+                    ( index2 + String.length string + String.length language2 + 6
+                    , Array.append output2 (Array.fromList [ formatText ("```" ++ language2), Html.text string, formatText "```" ])
+                    )
 
                 AttachedFile fileId ->
                     let
@@ -2261,26 +2321,67 @@ textInputViewHelper state allUsers attachedFiles stickers2 nonempty =
                         text =
                             attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
                     in
-                    [ if SeqDict.member fileId attachedFiles then
-                        formatText text
+                    ( index2 + String.length text
+                    , Array.push
+                        (if SeqDict.member fileId attachedFiles then
+                            formatText text
 
-                      else
-                        Html.text text
-                    ]
+                         else
+                            Html.text text
+                        )
+                        output2
+                    )
 
                 EscapedChar char ->
-                    [ formatText "\\", Html.text (escapedCharToString char) ]
+                    ( index2 + 2
+                    , Array.append output2 (Array.fromList [ formatText "\\", Html.text (escapedCharToString char) ])
+                    )
 
                 Sticker stickerId ->
-                    [ Html.span
-                        [ Html.Attributes.style "position" "relative" ]
-                        [ Html.div
-                            [ Html.Attributes.style "position" "absolute" ]
-                            [ Sticker.view "2lh" stickerId stickers2 Sticker.LoopAFewTimesOnLoad ]
-                        ]
-                    , Html.text "\n\n\n"
-                    ]
+                    let
+                        isSelected =
+                            case selection of
+                                Just selection2 ->
+                                    index2 >= selection2.start && index2 < selection2.end
+
+                                Nothing ->
+                                    False
+                    in
+                    ( index2 + String.length (Sticker.idToString stickerId)
+                    , Array.append
+                        output2
+                        (Array.fromList
+                            [ Html.span
+                                [ Html.Attributes.style "position" "relative" ]
+                                [ Html.div
+                                    [ Html.Attributes.style "position" "absolute"
+                                    , if isSelected then
+                                        Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground)
+
+                                      else
+                                        Html.Attributes.style "opacity" "transparent"
+                                    ]
+                                    [ Sticker.view "2lh" stickerId stickers2 Sticker.LoopForever ]
+                                , Html.div
+                                    [ Html.Attributes.style "position" "absolute"
+                                    , Html.Attributes.style "width" "2lh"
+                                    , Html.Attributes.style "height" "2lh"
+                                    , if isSelected then
+                                        Html.Attributes.style
+                                            "background-color"
+                                            (MyUi.colorToStyle (MyUi.colorWithAlpha 0.5 MyUi.selectedTextBackground))
+
+                                      else
+                                        Html.Attributes.style "opacity" "transparent"
+                                    ]
+                                    []
+                                ]
+                            , Html.text "\n\n\n"
+                            ]
+                        )
+                    )
         )
+        ( index, output )
         (List.Nonempty.toList nonempty)
 
 

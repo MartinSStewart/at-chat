@@ -243,7 +243,12 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
             )
             (case String.Nonempty.fromString text of
                 Just nonempty ->
-                    RichText.textInputView users attachedFiles stickers (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView
+                        users
+                        attachedFiles
+                        stickers
+                        (Maybe.map .selection textInputFocus)
+                        (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -313,6 +318,7 @@ disabledTextarea placeholderText text attachedFiles local =
                         users
                         attachedFiles
                         local.localUser.stickers
+                        Nothing
                         (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
