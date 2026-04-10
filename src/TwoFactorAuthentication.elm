@@ -22,9 +22,10 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera
 import Effect.Time as Time
 import LoginForm exposing (CodeStatus(..))
-import MyUi exposing (Range)
+import MyUi
 import Ports
 import QRCode
+import Range exposing (Range)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import TOTP.Algorithm

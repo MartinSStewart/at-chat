@@ -54,6 +54,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
+import Sticker exposing (StickerUrl(..))
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
@@ -180,7 +181,7 @@ init =
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
-      , backendInitialized = True
+      , isInitialized = False
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
       , discordDmChannels = SeqDict.empty
@@ -214,6 +215,8 @@ init =
       , exportState = Nothing
       , sendMessageRateLimits = SeqDict.empty
       , toBackendLogs = Array.empty
+      , stickers = SeqDict.empty
+      , discordStickers = OneToOne.empty
       }
     , Command.none
     )
@@ -257,6 +260,7 @@ subscriptions model =
 
             Nothing ->
                 Subscription.none
+        , Time.every Duration.hour HourlyUpdate
         ]
 
 
@@ -845,7 +849,7 @@ update msg model =
                                 DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
                             ( messages2, linkedMessageIds ) =
-                                DiscordSync.messagesAndLinks (List.reverse messages) attachments2
+                                DiscordSync.messagesAndLinks (List.reverse messages) model.discordStickers attachments2
 
                             --( attachments3, channel2 ) =
                             --case result of
@@ -937,7 +941,7 @@ update msg model =
                                     model.discordAttachments
 
                             ( messages2, linkedMessageIds ) =
-                                DiscordSync.messagesAndLinks (List.reverse messages) attachments2
+                                DiscordSync.messagesAndLinks (List.reverse messages) model.discordStickers attachments2
 
                             model2 : BackendModel
                             model2 =
@@ -1310,6 +1314,111 @@ update msg model =
             , Command.none
             )
 
+        GotDiscordGuildStickers userId results time ->
+            let
+                ( errors, stickers, newStickers ) =
+                    List.foldl
+                        (\( stickerId, result ) ( errors2, stickers2, newStickers2 ) ->
+                            case result of
+                                Ok uploadResponse ->
+                                    case SeqDict.get stickerId stickers2 of
+                                        Just sticker ->
+                                            case Sticker.addUrl uploadResponse sticker of
+                                                Ok sticker2 ->
+                                                    ( errors2
+                                                    , SeqDict.insert stickerId sticker2 stickers2
+                                                    , SeqDict.insert stickerId sticker2 newStickers2
+                                                    )
+
+                                                Err () ->
+                                                    ( errors2, stickers2, newStickers2 )
+
+                                        Nothing ->
+                                            ( errors2, stickers2, newStickers2 )
+
+                                Err error ->
+                                    ( ( stickerId, error ) :: errors2, stickers2, newStickers2 )
+                        )
+                        ( [], model.stickers, SeqDict.empty )
+                        results
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildStickers nonempty (List.length results))
+                        { model
+                            | stickers = stickers
+                            , users = NonemptyDict.updateIfExists userId (User.addNewStickers newStickers) model.users
+                        }
+
+                Nothing ->
+                    ( { model
+                        | stickers = stickers
+                        , users = NonemptyDict.updateIfExists userId (User.addNewStickers newStickers) model.users
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        userId
+                        (Server_LinkedDiscordUserStickersLoaded newStickers |> ServerChange)
+                        model
+                    )
+
+        HourlyUpdate time ->
+            ( model
+            , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
+            )
+
+        GotDiscordStandardStickerPacks time result ->
+            case result of
+                Ok stickerPacks ->
+                    let
+                        ( stickers, discordStickers ) =
+                            List.foldl
+                                (\stickerPack state ->
+                                    List.foldl
+                                        (\sticker ( stickers2, discordStickers2 ) ->
+                                            case OneToOne.second sticker.id discordStickers2 of
+                                                Just stickerId ->
+                                                    ( SeqDict.insert
+                                                        stickerId
+                                                        { url = DiscordStandardSticker sticker.id
+                                                        , name = sticker.name
+                                                        , format = sticker.formatType
+                                                        }
+                                                        stickers2
+                                                    , discordStickers2
+                                                    )
+
+                                                Nothing ->
+                                                    let
+                                                        stickerId =
+                                                            Id.nextId stickers2
+                                                    in
+                                                    ( SeqDict.insert
+                                                        stickerId
+                                                        { url = DiscordStandardSticker sticker.id
+                                                        , name = sticker.name
+                                                        , format = sticker.formatType
+                                                        }
+                                                        stickers2
+                                                    , OneToOne.insert sticker.id stickerId discordStickers2
+                                                    )
+                                        )
+                                        state
+                                        stickerPack.stickers
+                                )
+                                ( model.stickers, model.discordStickers )
+                                stickerPacks
+                    in
+                    ( { model | stickers = stickers, discordStickers = discordStickers }
+                    , Command.none
+                    )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToLoadDiscordStandardStickerPacks error) model
+
 
 addDiscordGuildData :
     Discord.Id Discord.UserId
@@ -1339,6 +1448,7 @@ addDiscordGuildData discordUserId data guild =
     , membersAndOwner =
         MembersAndOwner.addMember discordUserId { joinedAt = Nothing } guild.membersAndOwner
             |> Result.withDefault guild.membersAndOwner
+    , stickers = guild.stickers
     }
 
 
@@ -1549,19 +1659,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         Nothing ->
                             CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId
             in
-            if model.backendInitialized then
-                ( { model | backendInitialized = False }
+            if model.isInitialized then
+                ( model, cmd )
+
+            else
+                ( { model | isInitialized = True }
                 , Command.batch
                     [ Http.get
                         { url = FileStatus.domain ++ "/file/vapid"
                         , expect = Http.expectString GotVapidKeys
                         }
+                    , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
                     , cmd
                     ]
                 )
-
-            else
-                ( model, cmd )
 
         LoginWithTokenRequest requestMessagesFor loginCode userAgent ->
             BackendExtra.loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model
@@ -1895,6 +2006,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 Nothing
                                                         )
                                                         attachedFiles2
+                                                        model.discordStickers
                                                         text
                                                         |> Task.attempt
                                                             (SentDiscordGuildMessage
@@ -1957,6 +2069,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                                     Nothing
                                                                             )
                                                                             attachedFiles2
+                                                                            model.discordStickers
                                                                             text
                                                                     )
                                                                 |> Task.attempt
@@ -2015,6 +2128,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         Nothing
                                                 )
                                                 attachedFiles2
+                                                model.discordStickers
                                                 text
                                                 |> Task.attempt
                                                     (SentDiscordDmMessage

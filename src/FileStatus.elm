@@ -11,15 +11,19 @@ module FileStatus exposing
     , Location
     , Orientation(..)
     , UploadResponse
+    , UploadUrlRequest
     , addFileHash
     , contentType
     , contentTypes
+    , discordStickerUrl
     , domain
     , fileHash
     , fileUploadPreview
     , fileUrl
+    , gifContent
     , imageInfoView
     , imageMaxHeight
+    , jsonContent
     , onlyUploadedFiles
     , pngContent
     , sizeToString
@@ -31,6 +35,7 @@ module FileStatus exposing
     , uploadResponseCodec
     , uploadTrackerId
     , uploadUrl
+    , uploadUrlCodec
     , webpContent
     )
 
@@ -53,7 +58,6 @@ import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
-import Json.Encode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -180,6 +184,16 @@ pngContent =
 webpContent : ContentType
 webpContent =
     contentType "image/webp"
+
+
+gifContent : ContentType
+gifContent =
+    contentType "image/gif"
+
+
+jsonContent : ContentType
+jsonContent =
+    contentType "application/json"
 
 
 type ContentTypeType
@@ -360,22 +374,33 @@ type alias ExposureTime =
     { numerator : Int, denominator : Int }
 
 
-uploadUrl : SessionIdHash -> String -> Task restriction Http.Error UploadResponse
-uploadUrl sessionId url =
+uploadUrl : UploadUrlRequest -> Task restriction Http.Error UploadResponse
+uploadUrl request =
     Http.task
         { method = "POST"
         , headers = []
         , url = domain ++ "/file/upload-url"
-        , body =
-            Http.jsonBody
-                (Json.Encode.object
-                    [ ( "url", Json.Encode.string url )
-                    , ( "sid", Json.Encode.string (SessionIdHash.toString sessionId) )
-                    ]
-                )
+        , body = Http.jsonBody (Codec.encodeToValue uploadUrlCodec request)
         , resolver = resolver uploadResponseCodec
         , timeout = Just (Duration.seconds 30)
         }
+
+
+discordStickerUrl : Discord.Id Discord.StickerId -> String
+discordStickerUrl stickerId =
+    domain ++ "/file/discord-sticker/" ++ Discord.idToString stickerId
+
+
+type alias UploadUrlRequest =
+    { url : String, sessionId : SessionIdHash }
+
+
+uploadUrlCodec : Codec UploadUrlRequest
+uploadUrlCodec =
+    Codec.object UploadUrlRequest
+        |> Codec.field "url" .url Codec.string
+        |> Codec.field "sid" .sessionId SessionIdHash.codec
+        |> Codec.buildObject
 
 
 uploadFile :
@@ -1538,6 +1563,7 @@ contentTypes =
     , "test/mimetype"
     , "test/mimetyp"
     , "x-conference/x-cooltalk"
+    , "image/apng"
     ]
         |> List.indexedMap (\index contentType2 -> ( ContentType index, contentType2 ))
         |> OneToOne.fromList

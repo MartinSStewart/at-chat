@@ -16,14 +16,17 @@ import Embed exposing (Embed(..))
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
-import Id
+import Id exposing (Id, StickerId)
+import List.Nonempty exposing (Nonempty(..))
 import Log exposing (Log)
+import MessageInput
 import MyUi
 import OneOrGreater
 import Postmark
-import RichText exposing (Domain)
+import RichText exposing (Domain, RichText(..))
 import SeqDict
 import SeqSet exposing (SeqSet)
+import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
 import Time
 import Ui
@@ -51,6 +54,43 @@ main =
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
+                ]
+            , Ui.column
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Stickers")
+                , RichText.view
+                    (Dom.id "richText")
+                    800
+                    (\_ -> ())
+                    (\_ -> ())
+                    { domainWhitelist = SeqSet.empty
+                    , revealedSpoilers = SeqSet.empty
+                    , users = SeqDict.empty
+                    , attachedFiles = SeqDict.empty
+                    , stickers = stickers
+                    }
+                    Array.empty
+                    (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
+                    |> Html.div []
+                    |> Ui.html
+                , MessageInput.view
+                    (Dom.id "input")
+                    True
+                    False
+                    (Dom.id "channel")
+                    "Placeholder"
+                    (Nonempty
+                        (NormalText 'T' "est2")
+                        [ Sticker (Id.fromInt 123)
+                        , NormalText 'T' "est3333333333333333333333\n3333333333"
+                        ]
+                        |> RichText.toString SeqDict.empty
+                    )
+                    SeqDict.empty
+                    stickers
+                    Nothing
+                    SeqDict.empty
+                    |> Ui.map (\_ -> ())
                 ]
             , Ui.column
                 []
@@ -82,6 +122,11 @@ main =
                 ]
             ]
         )
+
+
+stickers : SeqDict.SeqDict (Id StickerId) StickerData
+stickers =
+    SeqDict.fromList [ ( Id.fromInt 123, { url = StickerLoading, name = "Mindless", format = Discord.GifFormat } ) ]
 
 
 emailView : NonemptyString -> Email.Html.Html -> Html msg
@@ -176,11 +221,13 @@ embedExamples whitelistedDomains =
                 (Dom.id "richText")
                 800
                 (\_ -> ())
-                whitelistedDomains
                 (\_ -> ())
-                (SeqSet.fromList [])
-                SeqDict.empty
-                SeqDict.empty
+                { domainWhitelist = whitelistedDomains
+                , revealedSpoilers = SeqSet.empty
+                , users = SeqDict.empty
+                , attachedFiles = SeqDict.empty
+                , stickers = SeqDict.empty
+                }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)
                 |> Html.div []

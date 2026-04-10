@@ -1,0 +1,57 @@
+{
+  "sticker_packs": [
+    {
+      "id": "796138864933863456",
+      "sku_id": "796138864933863454",
+      "name": "Mallow The Rascal",
+      "description": "Mallow is a quick-tempered but squishy rabbit who would go to battle for her friends.",
+      "stickers": [
+        {
+          "id": "796140620111544330",
+          "name": "Happy",
+          "tags": "mallow, happy, feliz, grin, smile, smiling, :), :D, :],c:, \ud83d\ude0a, \ud83d\ude04, \ud83d\ude05, \ud83d\ude06, \ud83d\ude0c, \ud83e\udd17, \ud83d\ude01, \ud83d\ude42, \ud83d\ude00, \ud83d\ude03, \ud83d\ude3a, \ud83d\ude38, :happy, :feliz, :grin",
+          "type": 1,
+          "format_type": 3,
+          "description": "Mallow dances a joyful jig",
+          "asset": "",
+          "pack_id": "796138864933863456",
+          "sort_value": 4
+        },
+        {
+          "id": "796140638093443092",
+          "name": "Sad",
+          "tags": "mallow, sad, triste, feelsbad, feels bad man, bummed, bummer, depressed, :<, :(, :[, :c, D:, \ud83d\ude25, \ud83d\ude22, \ud83d\ude2d, \ud83d\ude41, \u2639\ufe0f, :sad, sigh, rip",
+          "type": 1,
+          "format_type": 3,
+          "description": "Mallow sighs downtrodden",
+          "asset": "",
+          "pack_id": "796138864933863456",
+          "sort_value": 100
+        }
+      ],
+      "cover_sticker_id": "796140731256799242",
+      "banner_asset_id": "796139192806801428"
+    },
+    {
+      "id": "831563211706204223",
+      "sku_id": "831563211706204221",
+      "name": "Melty Chihuahua",
+      "description": "Melty Chihuahua",
+      "stickers": [
+        {
+          "id": "831569193391489054",
+          "name": "Oh No",
+          "tags": "melty chihuahua, oh no, no, yikes, yikers, not like this, concerned, concern, fall apart, ded, give up, melt, \ud83c\udf66, \ud83d\udc36, \ud83d\udc15, \ud83d\udc15\u200d\ud83e\uddba",
+          "type": 1,
+          "format_type": 2,
+          "description": "Melty Chihuahua falling out of an ice cream cone",
+          "asset": "",
+          "pack_id": "831563211706204223",
+          "sort_value": 100
+        }
+      ],
+      "cover_sticker_id": "831571726223540294",
+      "banner_asset_id": "831577545488596992"
+    }
+  ]
+}

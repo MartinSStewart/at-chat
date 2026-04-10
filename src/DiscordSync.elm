@@ -41,7 +41,7 @@ import Env
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -58,6 +58,7 @@ import RichText exposing (RichText(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
+import Sticker exposing (StickerData, StickerUrl(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User
@@ -214,7 +215,19 @@ handleDiscordDmEditMessage edit attachments model =
                     let
                         richText : Nonempty (RichText (Discord.Id Discord.UserId))
                         richText =
-                            RichText.fromDiscord edit.content attachments (Included edit.embeds)
+                            RichText.fromDiscord
+                                edit.content
+                                attachments
+                                (Included edit.embeds)
+                                (case edit.stickerItems of
+                                    Missing ->
+                                        []
+
+                                    Included stickers ->
+                                        List.filterMap
+                                            (\sticker -> OneToOne.second sticker.id model.discordStickers)
+                                            stickers
+                                )
                     in
                     case
                         LocalState.editMessageHelperNoThread
@@ -335,7 +348,17 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
         richText : Nonempty (RichText (Discord.Id Discord.UserId))
         richText =
-            RichText.fromDiscord edit.content attachments (Included edit.embeds)
+            RichText.fromDiscord
+                edit.content
+                attachments
+                (Included edit.embeds)
+                (case edit.stickerItems of
+                    Missing ->
+                        []
+
+                    Included stickers ->
+                        List.filterMap (\sticker -> OneToOne.second sticker.id model.discordStickers) stickers
+                )
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
@@ -650,12 +673,13 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     List Discord.Message
+    -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
         ( Array (Message messageId (Discord.Id Discord.UserId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
-messagesAndLinks messages discordAttachments =
+messagesAndLinks messages discordStickers discordAttachments =
     let
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
@@ -671,7 +695,18 @@ messagesAndLinks messages discordAttachments =
             Message.userTextMessageNoEmbeds
                 message.timestamp
                 message.author.id
-                (RichText.fromDiscord message.content attachments message.embeds)
+                (RichText.fromDiscord
+                    message.content
+                    attachments
+                    message.embeds
+                    (case message.stickerItems of
+                        Missing ->
+                            []
+
+                        Included stickers ->
+                            List.filterMap (\sticker -> OneToOne.second sticker.id discordStickers) stickers
+                    )
+                )
                 (case message.referencedMessage of
                     Discord.Referenced referenced ->
                         OneToOne.second referenced.id linkedMessageIds
@@ -774,19 +809,32 @@ handleCreateMessage websocketJson discordMessage attachments model =
                         let
                             richText : Nonempty (RichText (Discord.Id Discord.UserId))
                             richText =
-                                RichText.fromDiscord discordMessage.content attachments discordMessage.embeds
+                                RichText.fromDiscord
+                                    discordMessage.content
+                                    attachments
+                                    discordMessage.embeds
+                                    (case discordMessage.stickerItems of
+                                        Missing ->
+                                            []
+
+                                        Included stickers ->
+                                            List.filterMap
+                                                (\sticker -> OneToOne.second sticker.id model.discordStickers)
+                                                stickers
+                                    )
 
                             replyTo : Maybe (Id ChannelMessageId)
                             replyTo =
                                 referencedMessageToMessageId discordMessage channel
 
-                            ( message, embedCmds ) =
+                            ( message, embedCmds, stickersToFrontend ) =
                                 Message.userTextMessage
                                     discordMessage.timestamp
                                     discordMessage.author.id
                                     richText
                                     replyTo
                                     attachments
+                                    model.stickers
 
                             guildOrDmId : DiscordGuildOrDmId
                             guildOrDmId =
@@ -857,6 +905,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments
+                                                        stickersToFrontend
                                                         |> ServerChange
                                                     )
                                                     model2
@@ -872,6 +921,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments
+                                                        stickersToFrontend
                                                         |> ServerChange
                                                     )
                                                     model2
@@ -1020,7 +1070,19 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                 let
                                     richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                     richText =
-                                        RichText.fromDiscord content attachments discordMessage.embeds
+                                        RichText.fromDiscord
+                                            content
+                                            attachments
+                                            discordMessage.embeds
+                                            (case discordMessage.stickerItems of
+                                                Missing ->
+                                                    []
+
+                                                Included stickers ->
+                                                    List.filterMap
+                                                        (\sticker -> OneToOne.second sticker.id model.discordStickers)
+                                                        stickers
+                                            )
 
                                     threadOrChannelId : Discord.Id Discord.ChannelId
                                     threadOrChannelId =
@@ -1057,18 +1119,19 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                     guildOrDmId =
                                         DiscordGuildOrDmId_Guild discordMessage.author.id discordGuildId channelId
 
-                                    channelResult : Result DiscordMessageAlreadyExists ( DiscordBackendChannel, Command BackendOnly ToFrontend BackendMsg )
+                                    channelResult : Result DiscordMessageAlreadyExists ( DiscordBackendChannel, Command BackendOnly ToFrontend BackendMsg, SeqDict (Id StickerId) StickerData )
                                     channelResult =
                                         case threadRoute of
                                             ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                                 let
-                                                    ( message2, embedCmds ) =
+                                                    ( message2, embedCmds, stickers ) =
                                                         Message.userTextMessage
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
                                                             maybeReplyTo
                                                             attachments
+                                                            model.stickers
                                                 in
                                                 case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId message2 channel of
                                                     Ok ( messageId, channel3 ) ->
@@ -1077,6 +1140,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             identity
                                                             (DiscordGotGuildMessageEmbed discordGuildId channelId (ViewThreadWithMessage threadId messageId))
                                                             embedCmds
+                                                        , stickers
                                                         )
                                                             |> Ok
 
@@ -1085,13 +1149,14 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                                             NoThreadWithMaybeMessage maybeReplyTo ->
                                                 let
-                                                    ( message, embedCmds ) =
+                                                    ( message, embedCmds, stickers ) =
                                                         Message.userTextMessage
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
                                                             maybeReplyTo
                                                             attachments
+                                                            model.stickers
                                                 in
                                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
                                                     Ok ( messageId, channel3 ) ->
@@ -1100,6 +1165,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             identity
                                                             (DiscordGotGuildMessageEmbed discordGuildId channelId (NoThreadWithMessage messageId))
                                                             embedCmds
+                                                        , stickers
                                                         )
                                                             |> Ok
 
@@ -1107,7 +1173,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         Err DiscordMessageAlreadyExists
                                 in
                                 case channelResult of
-                                    Ok ( channel4, embedCmds ) ->
+                                    Ok ( channel4, embedCmds, stickers ) ->
                                         let
                                             ( model2, logCmd ) =
                                                 if richText == RichText.emptyPlaceholder then
@@ -1178,7 +1244,13 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         , Broadcast.toDiscordGuildExcludingOne
                                                             clientId
                                                             discordGuildId
-                                                            (Server_Discord_SendMessage discordMessage.timestamp guildOrDmId richText threadRoute attachments
+                                                            (Server_Discord_SendMessage
+                                                                discordMessage.timestamp
+                                                                guildOrDmId
+                                                                richText
+                                                                threadRoute
+                                                                attachments
+                                                                stickers
                                                                 |> ServerChange
                                                             )
                                                             model2
@@ -1193,6 +1265,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             richText
                                                             threadRoute
                                                             attachments
+                                                            stickers
                                                             |> ServerChange
                                                         )
                                                         model2
@@ -1461,7 +1534,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ReadyData readyData ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleReadyData readyData model2
+                                    handleReadyData userData.linkedTo readyData model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -1667,7 +1740,7 @@ handleJoinOrCreateGuild :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleJoinOrCreateGuild discordUserId gatewayGuild model =
-    ( { model | discordGuilds = addDiscordGuild [] gatewayGuild model.discordGuilds }
+    ( { model | discordGuilds = addDiscordGuild model.discordStickers [] gatewayGuild model.discordGuilds }
     , getDiscordGuildData gatewayGuild
         |> Task.map (\( _, guildData ) -> Ok guildData)
         |> Task.onError (\error -> Err error |> Task.succeed)
@@ -1907,7 +1980,7 @@ loadMessageAttachment :
     Discord.Attachment
     -> Task restriction x (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
 loadMessageAttachment attachment =
-    FileStatus.uploadUrl backendSessionIdHash attachment.url
+    FileStatus.uploadUrl { sessionId = backendSessionIdHash, url = attachment.url }
         |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
         |> Task.onError (\error -> Task.succeed (Err error))
 
@@ -2125,8 +2198,8 @@ handleReadySupplementalData data model =
             ( model, [] )
 
 
-handleReadyData : Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleReadyData readyData model =
+handleReadyData : Id UserId -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleReadyData userId readyData model =
     let
         discordDmChannels : List { dmChannelId : Discord.Id Discord.PrivateChannelId, members : List (Discord.Id Discord.UserId) }
         discordDmChannels =
@@ -2142,6 +2215,60 @@ handleReadyData readyData model =
         discordUsers : List Discord.PartialUser
         discordUsers =
             Discord.userToPartialUser readyData.user :: readyData.users
+
+        stickerData :
+            { tasks : List (Task BackendOnly x ( Id StickerId, Result Http.Error FileStatus.UploadResponse ))
+            , stickers : SeqDict (Id StickerId) StickerData
+            , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+            }
+        stickerData =
+            List.foldl
+                (\guild state ->
+                    List.foldl
+                        (\sticker { stickers, tasks, discordStickers } ->
+                            case OneToOne.second sticker.id discordStickers of
+                                Just _ ->
+                                    { tasks = tasks, stickers = stickers, discordStickers = discordStickers }
+
+                                Nothing ->
+                                    case sticker.stickerType of
+                                        Discord.StandardSticker ->
+                                            { tasks = tasks
+                                            , stickers = stickers
+                                            , discordStickers = discordStickers
+                                            }
+
+                                        Discord.GuildSticker ->
+                                            let
+                                                stickerId : Id StickerId
+                                                stickerId =
+                                                    Id.nextId stickers
+                                            in
+                                            { tasks =
+                                                (FileStatus.uploadUrl
+                                                    { sessionId = backendSessionIdHash
+                                                    , url = Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id
+                                                    }
+                                                    |> taskResult
+                                                    |> Task.map (\result -> ( stickerId, result ))
+                                                )
+                                                    :: tasks
+                                            , stickers =
+                                                SeqDict.insert
+                                                    stickerId
+                                                    { url = StickerLoading
+                                                    , name = sticker.name
+                                                    , format = sticker.formatType
+                                                    }
+                                                    stickers
+                                            , discordStickers = OneToOne.insert sticker.id stickerId discordStickers
+                                            }
+                        )
+                        state
+                        guild.stickers
+                )
+                { tasks = [], stickers = model.stickers, discordStickers = model.discordStickers }
+                readyData.guilds
     in
     ( { model
         | discordGuilds =
@@ -2149,10 +2276,10 @@ handleReadyData readyData model =
                 (\guild ( mergedMembers, guilds ) ->
                     case mergedMembers of
                         head :: rest ->
-                            ( rest, addDiscordGuild head guild guilds )
+                            ( rest, addDiscordGuild stickerData.discordStickers head guild guilds )
 
                         [] ->
-                            ( [], addDiscordGuild [] guild guilds )
+                            ( [], addDiscordGuild stickerData.discordStickers [] guild guilds )
                 )
                 ( case readyData.mergedMembers of
                     Included members2 ->
@@ -2165,9 +2292,14 @@ handleReadyData readyData model =
                 readyData.guilds
                 |> Tuple.second
         , discordUsers = List.foldl addDiscordUserData model.discordUsers discordUsers
+        , discordStickers = stickerData.discordStickers
+        , stickers = stickerData.stickers
       }
     , Command.batch
         [ getUserAvatars model.discordUsers discordUsers
+        , Task.sequence stickerData.tasks
+            |> Task.andThen (\stickers -> Task.map (GotDiscordGuildStickers userId stickers) Time.now)
+            |> Task.perform identity
         , (List.filterMap
             (\guild ->
                 if SeqDict.member guild.properties.id model.discordGuilds then
@@ -2193,8 +2325,13 @@ handleReadyData readyData model =
     )
 
 
-addDiscordGuild : List Discord.MergedMember -> Discord.GatewayGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-addDiscordGuild members guild discordGuilds =
+addDiscordGuild :
+    OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    -> List Discord.MergedMember
+    -> Discord.GatewayGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+    -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
+addDiscordGuild existingStickers members guild discordGuilds =
     SeqDict.update
         guild.properties.id
         (\maybe ->
@@ -2212,6 +2349,11 @@ addDiscordGuild members guild discordGuilds =
                                 )
                                 existingGuild.membersAndOwner
                                 members
+                        , stickers =
+                            List.filterMap
+                                (\sticker -> OneToOne.second sticker.id existingStickers)
+                                guild.stickers
+                                |> SeqSet.fromList
                     }
                         |> Just
 
@@ -2225,6 +2367,11 @@ addDiscordGuild members guild discordGuilds =
                                 |> SeqDict.fromList
                             )
                             guild.properties.ownerId
+                    , stickers =
+                        List.filterMap
+                            (\sticker -> OneToOne.second sticker.id existingStickers)
+                            guild.stickers
+                            |> SeqSet.fromList
                     }
                         |> Just
         )
@@ -2253,7 +2400,7 @@ uploadAttachmentsForMessages model messages =
         |> SeqDict.toList
         |> List.map
             (\( _, attachment ) ->
-                FileStatus.uploadUrl backendSessionIdHash attachment.url
+                FileStatus.uploadUrl { sessionId = backendSessionIdHash, url = attachment.url }
                     |> Task.map (\uploadResponse -> Ok ( DiscordAttachmentId.fromUrl attachment.url, uploadResponse ))
                     |> Task.onError (\error -> Task.succeed (Err error))
             )
@@ -2658,9 +2805,10 @@ sendMessage :
     -> Discord.Id Discord.ChannelId
     -> Maybe (Discord.Id Discord.MessageId)
     -> SeqDict (Id FileId) FileData
+    -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
-sendMessage discordUser channelId maybeReplyTo attachedFiles text =
+sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers text =
     List.map
         (\attachment ->
             Http.task
@@ -2740,6 +2888,13 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                                                     )
                                                     uploadAttachmentsResponse
                                                     attachments2
+                                            , stickers =
+                                                RichText.stickers text
+                                                    |> List.filterMap (\stickerId -> OneToOne.first stickerId discordStickers)
+                                                    |> SeqSet.fromList
+                                                    |> SeqSet.toList
+                                                    -- Discord will reject the message if it has more than 3 stickers
+                                                    |> List.take 3
                                             }
                                             |> http
                                     )

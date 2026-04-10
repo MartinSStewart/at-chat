@@ -32,6 +32,156 @@ exports.init = async function init(app)
         }
     });
 
+
+    class LottiePlayer extends HTMLElement {
+      static get observedAttributes() { return ['src', 'start-playing']; }
+      constructor() { super(); this._animation = null; this._playIndex = 0; }
+      connectedCallback() { this._loadAnimation(); }
+      disconnectedCallback() { this._destroyAnimation(); }
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'src' && oldValue !== newValue && this.isConnected) {
+          this._loadAnimation();
+        }
+        if (name === 'start-playing' && this._animation) {
+            switch(newValue) {
+                case '0': break;
+                case '1': {
+                    this._animation.play();
+                    this._animation.setLoop(true);
+                    this._playIndex += 1;
+                    const currentPlayIndex = this._playIndex;
+                    setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+                    break;
+                }
+                case '2': {
+                    this._animation.play();
+                    this._animation.setLoop(true);
+                    this._playIndex += 1;
+                    break;
+                }
+            }
+        }
+      }
+      _destroyAnimation() {
+        if (this._animation) {
+          this._animation.destroy();
+          this._animation = null;
+        }
+      }
+      _loadAnimation() {
+        this._destroyAnimation();
+        let src = this.getAttribute('src');
+        if (!src) return;
+        if (typeof bodymovin !== 'undefined') {
+            this._animation = bodymovin.loadAnimation({
+              container: this,
+              renderer: 'canvas',
+              loop: true,
+              autoplay: true,
+              path: src
+            });
+
+            this._playIndex += 1;
+            const currentPlayIndex = this._playIndex;
+            switch(this.getAttribute('start-playing')) {
+                case '0': {
+                    setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+                    break;
+                }
+                case '1': {
+                    setTimeout(() => { if (currentPlayIndex == this._playIndex) { this._animation.setLoop(false); } }, 4000);
+                    break;
+                }
+                case '2': {
+                    break;
+                }
+            }
+        }
+        else {
+            setTimeout(() => { this._loadAnimation(this); }, 1000);
+        }
+      }
+    }
+
+    customElements.define('lottie-player', LottiePlayer);
+
+    class AnimatedImagePlayer extends HTMLElement {
+      static get observedAttributes() { return ['src', 'start-playing']; }
+      constructor() {
+        super();
+        this._canvas = document.createElement('canvas');
+        this._img = document.createElement('img');
+        this._playIndex = 0;
+        this._loaded = false;
+      }
+      connectedCallback() { this._loadGif(); }
+      disconnectedCallback() {
+        this._canvas.remove();
+        this._img.remove();
+        this._loaded = false;
+      }
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'src' && oldValue !== newValue && this.isConnected) {
+          this._loadGif();
+        }
+        if (name === 'start-playing' && this._loaded) {
+            switch(newValue) {
+                case '0': break;
+                case '1': { this._play(false); break; }
+                case '2': { this._play(true); break; }
+            }
+
+        }
+      }
+      _play(loopForever) {
+        // Show the animated img, hide the canvas
+        this._canvas.style.display = 'none';
+        this._img.src = this.getAttribute('src');
+        this._img.style.display = 'block';
+        this._playIndex += 1;
+        if (!loopForever) {
+            const currentPlayIndex = this._playIndex;
+            setTimeout(() => {
+              if (currentPlayIndex === this._playIndex) {
+                this._img.style.display = 'none';
+                this._canvas.style.display = 'block';
+              }
+            }, 5000);
+        }
+      }
+      _loadGif() {
+        this._loaded = false;
+        this.innerHTML = '';
+        const src = this.getAttribute('src');
+        if (!src) return;
+
+        this._canvas.style.display = 'block';
+        this._img.style.display = 'none';
+        this._img.style.width = '100%';
+        this._img.style.height = '100%';
+        this.appendChild(this._canvas);
+        this.appendChild(this._img);
+
+        // Load the image to capture the first frame onto the canvas
+        const tempImg = new Image();
+        tempImg.crossOrigin = 'anonymous';
+        tempImg.onload = () => {
+          this._canvas.width = tempImg.naturalWidth;
+          this._canvas.height = tempImg.naturalHeight;
+          const ctx = this._canvas.getContext('2d');
+          ctx.drawImage(tempImg, 0, 0);
+          this._canvas.style.width = '100%';
+          this._canvas.style.height = '100%';
+          this._loaded = true;
+
+          this._play(this.getAttribute('start-playing') === '2');
+        };
+        tempImg.src = src;
+      }
+    }
+
+    customElements.define('animated-image-player', AnimatedImagePlayer);
+
     document.addEventListener('focusout', (event) => {
         app.ports.focus_changed_from_js.send({ id : null });
     });
@@ -50,8 +200,25 @@ exports.init = async function init(app)
     app.ports.exec_command_to_js.subscribe((data) => {
         var textarea = document.getElementById(data.htmlId);
         textarea.focus();
-        textarea.setSelectionRange(data.start, data.end);
-        document.execCommand('insertText', false, data.text);
+        data.commands.forEach((item) => {
+            console.log(item.args[0]);
+            switch (item.tag) {
+                case 'undo': {
+                    document.execCommand(item.tag, false, null);
+                    break;
+                }
+                case 'insertText': {
+                    textarea.setSelectionRange(item.args[1].start, item.args[1].end);
+                    document.execCommand(item.tag, false, item.args[0]);
+                    break;
+                }
+                case 'selectRange': {
+                    textarea.setSelectionRange(item.args[0].start, item.args[0].end, item.args[1]);
+                    break;
+                }
+            }
+
+        });
     });
 
     app.ports.fix_cursor_position_to_js.subscribe((htmlId) => {

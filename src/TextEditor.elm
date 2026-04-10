@@ -27,7 +27,8 @@ import Html.Events
 import Id exposing (Id, UserId)
 import Json.Decode
 import List.Extra
-import MyUi exposing (Range)
+import MyUi
+import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import String.Extra
 import String.Nonempty
@@ -147,13 +148,13 @@ update currentUserId msg model local =
                             String.length text - String.length editorState.text
                     in
                     ( model
-                    , if MyUi.rangeSize range == 0 && lengthDiff < 0 then
+                    , if Range.rangeSize range == 0 && lengthDiff < 0 then
                         Edit_TypedText { range | start = range.start + lengthDiff } ""
                             |> Local_EditChange
                             |> Just
 
                       else
-                        String.slice range.start (range.start + lengthDiff + MyUi.rangeSize range) text
+                        String.slice range.start (range.start + lengthDiff + Range.rangeSize range) text
                             |> Edit_TypedText range
                             |> Local_EditChange
                             |> Just
@@ -340,7 +341,7 @@ insertTextHelper insertCount removeRange range =
     let
         size : Int
         size =
-            MyUi.rangeSize removeRange
+            Range.rangeSize removeRange
 
         moveStartBy : Int
         moveStartBy =

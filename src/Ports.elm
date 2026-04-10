@@ -1,6 +1,8 @@
 port module Ports exposing
     ( CropImageData
     , CropImageDataResponse
+    , ExecCommand(..)
+    , ExecCommandPort
     , NotificationPermission(..)
     , PwaStatus(..)
     , checkNotificationPermission
@@ -42,9 +44,9 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
 import Json.Encode
-import MyUi exposing (Range, SelectionDirection(..))
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
+import Range exposing (Range, SelectionDirection(..))
 import Url
 import UserAgent exposing (UserAgent)
 import UserSession exposing (SubscribeData)
@@ -164,18 +166,49 @@ decodeDomId =
     Json.Decode.map Dom.id Json.Decode.string
 
 
-execCommand : HtmlId -> Int -> Int -> String -> Command FrontendOnly toMsg msg
-execCommand htmlId start end text =
-    Command.sendToJs
-        "exec_command_to_js"
-        exec_command_to_js
-        (Json.Encode.object
-            [ ( "htmlId", Json.Encode.string (Dom.idToString htmlId) )
-            , ( "start", Json.Encode.int start )
-            , ( "end", Json.Encode.int end )
-            , ( "text", Json.Encode.string text )
-            ]
+execCommand : ExecCommandPort -> Command FrontendOnly toMsg msg
+execCommand data =
+    Command.sendToJs "exec_command_to_js" exec_command_to_js (Codec.encodeToValue execCommandPortCodec data)
+
+
+type alias ExecCommandPort =
+    { htmlId : HtmlId
+    , commands : List ExecCommand
+    }
+
+
+type ExecCommand
+    = InsertText String Range
+    | Undo
+    | SelectRange Range SelectionDirection
+
+
+execCommandPortCodec : Codec ExecCommandPort
+execCommandPortCodec =
+    Codec.object ExecCommandPort
+        |> Codec.field "htmlId" .htmlId CodecExtra.htmlId
+        |> Codec.field "commands" .commands (Codec.list execCommandCodec)
+        |> Codec.buildObject
+
+
+execCommandCodec : Codec ExecCommand
+execCommandCodec =
+    Codec.custom
+        (\insertTextEncoder undoEncoder selectRangeEncoder value ->
+            case value of
+                InsertText argA argB ->
+                    insertTextEncoder argA argB
+
+                Undo ->
+                    undoEncoder
+
+                SelectRange argA argB ->
+                    selectRangeEncoder argA argB
         )
+        |> Codec.variant2 "insertText" InsertText Codec.string Range.codec
+        |> Codec.variant0 "undo" Undo
+        |> Codec.variant2 "selectRange" SelectRange Range.codec Range.selectionDirectionCodec
+        |> Codec.buildCustom
 
 
 fixCursorPosition : HtmlId -> Command FrontendOnly toMsg msg

@@ -1,5 +1,5 @@
 // List found here <https://mimetype.io/all-types>. Keep list in sync with FileStatus.contentTypes
-pub(crate) const CONTENT_TYPES: [&'static str; 686] = [
+pub(crate) const CONTENT_TYPES: [&'static str; 687] = [
     "image/gif",
     "image/jpeg",
     "image/png",
@@ -686,4 +686,5 @@ pub(crate) const CONTENT_TYPES: [&'static str; 686] = [
     "test/mimetype",
     "test/mimetyp",
     "x-conference/x-cooltalk",
+    "image/apng",
 ];

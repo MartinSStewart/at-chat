@@ -33,12 +33,13 @@ import Message exposing (ChangeAttachments(..), Message(..), MessageState)
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
-import MyUi exposing (Range)
+import MyUi
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
 import PersonName
 import Ports
+import Range exposing (Range)
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
@@ -1505,25 +1506,23 @@ changeUpdate localMsg local =
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                             LocalState.createThreadMessageFrontend
                                                 threadId
-                                                (Message.userTextMessage
+                                                (Message.userTextMessageFrontend
                                                     createdAt
                                                     localUser.session.userId
                                                     text
                                                     maybeReplyTo
                                                     attachedFiles
-                                                    |> Tuple.first
                                                 )
                                                 dmChannel
 
                                         NoThreadWithMaybeMessage maybeReplyTo ->
                                             LocalState.createChannelMessageFrontend
-                                                (Message.userTextMessage
+                                                (Message.userTextMessageFrontend
                                                     createdAt
                                                     localUser.session.userId
                                                     text
                                                     maybeReplyTo
                                                     attachedFiles
-                                                    |> Tuple.first
                                                 )
                                                 dmChannel
                             in
@@ -1604,13 +1603,12 @@ changeUpdate localMsg local =
 
                                                     NoThreadWithMaybeMessage maybeReplyTo ->
                                                         LocalState.createChannelMessageFrontend
-                                                            (Message.userTextMessage
+                                                            (Message.userTextMessageFrontend
                                                                 createdAt
                                                                 currentUserId
                                                                 text
                                                                 maybeReplyTo
                                                                 attachedFiles
-                                                                |> Tuple.first
                                                             )
                                                             dmChannel
                                                 )
@@ -2176,7 +2174,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage createdBy createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Server_SendMessage createdBy createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -2252,6 +2250,7 @@ changeUpdate localMsg local =
 
                                                     else
                                                         user
+                                                , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
 
@@ -2278,25 +2277,23 @@ changeUpdate localMsg local =
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                             LocalState.createThreadMessageFrontend
                                                 threadId
-                                                (Message.userTextMessage
-                                                    createdAt
-                                                    localUser.session.userId
-                                                    text
-                                                    maybeReplyTo
-                                                    attachedFiles
-                                                    |> Tuple.first
-                                                )
-                                                dmChannel
-
-                                        NoThreadWithMaybeMessage maybeReplyTo ->
-                                            LocalState.createChannelMessageFrontend
-                                                (Message.userTextMessage
+                                                (Message.userTextMessageFrontend
                                                     createdAt
                                                     createdBy
                                                     text
                                                     maybeReplyTo
                                                     attachedFiles
-                                                    |> Tuple.first
+                                                )
+                                                dmChannel
+
+                                        NoThreadWithMaybeMessage maybeReplyTo ->
+                                            LocalState.createChannelMessageFrontend
+                                                (Message.userTextMessageFrontend
+                                                    createdAt
+                                                    createdBy
+                                                    text
+                                                    maybeReplyTo
+                                                    attachedFiles
                                                 )
                                                 dmChannel
                             in
@@ -2316,10 +2313,11 @@ changeUpdate localMsg local =
 
                                             else
                                                 user
+                                        , stickers = SeqDict.union stickers localUser.stickers
                                     }
                             }
 
-                Server_Discord_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Server_Discord_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild discordUserId guildId channelId ->
                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -2395,6 +2393,7 @@ changeUpdate localMsg local =
 
                                                     else
                                                         user
+                                                , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
 
@@ -2416,7 +2415,7 @@ changeUpdate localMsg local =
                                         dmChannel2 : DiscordFrontendDmChannel
                                         dmChannel2 =
                                             LocalState.createChannelMessageFrontend
-                                                (Message.userTextMessage
+                                                (Message.userTextMessageFrontend
                                                     createdAt
                                                     data.currentUserId
                                                     text
@@ -2428,7 +2427,6 @@ changeUpdate localMsg local =
                                                             Nothing
                                                     )
                                                     attachedFiles
-                                                    |> Tuple.first
                                                 )
                                                 dmChannel
                                     in
@@ -2448,6 +2446,7 @@ changeUpdate localMsg local =
 
                                                     else
                                                         user
+                                                , stickers = SeqDict.union stickers localUser.stickers
                                             }
                                     }
 
@@ -3144,6 +3143,19 @@ changeUpdate localMsg local =
                                 }
                     }
 
+                Server_LinkedDiscordUserStickersLoaded newStickers ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | stickers = SeqDict.union newStickers localUser.stickers
+                                , user = User.addNewStickers newStickers localUser.user
+                            }
+                    }
+
 
 guildSendMessage :
     Id GuildId
@@ -3168,25 +3180,23 @@ guildSendMessage guildId guild channelId channel threadRouteWithRepliedTo create
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             LocalState.createThreadMessageFrontend
                                 threadId
-                                (Message.userTextMessage
+                                (Message.userTextMessageFrontend
                                     createdAt
                                     userId
                                     text
                                     maybeReplyTo
                                     attachedFiles
-                                    |> Tuple.first
                                 )
                                 channel
 
                         NoThreadWithMaybeMessage maybeReplyTo ->
                             LocalState.createChannelMessageFrontend
-                                (Message.userTextMessage
+                                (Message.userTextMessageFrontend
                                     createdAt
                                     userId
                                     text
                                     maybeReplyTo
                                     attachedFiles
-                                    |> Tuple.first
                                 )
                                 channel
                     )
@@ -3218,25 +3228,23 @@ discordGuildSendMessage guildId guild channelId channel threadRouteWithRepliedTo
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             LocalState.createThreadMessageFrontend
                                 threadId
-                                (Message.userTextMessage
+                                (Message.userTextMessageFrontend
                                     createdAt
                                     discordUserId
                                     text
                                     maybeReplyTo
                                     attachedFiles
-                                    |> Tuple.first
                                 )
                                 channel
 
                         NoThreadWithMaybeMessage maybeReplyTo ->
                             LocalState.createChannelMessageFrontend
-                                (Message.userTextMessage
+                                (Message.userTextMessageFrontend
                                     createdAt
                                     discordUserId
                                     text
                                     maybeReplyTo
                                     attachedFiles
-                                    |> Tuple.first
                                 )
                                 channel
                     )

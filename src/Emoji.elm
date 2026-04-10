@@ -2,8 +2,10 @@ module Emoji exposing
     ( CachedEmojiData
     , Category(..)
     , Emoji(..)
+    , EmojiCategory(..)
     , EmojiConfig
     , EmojiData
+    , EmojiOrSticker(..)
     , EmojiResponse
     , Model
     , Msg(..)
@@ -33,9 +35,11 @@ import Effect.Command exposing (Command)
 import Effect.Http as Http
 import Hex
 import Icons
+import Id exposing (Id, StickerId)
 import MyUi
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
+import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -74,6 +78,11 @@ fromDiscord emoji =
 
 
 type Category
+    = EmojiCategory EmojiCategory
+    | StickerCategory
+
+
+type EmojiCategory
     = Activities
     | AnimalsAndNature
     | Components
@@ -89,90 +98,102 @@ type Category
 categoryToString : Category -> String
 categoryToString category =
     case category of
-        Activities ->
-            "Activities"
+        EmojiCategory emojiCategory ->
+            case emojiCategory of
+                Activities ->
+                    "Activities"
 
-        AnimalsAndNature ->
-            "Animals & Nature"
+                AnimalsAndNature ->
+                    "Animals & Nature"
 
-        Components ->
-            "Component"
+                Components ->
+                    "Component"
 
-        Flags ->
-            "Flags"
+                Flags ->
+                    "Flags"
 
-        FoodAndDrink ->
-            "Food & Drink"
+                FoodAndDrink ->
+                    "Food & Drink"
 
-        Objects ->
-            "Objects"
+                Objects ->
+                    "Objects"
 
-        PeopleAndBody ->
-            "People & Body"
+                PeopleAndBody ->
+                    "People & Body"
 
-        SmileysAndEmotion ->
-            "Smileys & Emotion"
+                SmileysAndEmotion ->
+                    "Smileys & Emotion"
 
-        Symbols ->
-            "Symbols"
+                Symbols ->
+                    "Symbols"
 
-        TravelAndPlaces ->
-            "Travel & Places"
+                TravelAndPlaces ->
+                    "Travel & Places"
+
+        StickerCategory ->
+            "Stickers"
 
 
-categoryToEmojiString : Maybe SkinTone -> Category -> String
+categoryToEmojiString : Maybe SkinTone -> Category -> Element msg
 categoryToEmojiString skinTone category =
     case category of
-        Activities ->
-            "🎉"
+        EmojiCategory emojiCategory ->
+            case emojiCategory of
+                Activities ->
+                    Ui.text "🎉"
 
-        AnimalsAndNature ->
-            "🐟"
+                AnimalsAndNature ->
+                    Ui.text "🐟"
 
-        Components ->
-            "C"
+                Components ->
+                    Ui.text "C"
 
-        Flags ->
-            "🚩"
+                Flags ->
+                    Ui.text "🚩"
 
-        FoodAndDrink ->
-            "🥦"
+                FoodAndDrink ->
+                    Ui.text "🥦"
 
-        Objects ->
-            "🔬"
+                Objects ->
+                    Ui.text "🔬"
 
-        PeopleAndBody ->
-            case skinTone of
-                Nothing ->
-                    "👍"
+                PeopleAndBody ->
+                    (case skinTone of
+                        Nothing ->
+                            "👍"
 
-                Just SkinTone1 ->
-                    "👍🏻"
+                        Just SkinTone1 ->
+                            "👍🏻"
 
-                Just SkinTone2 ->
-                    "👍🏼"
+                        Just SkinTone2 ->
+                            "👍🏼"
 
-                Just SkinTone3 ->
-                    "👍🏽"
+                        Just SkinTone3 ->
+                            "👍🏽"
 
-                Just SkinTone4 ->
-                    "👍🏾"
+                        Just SkinTone4 ->
+                            "👍🏾"
 
-                Just SkinTone5 ->
-                    "👍🏿"
+                        Just SkinTone5 ->
+                            "👍🏿"
+                    )
+                        |> Ui.text
 
-        SmileysAndEmotion ->
-            "🙂"
+                SmileysAndEmotion ->
+                    Ui.text "🙂"
 
-        Symbols ->
-            "⬇️"
+                Symbols ->
+                    Ui.text "⬇️"
 
-        TravelAndPlaces ->
-            "🚆"
+                TravelAndPlaces ->
+                    Ui.text "🚆"
+
+        StickerCategory ->
+            Ui.text "S"
 
 
-allCategories : List Category
-allCategories =
+allEmojiCategories : List EmojiCategory
+allEmojiCategories =
     [ SmileysAndEmotion
     , Activities
     , AnimalsAndNature
@@ -226,7 +247,7 @@ allSkinTones =
 
 
 type alias Model =
-    { emojiHovered : Maybe Emoji
+    { emojiHovered : Maybe EmojiOrSticker
     , searchText : String
     }
 
@@ -247,7 +268,7 @@ selectorInit =
 
 type alias CachedEmojiData =
     { emojis : SeqDict Emoji EmojiData
-    , categories : SeqDict Category (List Emoji)
+    , categories : SeqDict EmojiCategory (List Emoji)
     , shortNames : Array { shortName : String, emoji : Emoji }
     }
 
@@ -259,15 +280,15 @@ type alias EmojiData =
 
 
 type alias EmojiResponse =
-    { emoji : String, shortNames : List String, category : Category, skinVariations : Maybe (Dict String String) }
+    { emoji : String, shortNames : List String, category : EmojiCategory, skinVariations : Maybe (Dict String String) }
 
 
 type Msg
     = PressedContainer
     | PressedCategory Category
-    | PressedSelectEmoji Emoji
+    | PressedSelectEmoji EmojiOrSticker
     | PressedSkinTone (Maybe SkinTone)
-    | MouseEnteredEmoji Emoji
+    | MouseEnteredEmoji EmojiOrSticker
     | TypedSearchText String
     | PressedClearSearch
 
@@ -420,8 +441,22 @@ setSearch text model =
     { model | searchText = text, emojiHovered = Nothing }
 
 
-selector : Bool -> Bool -> Int -> Model -> EmojiConfig -> Maybe CachedEmojiData -> Element Msg
-selector searchHasFocus isMobile width model userData emojiData =
+type EmojiOrSticker
+    = EmojiOrSticker_Emoji Emoji
+    | EmojiOrSticker_Sticker (Id StickerId)
+
+
+selector :
+    Bool
+    -> Bool
+    -> Int
+    -> Model
+    -> EmojiConfig
+    -> Maybe CachedEmojiData
+    -> SeqSet (Id StickerId)
+    -> SeqDict (Id StickerId) StickerData
+    -> Element Msg
+selector searchHasFocus isMobile width model userData emojiData availableStickers stickersData =
     case emojiData of
         Just emojiData2 ->
             let
@@ -429,7 +464,7 @@ selector searchHasFocus isMobile width model userData emojiData =
                 isSearching =
                     model.searchText /= ""
 
-                emojis : List Emoji
+                emojis : List EmojiOrSticker
                 emojis =
                     if isSearching then
                         let
@@ -448,9 +483,17 @@ selector searchHasFocus isMobile width model userData emojiData =
                             SeqSet.empty
                             emojiData2.shortNames
                             |> SeqSet.toList
+                            |> List.map EmojiOrSticker_Emoji
 
                     else
-                        SeqDict.get userData.category emojiData2.categories |> Maybe.withDefault []
+                        case userData.category of
+                            EmojiCategory emojiCategory ->
+                                SeqDict.get emojiCategory emojiData2.categories
+                                    |> Maybe.withDefault []
+                                    |> List.map EmojiOrSticker_Emoji
+
+                            StickerCategory ->
+                                SeqSet.toList availableStickers |> List.map EmojiOrSticker_Sticker
             in
             Ui.column
                 [ Ui.width (Ui.px (min 620 width))
@@ -475,7 +518,7 @@ selector searchHasFocus isMobile width model userData emojiData =
                                 List.filterMap
                                     (\category ->
                                         case category of
-                                            Components ->
+                                            EmojiCategory Components ->
                                                 Nothing
 
                                             _ ->
@@ -486,31 +529,35 @@ selector searchHasFocus isMobile width model userData emojiData =
                                                     , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
                                                     , Ui.attrIf (category == userData.category) (Ui.background MyUi.background3)
                                                     ]
-                                                    (Ui.text (categoryToEmojiString userData.skinTone category))
+                                                    (categoryToEmojiString userData.skinTone category)
                                                     |> Just
                                     )
-                                    allCategories
+                                    (StickerCategory :: List.map EmojiCategory allEmojiCategories)
                            )
                     )
                 , Ui.row
                     [ Ui.heightMin 0, Ui.width Ui.shrink, Ui.wrap ]
-                    (List.map
-                        (\emoji ->
+                    (List.indexedMap
+                        (\index item ->
                             let
-                                text : String
                                 text =
-                                    emojiWithSkinTone userData.skinTone emoji emojiData2
+                                    case item of
+                                        EmojiOrSticker_Emoji emoji ->
+                                            emojiWithSkinTone userData.skinTone emoji emojiData2 |> Ui.text
+
+                                        EmojiOrSticker_Sticker stickerId ->
+                                            Sticker.view "2lh" stickerId stickersData Sticker.LoopForever |> Ui.html
                             in
                             MyUi.elButton
-                                (Dom.id ("guild_emojiSelector_" ++ text))
-                                (PressedSelectEmoji emoji)
-                                [ Ui.Events.onMouseEnter (MouseEnteredEmoji emoji)
+                                (Dom.id ("guild_emojiSelector_" ++ String.fromInt index))
+                                (PressedSelectEmoji item)
+                                [ Ui.Events.onMouseEnter (MouseEnteredEmoji item)
                                 , Ui.attrIf
-                                    (model.emojiHovered == Just emoji)
+                                    (model.emojiHovered == Just item)
                                     (Ui.background MyUi.hoverHighlight)
                                 , Ui.width Ui.shrink
                                 ]
-                                (Ui.text text)
+                                text
                         )
                         emojis
                     )
@@ -523,7 +570,7 @@ selector searchHasFocus isMobile width model userData emojiData =
                     , Ui.paddingXY 8 0
                     ]
                     ((case model.emojiHovered of
-                        Just emoji ->
+                        Just (EmojiOrSticker_Emoji emoji) ->
                             Ui.text (emojiWithSkinTone userData.skinTone emoji emojiData2)
                                 :: (case SeqDict.get emoji emojiData2.emojis of
                                         Just emoji2 ->
@@ -538,6 +585,17 @@ selector searchHasFocus isMobile width model userData emojiData =
                                         Nothing ->
                                             []
                                    )
+
+                        Just (EmojiOrSticker_Sticker stickerId) ->
+                            case SeqDict.get stickerId stickersData of
+                                Just sticker ->
+                                    [ Ui.el
+                                        [ Ui.Font.size 16, Ui.width Ui.shrink ]
+                                        (Ui.text (":" ++ sticker.name ++ ":"))
+                                    ]
+
+                                Nothing ->
+                                    []
 
                         Nothing ->
                             []
@@ -610,7 +668,7 @@ requestEmojiData gotEmojiData =
                                         SeqDict.empty
                                         ok
 
-                                categories : SeqDict Category (List Emoji)
+                                categories : SeqDict EmojiCategory (List Emoji)
                                 categories =
                                     List.foldl
                                         (\emoji dict ->
@@ -619,7 +677,7 @@ requestEmojiData gotEmojiData =
                                                 (\maybe -> UnicodeEmoji emoji.emoji :: Maybe.withDefault [] maybe |> Just)
                                                 dict
                                         )
-                                        (allCategories |> List.map (\category -> ( category, [] )) |> SeqDict.fromList)
+                                        (allEmojiCategories |> List.map (\category -> ( category, [] )) |> SeqDict.fromList)
                                         ok
                             in
                             { emojis = emojiData
@@ -662,7 +720,7 @@ skinVariationCodec =
         |> Codec.buildObject
 
 
-categoryCodec : Codec Category
+categoryCodec : Codec EmojiCategory
 categoryCodec =
     Codec.enum Codec.string
         (List.map
@@ -700,7 +758,7 @@ categoryCodec =
                 , category
                 )
             )
-            allCategories
+            allEmojiCategories
         )
 
 

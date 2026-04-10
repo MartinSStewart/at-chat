@@ -64,7 +64,7 @@ import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -76,7 +76,6 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
-import MyUi exposing (Range, SelectionDirection)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -86,12 +85,14 @@ import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
+import Range exposing (Range, SelectionDirection)
 import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
@@ -294,7 +295,7 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
-    , backendInitialized : Bool
+    , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) DiscordDmChannel
@@ -318,6 +319,8 @@ type alias BackendModel =
     , exportState : Maybe ExportState
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     , toBackendLogs : Array ToBackendLogData
+    , stickers : SeqDict (Id StickerId) StickerData
+    , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     }
 
 
@@ -588,10 +591,16 @@ type BackendMsg
         Time.Posix
         (Result
             Discord.HttpError
-            { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
+            { guild : Discord.GatewayGuild
+            , channels : List Discord.Channel
+            , icon : Maybe FileStatus.UploadResponse
+            }
         )
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
+    | GotDiscordGuildStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | HourlyUpdate Time.Posix
+    | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
 
 
 type alias ExportState =
@@ -648,6 +657,7 @@ type alias LoginData =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
+    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 
@@ -663,8 +673,8 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
+    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -731,6 +741,7 @@ type ServerChange
     | Server_DiscordUpdateChannel (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (OptionalData String) (OptionalData (Maybe String))
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
+    | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
 
 
 type LocalChange

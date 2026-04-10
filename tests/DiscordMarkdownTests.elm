@@ -24,7 +24,7 @@ test =
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty Discord.Missing [] |> List.Nonempty.toList
 
 
 basicFormattingTests : Test

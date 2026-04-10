@@ -1,7 +1,5 @@
 module MyUi exposing
-    ( Range
-    , SelectionDirection(..)
-    , alertColor
+    ( alertColor
     , background1
     , background2
     , background3
@@ -13,6 +11,7 @@ module MyUi exposing
     , buttonFontColor
     , cancelButtonBackground
     , colorToStyle
+    , colorWithAlpha
     , column
     , container
     , css
@@ -52,7 +51,6 @@ module MyUi exposing
     , prewrap
     , radioColumn
     , radioRowWithSeparators
-    , rangeSize
     , replyToColor
     , rowButton
     , secondaryButton
@@ -70,7 +68,7 @@ module MyUi exposing
     , widthAttr
     )
 
-import Color
+import Color exposing (Color)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Date exposing (Date)
@@ -700,20 +698,6 @@ simpleButton htmlId onPress content =
         content
 
 
-type alias Range =
-    { start : Int, end : Int }
-
-
-type SelectionDirection
-    = SelectForward
-    | SelectBackward
-
-
-rangeSize : Range -> Int
-rangeSize range =
-    range.end - range.start
-
-
 focusEffect : Ui.Attribute msg
 focusEffect =
     Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.borderColor white ]
@@ -918,7 +902,7 @@ noShrinking =
     htmlStyle "flex-shrink" "0"
 
 
-colorToStyle : Ui.Color -> String
+colorToStyle : Color -> String
 colorToStyle color =
     let
         { red, green, blue, alpha } =
@@ -936,6 +920,15 @@ colorToStyle color =
         ++ ","
         ++ String.fromFloat alpha
         ++ ")"
+
+
+colorWithAlpha : Float -> Color -> Color
+colorWithAlpha alpha color =
+    let
+        color2 =
+            Color.toRgba color
+    in
+    Color.fromRgba { color2 | alpha = alpha }
 
 
 background1 : Ui.Color

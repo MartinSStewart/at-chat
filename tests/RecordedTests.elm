@@ -7,7 +7,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import Codec
 import Coord
-import Dict exposing (Dict)
+import Dict
 import Discord
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -30,13 +30,15 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
-import MyUi exposing (Range)
+import MessageInput
+import MyUi
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
+import Range exposing (Range)
 import RateLimit
 import RichText exposing (Domain(..), RichText(..))
 import Route
@@ -45,6 +47,7 @@ import SecretId exposing (SecretId(..))
 import SeqDict
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
+import Sticker
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
@@ -63,9 +66,9 @@ import VisibleMessages
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
 setup =
     T.viewerWith tests
-        |> T.addBytesFiles (Dict.values fileRequests)
         |> T.addStringFile "/tests/data/discord-op0-ready.json"
         |> T.addStringFile "/tests/data/discord-op0-ready-supplemental.json"
+        |> T.addStringFile "/tests/data/discord-sticker-packs.json"
         |> T.addBytesFile "/tests/data/at-user-icon.png"
         |> T.addStringFile "/public/compact-emoji.json"
 
@@ -78,17 +81,6 @@ main =
 domain : Url
 domain =
     { protocol = Url.Http, host = "localhost", port_ = Just 8000, path = "", query = Nothing, fragment = Nothing }
-
-
-{-| Please don't modify or rename this function
--}
-fileRequests : Dict String String
-fileRequests =
-    [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
-    , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
-    , ( "GET_/compact-emoji.json", "/public/compact-emoji.json" )
-    ]
-        |> Dict.fromList
 
 
 stringToJson : String -> Json.Encode.Value
@@ -548,41 +540,6 @@ clickSpoiler user htmlId =
         ]
 
 
-handleHttpRequests : Dict String String -> Dict String Bytes -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
-handleHttpRequests overrides fileData requestAndData =
-    let
-        key : String
-        key =
-            requestAndData.currentRequest.method
-                ++ "_"
-                ++ requestAndData.currentRequest.url
-
-        getData : String -> HttpResponse
-        getData path =
-            case Dict.get path fileData of
-                Just data ->
-                    BytesHttpResponse { url = requestAndData.currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty } data
-
-                Nothing ->
-                    UnhandledHttpRequest
-    in
-    if key == "GET_/_i" then
-        StringHttpResponse
-            { url = requestAndData.currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty }
-            infoEndpointResponse
-
-    else
-        case ( Dict.get key overrides, Dict.get key fileRequests ) of
-            ( Just path, _ ) ->
-                getData path
-
-            ( Nothing, Just path ) ->
-                getData path
-
-            _ ->
-                UnhandledHttpRequest
-
-
 scrollToTop :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -817,8 +774,8 @@ infoEndpointResponse =
     """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
 
 
-handleCustomRequest : CustomRequest -> HttpResponse
-handleCustomRequest { method, url, headers, body } =
+handleCustomRequest : String -> CustomRequest -> HttpResponse
+handleCustomRequest discordStickerPacks { method, url, headers, body } =
     if String.startsWith "https://" url then
         case ( method, String.dropLeft 8 url |> String.split "/" ) of
             ( "GET", [ "discord.com", "api", "v9", "users", "@me" ] ) ->
@@ -831,6 +788,11 @@ handleCustomRequest { method, url, headers, body } =
                     StringHttpResponse
                         { url = url, statusCode = 403, statusText = "OK", headers = Dict.empty }
                         ""
+
+            ( "GET", [ "discord.com", "api", "v9", "sticker-packs" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    discordStickerPacks
 
             ( "POST", [ "discord.com", "api", "v9", "channels", _, "typing" ] ) ->
                 StringHttpResponse
@@ -918,8 +880,14 @@ decodeCustomRequest request =
             Nothing
 
 
-tests : Dict String Bytes -> String -> String -> Bytes -> String -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson =
+tests :
+    String
+    -> String
+    -> String
+    -> Bytes
+    -> String
+    -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
         handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
         handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
@@ -950,7 +918,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         "http://localhost:3000/file/custom-request" ->
                             case decodeCustomRequest currentRequest of
                                 Just customRequest2 ->
-                                    handleCustomRequest customRequest2
+                                    handleCustomRequest discordStickerPacks customRequest2
 
                                 Nothing ->
                                     let
@@ -996,6 +964,62 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                                             |> Just
                                     }
                                 )
+
+                        "http://localhost:3000/file/upload-url" ->
+                            case currentRequest.body of
+                                T.JsonBody json ->
+                                    case Codec.decodeValue FileStatus.uploadUrlCodec json of
+                                        Ok request ->
+                                            -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
+                                            if String.contains "796138864933863456" request.url then
+                                                UnhandledHttpRequest
+
+                                            else
+                                                StringHttpResponse
+                                                    { url = currentRequest.url
+                                                    , statusCode = 200
+                                                    , statusText = "OK"
+                                                    , headers = Dict.empty
+                                                    }
+                                                    (Codec.encodeToString
+                                                        0
+                                                        FileStatus.uploadResponseCodec
+                                                        { fileHash = FileStatus.fileHash request.url
+                                                        , imageSize =
+                                                            { imageSize = Coord.xy 128 128
+                                                            , orientation = Nothing
+                                                            , gpsLocation = Nothing
+                                                            , cameraOwner = Nothing
+                                                            , exposureTime = Nothing
+                                                            , fNumber = Nothing
+                                                            , focalLength = Nothing
+                                                            , isoSpeedRating = Nothing
+                                                            , make = Nothing
+                                                            , model = Nothing
+                                                            , software = Nothing
+                                                            , userComment = Nothing
+                                                            }
+                                                                |> Just
+                                                        }
+                                                    )
+
+                                        Err _ ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 500
+                                                , statusText = "Bad request"
+                                                , headers = Dict.empty
+                                                }
+                                                ""
+
+                                _ ->
+                                    StringHttpResponse
+                                        { url = currentRequest.url
+                                        , statusCode = 500
+                                        , statusText = "Bad request"
+                                        , headers = Dict.empty
+                                        }
+                                        ""
 
                         "http://localhost:3000/file/push-notification" ->
                             StringHttpResponse
@@ -1112,26 +1136,13 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 handleFileRequest
                 handleMultiFileUpload
                 domain
-
-        config =
-            T.Config
-                Frontend.app_
-                Backend.app_
-                (handleHttpRequests
-                    Dict.empty
-                    fileData
-                )
-                (\_ -> Nothing)
-                (\_ -> UnhandledFileUpload)
-                (\_ -> UnhandledMultiFileUpload)
-                domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
-    , inviteUserAndDmChat config
+    , inviteUserAndDmChat normalConfig
     , startTest
         "Admin can open admin page"
         startTime
-        config
+        normalConfig
         [ T.connectFrontend
             100
             sessionId0
@@ -1259,37 +1270,6 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                 , admin.click 100 (Dom.id "guild_friendLabel_1")
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Editing..." ])
-                ]
-            )
-        ]
-    , startTest
-        "Discord friend label shows typing indicator"
-        startTime
-        normalConfig
-        [ linkDiscordAndLogin
-            sessionId0
-            (PersonName.toString Backend.adminUser.name)
-            adminEmail
-            False
-            discordOp0Ready
-            discordOp0ReadySupplemental
-            (\admin ->
-                [ andThenWebsocket
-                    (\connection _ ->
-                        [ admin.click 100 (Dom.id "guildIcon_showFriends")
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.exactText "Typing..." ]
-                            )
-                        , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"185574444641550336\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
-                        , admin.checkView
-                            100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Typing..." ]
-                            )
-                        ]
-                    )
                 ]
             )
         ]
@@ -1953,7 +1933,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                             [ tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                             , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                             , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                            , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                            , tabA.click 991 (Dom.id "guild_emojiSelector_131")
                             , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
                             , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
                             , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -1968,7 +1948,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_131")
                         , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
                         , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -1983,7 +1963,7 @@ tests fileData discordOp0Ready discordOp0ReadySupplemental atUserIcon emojiJson 
                         , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
                         , tabA.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
                         , tabA.click 100 (Dom.id "emoji_category_People & Body")
-                        , tabA.click 991 (Dom.id "guild_emojiSelector_👍")
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_351")
                         , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "👍" ])
                         , tabA.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
                         , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
@@ -2335,6 +2315,17 @@ inviteUserAndDmChat config =
                                 Test.Html.Query.findAll [ Test.Html.Selector.exactText "Sven" ] html
                                     |> Test.Html.Query.count (Expect.equal 2)
                             )
+                        , createThread user (Id.fromInt 1)
+                        , writeMessage user 100 "Writing in thread"
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "guild_threadStarterIndicator_1" ] html
+                                    |> Test.Html.Query.has
+                                        [ Test.Html.Selector.containing [ Test.Html.Selector.exactText "Sven" ]
+                                        ]
+                            )
+                        , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
                         ]
                     )
                 ]
@@ -2731,11 +2722,11 @@ attackerShouldNotGetThisToFrontend toFrontend =
 
                 Types.ServerChange serverChange ->
                     case serverChange of
-                        Types.Server_SendMessage _ _ _ _ _ _ ->
+                        Types.Server_SendMessage _ _ _ _ _ _ _ ->
                             True
 
                         --RichText.toString SeqDict.empty message |> String.contains "sensitive"
-                        Types.Server_Discord_SendMessage _ _ _ _ _ ->
+                        Types.Server_Discord_SendMessage _ _ _ _ _ _ ->
                             True
 
                         Types.Server_NewChannel _ _ _ ->
@@ -2893,6 +2884,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_DiscordGuildMemberJoined _ _ _ _ _ ->
                             True
 
+                        Types.Server_LinkedDiscordUserStickersLoaded _ ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 
@@ -3037,7 +3031,7 @@ attackerLocalChanges =
     , Local_SendMessage messageTime (GuildOrDmId_Dm normalUserId) normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_SetDiscordGuildNotificationLevel discordUserId discordGuildId User.NotifyOnEveryMessage
     , Local_SetDomainWhitelist True (Domain "example.com")
-    , Local_SetEmojiCategory Emoji.Activities
+    , Local_SetEmojiCategory (Emoji.EmojiCategory Emoji.Activities)
     , Local_SetEmojiSkinTone (Just Emoji.SkinTone1)
     , Local_SetGuildNotificationLevel legitGuildId User.NotifyOnEveryMessage
     , Local_SetLastViewed guildOrDmId_guild threadRouteWithMessage
@@ -3048,6 +3042,21 @@ attackerLocalChanges =
     , Local_TextEditor TextEditor.Local_Reset
     , Local_UnlinkDiscordUser discordUserId
     ]
+
+
+currentDiscordUserId : Discord.Id Discord.UserId
+currentDiscordUserId =
+    Unsafe.uint64 "184437096813953035" |> Discord.idFromUInt64
+
+
+botTestGuild : Discord.Id Discord.GuildId
+botTestGuild =
+    Unsafe.uint64 "705745250815311942" |> Discord.idFromUInt64
+
+
+botTestGuild_ChannelA : Discord.Id Discord.ChannelId
+botTestGuild_ChannelA =
+    Unsafe.uint64 "1072828564317159465" |> Discord.idFromUInt64
 
 
 discordTests :
@@ -3073,6 +3082,37 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
                         , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":476,"op":0,"d":{"webhook_id":"1374332266083254363","type":0,"tts":false,"timestamp":"2026-03-31T20:15:05.862000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1488632753368072280","flags":0,"embeds":[{"url":"https://github.com/lamdera/compiler/pull/92","type":"rich","title":"[lamdera/compiler] Pull request opened: #92   Allow configuring <html lang> via html-lang file","id":"1488632753368072281","description":"Read an optional html-lang file from the project root to set the lang attribute on the generated  tag.  If the file contains e.g. \\"fr\\", the output becomes .  If absent or empty, the tag is plain  as before.  Fixes #84.","content_scan_version":4,"color":38912,"author":{"url":"https://github.com/MavenRain","proxy_icon_url":"https://images-ext-1.discordapp.net/external/z5iI09eMZ6hW8pY8xflOmWevOiHuXRD-pljR_thC38Q/%3Fv%3D4/https/avatars.githubusercontent.com/u/7246681","name":"MavenRain","icon_url":"https://avatars.githubusercontent.com/u/7246681?v=4"}}],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"GitHub","id":"1374332266083254363","global_name":null,"discriminator":"0000","bot":true,"avatar":"e57fd67dc7ca0cc840a0e87a82281bc5"},"attachments":[],"guild_id":"705745250815311942"}}"""
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "Title for https://github.com/lamdera/compiler/pull/92" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , startTest
+        "Discord friend label shows typing indicator"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guildIcon_showFriends")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "Typing..." ]
+                            )
+                        , T.websocketSendString 100 connection "{\"t\":\"TYPING_START\",\"s\":3,\"op\":0,\"d\":{\"channel_id\":\"185574444641550336\",\"user_id\":\"161098476632014848\",\"timestamp\":1}}"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Typing..." ]
+                            )
                         ]
                     )
                 ]
@@ -3114,6 +3154,121 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
             discordOp0Ready
             discordOp0ReadySupplemental
             (\_ -> [])
+        ]
+    , startTest
+        "Message with sticker"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
+                        , admin.click 100 (Dom.id "emoji_category_Stickers")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.tag "lottie-player" ])
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.tag "animated-image-player" ] html
+                                    |> Test.Html.Query.count (Expect.equal 2)
+                            )
+                        , admin.click 100 (Dom.id "elm-ui-root-id")
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:35:37.476000+00:00\",\"sticker_items\":[{\"name\":\"sticker1\",\"id\":\"1490687750288965813\",\"format_type\":2}],\"pinned\":false,\"nonce\":\"1491219931943927808\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1491219932673740970\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Message with text and sticker!\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Sticker failed to load"
+                                , Test.Html.Selector.tag "lottie-player"
+                                ]
+                            )
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Message with text and sticker!" ])
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-07T23:36:41.898000+00:00\",\"sticker_items\":[{\"name\":\"Happy\",\"id\":\"796140620111544330\",\"format_type\":3}],\"pinned\":false,\"nonce\":\"1491220202350706688\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1491220202879324241\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "lottie-player" ])
+                        ]
+                    )
+                ]
+            )
+        , T.connectFrontend
+            100
+            sessionId0
+            (Route.encode
+                (Route.DiscordGuildRoute
+                    { currentDiscordUserId = currentDiscordUserId
+                    , guildId = botTestGuild
+                    , channelRoute =
+                        Route.DiscordChannel_ChannelRoute
+                            botTestGuild_ChannelA
+                            (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                    }
+                )
+            )
+            desktopWindow
+            (\admin ->
+                [ admin.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Sticker failed to load" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.tag "lottie-player"
+                        , Test.Html.Selector.exactText "Message with text and sticker!"
+                        ]
+                    )
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ admin.click 100 (Dom.id "guild_openChannel_0")
+                        , admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
+                        , admin.click 100 (Dom.id "emoji_category_Stickers")
+                        , admin.click 100 (Dom.id "guild_emojiSelector_0")
+                        , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
+                        , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.tag "animated-image-player" ])
+                        , T.andThen
+                            30
+                            (\data ->
+                                case
+                                    List.filter
+                                        (\request -> request.clientId == admin.clientId && request.portName == "exec_command_to_js")
+                                        data.portRequests
+                                of
+                                    [ _ ] ->
+                                        [ admin.update
+                                            30
+                                            (Types.MessageInputMsg
+                                                (GuildOrDmId (GuildOrDmId_Guild (Id.fromInt 0) (Id.fromInt 0)))
+                                                NoThread
+                                                (MessageInput.TypedMessage (Sticker.idToString (Id.fromInt 3)))
+                                            )
+                                        , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                                        ]
+
+                                    _ ->
+                                        [ admin.checkModel 100 (\_ -> Err "Didn't add sticker to text input") ]
+                            )
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "animated-image-player" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "animated-image-player" ])
+                        ]
+                    )
+                ]
+            )
         ]
     , startTest
         "Link Discord account with login to non-existent at-chat account"

@@ -117,7 +117,7 @@ import Embed exposing (EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
@@ -136,6 +136,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import Sticker exposing (StickerData)
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import ToBackendLog exposing (ToBackendLogData)
@@ -171,6 +172,7 @@ type alias LocalUser =
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
+    , stickers : SeqDict (Id StickerId) StickerData
     }
 
 
@@ -195,6 +197,7 @@ type alias DiscordBackendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , stickers : SeqSet (Id StickerId)
     }
 
 
@@ -214,6 +217,7 @@ type alias DiscordFrontendGuild =
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
+    , stickers : SeqSet (Id StickerId)
     }
 
 

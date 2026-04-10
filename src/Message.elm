@@ -13,6 +13,7 @@ module Message exposing
     , reactionEmojis
     , removeReactionEmoji
     , userTextMessage
+    , userTextMessageFrontend
     , userTextMessageNoEmbeds
     )
 
@@ -22,12 +23,13 @@ import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (Id)
+import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet
+import Sticker exposing (StickerData)
 import Time
 import Url exposing (Url)
 
@@ -69,8 +71,9 @@ userTextMessage :
     -> Nonempty (RichText userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
-    -> ( Message messageId userId, Command r toMsg ( Url, Result Http.Error EmbedData ) )
-userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
+    -> SeqDict (Id StickerId) StickerData
+    -> ( Message messageId userId, Command r toMsg ( Url, Result Http.Error EmbedData ), SeqDict (Id StickerId) StickerData )
+userTextMessage createdAt2 createdBy content repliedTo attachedFiles allStickers =
     let
         hyperlinks : List Url
         hyperlinks =
@@ -90,7 +93,48 @@ userTextMessage createdAt2 createdBy content repliedTo attachedFiles =
         |> SeqSet.toList
         |> List.map Embed.request
         |> Command.batch
+    , List.foldl
+        (\stickerId dict ->
+            SeqDict.update
+                stickerId
+                (\maybe ->
+                    case maybe of
+                        Just _ ->
+                            maybe
+
+                        Nothing ->
+                            SeqDict.get stickerId allStickers
+                )
+                dict
+        )
+        SeqDict.empty
+        (RichText.stickers content)
     )
+
+
+userTextMessageFrontend :
+    Time.Posix
+    -> userId
+    -> Nonempty (RichText userId)
+    -> Maybe (Id messageId)
+    -> SeqDict (Id FileId) FileData
+    -> Message messageId userId
+userTextMessageFrontend createdAt2 createdBy content repliedTo attachedFiles =
+    let
+        hyperlinks : List Url
+        hyperlinks =
+            RichText.hyperlinks content |> List.take maxEmbeds
+    in
+    { createdAt = createdAt2
+    , createdBy = createdBy
+    , content = content
+    , reactions = SeqDict.empty
+    , editedAt = Nothing
+    , repliedTo = repliedTo
+    , attachedFiles = attachedFiles
+    , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
+    }
+        |> UserTextMessage
 
 
 type ChangeAttachments

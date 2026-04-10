@@ -23,7 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -43,7 +43,7 @@ import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMe
 import MessageInput exposing (NameSoFar(..))
 import MessageMenu
 import MessageView
-import MyUi exposing (Range, SelectionDirection)
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -52,10 +52,12 @@ import Pages.Home
 import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
+import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import Sticker
 import String.Nonempty
 import TextEditor
 import Thread
@@ -433,6 +435,7 @@ loginDataToLocalState userAgent timezone loginData =
         , linkedDiscordUsers = loginData.linkedDiscordUsers
         , timezone = timezone
         , userAgent = userAgent
+        , stickers = loginData.stickers
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -1150,7 +1153,7 @@ updateLoaded msg model =
 
         EmojiSelectorMsg emojiMsg ->
             case emojiMsg of
-                Emoji.PressedSelectEmoji emoji ->
+                Emoji.PressedSelectEmoji emojiOrSticker ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case loggedIn.showEmojiSelector of
@@ -1158,17 +1161,22 @@ updateLoaded msg model =
                                     ( loggedIn, Command.none )
 
                                 EmojiSelectorForReaction guildOrDmId threadRoute ->
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
-                                        { loggedIn | showEmojiSelector = EmojiSelectorHidden }
-                                        (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_Emoji emoji ->
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+
+                                        EmojiOrSticker_Sticker _ ->
+                                            ( loggedIn, Command.none )
 
                                 EmojiSelectorForMessage maybeSelection ->
-                                    insertEmoji Pages.Guild.channelTextInputId maybeSelection emoji model loggedIn
+                                    insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
 
                                 EmojiSelectorForEditMessage _ maybeSelection ->
-                                    insertEmoji MessageMenu.editMessageTextInputId maybeSelection emoji model loggedIn
+                                    insertEmojiOrSticker MessageMenu.editMessageTextInputId maybeSelection emojiOrSticker model loggedIn
                         )
                         model
 
@@ -2684,8 +2692,10 @@ updateLoaded msg model =
                                                         }
                                                             |> MessageMenu
                                         }
-                                        (Process.sleep (Duration.seconds 1)
-                                            |> Task.perform (\() -> DebouncedTyping)
+                                        (Command.batch
+                                            [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
+                                            , removePartialStickers MessageMenu.editMessageTextInputId text
+                                            ]
                                         )
 
                                 Nothing ->
@@ -2957,6 +2967,7 @@ updateLoaded msg model =
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    , removePartialStickers Pages.Guild.channelTextInputId text
                                     ]
                                 )
                         )
@@ -3348,8 +3359,25 @@ updateLoaded msg model =
             textInputFocusChanged maybeHtmlId maybeRange model
 
 
+removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg
+removePartialStickers htmlId text =
+    case
+        List.filterMap
+            (\( range, maybeStickerId ) ->
+                case maybeStickerId of
+                    Just _ ->
+                        Nothing
 
---selectionChanged maybeHtmlId maybeRange model
+                    Nothing ->
+                        Ports.InsertText "" range |> Just
+            )
+            (RichText.stringToStickers text)
+    of
+        [] ->
+            Command.none
+
+        list ->
+            Ports.execCommand { htmlId = htmlId, commands = list }
 
 
 messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
@@ -3472,29 +3500,41 @@ pressedOpenEmojiSelector textInputId emojiSelector model =
         model
 
 
-insertEmoji : HtmlId -> Maybe Range -> Emoji -> LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly toMsg msg )
-insertEmoji inputId maybeSelection emoji model loggedIn =
+insertEmojiOrSticker :
+    HtmlId
+    -> Maybe Range
+    -> EmojiOrSticker
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly toMsg msg )
+insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
     let
         text : String
         text =
-            case model.emojiData of
-                Just emojiData ->
+            case ( emojiOrSticker, model.emojiData ) of
+                ( EmojiOrSticker_Emoji emoji, Just emojiData ) ->
                     Emoji.emojiWithSkinTone
                         (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
                         emoji
                         emojiData
                         ++ " "
 
-                Nothing ->
+                ( EmojiOrSticker_Sticker stickerId, _ ) ->
+                    Sticker.idToString stickerId
+
+                _ ->
                     ""
     in
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
     , case maybeSelection of
-        Just { start, end } ->
-            Ports.execCommand inputId start end text
+        Just range ->
+            Ports.execCommand { htmlId = inputId, commands = [ Ports.InsertText text range ] }
 
         Nothing ->
-            Ports.execCommand inputId 99999 99999 text
+            Ports.execCommand
+                { htmlId = inputId
+                , commands = [ Ports.InsertText text { start = 99999, end = 99999 } ]
+                }
     )
 
 
@@ -3589,13 +3629,53 @@ selectionChanged maybeHtmlId maybeRange model =
                             }
                                 |> LoggedIn
                       }
-                    , if showDropdown then
-                        Dom.getElement htmlId
-                            |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
-                            |> Task.attempt (GotPingUserPosition htmlId)
+                    , Command.batch
+                        [ if showDropdown then
+                            Dom.getElement htmlId
+                                |> Task.map (\{ element } -> { dropdownIndex = 0, inputElement = element })
+                                |> Task.attempt (GotPingUserPosition htmlId)
 
-                      else
-                        Command.none
+                          else
+                            Command.none
+                        , case Route.toGuildOrDmId model.route of
+                            Just guildOrDmId ->
+                                if htmlId == Pages.Guild.channelTextInputId then
+                                    case SeqDict.get guildOrDmId loggedIn.drafts of
+                                        Just draft ->
+                                            case
+                                                adjustSelection
+                                                    (Maybe.map .selection loggedIn.textInputFocus)
+                                                    range
+                                                    (String.Nonempty.toString draft)
+                                            of
+                                                Just range2 ->
+                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 direction ] }
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        Nothing ->
+                                            Command.none
+
+                                else if htmlId == MessageMenu.editMessageTextInputId then
+                                    case SeqDict.get guildOrDmId loggedIn.editMessage of
+                                        Just edit ->
+                                            case adjustSelection (Maybe.map .selection loggedIn.textInputFocus) range edit.text of
+                                                Just range2 ->
+                                                    Ports.execCommand { htmlId = htmlId, commands = [ Ports.SelectRange range2 direction ] }
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        Nothing ->
+                                            Command.none
+
+                                else
+                                    Command.none
+
+                            Nothing ->
+                                Command.none
+                        ]
                     )
 
                 NotLoggedIn notLoggedIn ->
@@ -3608,6 +3688,51 @@ selectionChanged maybeHtmlId maybeRange model =
 
         _ ->
             ( model, Command.none )
+
+
+adjustSelection : Maybe Range -> Range -> String -> Maybe Range
+adjustSelection selectionOld selection text =
+    let
+        selectionOld2 : Range
+        selectionOld2 =
+            Maybe.withDefault { start = 0, end = 0 } selectionOld
+    in
+    List.Extra.findMap
+        (\( stickerRange, maybeStickerId ) ->
+            case maybeStickerId of
+                Just _ ->
+                    if selection.start == selection.end then
+                        if Range.inside selection.start stickerRange then
+                            if selection.start < selectionOld2.start then
+                                Just { start = stickerRange.start, end = stickerRange.start }
+
+                            else
+                                Just { start = stickerRange.end, end = stickerRange.end }
+
+                        else
+                            Nothing
+
+                    else if Range.inside selection.start stickerRange then
+                        if selection.start < selectionOld2.start then
+                            Just { start = stickerRange.start, end = selection.end }
+
+                        else
+                            Just { start = stickerRange.end, end = selection.end }
+
+                    else if Range.inside selection.end stickerRange then
+                        if selection.end < selectionOld2.end then
+                            Just { start = selection.start, end = stickerRange.start }
+
+                        else
+                            Just { start = selection.start, end = stickerRange.end }
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+        )
+        (RichText.stringToStickers text)
 
 
 textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4713,7 +4838,7 @@ updateLoadedFromBackend msg model =
                                             Command.none
                                     )
 
-                                Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _ ->
+                                Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
                                         helper channel =
                                             Command.batch
@@ -4759,7 +4884,7 @@ updateLoadedFromBackend msg model =
                                                     Command.none
                                     )
 
-                                Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _ ->
+                                Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _ _ ->
                                     let
                                         helper senderId channel =
                                             Command.batch

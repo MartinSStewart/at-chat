@@ -28,19 +28,21 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MembersAndOwner
-import MyUi exposing (Range, SelectionDirection)
+import MyUi
 import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
+import Range exposing (Range, SelectionDirection)
 import RichText
 import SeqDict exposing (SeqDict)
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
@@ -121,10 +123,11 @@ textarea :
     -> String
     -> String
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -240,12 +243,18 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
             )
             (case String.Nonempty.fromString text of
                 Just nonempty ->
-                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView
+                        users
+                        attachedFiles
+                        stickers
+                        (Maybe.map .selection textInputFocus)
+                        (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
                     [ if placeholderText == "" then
-                        Html.text " "
+                        -- A normal space doesn't prevent the textarea from being 0 lines tall for some reason
+                        Html.text "\u{00A0}"
 
                       else
                         Html.text placeholderText
@@ -305,7 +314,12 @@ disabledTextarea placeholderText text attachedFiles local =
                         users =
                             LocalState.allUsers local.localUser
                     in
-                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView
+                        users
+                        attachedFiles
+                        local.localUser.stickers
+                        Nothing
+                        (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -328,16 +342,17 @@ editView :
     -> String
     -> String
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -393,16 +408,17 @@ view :
     -> String
     -> String
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -477,7 +493,7 @@ showEmojiSelectorButton : String -> Element Msg
 showEmojiSelectorButton htmlIdPrefix =
     Ui.el
         [ Ui.rounded 4
-        , Ui.id (htmlIdPrefix ++ "_uploadFile")
+        , Ui.id (htmlIdPrefix ++ "_openEmojiSelector")
         , Ui.pointer
         , Ui.paddingXY 6 0
         , Ui.height (Ui.px 40)
@@ -776,13 +792,16 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
                             Nothing
     in
     case ( pingUser, maybeTextToInsert ) of
-        ( Just _, Just ( { start, end }, textToInsert ) ) ->
+        ( Just _, Just ( range, textToInsert ) ) ->
             ( Nothing
             , inputText
             , Command.batch
                 [ Dom.focus channelTextInputId
                     |> Task.attempt (\_ -> setFocusMsg)
-                , Ports.execCommand channelTextInputId start end (textToInsert ++ " ")
+                , Ports.execCommand
+                    { htmlId = channelTextInputId
+                    , commands = [ Ports.InsertText (textToInsert ++ " ") range ]
+                    }
                 ]
             )
 

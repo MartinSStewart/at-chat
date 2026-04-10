@@ -532,6 +532,7 @@ getLoginData sessionId session user requestMessagesFor model =
             |> SeqDict.fromList
     , publicVapidKey = model.publicVapidKey
     , textEditor = model.textEditor
+    , stickers = model.stickers
     }
 
 
@@ -577,6 +578,7 @@ discordGuildToFrontend requestMessagesFor guild =
             )
             guild.channels
     , membersAndOwner = guild.membersAndOwner
+    , stickers = guild.stickers
     }
 
 
@@ -774,12 +776,12 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
     case ( SeqDict.get channelId guild.channels, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( Just channel, Ok sendMessageRateLimits ) ->
             let
-                ( channel2, embedCmds ) =
+                ( channel2, embedCmds, stickers ) =
                     case threadRouteWithMaybeReplyTo of
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             let
-                                ( message2, cmds ) =
-                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles
+                                ( message2, cmds, stickers2 ) =
+                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles model.stickers
 
                                 ( messageId, channel3 ) =
                                     LocalState.createThreadMessageBackend threadId message2 channel
@@ -789,12 +791,13 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 identity
                                 (GotGuildMessageEmbed guildId channelId (ViewThreadWithMessage threadId messageId))
                                 cmds
+                            , stickers2
                             )
 
                         NoThreadWithMaybeMessage maybeReplyTo ->
                             let
-                                ( message2, cmds ) =
-                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles
+                                ( message2, cmds, stickers2 ) =
+                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles model.stickers
 
                                 ( messageId, channel3 ) =
                                     LocalState.createChannelMessageBackend message2 channel
@@ -804,6 +807,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 identity
                                 (GotGuildMessageEmbed guildId channelId (NoThreadWithMessage messageId))
                                 cmds
+                            , stickers2
                             )
 
                 guildOrDmId : GuildOrDmId
@@ -893,7 +897,14 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 , Broadcast.toGuildExcludingOne
                     clientId
                     guildId
-                    (Server_SendMessage session.userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
+                    (Server_SendMessage
+                        session.userId
+                        time
+                        guildOrDmId
+                        text
+                        threadRouteWithMaybeReplyTo
+                        attachedFiles
+                        stickers
                         |> ServerChange
                     )
                     model
@@ -933,8 +944,8 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
     case ( threadRouteWithReplyTo, RateLimit.checkAndUpdateRateLimit time session.userId model.sendMessageRateLimits ) of
         ( ViewThreadWithMaybeMessage threadId repliedTo, Ok sendMessageRateLimits ) ->
             let
-                ( message, embedCmds ) =
-                    Message.userTextMessage time session.userId text repliedTo attachedFiles
+                ( message, embedCmds, stickers ) =
+                    Message.userTextMessage time session.userId text repliedTo attachedFiles model.stickers
 
                 ( messageId, dmChannel2 ) =
                     LocalState.createThreadMessageBackend threadId message dmChannel
@@ -955,28 +966,25 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 , sendMessageRateLimits = sendMessageRateLimits
               }
             , Command.batch
-                [ if session.userId == otherUserId then
-                    Command.none
-
-                  else
-                    Broadcast.broadcastDm
-                        changeId
-                        time
-                        clientId
-                        session.userId
-                        otherUserId
-                        text
-                        threadRouteWithReplyTo
-                        attachedFiles
-                        model
+                [ Broadcast.broadcastDm
+                    changeId
+                    time
+                    clientId
+                    session.userId
+                    otherUserId
+                    text
+                    threadRouteWithReplyTo
+                    attachedFiles
+                    stickers
+                    model
                 , Command.map identity (GotDmMessageEmbed dmChannelId (ViewThreadWithMessage threadId messageId)) embedCmds
                 ]
             )
 
         ( NoThreadWithMaybeMessage repliedTo, Ok sendMessageRateLimits ) ->
             let
-                ( message, embedCmds ) =
-                    Message.userTextMessage time session.userId text repliedTo attachedFiles
+                ( message, embedCmds, stickers ) =
+                    Message.userTextMessage time session.userId text repliedTo attachedFiles model.stickers
 
                 ( messageId, dmChannel2 ) =
                     LocalState.createChannelMessageBackend message dmChannel
@@ -994,7 +1002,17 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                 , sendMessageRateLimits = sendMessageRateLimits
               }
             , Command.batch
-                [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
+                [ Broadcast.broadcastDm
+                    changeId
+                    time
+                    clientId
+                    session.userId
+                    otherUserId
+                    text
+                    threadRouteWithReplyTo
+                    attachedFiles
+                    stickers
+                    model
                 , Command.map identity (GotDmMessageEmbed dmChannelId (NoThreadWithMessage messageId)) embedCmds
                 ]
             )

@@ -16,6 +16,8 @@ module RichText exposing
     , mentionsUser
     , preview
     , removeAttachedFile
+    , stickers
+    , stringToStickers
     , textInputView
     , toDiscord
     , toString
@@ -25,6 +27,7 @@ module RichText exposing
     )
 
 import Array exposing (Array)
+import Basics.Extra
 import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Discord
@@ -38,16 +41,18 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (Id)
+import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyDict
 import NonemptyExtra
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
+import Range exposing (Range)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..), Url)
@@ -66,6 +71,7 @@ type RichText userId
     | CodeBlock Language String
     | AttachedFile (Id FileId)
     | EscapedChar EscapedChar
+    | Sticker (Id StickerId)
 
 
 type EscapedChar
@@ -185,6 +191,9 @@ removeAttachedFile fileId list =
 
                 EscapedChar _ ->
                     Just richText
+
+                Sticker _ ->
+                    Just richText
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -230,6 +239,56 @@ hyperlinks nonempty =
 
                 EscapedChar _ ->
                     []
+
+                Sticker _ ->
+                    []
+        )
+        (List.Nonempty.toList nonempty)
+
+
+stickers : Nonempty (RichText userId) -> List (Id StickerId)
+stickers nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink _ ->
+                    []
+
+                UserMention _ ->
+                    []
+
+                NormalText _ _ ->
+                    []
+
+                Bold nonempty2 ->
+                    stickers nonempty2
+
+                Italic nonempty2 ->
+                    stickers nonempty2
+
+                Underline nonempty2 ->
+                    stickers nonempty2
+
+                Strikethrough nonempty2 ->
+                    stickers nonempty2
+
+                Spoiler nonempty2 ->
+                    stickers nonempty2
+
+                InlineCode _ _ ->
+                    []
+
+                CodeBlock _ _ ->
+                    []
+
+                AttachedFile _ ->
+                    []
+
+                EscapedChar _ ->
+                    []
+
+                Sticker stickerId ->
+                    [ stickerId ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -288,6 +347,9 @@ toStringWithGetter userToString users nonempty =
 
                 EscapedChar char ->
                     "\\" ++ escapedCharToString char
+
+                Sticker id ->
+                    Sticker.idToString id
         )
         nonempty
         |> List.Nonempty.toList
@@ -348,6 +410,9 @@ toString users nonempty =
 
                 EscapedChar char ->
                     "\\" ++ escapedCharToString char
+
+                Sticker id ->
+                    Sticker.idToString id
         )
         nonempty
         |> List.Nonempty.toList
@@ -421,6 +486,9 @@ normalize nonempty =
 
                 EscapedChar char ->
                     List.Nonempty.cons (EscapedChar char) nonempty2
+
+                Sticker id ->
+                    List.Nonempty.cons (Sticker id) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -459,6 +527,9 @@ normalize nonempty =
 
                 EscapedChar char ->
                     EscapedChar char
+
+                Sticker id ->
+                    Sticker id
             )
             []
         )
@@ -571,6 +642,102 @@ parseInner source index len users modifiers =
     parseLoop source index len users modifiers "" []
 
 
+stringAt : Int -> String -> Maybe String
+stringAt index text =
+    if index < String.length text then
+        String.slice index (index + 1) text |> Just
+
+    else
+        Nothing
+
+
+stringAtRange : Int -> Int -> String -> Maybe String
+stringAtRange index count text =
+    if index + count <= String.length text && count >= 0 then
+        String.slice index (index + count) text |> Just
+
+    else
+        Nothing
+
+
+parseStickerId : Int -> String -> ( Int, Maybe (Id StickerId) )
+parseStickerId index source =
+    case stringAt index source of
+        Just char ->
+            case char of
+                "\u{200B}" ->
+                    if stringAtRange (index + 1) 2 source == Just "\n\n" then
+                        ( index + 3, Just (Id.fromInt 0) )
+
+                    else
+                        ( index + 1, Nothing )
+
+                "\u{200C}" ->
+                    parseStickerIdHelper 1 (index + 1) source
+
+                "\u{200D}" ->
+                    parseStickerIdHelper 2 (index + 1) source
+
+                "\u{2060}" ->
+                    parseStickerIdHelper 3 (index + 1) source
+
+                _ ->
+                    ( index, Nothing )
+
+        Nothing ->
+            ( index, Nothing )
+
+
+parseStickerIdHelper : Int -> Int -> String -> ( Int, Maybe (Id StickerId) )
+parseStickerIdHelper id index source =
+    case stringAt index source of
+        Just char ->
+            case char of
+                "\u{200B}" ->
+                    parseStickerIdHelper (4 * id) (index + 1) source
+
+                "\u{200C}" ->
+                    parseStickerIdHelper (1 + 4 * id) (index + 1) source
+
+                "\u{200D}" ->
+                    parseStickerIdHelper (2 + 4 * id) (index + 1) source
+
+                "\u{2060}" ->
+                    parseStickerIdHelper (3 + 4 * id) (index + 1) source
+
+                "\n" ->
+                    case ( stringAt (index + 1) source, id <= Basics.Extra.maxSafeInteger ) of
+                        ( Just "\n", True ) ->
+                            ( index + 2, Just (Id.fromInt id) )
+
+                        _ ->
+                            ( index + 1, Nothing )
+
+                _ ->
+                    ( index, Nothing )
+
+        Nothing ->
+            ( index, Nothing )
+
+
+stringToStickers : String -> List ( Range, Maybe (Id StickerId) )
+stringToStickers text =
+    String.indexes "\n\u{200B}" text
+        ++ String.indexes "\n\u{200C}" text
+        ++ String.indexes "\n\u{200D}" text
+        ++ String.indexes "\n\u{2060}" text
+        |> List.foldl
+            (\index shouldRemove ->
+                let
+                    ( endIndex, stickerId ) =
+                        parseStickerId (index + 1) text
+                in
+                ( { start = index, end = endIndex }, stickerId ) :: shouldRemove
+            )
+            []
+        |> List.sortBy (\( range, _ ) -> -range.start)
+
+
 parseLoop :
     String
     -> Int
@@ -586,25 +753,30 @@ parseLoop source index len users modifiers accText revNodes =
 
     else
         case String.slice index (index + 1) source of
+            "\n" ->
+                case parseStickerId (index + 1) source of
+                    ( index2, Just stickerId ) ->
+                        parseLoop source index2 len users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                    ( _, Nothing ) ->
+                        parseLoop source (index + 1) len users modifiers (accText ++ "\n") revNodes
+
             "\\" ->
                 let
                     afterBackslash =
                         index + 1
                 in
-                if afterBackslash < len then
-                    let
-                        nextChar =
-                            String.slice afterBackslash (afterBackslash + 1) source
-                    in
-                    case Dict.get nextChar charToEscaped of
-                        Just escaped ->
-                            parseLoop source (afterBackslash + 1) len users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+                case stringAt afterBackslash source of
+                    Just nextChar ->
+                        case Dict.get nextChar charToEscaped of
+                            Just escaped ->
+                                parseLoop source (afterBackslash + 1) len users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
-                        Nothing ->
-                            parseLoop source (afterBackslash + 1) len users modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            Nothing ->
+                                parseLoop source (afterBackslash + 1) len users modifiers (accText ++ "\\" ++ nextChar) revNodes
 
-                else
-                    parseLoop source afterBackslash len users modifiers (accText ++ "\\") revNodes
+                    Nothing ->
+                        parseLoop source afterBackslash len users modifiers (accText ++ "\\") revNodes
 
             "@" ->
                 let
@@ -773,10 +945,10 @@ parseLoop source index len users modifiers accText revNodes =
                         Just closeIndex ->
                             let
                                 content =
-                                    String.slice (index + 3) closeIndex source |> Debug.log "content"
+                                    String.slice (index + 3) closeIndex source
 
                                 ( language, codeContent ) =
-                                    parseCodeBlockContent content |> Debug.log "content2"
+                                    parseCodeBlockContent content
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
@@ -1085,7 +1257,7 @@ skipNormalChars source index len =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" then
+        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" then
             index
 
         else
@@ -1137,6 +1309,9 @@ mentionsUserHelper set nonempty =
 
                 EscapedChar _ ->
                     set2
+
+                Sticker _ ->
+                    set2
         )
         set
         nonempty
@@ -1167,54 +1342,62 @@ view :
     HtmlId
     -> Int
     -> (Url -> msg)
-    -> SeqSet Domain
     -> (Int -> msg)
-    -> SeqSet Int
-    -> SeqDict userId { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
+    -> Config a userId
     -> Array Embed
     -> Nonempty (RichText userId)
     -> List (Html msg)
-view htmlIdPrefix containerWidth onPressLink domainWhitelist onPressSpoiler revealedSpoilers users attachedFiles embeds nonempty =
+view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonempty =
     viewHelper
         (ShowLargeContent containerWidth)
         (Just ( htmlIdPrefix, onPressSpoiler ))
         onPressLink
-        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
-        revealedSpoilers
-        users
-        attachedFiles
+        config
         embeds
         0
         nonempty
         |> (\( _, _, a ) -> a)
 
 
-preview :
-    (Url -> msg)
-    -> SeqSet Domain
-    -> SeqSet Int
-    -> SeqDict userId { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText userId)
-    -> List (Html msg)
-preview onPressLink domainWhitelist revealedSpoilers users attachedFiles nonempty =
+preview : (Url -> msg) -> PreviewConfig a userId -> Nonempty (RichText userId) -> List (Html msg)
+preview onPressLink config nonempty =
     viewHelper
         NoLargeContent
         Nothing
         onPressLink
-        domainWhitelist
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
-        revealedSpoilers
-        users
-        attachedFiles
+        { domainWhitelist = config.domainWhitelist
+        , revealedSpoilers = config.revealedSpoilers
+        , users = config.users
+        , attachedFiles = config.attachedFiles
+        , stickers = SeqDict.empty
+        , animationMode = Sticker.LoopAFewTimesOnLoad
+        }
         Array.empty
         0
         nonempty
         |> (\( _, _, a ) -> a)
+
+
+type alias Config a userId =
+    { domainWhitelist : SeqSet Domain
+    , revealedSpoilers : SeqSet Int
+    , users : SeqDict userId { a | name : PersonName }
+    , attachedFiles : SeqDict (Id FileId) FileData
+    , stickers : SeqDict (Id StickerId) StickerData
+    , animationMode : Sticker.AnimationMode
+    }
+
+
+type alias PreviewConfig a userId =
+    { domainWhitelist : SeqSet Domain
+    , revealedSpoilers : SeqSet Int
+    , users : SeqDict userId { a | name : PersonName }
+    , attachedFiles : SeqDict (Id FileId) FileData
+    }
 
 
 normalTextView : String -> RichTextState -> List (Html msg)
@@ -1234,22 +1417,19 @@ viewHelper :
     ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
     -> (Url -> msg)
-    -> SeqSet Domain
     -> Int
     -> RichTextState
-    -> SeqSet Int
-    -> SeqDict userId { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
+    -> Config a userId
     -> Array Embed
     -> Int
     -> Nonempty (RichText userId)
     -> ( Int, Int, List (Html msg) )
-viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoilerIndex state revealedSpoilers allUsers attachedFiles embeds embedIndex nonempty =
+viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
     List.foldl
         (\item ( spoilerIndex2, embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId allUsers ] )
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
 
                 NormalText char text ->
                     ( spoilerIndex2
@@ -1264,12 +1444,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | italic = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1283,12 +1460,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | underline = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1302,12 +1476,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | bold = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1321,12 +1492,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 { state | strikethrough = True }
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1336,7 +1504,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                 Spoiler nonempty2 ->
                     let
                         revealed =
-                            SeqSet.member spoilerIndex2 revealedSpoilers
+                            SeqSet.member spoilerIndex2 config.revealedSpoilers
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
                         ( _, embedIndex3, list ) =
@@ -1344,7 +1512,6 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
-                                domainWhitelist
                                 spoilerIndex2
                                 (if revealed then
                                     state
@@ -1352,9 +1519,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                                  else
                                     { state | spoiler = True }
                                 )
-                                revealedSpoilers
-                                allUsers
-                                attachedFiles
+                                config
                                 embeds
                                 embedIndex2
                                 nonempty2
@@ -1410,18 +1575,24 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                              else
                                 case Array.get embedIndex2 embeds of
                                     Just EmbedLoading ->
-                                        embedLoadingView onPressLink domainWhitelist data
+                                        embedLoadingView onPressLink config.domainWhitelist data
 
                                     Just (EmbedLoaded embed) ->
                                         case ( embed == Embed.empty, showLargeContent ) of
                                             ( False, ShowLargeContent containerWidth ) ->
-                                                embedView onPressLink containerWidth domainWhitelist data embed
+                                                embedView
+                                                    onPressLink
+                                                    containerWidth
+                                                    config.domainWhitelist
+                                                    config.animationMode
+                                                    data
+                                                    embed
 
                                             _ ->
-                                                inlineEmbedView showLargeContent onPressLink domainWhitelist data
+                                                inlineEmbedView showLargeContent onPressLink config.domainWhitelist data
 
                                     Nothing ->
-                                        inlineEmbedView showLargeContent onPressLink domainWhitelist data
+                                        inlineEmbedView showLargeContent onPressLink config.domainWhitelist data
                            ]
                     )
 
@@ -1470,7 +1641,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
                         ShowLargeContent containerWidth2 ->
                             ( spoilerIndex2
                             , embedIndex2
-                            , case SeqDict.get fileId attachedFiles of
+                            , case SeqDict.get fileId config.attachedFiles of
                                 Just fileData ->
                                     currentList
                                         ++ [ case fileData.imageMetadata of
@@ -1517,6 +1688,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink domainWhitelist spoi
 
                 EscapedChar char ->
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
+
+                Sticker stickerId ->
+                    ( spoilerIndex2, embedIndex2, currentList ++ [ Sticker.view "160px" stickerId config.stickers config.animationMode ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -1583,8 +1757,8 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             content
 
 
-embedView : (Url -> msg) -> Int -> SeqSet Domain -> Url -> EmbedData -> Html msg
-embedView onPressLink containerWidth domainWhitelist url embed =
+embedView : (Url -> msg) -> Int -> SeqSet Domain -> Sticker.AnimationMode -> Url -> EmbedData -> Html msg
+embedView onPressLink containerWidth domainWhitelist playAnimation url embed =
     embedContainer
         (List.filterMap
             identity
@@ -1634,17 +1808,40 @@ embedView onPressLink containerWidth domainWhitelist url embed =
 
                         ( width, height ) =
                             actualImageSize embedImageMaxHeight insideWidth imageData.imageSize
+
+                        width2 =
+                            String.fromFloat width ++ "px"
+
+                        height2 =
+                            String.fromFloat height ++ "px"
+
+                        isAnimatedImage =
+                            case imageData.format of
+                                Just format ->
+                                    case format of
+                                        Embed.Gif ->
+                                            True
+
+                                        _ ->
+                                            False
+
+                                Nothing ->
+                                    False
                     in
-                    Html.img
-                        [ Html.Attributes.src imageData.url
-                        , Html.Attributes.style "width" (String.fromFloat width ++ "px")
-                        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-                        , Html.Attributes.style "border-radius" "4px"
-                        , Html.Attributes.style "margin-top" "8px"
-                        , Html.Attributes.style "display" "block"
-                        ]
-                        []
-                        |> Just
+                    if isAnimatedImage then
+                        Sticker.animatedImageView width2 height2 imageData.url playAnimation |> Just
+
+                    else
+                        Html.img
+                            [ Html.Attributes.src imageData.url
+                            , Html.Attributes.style "width" width2
+                            , Html.Attributes.style "height" height2
+                            , Html.Attributes.style "border-radius" "4px"
+                            , Html.Attributes.style "margin-top" "8px"
+                            , Html.Attributes.style "display" "block"
+                            ]
+                            []
+                            |> Just
 
                 Nothing ->
                     Nothing
@@ -1903,14 +2100,22 @@ fileDownloadView fileData =
 textInputView :
     SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
+    -> SeqDict (Id StickerId) StickerData
+    -> Maybe Range
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView users attachedFiles nonempty =
+textInputView users attachedFiles stickers2 selection nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
+        stickers2
+        0
+        selection
         nonempty
+        Array.empty
+        |> Tuple.second
+        |> Array.toList
 
 
 htmlAttrIf : Bool -> Html.Attribute msg -> Html.Attribute msg
@@ -1930,125 +2135,185 @@ textInputViewHelper :
     RichTextState
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
+    -> SeqDict (Id StickerId) StickerData
+    -> Int
+    -> Maybe Range
     -> Nonempty (RichText userId)
-    -> List (Html msg)
-textInputViewHelper state allUsers attachedFiles nonempty =
-    List.concatMap
-        (\item ->
+    -> Array (Html msg)
+    -> ( Int, Array (Html msg) )
+textInputViewHelper state allUsers attachedFiles stickers2 index selection nonempty output =
+    List.foldl
+        (\item ( index2, output2 ) ->
             case item of
                 UserMention userId ->
-                    [ case SeqDict.get userId allUsers of
+                    case SeqDict.get userId allUsers of
                         Just user ->
-                            Html.span
-                                [ Html.Attributes.style "color" "rgb(215,235,255)"
-                                , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
-                                , Html.Attributes.style "border-radius" "2px"
-                                ]
-                                [ Html.text ("@" ++ PersonName.toString user.name) ]
+                            let
+                                text =
+                                    "@" ++ PersonName.toString user.name
+                            in
+                            ( index2 + String.length text
+                            , Array.push
+                                (Html.span
+                                    [ Html.Attributes.style "color" "rgb(215,235,255)"
+                                    , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
+                                    , Html.Attributes.style "border-radius" "2px"
+                                    ]
+                                    [ Html.text text ]
+                                )
+                                output2
+                            )
 
                         Nothing ->
-                            Html.text ""
-                    ]
+                            ( index2 + 1, output2 )
 
                 NormalText char text ->
-                    [ Html.span
-                        [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                          htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                        ]
-                        [ Html.text (String.cons char text) ]
-                    ]
+                    ( index2 + String.length text + 1
+                    , Array.push
+                        (Html.span
+                            [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                              htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                            , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                            ]
+                            [ Html.text (String.cons char text) ]
+                        )
+                        output2
+                    )
 
                 Italic nonempty2 ->
-                    formatText "_"
-                        :: textInputViewHelper
-                            { state | italic = True }
-                            allUsers
-                            attachedFiles
-                            nonempty2
-                        ++ [ formatText "_" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | italic = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 1)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "_") output2)
+                    in
+                    ( index3 + 1, Array.push (formatText "_") output3 )
 
                 Underline nonempty2 ->
-                    formatText "__"
-                        :: textInputViewHelper
-                            { state | underline = True }
-                            allUsers
-                            attachedFiles
-                            nonempty2
-                        ++ [ formatText "__" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | underline = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 2)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "__") output2)
+                    in
+                    ( index3 + 2, Array.push (formatText "__") output3 )
 
                 Bold nonempty2 ->
-                    formatText "*"
-                        :: textInputViewHelper
-                            { state | bold = True }
-                            allUsers
-                            attachedFiles
-                            nonempty2
-                        ++ [ formatText "*" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | bold = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 1)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "*") output2)
+                    in
+                    ( index3 + 1, Array.push (formatText "*") output3 )
 
                 Strikethrough nonempty2 ->
-                    formatText "~~"
-                        :: textInputViewHelper
-                            { state | strikethrough = True }
-                            allUsers
-                            attachedFiles
-                            nonempty2
-                        ++ [ formatText "~~" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | strikethrough = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 2)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "~~") output2)
+                    in
+                    ( index3 + 2, Array.push (formatText "~~") output3 )
 
                 Spoiler nonempty2 ->
-                    formatText "||"
-                        :: textInputViewHelper
-                            { state | spoiler = True }
-                            allUsers
-                            attachedFiles
-                            nonempty2
-                        ++ [ formatText "||" ]
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                { state | spoiler = True }
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 2)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "||") output2)
+                    in
+                    ( index3 + 2, Array.push (formatText "||") output3 )
 
                 Hyperlink data ->
-                    [ Html.span
-                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                        , Html.Attributes.style "color" "rgb(66,93,203)"
-                        ]
-                        [ Html.text (Url.toString data) ]
-                    ]
+                    let
+                        text =
+                            Url.toString data
+                    in
+                    ( index2 + String.length text
+                    , Array.push
+                        (Html.span
+                            [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                            , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                            , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            ]
+                            [ Html.text text ]
+                        )
+                        output2
+                    )
 
                 InlineCode char rest ->
-                    [ formatText "`"
-                    , Html.span
-                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                        , if state.spoiler then
-                            Html.Attributes.style "background-color" "rgb(0,0,0)"
+                    ( index2 + String.length rest + 3
+                    , Array.append
+                        output2
+                        (Array.fromList
+                            [ formatText "`"
+                            , Html.span
+                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                                , if state.spoiler then
+                                    Html.Attributes.style "background-color" "rgb(0,0,0)"
 
-                          else
-                            Html.Attributes.style "background-color" "rgb(90,100,120)"
-                        ]
-                        [ Html.text (String.cons char rest) ]
-                    , formatText "`"
-                    ]
+                                  else
+                                    Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                ]
+                                [ Html.text (String.cons char rest) ]
+                            , formatText "`"
+                            ]
+                        )
+                    )
 
                 CodeBlock language string ->
-                    [ formatText
-                        ("```"
-                            ++ (case language of
-                                    Language language2 ->
-                                        String.Nonempty.toString language2 ++ "\n"
+                    let
+                        language2 : String
+                        language2 =
+                            case language of
+                                Language a ->
+                                    String.Nonempty.toString a ++ "\n"
 
-                                    NoLanguage ->
-                                        ""
-                               )
-                        )
-                    , Html.text string
-                    , formatText "```"
-                    ]
+                                NoLanguage ->
+                                    ""
+                    in
+                    ( index2 + String.length string + String.length language2 + 6
+                    , Array.append output2 (Array.fromList [ formatText ("```" ++ language2), Html.text string, formatText "```" ])
+                    )
 
                 AttachedFile fileId ->
                     let
@@ -2056,16 +2321,67 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                         text =
                             attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
                     in
-                    [ if SeqDict.member fileId attachedFiles then
-                        formatText text
+                    ( index2 + String.length text
+                    , Array.push
+                        (if SeqDict.member fileId attachedFiles then
+                            formatText text
 
-                      else
-                        Html.text text
-                    ]
+                         else
+                            Html.text text
+                        )
+                        output2
+                    )
 
                 EscapedChar char ->
-                    [ formatText "\\", Html.text (escapedCharToString char) ]
+                    ( index2 + 2
+                    , Array.append output2 (Array.fromList [ formatText "\\", Html.text (escapedCharToString char) ])
+                    )
+
+                Sticker stickerId ->
+                    let
+                        isSelected =
+                            case selection of
+                                Just selection2 ->
+                                    index2 >= selection2.start && index2 < selection2.end
+
+                                Nothing ->
+                                    False
+                    in
+                    ( index2 + String.length (Sticker.idToString stickerId)
+                    , Array.append
+                        output2
+                        (Array.fromList
+                            [ Html.span
+                                [ Html.Attributes.style "position" "relative" ]
+                                [ Html.div
+                                    [ Html.Attributes.style "position" "absolute"
+                                    , if isSelected then
+                                        Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground)
+
+                                      else
+                                        Html.Attributes.style "opacity" "transparent"
+                                    ]
+                                    [ Sticker.view "2lh" stickerId stickers2 Sticker.LoopForever ]
+                                , Html.div
+                                    [ Html.Attributes.style "position" "absolute"
+                                    , Html.Attributes.style "width" "2lh"
+                                    , Html.Attributes.style "height" "2lh"
+                                    , if isSelected then
+                                        Html.Attributes.style
+                                            "background-color"
+                                            (MyUi.colorToStyle (MyUi.colorWithAlpha 0.5 MyUi.selectedTextBackground))
+
+                                      else
+                                        Html.Attributes.style "opacity" "transparent"
+                                    ]
+                                    []
+                                ]
+                            , Html.text "\n\n\n"
+                            ]
+                        )
+                    )
         )
+        ( index, output )
         (List.Nonempty.toList nonempty)
 
 
@@ -2160,8 +2476,13 @@ formatText text =
 --        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : String -> SeqDict (Id FileId) FileData -> Discord.OptionalData (List Discord.Embed) -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments embeds =
+fromDiscord :
+    String
+    -> SeqDict (Id FileId) FileData
+    -> Discord.OptionalData (List Discord.Embed)
+    -> List (Id StickerId)
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+fromDiscord text attachments embeds stickers2 =
     let
         embedSet : SeqSet Url
         embedSet =
@@ -2183,6 +2504,7 @@ fromDiscord text attachments embeds =
                 )
                 |> SeqSet.fromList
 
+        applyExtraEmbeds : Nonempty (RichText userId) -> Nonempty (RichText userId)
         applyExtraEmbeds richText =
             let
                 urls : List Url
@@ -2205,6 +2527,15 @@ fromDiscord text attachments embeds =
 
             else
                 richText
+
+        applyStickers : List (RichText userId) -> Nonempty (RichText userId)
+        applyStickers richText =
+            case richText ++ List.map Sticker stickers2 |> List.Nonempty.fromList of
+                Just nonempty ->
+                    nonempty
+
+                Nothing ->
+                    emptyPlaceholder
     in
     case String.Nonempty.fromString text of
         Just nonempty ->
@@ -2223,24 +2554,22 @@ fromDiscord text attachments embeds =
                 )
                 (List.map AttachedFile (SeqDict.keys attachments))
                 |> applyExtraEmbeds
+                |> List.Nonempty.toList
+                |> applyStickers
 
         Nothing ->
             case NonemptyDict.fromSeqDict attachments of
                 Just attachments2 ->
-                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2) |> applyExtraEmbeds
+                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
+                        |> applyExtraEmbeds
+                        |> List.Nonempty.toList
+                        |> applyStickers
 
                 Nothing ->
-                    case
-                        SeqSet.toList embedSet
-                            |> List.map Hyperlink
-                            |> List.intersperse (NormalText ' ' "")
-                            |> List.Nonempty.fromList
-                    of
-                        Just nonempty ->
-                            nonempty
-
-                        Nothing ->
-                            emptyPlaceholder
+                    SeqSet.toList embedSet
+                        |> List.map Hyperlink
+                        |> List.intersperse (NormalText ' ' "")
+                        |> applyStickers
 
 
 emptyPlaceholder : Nonempty (RichText userId)
@@ -2625,6 +2954,9 @@ toDiscord content =
 
                 EscapedChar char ->
                     Discord.Markdown.text (escapedCharToString char)
+
+                Sticker _ ->
+                    Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)
 

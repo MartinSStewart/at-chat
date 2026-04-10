@@ -37,7 +37,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty
@@ -54,10 +54,11 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
-import RichText exposing (Domain)
+import RichText
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Sticker
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
@@ -715,6 +716,7 @@ discordDmChannelView routeData loggedIn local model =
                 , lastTypedAt = dmChannel.lastTypedAt
                 , threads = SeqDict.empty
                 }
+                SeqSet.empty
 
         Nothing ->
             Ui.el
@@ -1548,6 +1550,7 @@ discordChannelView routeData guild loggedIn local model =
                                             threadMessageIndex
                                             channel
                                     )
+                                    guild.stickers
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             discordConversationView
@@ -1564,6 +1567,7 @@ discordChannelView routeData guild loggedIn local model =
                                 local
                                 (ChannelName.toString channel.name)
                                 channel
+                                (SeqSet.intersect local.localUser.user.availableStickers guild.stickers)
 
                 Nothing ->
                     pageMissing "Channel does not exist"
@@ -3049,8 +3053,8 @@ privateChatWith name =
     ]
 
 
-emojiSelector : Bool -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
-emojiSelector isMobile local loggedIn model =
+emojiSelector : Bool -> SeqSet (Id StickerId) -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
+emojiSelector isMobile availableStickers local loggedIn model =
     let
         emojiConfig : EmojiConfig
         emojiConfig =
@@ -3081,6 +3085,8 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableStickers
+                    local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
                         , Ui.paddingXY paddingX 0
@@ -3102,6 +3108,8 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableStickers
+                    local.localUser.stickers
                     |> Ui.el
                         [ Ui.alignBottom
                         , Ui.paddingXY paddingX 0
@@ -3127,6 +3135,8 @@ emojiSelector isMobile local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableStickers
+                    local.localUser.stickers
                     |> Ui.el
                         [ Ui.paddingXY paddingX 0
                         , Ui.move
@@ -3201,7 +3211,12 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector
+                isMobile
+                local.localUser.user.availableStickers
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3320,6 +3335,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) NoThread)
@@ -3354,8 +3370,9 @@ discordConversationView :
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
         }
+    -> SeqSet (Id StickerId)
     -> Element FrontendMsg
-discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
+discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableStickers =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -3400,7 +3417,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector isMobile availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3522,6 +3539,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
+                        local.localUser.stickers
                         loggedIn.textInputFocus
                         (LocalState.allDiscordUsers local.localUser)
                         |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) NoThread)
@@ -3673,7 +3691,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector isMobile local.localUser.user.availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3806,6 +3824,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
                 |> Ui.map (MessageInputMsg (GuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
@@ -3824,9 +3843,10 @@ discordThreadConversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
+    -> SeqSet (Id StickerId)
     -> DiscordFrontendThread
     -> Element FrontendMsg
-discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name channel =
+discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableStickers channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -3871,7 +3891,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local loggedIn model
+            [ emojiSelector isMobile availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3993,6 +4013,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allDiscordUsers local.localUser)
                 |> Ui.map (MessageInputMsg (DiscordGuildOrDmId guildOrDmIdNoThread) (ViewThread threadId))
@@ -4323,6 +4344,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         ""
                         editing.text
                         editing.attachedFiles
+                        local.localUser.stickers
                         pingUser
             in
             Ui.column
@@ -4456,6 +4478,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         ""
                         editing.text
                         editing.attachedFiles
+                        local.localUser.stickers
                         pingUser
             in
             Ui.column
@@ -4812,10 +4835,10 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     isBeingEdited
                     isMobile
                     maybeRepliedTo
-                    localUser.user.domainWhitelist
+                    localUser
                     revealedSpoilers
                     allUsers
-                    localUser.timezone
+                    isHovered
                     messageIndex
                     data
                 )
@@ -4898,10 +4921,10 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     isBeingEdited
                     isMobile
                     maybeRepliedTo
-                    localUser.user.domainWhitelist
+                    localUser
                     revealedSpoilers
                     allUsers
-                    localUser.timezone
+                    isHovered
                     messageIndex
                     message2
                 )
@@ -4940,14 +4963,14 @@ userTextMessageContent :
     -> Bool
     -> Bool
     -> Maybe ( Id messageId, Message messageId userId )
-    -> SeqSet Domain
+    -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
-    -> Time.Zone
+    -> IsHovered
     -> Id messageId
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo domainWhitelist revealedSpoilers allUsers timezone messageIndex message2 =
+userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo localUser revealedSpoilers allUsers isHovered messageIndex message2 =
     Ui.row
         []
         [ Ui.el
@@ -4982,7 +5005,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
-                , messageTimestamp message2.createdAt timezone |> Ui.html
+                , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
                 , messageIdView messageIndex
                 ]
             , Html.div
@@ -4991,17 +5014,29 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageIndex))
                     containerWidth
                     MessageView_PressedNonWhitelistLink
-                    domainWhitelist
                     MessageView_PressedSpoiler
-                    (case SeqDict.get messageIndex revealedSpoilers of
-                        Just nonempty ->
-                            NonemptySet.toSeqSet nonempty
+                    { revealedSpoilers =
+                        case SeqDict.get messageIndex revealedSpoilers of
+                            Just nonempty ->
+                                NonemptySet.toSeqSet nonempty
 
-                        Nothing ->
-                            SeqSet.empty
-                    )
-                    allUsers
-                    message2.attachedFiles
+                            Nothing ->
+                                SeqSet.empty
+                    , users = allUsers
+                    , attachedFiles = message2.attachedFiles
+                    , domainWhitelist = localUser.user.domainWhitelist
+                    , stickers = localUser.stickers
+                    , animationMode =
+                        case isHovered of
+                            IsNotHovered ->
+                                Sticker.LoopAFewTimesOnLoad
+
+                            IsHovered ->
+                                Sticker.ResetAndLoopAFewTimes
+
+                            IsHoveredButNoMenu ->
+                                Sticker.ResetAndLoopAFewTimes
+                    }
                     message2.embeds
                     message2.content
                     ++ (if isBeingEdited then
@@ -5138,10 +5173,11 @@ userTextMessagePreview allUsers revealedSpoilers message =
             [ Html.text (User.toString message.createdBy allUsers) ]
             :: RichText.preview
                 (\_ -> MessageView_NoOp)
-                SeqSet.empty
-                revealedSpoilers
-                allUsers
-                message.attachedFiles
+                { revealedSpoilers = revealedSpoilers
+                , users = allUsers
+                , attachedFiles = message.attachedFiles
+                , domainWhitelist = SeqSet.empty
+                }
                 message.content
         )
         |> Ui.html
@@ -5489,10 +5525,11 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                     [ Html.text (User.toString data.createdBy allUsers) ]
                                     :: RichText.preview
                                         (\_ -> MessageView_NoOp)
-                                        SeqSet.empty
-                                        SeqSet.empty
-                                        allUsers
-                                        data.attachedFiles
+                                        { revealedSpoilers = SeqSet.empty
+                                        , users = allUsers
+                                        , attachedFiles = data.attachedFiles
+                                        , domainWhitelist = SeqSet.empty
+                                        }
                                         data.content
 
                             UserJoinedMessage _ userId _ ->

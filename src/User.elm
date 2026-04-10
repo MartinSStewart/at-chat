@@ -10,6 +10,7 @@ module User exposing
     , NotificationLevel(..)
     , addDirectMention
     , addDiscordDirectMention
+    , addNewStickers
     , addRecentlyUsedEmoji
     , backendToFrontend
     , backendToFrontendCurrent
@@ -43,9 +44,9 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), Emoji, EmojiConfig, SkinTone)
+import Emoji exposing (Category(..), Emoji, EmojiCategory(..), EmojiConfig, SkinTone)
 import FileStatus exposing (FileHash)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -56,6 +57,7 @@ import RichText exposing (Domain)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Font
 
@@ -88,6 +90,7 @@ type alias BackendUser =
     , linkDiscordAcknowledgementIsChecked : Bool
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
+    , availableStickers : SeqSet (Id StickerId)
     }
 
 
@@ -223,7 +226,8 @@ init createdAt name email userIsAdmin =
     , expandedDiscordGuilds = SeqSet.empty
     , linkDiscordAcknowledgementIsChecked = False
     , domainWhitelist = SeqSet.empty
-    , emojiConfig = { skinTone = Nothing, category = SmileysAndEmotion, lastUsedEmojis = Array.empty }
+    , emojiConfig = { skinTone = Nothing, category = EmojiCategory SmileysAndEmotion, lastUsedEmojis = Array.empty }
+    , availableStickers = SeqSet.empty
     }
 
 
@@ -235,6 +239,14 @@ addDirectMention :
     -> { a | directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater) }
 addDirectMention guildId channelId threadRoute user =
     { user | directMentions = addDirectMentionHelper guildId channelId threadRoute user.directMentions }
+
+
+addNewStickers :
+    SeqDict (Id StickerId) StickerData
+    -> { a | availableStickers : SeqSet (Id StickerId) }
+    -> { a | availableStickers : SeqSet (Id StickerId) }
+addNewStickers stickers user =
+    { user | availableStickers = SeqDict.keys stickers |> SeqSet.fromList |> SeqSet.union user.availableStickers }
 
 
 addDiscordDirectMention :
@@ -535,6 +547,7 @@ backendToFrontendCurrent user =
     , linkDiscordAcknowledgementIsChecked = user.linkDiscordAcknowledgementIsChecked
     , domainWhitelist = user.domainWhitelist
     , emojiConfig = user.emojiConfig
+    , availableStickers = user.availableStickers
     }
 
 

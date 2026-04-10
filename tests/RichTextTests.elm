@@ -51,6 +51,12 @@ stringFuzzer =
         , "\\"
         , "["
         , "[!1]"
+        , "\u{200B}"
+        , "\u{200C}"
+        , "\u{200D}"
+        , "\u{2060}"
+        , "\n\u{200C}\u{200B}\n\n"
+        , "\n\u{200B}"
         ]
 
 
@@ -256,24 +262,34 @@ test =
         , fromNonemptyStringTest
             "https://abc.com/..."
             (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [ NormalText '.' ".." ])
-        , fromNonemptyStringTest
-            "```a\n```"
-            (Nonempty (CodeBlock NoLanguage "a\n") [])
-        , fromNonemptyStringTest
-            "````\n```"
-            (Nonempty (CodeBlock NoLanguage "`\n") [])
-        , fromNonemptyStringTest
-            "```*\n```"
-            (Nonempty (CodeBlock NoLanguage "*\n") [])
-        , fromNonemptyStringTest
-            "||||"
-            (Nonempty (NormalText '|' "|||") [])
-        , fromNonemptyStringTest
-            "~~~~"
-            (Nonempty (NormalText '~' "~~~") [])
-        , fromNonemptyStringTest
-            "____"
-            (Nonempty (NormalText '_' "___") [])
+        , fromNonemptyStringTest "```a\n```" (Nonempty (CodeBlock NoLanguage "a\n") [])
+        , fromNonemptyStringTest "````\n```" (Nonempty (CodeBlock NoLanguage "`\n") [])
+        , fromNonemptyStringTest "```*\n```" (Nonempty (CodeBlock NoLanguage "*\n") [])
+        , fromNonemptyStringTest "||||" (Nonempty (NormalText '|' "|||") [])
+        , fromNonemptyStringTest "~~~~" (Nonempty (NormalText '~' "~~~") [])
+        , fromNonemptyStringTest "____" (Nonempty (NormalText '_' "___") [])
+        , fromNonemptyStringTest "\n\u{200C}\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 4)) [])
+        , Test.test
+            "Sticker 1"
+            (\_ ->
+                RichText.toString
+                    SeqDict.empty
+                    (Nonempty (Sticker (Id.fromInt 0)) [ NormalText '\u{200C}' "\u{200B}\n\n" ])
+                    |> Expect.equal "\n\u{200B}\n\n\u{200C}\u{200B}\n\n"
+            )
+        , Test.test
+            "Sticker 2"
+            (\_ ->
+                RichText.toString
+                    SeqDict.empty
+                    (Nonempty (Sticker (Id.fromInt 4)) [])
+                    |> Expect.equal "\n\u{200C}\u{200B}\n\n"
+            )
+        , fromNonemptyStringTest "\n\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 0)) [])
+
+        --, fromNonemptyStringTest
+        --    "\n\u{200B}\u{200C}\n\n"
+        --    (Nonempty (Sticker (Id.fromInt 0)) [ NormalText '\u{200C}' "\u{200B}\n\n" ])
         , Test.fuzz
             fuzzer
             "Round trip"
@@ -289,7 +305,7 @@ fromNonemptyStringTest : String -> Nonempty (RichText (Id.Id a)) -> Test
 fromNonemptyStringTest input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
-            Test.test input (\_ -> RichText.fromNonemptyString users nonempty |> Expect.equal expected)
+            Test.test (Debug.toString input) (\_ -> RichText.fromNonemptyString users nonempty |> Expect.equal expected)
 
         Nothing ->
             Debug.todo "Can't run a RichText parser on empty text"
