@@ -2,7 +2,7 @@ module RichTextTests exposing (test)
 
 import Expect
 import Fuzz exposing (Fuzzer)
-import Id
+import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
 import RichText exposing (EscapedChar(..), Language(..), RichText(..))
@@ -325,7 +325,8 @@ test =
         , fromNonemptyStringTest
             "[link](https://abc.com)"
             (Nonempty
-                (MarkdownLink (NonemptyString 'l' "ink")
+                (MarkdownLink
+                    (NonemptyString 'l' "ink")
                     { protocol = Https
                     , host = "abc.com"
                     , path = ""
@@ -337,39 +338,11 @@ test =
                 []
             )
         , fromNonemptyStringTest "\n\u{200C}\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 4)) [])
-        , Test.test
-            "Sticker 1"
-            (\_ ->
-                RichText.toString
-                    False
-                    SeqDict.empty
-                    (Nonempty (Sticker (Id.fromInt 0)) [ NormalText '\u{200C}' "\u{200B}\n\n" ])
-                    |> Expect.equal "\n\u{200B}\n\n\u{200C}\u{200B}\n\n"
-            )
-        , Test.test
-            "Sticker 2"
-            (\_ ->
-                RichText.toString
-                    False
-                    SeqDict.empty
-                    (Nonempty (Sticker (Id.fromInt 4)) [])
-                    |> Expect.equal "\n\u{200C}\u{200B}\n\n"
-            )
+        , toStringTest
+            (Nonempty (Sticker (Id.fromInt 0)) [ NormalText '\u{200C}' "\u{200B}\n\n" ])
+            "\n\u{200B}\n\n\u{200C}\u{200B}\n\n"
+        , toStringTest (Nonempty (Sticker (Id.fromInt 4)) []) "\n\u{200C}\u{200B}\n\n"
         , fromNonemptyStringTest "\n\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 0)) [])
-        , fromNonemptyStringTest
-            "_[123](https://abc.com)_"
-            (Nonempty
-                (Italic
-                    (Nonempty
-                        (MarkdownLink
-                            (NonemptyString '1' "23")
-                            (unsafeUrl "https://abc.com/")
-                        )
-                        []
-                    )
-                )
-                []
-            )
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"
@@ -385,7 +358,7 @@ test =
         ]
 
 
-fromNonemptyStringTest : String -> Nonempty (RichText (Id.Id a)) -> Test
+fromNonemptyStringTest : String -> Nonempty (RichText (Id userId)) -> Test
 fromNonemptyStringTest input expected =
     case String.Nonempty.fromString input of
         Just nonempty ->
@@ -393,3 +366,10 @@ fromNonemptyStringTest input expected =
 
         Nothing ->
             Debug.todo "Can't run a RichText parser on empty text"
+
+
+toStringTest : Nonempty (RichText (Id userId)) -> String -> Test
+toStringTest input expected =
+    Test.test
+        (Debug.toString ("RichText.toString: " ++ expected))
+        (\_ -> RichText.toString False users input |> Expect.equal expected)

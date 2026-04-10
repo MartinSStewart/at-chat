@@ -1657,7 +1657,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     , currentList
                         ++ [ if state.spoiler then
                                 Html.span
-                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                     , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
                                     , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
@@ -1700,7 +1700,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     , currentList
                         ++ [ if state.spoiler then
                                 Html.span
-                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                     , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
                                     , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
@@ -1714,7 +1714,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                     , Html.Attributes.target "_blank"
                                     , Html.Attributes.rel "noreferrer"
                                     , Html.Attributes.style "color" "rgb(66,133,244)"
-                                    , htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    , htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                     , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
                                     , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
@@ -1728,7 +1728,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     , embedIndex2
                     , currentList
                         ++ [ Html.span
-                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                 , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
@@ -2191,19 +2191,6 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         ]
 
 
-
---buttonOrA
---    onPressUrl
---    domainWhitelist
---    url
---    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
---    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
---    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
---    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
---    ]
---    [ Html.text urlText ]
-
-
 fileDownloadView : FileData -> Html msg
 fileDownloadView fileData =
     let
@@ -2306,8 +2293,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                     ( index2 + String.length text + 1
                     , Array.push
                         (Html.span
-                            [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                              htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
@@ -2400,8 +2386,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                     ( index2 + String.length text
                     , Array.push
                         (Html.span
-                            [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                            , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
@@ -2420,8 +2405,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                     ( index2 + String.length text
                     , Array.push
                         (Html.span
-                            [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                            , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                             , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                             , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                             , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
@@ -2439,8 +2423,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                         (Array.fromList
                             [ formatText "`"
                             , Html.span
-                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                                , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                                 , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , if state.spoiler then
