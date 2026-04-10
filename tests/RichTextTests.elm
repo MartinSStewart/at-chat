@@ -60,6 +60,7 @@ stringFuzzer =
         , "]("
         , ")"
         , "[link](https://abc.com/)"
+        , "[link](https://abc.com)"
         ]
 
 
@@ -320,6 +321,20 @@ test =
                 , Hyperlink { protocol = Https, host = "abc.com", path = "/", port_ = Nothing, fragment = Nothing, query = Nothing }
                 , NormalText ')' ""
                 ]
+            )
+        , fromNonemptyStringTest
+            "[link](https://abc.com)"
+            (Nonempty
+                (MarkdownLink (NonemptyString 'l' "ink")
+                    { protocol = Http
+                    , host = "abc.com"
+                    , path = ""
+                    , port_ = Nothing
+                    , fragment = Nothing
+                    , query = Nothing
+                    }
+                )
+                []
             )
         , fromNonemptyStringTest "\n\u{200C}\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 4)) [])
         , Test.test
