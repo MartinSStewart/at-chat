@@ -273,6 +273,7 @@ test =
             "Sticker 1"
             (\_ ->
                 RichText.toString
+                    False
                     SeqDict.empty
                     (Nonempty (Sticker (Id.fromInt 0)) [ NormalText '\u{200C}' "\u{200B}\n\n" ])
                     |> Expect.equal "\n\u{200B}\n\n\u{200C}\u{200B}\n\n"
@@ -281,6 +282,7 @@ test =
             "Sticker 2"
             (\_ ->
                 RichText.toString
+                    False
                     SeqDict.empty
                     (Nonempty (Sticker (Id.fromInt 4)) [])
                     |> Expect.equal "\n\u{200C}\u{200B}\n\n"
@@ -295,7 +297,7 @@ test =
             "Round trip"
             (\text ->
                 RichText.fromNonemptyString users text
-                    |> RichText.toString users
+                    |> RichText.toString False users
                     |> Expect.equal (String.Nonempty.toString text)
             )
         ]
