@@ -1127,7 +1127,7 @@ parseUrlBody protocol urlBody =
                     if stop then
                         ( idx, True )
 
-                    else if char == '.' || char == ')' || char == ',' || char == '"' then
+                    else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' then
                         ( idx - 1, False )
 
                     else
