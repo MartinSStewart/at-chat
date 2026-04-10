@@ -31,13 +31,14 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
 import MessageInput
-import MyUi exposing (Range)
+import MyUi
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
+import Range exposing (Range)
 import RateLimit
 import RichText exposing (Domain(..), RichText(..))
 import Route

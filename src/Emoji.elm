@@ -39,7 +39,7 @@ import Id exposing (Id, StickerId)
 import MyUi
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Sticker exposing (StickerData, StickerUrl(..))
+import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
