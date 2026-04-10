@@ -668,25 +668,27 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
     }
 }
 
-async fn discord_sticker_endpoint(sticker_id: Path<String>) -> http::Response<Body> {
-    match sticker_id.parse::<usize>() {
-        Ok(sticker_id2) => {
-            match reqwest::get(format!("https://discord.com/stickers/{}.json", sticker_id2)).await {
-                Ok(bytes) => Response::builder()
-                    .status(StatusCode::OK)
-                    .body(Body::from(bytes.bytes().await.unwrap()))
-                    .unwrap(),
-                Err(_) => Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from(format!("Invalid sticker ID")))
-                    .unwrap(),
-            }
+async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<Body> {
+    let sticker_path2 = sticker_path.to_string();
+    if sticker_path2.chars().all(|x| x.is_ascii_alphanumeric() || x == '.') && sticker_path2.len() < 50
+    {
+        match reqwest::get(format!("https://discord.com/stickers/{}", sticker_path2)).await {
+            Ok(bytes) => Response::builder()
+                .status(StatusCode::OK)
+                .body(Body::from(bytes.bytes().await.unwrap()))
+                .unwrap(),
+            Err(_) => Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(format!("Sticker does not exist")))
+                .unwrap(),
         }
-
-        Err(_) => Response::builder()
+    }
+    else
+    {
+        Response::builder()
             .status(StatusCode::BAD_REQUEST)
-            .body(Body::from(format!("Invalid sticker ID")))
-            .unwrap(),
+            .body(Body::from(format!("Invalid sticker format")))
+            .unwrap()
     }
 }
 

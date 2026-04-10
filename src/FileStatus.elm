@@ -386,9 +386,24 @@ uploadUrl request =
         }
 
 
-discordStickerUrl : Discord.Id Discord.StickerId -> String
-discordStickerUrl stickerId =
-    domain ++ "/file/discord-sticker/" ++ Discord.idToString stickerId
+discordStickerUrl : Discord.Id Discord.StickerId -> Discord.StickerFormatType -> String
+discordStickerUrl stickerId format =
+    domain
+        ++ "/file/discord-sticker/"
+        ++ Discord.idToString stickerId
+        ++ (case format of
+                Discord.PngFormat ->
+                    ".png"
+
+                Discord.ApngFormat ->
+                    ".png"
+
+                Discord.LottieFormat ->
+                    ".json"
+
+                Discord.GifFormat ->
+                    ".gif"
+           )
 
 
 type alias UploadUrlRequest =

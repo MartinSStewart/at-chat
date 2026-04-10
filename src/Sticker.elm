@@ -90,13 +90,16 @@ view stickerSize2 stickerId stickers2 animationMode =
                 DiscordStandardSticker discordStickerId ->
                     case sticker.format of
                         Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.discordStickerUrl discordStickerId) animationMode
+                            lottieView
+                                stickerSize2
+                                (FileStatus.discordStickerUrl discordStickerId sticker.format)
+                                animationMode
 
                         _ ->
                             animatedImageView
                                 stickerSize2
                                 stickerSize2
-                                (Discord.stickerUrl Discord.StandardSticker sticker.format discordStickerId)
+                                (FileStatus.discordStickerUrl discordStickerId sticker.format)
                                 animationMode
 
         Nothing ->
