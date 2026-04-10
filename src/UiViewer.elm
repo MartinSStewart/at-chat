@@ -68,6 +68,7 @@ main =
                     , users = SeqDict.empty
                     , attachedFiles = SeqDict.empty
                     , stickers = stickers
+                    , animationMode = Sticker.LoopForever
                     }
                     Array.empty
                     (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -84,7 +85,7 @@ main =
                         [ Sticker (Id.fromInt 123)
                         , NormalText 'T' "est3333333333333333333333\n3333333333"
                         ]
-                        |> RichText.toString SeqDict.empty
+                        |> RichText.toString True SeqDict.empty
                     )
                     SeqDict.empty
                     stickers
@@ -227,6 +228,7 @@ embedExamples whitelistedDomains =
                 , users = SeqDict.empty
                 , attachedFiles = SeqDict.empty
                 , stickers = SeqDict.empty
+                , animationMode = Sticker.LoopForever
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)
