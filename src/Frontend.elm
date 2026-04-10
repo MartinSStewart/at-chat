@@ -2192,6 +2192,26 @@ updateLoaded msg model =
                                                             )
                                                         )
 
+                                                ( GuildOrDmId_Guild guildId channelId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                    FrontendExtra.routePush
+                                                        model
+                                                        (GuildRoute guildId
+                                                            (ChannelRoute
+                                                                channelId
+                                                                (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                            )
+                                                        )
+
+                                                ( GuildOrDmId_Dm otherUserId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                    FrontendExtra.routePush
+                                                        model
+                                                        (DmRoute
+                                                            { otherUserId = otherUserId
+                                                            , threadRoute =
+                                                                ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab
+                                                            }
+                                                        )
+
                                                 ( GuildOrDmId_Dm otherUserId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
                                                     FrontendExtra.routePush
                                                         model
@@ -2221,6 +2241,19 @@ updateLoaded msg model =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                         }
+                                                            |> DiscordGuildRoute
+                                                        )
+
+                                                ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
+                                                    FrontendExtra.routePush
+                                                        model
+                                                        ({ currentDiscordUserId = currentDiscordUserId
+                                                         , guildId = guildId
+                                                         , channelRoute =
+                                                            DiscordChannel_ChannelRoute
+                                                                channelId
+                                                                (NoThreadWithFriends (Just repliedTo) HideMembersTab)
                                                          }
                                                             |> DiscordGuildRoute
                                                         )

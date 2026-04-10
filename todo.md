@@ -4,7 +4,6 @@
 * Typing indicator not appearing for Discord guilds
 * Changing tabs and then returning to a channel causes it to unload all old messages
 * Two messages get sent if a linked Discord user starts a thread
-* Clicking on a message reply should scroll to the original message
 * 4 Discord messages DM restriction not removed until after the page is refreshed
 * Prevent messages longer than 2000 chars from being sent
 * Finding an emoji via text search and then trying to click it fails on mobile
