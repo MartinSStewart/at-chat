@@ -389,7 +389,7 @@ messageToString : SeqDict userId { a | name : PersonName } -> Message messageId 
 messageToString allUsers3 message =
     case message of
         UserTextMessage a ->
-            RichText.toString allUsers3 a.content
+            RichText.toString False allUsers3 a.content
 
         UserJoinedMessage _ userId _ ->
             User.toString userId allUsers3

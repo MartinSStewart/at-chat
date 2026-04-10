@@ -516,7 +516,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                                 users =
                                     LocalState.allUsers local.localUser
                             in
-                            Ports.showNotification (User.toString senderId users) (RichText.toString users content)
+                            Ports.showNotification (User.toString senderId users) (RichText.toString True users content)
 
                         _ ->
                             Command.none
@@ -576,7 +576,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         Ports.Granted ->
                             Ports.showNotification
                                 (User.toString senderId allUsers)
-                                (RichText.toString allUsers content)
+                                (RichText.toString True allUsers content)
 
                         _ ->
                             Command.none

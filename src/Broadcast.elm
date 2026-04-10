@@ -385,7 +385,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
     let
         plainText : String
         plainText =
-            RichText.toString (NonemptyDict.toSeqDict model.users) content
+            RichText.toString True (NonemptyDict.toSeqDict model.users) content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -884,7 +884,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                         otherUserId
                         (PersonName.toString otherUser.name)
                         otherUser.icon
-                        (RichText.toString (NonemptyDict.toSeqDict model.users) text)
+                        (RichText.toString True (NonemptyDict.toSeqDict model.users) text)
                         (DmRoute
                             { otherUserId = otherUserId
                             , threadRoute =

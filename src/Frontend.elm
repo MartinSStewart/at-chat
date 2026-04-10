@@ -1890,7 +1890,7 @@ updateLoaded msg model =
                                                     |> RichText.removeAttachedFile fileId
                                             of
                                                 Just richText ->
-                                                    RichText.toString allUsers richText
+                                                    RichText.toString False allUsers richText
                                                         |> String.Nonempty.fromString
 
                                                 Nothing ->
@@ -1931,7 +1931,7 @@ updateLoaded msg model =
                                                                 |> RichText.removeAttachedFile fileId
                                                         of
                                                             Just richText ->
-                                                                RichText.toString allUsers richText
+                                                                RichText.toString False allUsers richText
 
                                                             Nothing ->
                                                                 edit.text
@@ -3176,7 +3176,7 @@ updateLoaded msg model =
                                                                 ( GuildOrDmId guildOrDmId2, threadRoute )
                                                                 { messageIndex = index
                                                                 , text =
-                                                                    RichText.toString (LocalState.allUsers local.localUser) message.content
+                                                                    RichText.toString False (LocalState.allUsers local.localUser) message.content
                                                                 , attachedFiles =
                                                                     SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                                 }
@@ -3263,6 +3263,7 @@ updateLoaded msg model =
                                                                 { messageIndex = index
                                                                 , text =
                                                                     RichText.toString
+                                                                        False
                                                                         (LocalState.allDiscordUsers local.localUser)
                                                                         message.content
                                                                 , attachedFiles =
@@ -3967,7 +3968,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         GuildOrDmId guildOrDmId2 ->
                             case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString (LocalState.allUsers local.localUser) message.content
+                                    ( RichText.toString False (LocalState.allUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just
@@ -3978,7 +3979,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                         DiscordGuildOrDmId guildOrDmId2 ->
                             case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
-                                    ( RichText.toString (LocalState.allDiscordUsers local.localUser) message.content
+                                    ( RichText.toString False (LocalState.allDiscordUsers local.localUser) message.content
                                     , message.attachedFiles
                                     )
                                         |> Just

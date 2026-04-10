@@ -6617,7 +6617,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString allUsers a.content
+                                        ++ RichText.toString True allUsers a.content
 
                                 UserJoinedMessage _ userId _ ->
                                     User.toString userId allUsers
@@ -6730,7 +6730,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                      else
                                         ""
                                     )
-                                        ++ RichText.toString (LocalState.allDiscordUsers localUser) a.content
+                                        ++ RichText.toString True (LocalState.allDiscordUsers localUser) a.content
 
                                 UserJoinedMessage _ userId _ ->
                                     User.toString userId (LocalState.allDiscordUsers localUser) ++ " joined!"

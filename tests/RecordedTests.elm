@@ -31,7 +31,6 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
 import MessageInput
-import MyUi
 import NonemptyDict
 import Pages.Admin
 import Pages.Guild

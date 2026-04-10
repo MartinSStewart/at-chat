@@ -356,8 +356,8 @@ toStringWithGetter userToString users nonempty =
         |> String.concat
 
 
-toString : SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
-toString users nonempty =
+toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
+toString emojisForStickersAndAttachments users nonempty =
     List.Nonempty.map
         (\richText ->
             case richText of
@@ -373,19 +373,19 @@ toString users nonempty =
                             "@<missing>"
 
                 Bold a ->
-                    "*" ++ toString users a ++ "*"
+                    "*" ++ toString emojisForStickersAndAttachments users a ++ "*"
 
                 Italic a ->
-                    "_" ++ toString users a ++ "_"
+                    "_" ++ toString emojisForStickersAndAttachments users a ++ "_"
 
                 Underline a ->
-                    "__" ++ toString users a ++ "__"
+                    "__" ++ toString emojisForStickersAndAttachments users a ++ "__"
 
                 Strikethrough a ->
-                    "~~" ++ toString users a ++ "~~"
+                    "~~" ++ toString emojisForStickersAndAttachments users a ++ "~~"
 
                 Spoiler a ->
-                    "||" ++ toString users a ++ "||"
+                    "||" ++ toString emojisForStickersAndAttachments users a ++ "||"
 
                 Hyperlink data ->
                     Url.toString data
@@ -406,13 +406,21 @@ toString users nonempty =
                         ++ "```"
 
                 AttachedFile fileId ->
-                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
+                    if emojisForStickersAndAttachments then
+                        "🖼️"
+
+                    else
+                        attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
 
                 EscapedChar char ->
                     "\\" ++ escapedCharToString char
 
                 Sticker id ->
-                    Sticker.idToString id
+                    if emojisForStickersAndAttachments then
+                        "🖼️"
+
+                    else
+                        Sticker.idToString id
         )
         nonempty
         |> List.Nonempty.toList
@@ -1680,7 +1688,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                            ]
 
                                 Nothing ->
-                                    currentList ++ normalTextView (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) state
+                                    currentList ++ [ Icons.image ]
                             )
 
                         NoLargeContent ->
@@ -1690,7 +1698,15 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
                 Sticker stickerId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ Sticker.view "160px" stickerId config.stickers config.animationMode ] )
+                    case showLargeContent of
+                        ShowLargeContent _ ->
+                            ( spoilerIndex2
+                            , embedIndex2
+                            , currentList ++ [ Sticker.view "160px" stickerId config.stickers config.animationMode ]
+                            )
+
+                        NoLargeContent ->
+                            ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
         )
         ( spoilerIndex, embedIndex, [] )
         (List.Nonempty.toList nonempty)
