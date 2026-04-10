@@ -326,7 +326,7 @@ test =
             "[link](https://abc.com)"
             (Nonempty
                 (MarkdownLink (NonemptyString 'l' "ink")
-                    { protocol = Http
+                    { protocol = Https
                     , host = "abc.com"
                     , path = ""
                     , port_ = Nothing

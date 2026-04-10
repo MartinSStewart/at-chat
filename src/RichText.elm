@@ -1267,7 +1267,15 @@ parseMarkdownLink source index len =
                         in
                         case ( String.Nonempty.fromString alias, Url.fromString urlText ) of
                             ( Just nonemptyAlias, Just url ) ->
-                                Just ( nonemptyAlias, url, closeParen + 1 )
+                                let
+                                    urlNoPath =
+                                        { url | path = "" }
+                                in
+                                if Url.toString urlNoPath == urlText then
+                                    Just ( nonemptyAlias, urlNoPath, closeParen + 1 )
+
+                                else
+                                    Just ( nonemptyAlias, url, closeParen + 1 )
 
                             _ ->
                                 Nothing
