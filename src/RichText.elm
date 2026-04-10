@@ -67,6 +67,7 @@ type RichText userId
     | Strikethrough (Nonempty (RichText userId))
     | Spoiler (Nonempty (RichText userId))
     | Hyperlink Url
+    | MarkdownLink NonemptyString Url
     | InlineCode Char String
     | CodeBlock Language String
     | AttachedFile (Id FileId)
@@ -176,6 +177,9 @@ removeAttachedFile fileId list =
                 Hyperlink _ ->
                     Just richText
 
+                MarkdownLink _ _ ->
+                    Just richText
+
                 InlineCode _ _ ->
                     Just richText
 
@@ -206,6 +210,9 @@ hyperlinks nonempty =
             case richText of
                 Hyperlink data ->
                     [ data ]
+
+                MarkdownLink _ url ->
+                    [ url ]
 
                 UserMention _ ->
                     []
@@ -252,6 +259,9 @@ stickers nonempty =
         (\richText ->
             case richText of
                 Hyperlink _ ->
+                    []
+
+                MarkdownLink _ _ ->
                     []
 
                 UserMention _ ->
@@ -327,6 +337,9 @@ toStringWithGetter userToString users nonempty =
                 Hyperlink data ->
                     Url.toString data
 
+                MarkdownLink alias url ->
+                    "[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")"
+
                 InlineCode char rest ->
                     "`" ++ String.cons char rest ++ "`"
 
@@ -389,6 +402,9 @@ toString emojisForStickersAndAttachments users nonempty =
 
                 Hyperlink data ->
                     Url.toString data
+
+                MarkdownLink alias url ->
+                    "[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")"
 
                 InlineCode char rest ->
                     "`" ++ String.cons char rest ++ "`"
@@ -483,6 +499,9 @@ normalize nonempty =
                 Hyperlink data ->
                     List.Nonempty.cons (Hyperlink data) nonempty2
 
+                MarkdownLink alias url ->
+                    List.Nonempty.cons (MarkdownLink alias url) nonempty2
+
                 InlineCode char string ->
                     List.Nonempty.cons (InlineCode char string) nonempty2
 
@@ -523,6 +542,9 @@ normalize nonempty =
 
                 Hyperlink data ->
                     Hyperlink data
+
+                MarkdownLink alias url ->
+                    MarkdownLink alias url
 
                 InlineCode char string ->
                     InlineCode char string
@@ -1060,7 +1082,12 @@ parseLoop source index len users modifiers accText revNodes =
                             parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
 
                 else
-                    parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
+                    case parseMarkdownLink source (index + 1) len of
+                        Just ( alias, url, nextIndex ) ->
+                            parseLoop source nextIndex len users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+
+                        Nothing ->
+                            parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
 
             _ ->
                 let
@@ -1220,6 +1247,53 @@ findSingleBacktick source index len =
         findSingleBacktick source (index + 1) len
 
 
+parseMarkdownLink : String -> Int -> Int -> Maybe ( NonemptyString, Url, Int )
+parseMarkdownLink source index len =
+    case findChar source index len ']' of
+        Just closeBracket ->
+            let
+                alias =
+                    String.slice index closeBracket source
+
+                afterBracket =
+                    closeBracket + 1
+            in
+            if afterBracket < len && String.slice afterBracket (afterBracket + 1) source == "(" then
+                case findChar source (afterBracket + 1) len ')' of
+                    Just closeParen ->
+                        let
+                            urlText =
+                                String.slice (afterBracket + 1) closeParen source
+                        in
+                        case ( String.Nonempty.fromString alias, Url.fromString urlText ) of
+                            ( Just nonemptyAlias, Just url ) ->
+                                Just ( nonemptyAlias, url, closeParen + 1 )
+
+                            _ ->
+                                Nothing
+
+                    Nothing ->
+                        Nothing
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
+findChar : String -> Int -> Int -> Char -> Maybe Int
+findChar source index len target =
+    if index >= len then
+        Nothing
+
+    else if String.slice index (index + 1) source == String.fromChar target then
+        Just index
+
+    else
+        findChar source (index + 1) len target
+
+
 parseFileId : String -> Int -> Int -> Maybe ( Int, Int )
 parseFileId source index len =
     let
@@ -1304,6 +1378,9 @@ mentionsUserHelper set nonempty =
                     mentionsUserHelper set2 nonempty2
 
                 Hyperlink _ ->
+                    set2
+
+                MarkdownLink _ _ ->
                     set2
 
                 InlineCode _ _ ->
@@ -1601,6 +1678,40 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
 
                                     Nothing ->
                                         inlineEmbedView showLargeContent onPressLink config.domainWhitelist data
+                           ]
+                    )
+
+                MarkdownLink alias url ->
+                    let
+                        aliasText : String
+                        aliasText =
+                            String.Nonempty.toString alias
+                    in
+                    ( spoilerIndex2
+                    , embedIndex2
+                    , currentList
+                        ++ [ if state.spoiler then
+                                Html.span
+                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+                                    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                                    , Html.Attributes.style "opacity" "0"
+                                    ]
+                                    [ Html.text aliasText ]
+
+                             else
+                                Html.a
+                                    [ Html.Attributes.href (Url.toString url)
+                                    , Html.Attributes.target "_blank"
+                                    , Html.Attributes.rel "noreferrer"
+                                    , Html.Attributes.style "color" "rgb(66,133,244)"
+                                    , htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+                                    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                                    ]
+                                    [ Html.text aliasText ]
                            ]
                     )
 
@@ -2293,6 +2404,26 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                         output2
                     )
 
+                MarkdownLink alias url ->
+                    let
+                        text =
+                            "[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")"
+                    in
+                    ( index2 + String.length text
+                    , Array.push
+                        (Html.span
+                            [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                            , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                            , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                            , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                            , Html.Attributes.style "color" "rgb(66,93,203)"
+                            ]
+                            [ Html.text text ]
+                        )
+                        output2
+                    )
+
                 InlineCode char rest ->
                     ( index2 + String.length rest + 3
                     , Array.append
@@ -2950,6 +3081,9 @@ toDiscord content =
 
                 Hyperlink data ->
                     Discord.Markdown.text (Url.toString data)
+
+                MarkdownLink alias url ->
+                    Discord.Markdown.text ("[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")")
 
                 InlineCode char string ->
                     Discord.Markdown.code (String.cons char string)

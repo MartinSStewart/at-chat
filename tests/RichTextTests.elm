@@ -57,6 +57,9 @@ stringFuzzer =
         , "\u{2060}"
         , "\n\u{200C}\u{200B}\n\n"
         , "\n\u{200B}"
+        , "]("
+        , ")"
+        , "[link](https://abc.com/)"
         ]
 
 
@@ -268,6 +271,56 @@ test =
         , fromNonemptyStringTest "||||" (Nonempty (NormalText '|' "|||") [])
         , fromNonemptyStringTest "~~~~" (Nonempty (NormalText '~' "~~~") [])
         , fromNonemptyStringTest "____" (Nonempty (NormalText '_' "___") [])
+        , fromNonemptyStringTest
+            "[click here](https://example.com/)"
+            (Nonempty (MarkdownLink (NonemptyString 'c' "lick here") (unsafeUrl "https://example.com/")) [])
+        , fromNonemptyStringTest
+            "go to [my site](https://abc.com/) now"
+            (Nonempty (NormalText 'g' "o to ")
+                [ MarkdownLink (NonemptyString 'm' "y site") { protocol = Https, host = "abc.com", path = "/", port_ = Nothing, fragment = Nothing, query = Nothing }
+                , NormalText ' ' "now"
+                ]
+            )
+        , fromNonemptyStringTest
+            "[docs](http://example.com/path?q=1#frag)"
+            (Nonempty
+                (MarkdownLink (NonemptyString 'd' "ocs")
+                    { protocol = Http
+                    , host = "example.com"
+                    , path = "/path"
+                    , port_ = Nothing
+                    , fragment = Just "frag"
+                    , query = Just "q=1"
+                    }
+                )
+                []
+            )
+        , fromNonemptyStringTest
+            "[](https://example.com/)"
+            (Nonempty (NormalText '[' "](")
+                [ Hyperlink (unsafeUrl "https://example.com/")
+                , NormalText ')' ""
+                ]
+            )
+        , fromNonemptyStringTest "[alias](notaurl)" (Nonempty (NormalText '[' "alias](notaurl)") [])
+        , fromNonemptyStringTest
+            "[alias](https://example.com/"
+            (Nonempty (NormalText '[' "alias](")
+                [ Hyperlink { protocol = Https, host = "example.com", path = "/", port_ = Nothing, fragment = Nothing, query = Nothing }
+                ]
+            )
+        , fromNonemptyStringTest "[alias" (Nonempty (NormalText '[' "alias") [])
+        , fromNonemptyStringTest
+            "*[link](https://abc.com/)*"
+            (Nonempty (Bold (Nonempty (MarkdownLink (NonemptyString 'l' "ink") { protocol = Https, host = "abc.com", path = "/", port_ = Nothing, fragment = Nothing, query = Nothing }) [])) [])
+        , fromNonemptyStringTest
+            "\\[not a link](https://abc.com/)"
+            (Nonempty (EscapedChar EscapedSquareBracket)
+                [ NormalText 'n' "ot a link]("
+                , Hyperlink { protocol = Https, host = "abc.com", path = "/", port_ = Nothing, fragment = Nothing, query = Nothing }
+                , NormalText ')' ""
+                ]
+            )
         , fromNonemptyStringTest "\n\u{200C}\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 4)) [])
         , Test.test
             "Sticker 1"

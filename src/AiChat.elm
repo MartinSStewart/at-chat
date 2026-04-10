@@ -456,6 +456,13 @@ richTextToMessage previousText previousList nonempty =
                         :: list
                     )
 
+                RichText.MarkdownLink _ url ->
+                    ( ""
+                    , ImageUrlMessage (Url.toString url)
+                        :: TextMessage currentText
+                        :: list
+                    )
+
                 RichText.InlineCode char rest ->
                     ( currentText ++ "`" ++ String.fromChar char ++ rest ++ "`", list )
 
