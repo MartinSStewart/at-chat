@@ -46,7 +46,6 @@ import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyDict
 import NonemptyExtra
-import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
@@ -2678,16 +2677,15 @@ fromDiscord text attachments embeds stickers2 =
     case String.Nonempty.fromString text of
         Just nonempty ->
             NonemptyExtra.appendList
-                (case Parser.run (discordParser []) text of
-                    Ok ok ->
-                        case List.Nonempty.fromList (Array.toList ok) of
-                            Just nonempty2 ->
-                                normalize nonempty2
+                (let
+                    result =
+                        discordParseLoop text 0 (String.length text) [] "" []
+                 in
+                 case List.Nonempty.fromList result.nodes of
+                    Just nonempty2 ->
+                        normalize nonempty2
 
-                            Nothing ->
-                                Nonempty (normalTextFromNonempty nonempty) []
-
-                    Err _ ->
+                    Nothing ->
                         Nonempty (normalTextFromNonempty nonempty) []
                 )
                 (List.map AttachedFile (SeqDict.keys attachments))
@@ -2746,300 +2744,333 @@ discordModifierToSymbol modifier =
             NonemptyString '|' "|"
 
 
-type alias LoopState userId =
-    { current : Array String, rest : Array (RichText userId) }
-
-
-parserHelper : LoopState userId -> Array (RichText userId)
-parserHelper state =
-    case state.current |> Array.toList |> String.concat |> normalTextFromString of
-        Just a ->
-            Array.fromList [ a ]
-
-        Nothing ->
-            Array.empty
-
-
-getRemainingText : Parser String
-getRemainingText =
-    Parser.succeed String.dropLeft
-        |= Parser.getOffset
-        |= Parser.getSource
-
-
-urlParser : Parser { hyperlink : Result String Url, trailing : String }
-urlParser =
-    Parser.succeed
-        (\protocol url ->
-            let
-                urlLength : Int
-                urlLength =
-                    String.length url
-
-                ( urlTrimIndex, _ ) =
-                    String.foldr
-                        (\char (( index2, stop ) as loopState) ->
-                            if stop then
-                                loopState
-
-                            else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' then
-                                ( index2 - 1, False )
-
-                            else
-                                ( index2, True )
-                        )
-                        ( urlLength, False )
-                        url
-
-                urlText : String
-                urlText =
-                    (case protocol of
-                        Http ->
-                            "http://"
-
-                        Https ->
-                            "https://"
-                    )
-                        ++ String.slice 0 urlTrimIndex url
-            in
-            { hyperlink =
-                case Url.fromString urlText of
-                    Just url2 ->
-                        let
-                            url3 =
-                                { url2 | protocol = protocol }
-
-                            urlNoPath =
-                                { url3 | path = "" }
-                        in
-                        if Url.toString urlNoPath == urlText then
-                            Ok urlNoPath
-
-                        else
-                            Ok url3
-
-                    Nothing ->
-                        Err urlText
-            , trailing = String.slice urlTrimIndex urlLength url
-            }
-        )
-        |= Parser.oneOf
-            [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
-            , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
-            ]
-        |= (Parser.chompWhile
-                (\char ->
-                    (char /= ' ')
-                        && (char /= '\n')
-                        && (char /= '\t')
-                        && (char /= '<')
-                        && (char /= '|')
-                )
-                |> Parser.getChompedString
-           )
-
-
-codeBlockParser : Parser ( Language, String )
-codeBlockParser =
-    Parser.succeed
-        (\text ->
-            case String.split "\n" text of
-                [ single ] ->
-                    ( NoLanguage, single )
-
-                head :: rest ->
-                    if String.contains " " head then
-                        ( NoLanguage, text )
-
-                    else
-                        case String.Nonempty.fromString head of
-                            Just nonempty ->
-                                ( Language nonempty, String.join "\n" rest )
-
-                            Nothing ->
-                                ( NoLanguage, text )
-
-                [] ->
-                    ( NoLanguage, "" )
-        )
-        |. Parser.symbol "```"
-        |= Parser.loop
-            []
-            (\list ->
-                Parser.oneOf
-                    [ Parser.succeed (Done (List.reverse list |> String.concat))
-                        |. Parser.symbol "```"
-                    , Parser.succeed (\char -> Loop (char :: list))
-                        |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
-                    ]
-            )
-
-
 {-| <https://discord.com/developers/docs/reference#message-formatting>
 -}
-discordParser : List DiscordModifiers -> Parser (Array (RichText (Discord.Id Discord.UserId)))
-discordParser modifiers =
-    Parser.loop
-        { current = Array.empty, rest = Array.empty }
-        (\state ->
-            Parser.oneOf
-                [ Parser.succeed
-                    (\text ->
-                        if Set.member text discordEscapableChars then
-                            Loop { current = Array.push text state.current, rest = state.rest }
+discordParseLoop :
+    String
+    -> Int
+    -> Int
+    -> List DiscordModifiers
+    -> String
+    -> List (RichText (Discord.Id Discord.UserId))
+    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
+discordParseLoop source index len modifiers accText revNodes =
+    if index >= len then
+        discordFinalizeResult accText revNodes modifiers index
+
+    else
+        case String.slice index (index + 1) source of
+            "\\" ->
+                let
+                    afterBackslash =
+                        index + 1
+                in
+                case stringAt afterBackslash source of
+                    Just nextChar ->
+                        if Set.member nextChar discordEscapableChars then
+                            discordParseLoop source (afterBackslash + 1) len modifiers (accText ++ nextChar) revNodes
 
                         else
-                            Loop { current = Array.push ("\\" ++ text) state.current, rest = state.rest }
-                    )
-                    |. Parser.symbol "\\"
-                    |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
-                , Parser.succeed
-                    (\digits ->
-                        case UInt64.fromString digits of
-                            Just discordUserId ->
-                                Loop
-                                    { current = Array.empty
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push
-                                                (UserMention (Discord.idFromUInt64 discordUserId))
-                                                (parserHelper state)
-                                            )
-                                    }
+                            discordParseLoop source (afterBackslash + 1) len modifiers (accText ++ "\\" ++ nextChar) revNodes
 
-                            Nothing ->
-                                Loop
-                                    { current = Array.push ("<@" ++ digits ++ ">") state.current
-                                    , rest = state.rest
-                                    }
-                    )
-                    |. Parser.symbol "<@"
-                    |. Parser.oneOf
-                        [ Parser.symbol "!"
-                        , Parser.succeed ()
-                        ]
-                    |= (Parser.chompWhile Char.isDigit |> Parser.getChompedString)
-                    |. Parser.symbol ">"
-                    |> Parser.backtrackable
-                , discordModifierHelper False DiscordIsBold Bold state modifiers
-                , discordModifierHelper False DiscordIsUnderlined Underline state modifiers
-                , discordModifierHelper True DiscordIsItalic Italic state modifiers
-                , discordModifierHelper False DiscordIsItalic2 Italic state modifiers
-                , discordModifierHelper False DiscordIsStrikethrough Strikethrough state modifiers
-                , discordModifierHelper False DiscordIsSpoilered Spoiler state modifiers
-                , Parser.succeed
-                    (\( language, text ) ->
-                        case String.Nonempty.fromString text of
-                            Just _ ->
-                                Loop
-                                    { current = Array.empty
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push
-                                                (CodeBlock language text)
-                                                (parserHelper state)
-                                            )
-                                    }
+                    Nothing ->
+                        discordParseLoop source afterBackslash len modifiers (accText ++ "\\") revNodes
 
-                            Nothing ->
-                                Loop
-                                    { current = Array.push "``````" state.current
-                                    , rest = state.rest
-                                    }
-                    )
-                    |= codeBlockParser
-                    |> Parser.backtrackable
-                , Parser.succeed
-                    (\text ->
-                        case String.Nonempty.fromString text of
-                            Just a ->
-                                Loop
-                                    { current = Array.empty
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push
-                                                (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
-                                                (parserHelper state)
-                                            )
-                                    }
+            "<" ->
+                case tryParseDiscordMention source index len of
+                    Just ( userId, nextIndex ) ->
+                        discordParseLoop source nextIndex len modifiers "" (UserMention userId :: flushText accText revNodes)
 
-                            Nothing ->
-                                Loop
-                                    { current = Array.push "``" state.current
-                                    , rest = state.rest
-                                    }
-                    )
-                    |. Parser.symbol "`"
-                    |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
-                    |. Parser.symbol "`"
-                    |> Parser.backtrackable
-                , urlParser
-                    |> Parser.map
-                        (\{ hyperlink, trailing } ->
-                            (case hyperlink of
-                                Ok hyperlink2 ->
-                                    { current = Array.fromList [ trailing ]
-                                    , rest =
-                                        Array.append
-                                            state.rest
-                                            (Array.push (Hyperlink hyperlink2) (parserHelper state))
-                                    }
+                    Nothing ->
+                        discordParseLoop source (index + 1) len modifiers (accText ++ "<") revNodes
 
-                                Err text ->
-                                    { current = Array.push (text ++ trailing) state.current
-                                    , rest = state.rest
-                                    }
-                            )
-                                |> Loop
-                        )
-                , Parser.chompIf (\_ -> True)
-                    |> Parser.andThen
-                        (\_ ->
-                            Parser.chompWhile
-                                (\char ->
-                                    case char of
-                                        '<' ->
-                                            False
+            "*" ->
+                if String.slice index (index + 2) source == "**" then
+                    let
+                        afterSymbol =
+                            index + 2
+                    in
+                    if List.head modifiers == Just DiscordIsBold then
+                        closeModifier afterSymbol accText revNodes Bold (discordModifierToSymbol DiscordIsBold)
 
-                                        'h' ->
-                                            False
+                    else if List.member DiscordIsBold modifiers then
+                        discordFinalizeResult accText revNodes modifiers index
 
-                                        '`' ->
-                                            False
+                    else
+                        let
+                            flushed =
+                                flushText accText revNodes
 
-                                        '\\' ->
-                                            False
+                            inner =
+                                discordParseInner source afterSymbol len (DiscordIsBold :: modifiers)
 
-                                        '*' ->
-                                            False
+                            newRevNodes =
+                                List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                        in
+                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
 
-                                        '_' ->
-                                            False
+                else
+                    let
+                        afterSymbol =
+                            index + 1
+                    in
+                    if List.head modifiers == Just DiscordIsItalic then
+                        closeModifier afterSymbol accText revNodes Italic (discordModifierToSymbol DiscordIsItalic)
 
-                                        '~' ->
-                                            False
+                    else if List.member DiscordIsItalic modifiers then
+                        discordFinalizeResult accText revNodes modifiers index
 
-                                        '|' ->
-                                            False
+                    else
+                        let
+                            nextChar =
+                                String.slice afterSymbol (afterSymbol + 1) source
+                        in
+                        if nextChar == "*" || nextChar == " " then
+                            discordParseLoop source afterSymbol len modifiers (accText ++ "*") revNodes
 
-                                        _ ->
-                                            True
-                                )
-                        )
-                    |> Parser.getChompedString
-                    |> Parser.map
-                        (\a ->
-                            Loop
-                                { current = Array.push a state.current
-                                , rest = state.rest
-                                }
-                        )
-                , Parser.map (\() -> discordBailOut state modifiers) Parser.end
-                ]
-        )
+                        else
+                            let
+                                flushed =
+                                    flushText accText revNodes
+
+                                inner =
+                                    discordParseInner source afterSymbol len (DiscordIsItalic :: modifiers)
+
+                                newRevNodes =
+                                    List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                            in
+                            discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+
+            "_" ->
+                if String.slice index (index + 2) source == "__" then
+                    let
+                        afterSymbol =
+                            index + 2
+                    in
+                    if List.head modifiers == Just DiscordIsUnderlined then
+                        closeModifier afterSymbol accText revNodes Underline (discordModifierToSymbol DiscordIsUnderlined)
+
+                    else if List.member DiscordIsUnderlined modifiers then
+                        discordFinalizeResult accText revNodes modifiers index
+
+                    else
+                        let
+                            flushed =
+                                flushText accText revNodes
+
+                            inner =
+                                discordParseInner source afterSymbol len (DiscordIsUnderlined :: modifiers)
+
+                            newRevNodes =
+                                List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                        in
+                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+
+                else
+                    let
+                        afterSymbol =
+                            index + 1
+                    in
+                    if List.head modifiers == Just DiscordIsItalic2 then
+                        closeModifier afterSymbol accText revNodes Italic (discordModifierToSymbol DiscordIsItalic2)
+
+                    else if List.member DiscordIsItalic2 modifiers then
+                        discordFinalizeResult accText revNodes modifiers index
+
+                    else
+                        let
+                            flushed =
+                                flushText accText revNodes
+
+                            inner =
+                                discordParseInner source afterSymbol len (DiscordIsItalic2 :: modifiers)
+
+                            newRevNodes =
+                                List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                        in
+                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+
+            "~" ->
+                if String.slice index (index + 2) source == "~~" then
+                    let
+                        afterSymbol =
+                            index + 2
+                    in
+                    if List.head modifiers == Just DiscordIsStrikethrough then
+                        closeModifier afterSymbol accText revNodes Strikethrough (discordModifierToSymbol DiscordIsStrikethrough)
+
+                    else if List.member DiscordIsStrikethrough modifiers then
+                        discordFinalizeResult accText revNodes modifiers index
+
+                    else
+                        let
+                            flushed =
+                                flushText accText revNodes
+
+                            inner =
+                                discordParseInner source afterSymbol len (DiscordIsStrikethrough :: modifiers)
+
+                            newRevNodes =
+                                List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                        in
+                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+
+                else
+                    discordParseLoop source (index + 1) len modifiers (accText ++ "~") revNodes
+
+            "|" ->
+                if String.slice index (index + 2) source == "||" then
+                    let
+                        afterSymbol =
+                            index + 2
+                    in
+                    if List.head modifiers == Just DiscordIsSpoilered then
+                        closeModifier afterSymbol accText revNodes Spoiler (discordModifierToSymbol DiscordIsSpoilered)
+
+                    else if List.member DiscordIsSpoilered modifiers then
+                        discordFinalizeResult accText revNodes modifiers index
+
+                    else
+                        let
+                            flushed =
+                                flushText accText revNodes
+
+                            inner =
+                                discordParseInner source afterSymbol len (DiscordIsSpoilered :: modifiers)
+
+                            newRevNodes =
+                                List.foldl (\node acc -> node :: acc) flushed inner.nodes
+                        in
+                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+
+                else
+                    discordParseLoop source (index + 1) len modifiers (accText ++ "|") revNodes
+
+            "`" ->
+                if String.slice index (index + 3) source == "```" then
+                    case findSubstring source (index + 3) len "```" of
+                        Just closeIndex ->
+                            let
+                                content =
+                                    String.slice (index + 3) closeIndex source
+
+                                ( language, codeContent ) =
+                                    case String.split "\n" content of
+                                        [ single ] ->
+                                            ( NoLanguage, single )
+
+                                        head :: rest ->
+                                            if String.contains " " head then
+                                                ( NoLanguage, content )
+
+                                            else
+                                                case String.Nonempty.fromString head of
+                                                    Just nonempty2 ->
+                                                        ( Language nonempty2, String.join "\n" rest )
+
+                                                    Nothing ->
+                                                        ( NoLanguage, content )
+
+                                        [] ->
+                                            ( NoLanguage, "" )
+                            in
+                            case String.Nonempty.fromString codeContent of
+                                Just _ ->
+                                    discordParseLoop source (closeIndex + 3) len modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+
+                                Nothing ->
+                                    discordParseLoop source (closeIndex + 3) len modifiers (accText ++ "``````") revNodes
+
+                        Nothing ->
+                            case findSingleBacktick source (index + 1) len of
+                                Just closeIndex ->
+                                    let
+                                        content =
+                                            String.slice (index + 1) closeIndex source
+                                    in
+                                    case String.Nonempty.fromString content of
+                                        Just a ->
+                                            discordParseLoop source (closeIndex + 1) len modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+
+                                        Nothing ->
+                                            discordParseLoop source (closeIndex + 1) len modifiers (accText ++ "``") revNodes
+
+                                Nothing ->
+                                    discordParseLoop source (index + 1) len modifiers (accText ++ "`") revNodes
+
+                else
+                    case findSingleBacktick source (index + 1) len of
+                        Just closeIndex ->
+                            let
+                                content =
+                                    String.slice (index + 1) closeIndex source
+                            in
+                            case String.Nonempty.fromString content of
+                                Just a ->
+                                    discordParseLoop source (closeIndex + 1) len modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+
+                                Nothing ->
+                                    discordParseLoop source (closeIndex + 1) len modifiers (accText ++ "``") revNodes
+
+                        Nothing ->
+                            discordParseLoop source (index + 1) len modifiers (accText ++ "`") revNodes
+
+            "h" ->
+                if String.slice index (index + 8) source == "https://" then
+                    let
+                        protocolEnd =
+                            index + 8
+
+                        urlEnd =
+                            skipUrlChars source protocolEnd len
+
+                        urlBody =
+                            String.slice protocolEnd urlEnd source
+
+                        result =
+                            parseUrlBody Https urlBody
+                    in
+                    case result.hyperlink of
+                        Ok url ->
+                            discordParseLoop source urlEnd len modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
+
+                        Err errText ->
+                            discordParseLoop source urlEnd len modifiers (accText ++ errText ++ result.trailing) revNodes
+
+                else if String.slice index (index + 7) source == "http://" then
+                    let
+                        protocolEnd =
+                            index + 7
+
+                        urlEnd =
+                            skipUrlChars source protocolEnd len
+
+                        urlBody =
+                            String.slice protocolEnd urlEnd source
+
+                        result =
+                            parseUrlBody Http urlBody
+                    in
+                    case result.hyperlink of
+                        Ok url ->
+                            discordParseLoop source urlEnd len modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
+
+                        Err errText ->
+                            discordParseLoop source urlEnd len modifiers (accText ++ errText ++ result.trailing) revNodes
+
+                else
+                    let
+                        nextIndex =
+                            skipDiscordNormalChars source (index + 1) len
+                    in
+                    discordParseLoop source nextIndex len modifiers (accText ++ String.slice index nextIndex source) revNodes
+
+            _ ->
+                let
+                    nextIndex =
+                        skipDiscordNormalChars source (index + 1) len
+                in
+                discordParseLoop source nextIndex len modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
 toDiscord :
@@ -3102,107 +3133,93 @@ toDiscord content =
         (List.Nonempty.toList content)
 
 
-discordModifierHelper :
-    Bool
-    -> DiscordModifiers
-    -> (Nonempty (RichText (Discord.Id Discord.UserId)) -> RichText (Discord.Id Discord.UserId))
-    -> LoopState (Discord.Id Discord.UserId)
+discordParseInner :
+    String
+    -> Int
+    -> Int
     -> List DiscordModifiers
-    -> Parser (Step (LoopState (Discord.Id Discord.UserId)) (Array (RichText (Discord.Id Discord.UserId))))
-discordModifierHelper noTrailingWhitespace modifier container state modifiers =
+    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
+discordParseInner source index len modifiers =
+    discordParseLoop source index len modifiers "" []
+
+
+discordFinalizeResult :
+    String
+    -> List (RichText (Discord.Id Discord.UserId))
+    -> List DiscordModifiers
+    -> Int
+    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
+discordFinalizeResult accText revNodes modifiers index =
     let
-        symbol : NonemptyString
-        symbol =
-            discordModifierToSymbol modifier
+        flushed =
+            flushText accText revNodes
 
-        symbolText =
-            String.Nonempty.toString symbol
+        finalNodes =
+            List.reverse flushed
     in
-    if List.head modifiers == Just modifier then
-        Parser.map
-            (\() ->
-                case
-                    Array.append state.rest (parserHelper state)
-                        |> Array.toList
-                        |> List.Nonempty.fromList
-                of
-                    Just nonempty ->
-                        Done (Array.fromList [ container nonempty ])
-
-                    Nothing ->
-                        NormalText (String.Nonempty.head symbol) (String.Nonempty.tail symbol)
-                            |> List.singleton
-                            |> Array.fromList
-                            |> Done
-            )
-            (Parser.symbol symbolText)
-
-    else if List.member modifier modifiers then
-        getRemainingText
-            |> Parser.andThen
-                (\remainingText ->
-                    if String.startsWith symbolText remainingText then
-                        discordBailOut state modifiers |> Parser.succeed
-
-                    else
-                        Parser.backtrackable (Parser.problem "")
-                )
-
-    else
-        Parser.succeed identity
-            |. Parser.symbol symbolText
-            |= Parser.oneOf
-                [ if noTrailingWhitespace then
-                    getRemainingText
-                        |> Parser.andThen
-                            (\remainingText ->
-                                if
-                                    String.startsWith symbolText remainingText
-                                        || String.startsWith " " remainingText
-                                then
-                                    Parser.backtrackable (Parser.problem "")
-
-                                else
-                                    Parser.map
-                                        (\a ->
-                                            Loop
-                                                { current = Array.empty
-                                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
-                                                }
-                                        )
-                                        (discordParser (modifier :: modifiers))
-                            )
-
-                  else
-                    Parser.map
-                        (\a ->
-                            Loop
-                                { current = Array.empty
-                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
-                                }
-                        )
-                        (discordParser (modifier :: modifiers))
-                , Loop { current = Array.push symbolText state.current, rest = state.rest }
-                    |> Parser.succeed
-                ]
-
-
-discordBailOut :
-    LoopState (Discord.Id Discord.UserId)
-    -> List DiscordModifiers
-    -> Step state (Array (RichText (Discord.Id Discord.UserId)))
-discordBailOut state modifiers =
-    Array.append
-        (case modifiers of
+    { nodes =
+        case modifiers of
             head :: _ ->
                 let
                     (NonemptyString char rest) =
                         discordModifierToSymbol head
                 in
-                Array.fromList [ NormalText char rest ]
+                NormalText char rest :: finalNodes
 
             [] ->
-                Array.empty
-        )
-        (Array.append state.rest (parserHelper state))
-        |> Done
+                finalNodes
+    , nextIndex = index
+    }
+
+
+tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )
+tryParseDiscordMention source index len =
+    let
+        afterLt =
+            index + 1
+    in
+    if afterLt < len && String.slice afterLt (afterLt + 1) source == "@" then
+        let
+            afterAt =
+                afterLt + 1
+
+            afterBang =
+                if afterAt < len && String.slice afterAt (afterAt + 1) source == "!" then
+                    afterAt + 1
+
+                else
+                    afterAt
+
+            digitEnd =
+                skipDigits source afterBang len
+        in
+        if digitEnd > afterBang && digitEnd < len && String.slice digitEnd (digitEnd + 1) source == ">" then
+            case UInt64.fromString (String.slice afterBang digitEnd source) of
+                Just discordUserId ->
+                    Just ( Discord.idFromUInt64 discordUserId, digitEnd + 1 )
+
+                Nothing ->
+                    Nothing
+
+        else
+            Nothing
+
+    else
+        Nothing
+
+
+skipDiscordNormalChars : String -> Int -> Int -> Int
+skipDiscordNormalChars source index len =
+    if index >= len then
+        index
+
+    else
+        let
+            c =
+                String.slice index (index + 1) source
+        in
+        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" then
+            index
+
+        else
+            skipDiscordNormalChars source (index + 1) len
