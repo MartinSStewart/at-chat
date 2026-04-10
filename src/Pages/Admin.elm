@@ -68,6 +68,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
+import Sticker
 import Table
 import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
@@ -1331,6 +1332,7 @@ view isMobile2 version local adminData user model =
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , filesSection user adminData
+            , stickersSection local user
             , toBackendLogsSection user adminData
             , exportSection user model
             ]
@@ -1390,6 +1392,112 @@ filesSection user adminData =
         user.expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+
+
+stickersSection : LocalState -> BackendUser -> Element Msg
+stickersSection local user =
+    let
+        stickers =
+            local.localUser.stickers
+
+        stickerCount =
+            SeqDict.size stickers
+
+        formatCounts =
+            SeqDict.foldl
+                (\_ stickerData acc ->
+                    let
+                        formatStr =
+                            stickerFormatToString stickerData.format
+                    in
+                    SeqDict.update formatStr
+                        (\maybe ->
+                            case maybe of
+                                Just count ->
+                                    Just (count + 1)
+
+                                Nothing ->
+                                    Just 1
+                        )
+                        acc
+                )
+                SeqDict.empty
+                stickers
+
+        urlTypeCounts =
+            SeqDict.foldl
+                (\_ stickerData acc ->
+                    let
+                        urlTypeStr =
+                            stickerUrlToString stickerData.url
+                    in
+                    SeqDict.update urlTypeStr
+                        (\maybe ->
+                            case maybe of
+                                Just count ->
+                                    Just (count + 1)
+
+                                Nothing ->
+                                    Just 1
+                        )
+                        acc
+                )
+                SeqDict.empty
+                stickers
+    in
+    section
+        8
+        user.expandedSections
+        StickersSection
+        [ Ui.text ("Sticker count: " ++ String.fromInt stickerCount)
+        , Ui.column
+            [ Ui.spacing 2 ]
+            (Ui.el [ Ui.Font.bold ] (Ui.text "By format:")
+                :: List.map
+                    (\( format, count ) ->
+                        Ui.text ("  " ++ format ++ ": " ++ String.fromInt count)
+                    )
+                    (SeqDict.toList formatCounts)
+            )
+        , Ui.column
+            [ Ui.spacing 2 ]
+            (Ui.el [ Ui.Font.bold ] (Ui.text "By URL type:")
+                :: List.map
+                    (\( urlType, count ) ->
+                        Ui.text ("  " ++ urlType ++ ": " ++ String.fromInt count)
+                    )
+                    (SeqDict.toList urlTypeCounts)
+            )
+        ]
+
+
+stickerFormatToString : Discord.StickerFormatType -> String
+stickerFormatToString format =
+    case format of
+        Discord.PngFormat ->
+            "PNG"
+
+        Discord.ApngFormat ->
+            "APNG"
+
+        Discord.LottieFormat ->
+            "Lottie"
+
+        Discord.GifFormat ->
+            "GIF"
+
+
+stickerUrlToString : Sticker.StickerUrl -> String
+stickerUrlToString url =
+    case url of
+        Sticker.StickerInternal _ _ ->
+            "Internal"
+
+        Sticker.DiscordStandardSticker _ ->
+            "Discord Standard"
+
+        Sticker.StickerLoading ->
+            "Loading"
 
 
 toBackendLogsSection : BackendUser -> AdminData -> Element Msg

@@ -422,6 +422,7 @@ type AdminUiSection
     | ConnectionsSection
     | FilesSection
     | ToBackendLogsSection
+    | StickersSection
 
 
 sectionToString : AdminUiSection -> String
@@ -459,6 +460,9 @@ sectionToString section2 =
 
         ToBackendLogsSection ->
             "ToBackend logs"
+
+        StickersSection ->
+            "Stickers"
 
 
 {-| User containing only publicly visible data
