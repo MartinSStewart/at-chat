@@ -132,16 +132,6 @@ type Language
     | NoLanguage
 
 
-normalTextFromString : String -> Maybe (RichText userId)
-normalTextFromString text =
-    case String.uncons text of
-        Just ( head, rest ) ->
-            NormalText head rest |> Just
-
-        Nothing ->
-            Nothing
-
-
 normalTextFromNonempty : NonemptyString -> RichText userId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
@@ -1810,7 +1800,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                                         ]
 
                                                 _ ->
-                                                    fileDownloadView fileData
+                                                    fileDownloadView state.spoiler fileData
                                            ]
 
                                 Nothing ->
@@ -2198,19 +2188,30 @@ inlineEmbedView showLargeContent onPressUrl domainWhitelist url =
         ]
 
 
-fileDownloadView : FileData -> Html msg
-fileDownloadView fileData =
+fileDownloadView : Bool -> FileData -> Html msg
+fileDownloadView isSpoilered fileData =
     let
         fileUrl =
             FileStatus.fileUrl fileData.contentType fileData.fileHash
     in
     Html.a
         [ Html.Attributes.style "max-width" "284px"
-        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+        , Html.Attributes.style
+            "background-color"
+            (if isSpoilered then
+                "rgb(0,0,0)"
+
+             else
+                MyUi.colorToStyle MyUi.background1
+            )
         , Html.Attributes.style "border-radius" "4px"
         , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
         , Html.Attributes.style "display" "block"
-        , Html.Attributes.href fileUrl
+        , if isSpoilered then
+            Html.Attributes.style "color" "transparent"
+
+          else
+            Html.Attributes.href fileUrl
         , Html.Attributes.target "_blank"
         , Html.Attributes.rel "noreferrer"
         , Html.Attributes.style "font-size" "14px"
@@ -2221,6 +2222,7 @@ fileDownloadView fileData =
         , Html.div
             [ Html.Attributes.style "display" "inline-block"
             , Html.Attributes.style "transform" "translateY(4px)"
+            , htmlAttrIf isSpoilered (Html.Attributes.style "opacity" "0")
             ]
             [ Icons.download ]
         ]

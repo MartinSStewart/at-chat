@@ -13,6 +13,8 @@ import Effect.Http as Http
 import Email.Html
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (Embed(..))
+import FileName
+import FileStatus exposing (FileData, FileId)
 import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
@@ -24,7 +26,7 @@ import MyUi
 import OneOrGreater
 import Postmark
 import RichText exposing (Domain, RichText(..))
-import SeqDict
+import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString(..))
@@ -37,7 +39,7 @@ import Unsafe
 main : Html ()
 main =
     Ui.layout
-        [ Ui.Font.color MyUi.font1, Ui.background MyUi.background1 ]
+        [ Ui.Font.color MyUi.font1, Ui.background MyUi.background1, Ui.behindContent (Ui.html MyUi.css), Ui.scrollable, MyUi.prewrap ]
         (Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ Ui.column
@@ -54,6 +56,40 @@ main =
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
                 [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Embeds")
                 , embedExamples SeqSet.empty
+                ]
+            , Ui.column
+                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Attachments")
+                , RichText.view
+                    (Dom.id "richText")
+                    800
+                    (\_ -> ())
+                    (\_ -> ())
+                    { domainWhitelist = SeqSet.empty
+                    , revealedSpoilers = SeqSet.fromList [ 1, 3 ]
+                    , users = SeqDict.empty
+                    , attachedFiles = attachments
+                    , stickers = stickers
+                    , animationMode = Sticker.LoopForever
+                    }
+                    Array.empty
+                    (Nonempty
+                        (NormalText 'F' "ile without spoiler")
+                        [ AttachedFile (Id.fromInt 1)
+                        , NormalText '\n' "File with spoiler"
+                        , Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) [])
+                        , NormalText '\n' "File with spoiler revealed"
+                        , Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) [])
+                        , NormalText '\n' "Image without spoiler"
+                        , AttachedFile (Id.fromInt 2)
+                        , NormalText '\n' "Image with spoiler"
+                        , Spoiler (Nonempty (AttachedFile (Id.fromInt 2)) [])
+                        , NormalText '\n' "Image with spoiler revealed"
+                        , Spoiler (Nonempty (AttachedFile (Id.fromInt 2)) [])
+                        ]
+                    )
+                    |> Html.div []
+                    |> Ui.html
                 ]
             , Ui.column
                 [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
@@ -125,7 +161,43 @@ main =
         )
 
 
-stickers : SeqDict.SeqDict (Id StickerId) StickerData
+attachments : SeqDict (Id FileId) FileData
+attachments =
+    SeqDict.fromList
+        [ ( Id.fromInt 1
+          , { fileName = FileName.fromString "file.json"
+            , fileSize = 10000
+            , imageMetadata = Nothing
+            , contentType = FileStatus.jsonContent
+            , fileHash = FileStatus.fileHash "123"
+            }
+          )
+        , ( Id.fromInt 2
+          , { fileName = FileName.fromString "file.json"
+            , fileSize = 1000000
+            , imageMetadata =
+                Just
+                    { imageSize = Coord.xy 200 300
+                    , orientation = Nothing
+                    , gpsLocation = Nothing
+                    , cameraOwner = Nothing
+                    , exposureTime = Nothing
+                    , fNumber = Nothing
+                    , focalLength = Nothing
+                    , isoSpeedRating = Nothing
+                    , make = Nothing
+                    , model = Nothing
+                    , software = Nothing
+                    , userComment = Nothing
+                    }
+            , contentType = FileStatus.pngContent
+            , fileHash = FileStatus.fileHash "123"
+            }
+          )
+        ]
+
+
+stickers : SeqDict (Id StickerId) StickerData
 stickers =
     SeqDict.fromList [ ( Id.fromInt 123, { url = StickerLoading, name = "Mindless", format = Discord.GifFormat } ) ]
 
