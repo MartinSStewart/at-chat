@@ -1254,7 +1254,10 @@ parseMarkdownLink source index len =
                 afterBracket =
                     closeBracket + 1
             in
-            if afterBracket < len && String.slice afterBracket (afterBracket + 1) source == "(" then
+            if String.contains "[" alias then
+                Nothing
+
+            else if afterBracket < len && String.slice afterBracket (afterBracket + 1) source == "(" then
                 case findChar source (afterBracket + 1) len ')' of
                     Just closeParen ->
                         let
@@ -3063,6 +3066,14 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                             modifiers
                             (accText ++ errText)
                             revNodes
+
+            "[" ->
+                case parseMarkdownLink source (index + 1) sourceLength of
+                    Just ( alias, url, nextIndex ) ->
+                        discordParseLoop source nextIndex sourceLength modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+
+                    Nothing ->
+                        discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "[") revNodes
 
             _ ->
                 let
