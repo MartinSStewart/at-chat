@@ -38,6 +38,7 @@ stringFuzzer =
         , "~"
         , "_"
         , " "
+        , "https://"
         , "https://abc.com"
         , "http://abc.com"
         , "https://abc.com/"
@@ -190,6 +191,13 @@ test =
             "@a @a1"
             (Nonempty (UserMention (Id.fromInt 123)) [ NormalText ' ' "", UserMention (Id.fromInt 1234) ])
         , fromNonemptyStringTest "https://example.com/" (Nonempty (Hyperlink (unsafeUrl "https://example.com/")) [])
+        , fromNonemptyStringTest "ahttps://example.com/" (Nonempty (NormalText 'a' "") [ Hyperlink (unsafeUrl "https://example.com/") ])
+        , fromNonemptyStringTest
+            "_https://example.com/_"
+            (Nonempty
+                (Italic (Nonempty (Hyperlink (unsafeUrl "https://example.com/")) []))
+                []
+            )
         , fromNonemptyStringTest
             "http://example.com/"
             (Nonempty

@@ -5,6 +5,7 @@ import Expect
 import List.Nonempty exposing (Nonempty(..))
 import RichText exposing (RichText(..))
 import SeqDict
+import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
 import Unsafe
 import Url exposing (Url)
@@ -92,7 +93,7 @@ basicFormattingTests =
                         ]
 
         --, fromNonemptyStringTest "[link](https://abc.com/)" (Nonempty (MarkdownLink (NonemptyString 'l' "ink") (unsafeUrl "https://abc.com")) [])
-        --, fromNonemptyStringTest "_https://abc.com/_" (Nonempty (Italic (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [])) [])
+        , fromNonemptyStringTest "_https://abc.com/_" (Nonempty (Italic (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [])) [])
         , fromNonemptyStringTest "https://abc.com/," (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [ NormalText ',' "" ])
         , fromNonemptyStringTest "https://abc.com/:" (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [ NormalText ':' "" ])
 

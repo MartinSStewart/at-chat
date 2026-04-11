@@ -776,8 +776,8 @@ parseLoop :
     -> String
     -> List (RichText userId)
     -> { nodes : List (RichText userId), nextIndex : Int }
-parseLoop source index len users modifiers accText revNodes =
-    if index >= len then
+parseLoop source index sourceLength users modifiers accText revNodes =
+    if index >= sourceLength then
         finalizeResult accText revNodes modifiers index
 
     else
@@ -785,10 +785,10 @@ parseLoop source index len users modifiers accText revNodes =
             "\n" ->
                 case parseStickerId (index + 1) source of
                     ( index2, Just stickerId ) ->
-                        parseLoop source index2 len users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                        parseLoop source index2 sourceLength users modifiers "" (Sticker stickerId :: flushText accText revNodes)
 
                     ( _, Nothing ) ->
-                        parseLoop source (index + 1) len users modifiers (accText ++ "\n") revNodes
+                        parseLoop source (index + 1) sourceLength users modifiers (accText ++ "\n") revNodes
 
             "\\" ->
                 let
@@ -799,13 +799,13 @@ parseLoop source index len users modifiers accText revNodes =
                     Just nextChar ->
                         case Dict.get nextChar charToEscaped of
                             Just escaped ->
-                                parseLoop source (afterBackslash + 1) len users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+                                parseLoop source (afterBackslash + 1) sourceLength users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
                             Nothing ->
-                                parseLoop source (afterBackslash + 1) len users modifiers (accText ++ "\\" ++ nextChar) revNodes
+                                parseLoop source (afterBackslash + 1) sourceLength users modifiers (accText ++ "\\" ++ nextChar) revNodes
 
                     Nothing ->
-                        parseLoop source afterBackslash len users modifiers (accText ++ "\\") revNodes
+                        parseLoop source afterBackslash sourceLength users modifiers (accText ++ "\\") revNodes
 
             "@" ->
                 let
@@ -813,14 +813,14 @@ parseLoop source index len users modifiers accText revNodes =
                         index + 1
 
                     remaining =
-                        String.slice afterAt len source
+                        String.slice afterAt sourceLength source
                 in
                 case tryMatchUser users remaining of
                     Just ( userId, matchLen ) ->
-                        parseLoop source (afterAt + matchLen) len users modifiers "" (UserMention userId :: flushText accText revNodes)
+                        parseLoop source (afterAt + matchLen) sourceLength users modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
-                        parseLoop source afterAt len users modifiers (accText ++ "@") revNodes
+                        parseLoop source afterAt sourceLength users modifiers (accText ++ "@") revNodes
 
             "*" ->
                 let
@@ -839,7 +839,7 @@ parseLoop source index len users modifiers accText revNodes =
                             String.slice afterSymbol (afterSymbol + 1) source
                     in
                     if nextChar == "*" || nextChar == " " then
-                        parseLoop source afterSymbol len users modifiers (accText ++ "*") revNodes
+                        parseLoop source afterSymbol sourceLength users modifiers (accText ++ "*") revNodes
 
                     else
                         let
@@ -847,16 +847,16 @@ parseLoop source index len users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol len users (IsBold :: modifiers)
+                                parseInner source afterSymbol sourceLength users (IsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 4) source == "____" then
-                    parseLoop source (index + 4) len users modifiers (accText ++ "____") revNodes
+                    parseLoop source (index + 4) sourceLength users modifiers (accText ++ "____") revNodes
 
                 else if String.slice index (index + 2) source == "__" then
                     let
@@ -875,12 +875,12 @@ parseLoop source index len users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol len users (IsUnderlined :: modifiers)
+                                parseInner source afterSymbol sourceLength users (IsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
                 else
                     let
@@ -899,16 +899,16 @@ parseLoop source index len users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol len users (IsItalic :: modifiers)
+                                parseInner source afterSymbol sourceLength users (IsItalic :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
             "~" ->
                 if String.slice index (index + 4) source == "~~~~" then
-                    parseLoop source (index + 4) len users modifiers (accText ++ "~~~~") revNodes
+                    parseLoop source (index + 4) sourceLength users modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
                     let
@@ -927,19 +927,19 @@ parseLoop source index len users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol len users (IsStrikethrough :: modifiers)
+                                parseInner source afterSymbol sourceLength users (IsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
                 else
-                    parseLoop source (index + 1) len users modifiers (accText ++ "~") revNodes
+                    parseLoop source (index + 1) sourceLength users modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if String.slice index (index + 4) source == "||||" then
-                    parseLoop source (index + 4) len users modifiers (accText ++ "||||") revNodes
+                    parseLoop source (index + 4) sourceLength users modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
                     let
@@ -958,19 +958,19 @@ parseLoop source index len users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol len users (IsSpoilered :: modifiers)
+                                parseInner source afterSymbol sourceLength users (IsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex len users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
                 else
-                    parseLoop source (index + 1) len users modifiers (accText ++ "|") revNodes
+                    parseLoop source (index + 1) sourceLength users modifiers (accText ++ "|") revNodes
 
             "`" ->
                 if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) len "```" of
+                    case findSubstring source (index + 3) sourceLength "```" of
                         Just closeIndex ->
                             let
                                 content =
@@ -981,14 +981,14 @@ parseLoop source index len users modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
-                                    parseLoop source (closeIndex + 3) len users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                    parseLoop source (closeIndex + 3) sourceLength users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
                                 Nothing ->
-                                    parseLoop source (closeIndex + 3) len users modifiers (accText ++ "``````") revNodes
+                                    parseLoop source (closeIndex + 3) sourceLength users modifiers (accText ++ "``````") revNodes
 
                         Nothing ->
                             -- No closing ```, try inline code
-                            case findSingleBacktick source (index + 1) len of
+                            case findSingleBacktick source (index + 1) sourceLength of
                                 Just closeIndex ->
                                     let
                                         content =
@@ -996,16 +996,16 @@ parseLoop source index len users modifiers accText revNodes =
                                     in
                                     case String.Nonempty.fromString content of
                                         Just a ->
-                                            parseLoop source (closeIndex + 1) len users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                            parseLoop source (closeIndex + 1) sourceLength users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                         Nothing ->
-                                            parseLoop source (closeIndex + 1) len users modifiers (accText ++ "``") revNodes
+                                            parseLoop source (closeIndex + 1) sourceLength users modifiers (accText ++ "``") revNodes
 
                                 Nothing ->
-                                    parseLoop source (index + 1) len users modifiers (accText ++ "`") revNodes
+                                    parseLoop source (index + 1) sourceLength users modifiers (accText ++ "`") revNodes
 
                 else
-                    case findSingleBacktick source (index + 1) len of
+                    case findSingleBacktick source (index + 1) sourceLength of
                         Just closeIndex ->
                             let
                                 content =
@@ -1013,87 +1013,59 @@ parseLoop source index len users modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString content of
                                 Just a ->
-                                    parseLoop source (closeIndex + 1) len users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                    parseLoop source (closeIndex + 1) sourceLength users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                 Nothing ->
-                                    parseLoop source (closeIndex + 1) len users modifiers (accText ++ "``") revNodes
+                                    parseLoop source (closeIndex + 1) sourceLength users modifiers (accText ++ "``") revNodes
 
                         Nothing ->
-                            parseLoop source (index + 1) len users modifiers (accText ++ "`") revNodes
+                            parseLoop source (index + 1) sourceLength users modifiers (accText ++ "`") revNodes
 
             "h" ->
-                if String.slice index (index + 8) source == "https://" then
-                    let
-                        protocolEnd =
-                            index + 8
+                case parseUrlBody modifierToSymbol modifiers index source of
+                    Ok url ->
+                        parseLoop
+                            source
+                            (index + String.length (Url.toString url))
+                            sourceLength
+                            users
+                            modifiers
+                            ""
+                            (Hyperlink url :: flushText accText revNodes)
 
-                        urlEnd =
-                            skipUrlChars source protocolEnd len
-
-                        urlBody =
-                            String.slice protocolEnd urlEnd source
-
-                        result =
-                            parseUrlBody Https urlBody
-                    in
-                    case result.hyperlink of
-                        Ok url ->
-                            parseLoop source urlEnd len users modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
-
-                        Err errText ->
-                            parseLoop source urlEnd len users modifiers (accText ++ errText ++ result.trailing) revNodes
-
-                else if String.slice index (index + 7) source == "http://" then
-                    let
-                        protocolEnd =
-                            index + 7
-
-                        urlEnd =
-                            skipUrlChars source protocolEnd len
-
-                        urlBody =
-                            String.slice protocolEnd urlEnd source
-
-                        result =
-                            parseUrlBody Http urlBody
-                    in
-                    case result.hyperlink of
-                        Ok url ->
-                            parseLoop source urlEnd len users modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
-
-                        Err errText ->
-                            parseLoop source urlEnd len users modifiers (accText ++ errText ++ result.trailing) revNodes
-
-                else
-                    let
-                        nextIndex =
-                            skipNormalChars source (index + 1) len
-                    in
-                    parseLoop source nextIndex len users modifiers (accText ++ String.slice index nextIndex source) revNodes
+                    Err errText ->
+                        parseLoop
+                            source
+                            (index + String.length errText)
+                            sourceLength
+                            users
+                            modifiers
+                            (accText ++ errText)
+                            revNodes
 
             "[" ->
                 if String.slice index (index + 2) source == "[!" then
-                    case parseFileId source (index + 2) len of
+                    case parseFileId source (index + 2) sourceLength of
                         Just ( fileId, nextIndex ) ->
-                            parseLoop source nextIndex len users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
+                            parseLoop source nextIndex sourceLength users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
+                            parseLoop source (index + 1) sourceLength users modifiers (accText ++ "[") revNodes
 
                 else
-                    case parseMarkdownLink source (index + 1) len of
+                    case parseMarkdownLink source (index + 1) sourceLength of
                         Just ( alias, url, nextIndex ) ->
-                            parseLoop source nextIndex len users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+                            parseLoop source nextIndex sourceLength users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop source (index + 1) len users modifiers (accText ++ "[") revNodes
+                            parseLoop source (index + 1) sourceLength users modifiers (accText ++ "[") revNodes
 
             _ ->
                 let
                     nextIndex =
-                        skipNormalChars source (index + 1) len
+                        skipNormalChars source (index + 1) sourceLength
                 in
-                parseLoop source nextIndex len users modifiers (accText ++ String.slice index nextIndex source) revNodes
+                parseLoop source nextIndex sourceLength users modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
 tryMatchUser : SeqDict userId { a | name : PersonName } -> String -> Maybe ( userId, Int )
@@ -1115,65 +1087,84 @@ tryMatchUser users remaining =
         |> List.head
 
 
-parseUrlBody : Protocol -> String -> { hyperlink : Result String Url, trailing : String }
-parseUrlBody protocol urlBody =
+parseUrlBody : (modifier -> NonemptyString) -> List modifier -> Int -> String -> Result String Url
+parseUrlBody modifierToString modifiers index source =
     let
-        urlBodyLen =
-            String.length urlBody
+        protocolResult =
+            if String.slice index (index + 8) source == "https://" then
+                Ok ( Https, index + 8 )
 
-        ( trimIdx, _ ) =
-            String.foldr
-                (\char ( idx, stop ) ->
-                    if stop then
-                        ( idx, True )
-
-                    else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' then
-                        ( idx - 1, False )
-
-                    else
-                        ( idx, True )
-                )
-                ( urlBodyLen, False )
-                urlBody
-
-        protocolStr =
-            case protocol of
-                Http ->
-                    "http://"
-
-                Https ->
-                    "https://"
-
-        urlText =
-            protocolStr ++ String.slice 0 trimIdx urlBody
-
-        trailing =
-            String.slice trimIdx urlBodyLen urlBody
-    in
-    case Url.fromString urlText of
-        Just url ->
-            let
-                url2 =
-                    { url | protocol = protocol }
-
-                urlNoPath =
-                    { url2 | path = "" }
-            in
-            -- This is a hack to get the url decode to exactly match the user's input
-            -- Otherwise what the user is typing will get out of sync in the case they type http://google.com?query and it gets decoded to http://google.com/?query
-            if Url.toString urlNoPath == urlText then
-                { hyperlink = Ok urlNoPath, trailing = trailing }
+            else if String.slice index (index + 7) source == "http://" then
+                Ok ( Http, index + 7 )
 
             else
-                { hyperlink = Ok url2, trailing = trailing }
+                Err ()
+    in
+    case protocolResult of
+        Ok ( protocol, protocolEnd ) ->
+            let
+                urlEnd =
+                    skipUrlChars source protocolEnd (String.length source)
 
-        Nothing ->
-            { hyperlink = Err urlText, trailing = trailing }
+                urlBody =
+                    String.slice protocolEnd urlEnd source
+
+                urlBodyLen =
+                    String.length urlBody
+
+                ( trimIdx, _ ) =
+                    String.foldr
+                        (\char ( idx, stop ) ->
+                            if stop then
+                                ( idx, True )
+
+                            else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' then
+                                ( idx - 1, False )
+
+                            else
+                                ( idx, True )
+                        )
+                        ( urlBodyLen, False )
+                        urlBody
+
+                protocolStr =
+                    case protocol of
+                        Http ->
+                            "http://"
+
+                        Https ->
+                            "https://"
+
+                urlText =
+                    protocolStr ++ String.slice 0 trimIdx urlBody
+            in
+            case Url.fromString urlText of
+                Just url ->
+                    let
+                        url2 =
+                            { url | protocol = protocol }
+
+                        urlNoPath =
+                            { url2 | path = "" }
+                    in
+                    -- This is a hack to get the url decode to exactly match the user's input
+                    -- Otherwise what the user is typing will get out of sync in the case they type http://google.com?query and it gets decoded to http://google.com/?query
+                    if Url.toString urlNoPath == urlText then
+                        Ok urlNoPath
+
+                    else
+                        Ok url2
+
+                Nothing ->
+                    Err urlText
+
+        Err () ->
+            Err "h"
 
 
 skipUrlChars : String -> Int -> Int -> Int
-skipUrlChars source index len =
-    if index >= len then
+skipUrlChars source index sourceLength =
+    if index >= sourceLength then
         index
 
     else
@@ -1185,7 +1176,7 @@ skipUrlChars source index len =
             index
 
         else
-            skipUrlChars source (index + 1) len
+            skipUrlChars source (index + 1) sourceLength
 
 
 parseCodeBlockContent : String -> ( Language, String )
@@ -2754,8 +2745,8 @@ discordParseLoop :
     -> String
     -> List (RichText (Discord.Id Discord.UserId))
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordParseLoop source index len modifiers accText revNodes =
-    if index >= len then
+discordParseLoop source index sourceLength modifiers accText revNodes =
+    if index >= sourceLength then
         discordFinalizeResult accText revNodes modifiers index
 
     else
@@ -2768,21 +2759,21 @@ discordParseLoop source index len modifiers accText revNodes =
                 case stringAt afterBackslash source of
                     Just nextChar ->
                         if Set.member nextChar discordEscapableChars then
-                            discordParseLoop source (afterBackslash + 1) len modifiers (accText ++ nextChar) revNodes
+                            discordParseLoop source (afterBackslash + 1) sourceLength modifiers (accText ++ nextChar) revNodes
 
                         else
-                            discordParseLoop source (afterBackslash + 1) len modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            discordParseLoop source (afterBackslash + 1) sourceLength modifiers (accText ++ "\\" ++ nextChar) revNodes
 
                     Nothing ->
-                        discordParseLoop source afterBackslash len modifiers (accText ++ "\\") revNodes
+                        discordParseLoop source afterBackslash sourceLength modifiers (accText ++ "\\") revNodes
 
             "<" ->
-                case tryParseDiscordMention source index len of
+                case tryParseDiscordMention source index sourceLength of
                     Just ( userId, nextIndex ) ->
-                        discordParseLoop source nextIndex len modifiers "" (UserMention userId :: flushText accText revNodes)
+                        discordParseLoop source nextIndex sourceLength modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
-                        discordParseLoop source (index + 1) len modifiers (accText ++ "<") revNodes
+                        discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "<") revNodes
 
             "*" ->
                 if String.slice index (index + 2) source == "**" then
@@ -2802,12 +2793,12 @@ discordParseLoop source index len modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol len (DiscordIsBold :: modifiers)
+                                discordParseInner source afterSymbol sourceLength (DiscordIsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
                 else
                     let
@@ -2826,7 +2817,7 @@ discordParseLoop source index len modifiers accText revNodes =
                                 String.slice afterSymbol (afterSymbol + 1) source
                         in
                         if nextChar == "*" || nextChar == " " then
-                            discordParseLoop source afterSymbol len modifiers (accText ++ "*") revNodes
+                            discordParseLoop source afterSymbol sourceLength modifiers (accText ++ "*") revNodes
 
                         else
                             let
@@ -2834,12 +2825,12 @@ discordParseLoop source index len modifiers accText revNodes =
                                     flushText accText revNodes
 
                                 inner =
-                                    discordParseInner source afterSymbol len (DiscordIsItalic :: modifiers)
+                                    discordParseInner source afterSymbol sourceLength (DiscordIsItalic :: modifiers)
 
                                 newRevNodes =
                                     List.foldl (\node acc -> node :: acc) flushed inner.nodes
                             in
-                            discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+                            discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 2) source == "__" then
@@ -2859,12 +2850,12 @@ discordParseLoop source index len modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol len (DiscordIsUnderlined :: modifiers)
+                                discordParseInner source afterSymbol sourceLength (DiscordIsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
                 else
                     let
@@ -2883,12 +2874,12 @@ discordParseLoop source index len modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol len (DiscordIsItalic2 :: modifiers)
+                                discordParseInner source afterSymbol sourceLength (DiscordIsItalic2 :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
             "~" ->
                 if String.slice index (index + 2) source == "~~" then
@@ -2908,15 +2899,15 @@ discordParseLoop source index len modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol len (DiscordIsStrikethrough :: modifiers)
+                                discordParseInner source afterSymbol sourceLength (DiscordIsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
                 else
-                    discordParseLoop source (index + 1) len modifiers (accText ++ "~") revNodes
+                    discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if String.slice index (index + 2) source == "||" then
@@ -2936,19 +2927,19 @@ discordParseLoop source index len modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol len (DiscordIsSpoilered :: modifiers)
+                                discordParseInner source afterSymbol sourceLength (DiscordIsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex len modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
                 else
-                    discordParseLoop source (index + 1) len modifiers (accText ++ "|") revNodes
+                    discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "|") revNodes
 
             "`" ->
                 if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) len "```" of
+                    case findSubstring source (index + 3) sourceLength "```" of
                         Just closeIndex ->
                             let
                                 content =
@@ -2976,13 +2967,13 @@ discordParseLoop source index len modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
-                                    discordParseLoop source (closeIndex + 3) len modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                    discordParseLoop source (closeIndex + 3) sourceLength modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
                                 Nothing ->
-                                    discordParseLoop source (closeIndex + 3) len modifiers (accText ++ "``````") revNodes
+                                    discordParseLoop source (closeIndex + 3) sourceLength modifiers (accText ++ "``````") revNodes
 
                         Nothing ->
-                            case findSingleBacktick source (index + 1) len of
+                            case findSingleBacktick source (index + 1) sourceLength of
                                 Just closeIndex ->
                                     let
                                         content =
@@ -2990,16 +2981,16 @@ discordParseLoop source index len modifiers accText revNodes =
                                     in
                                     case String.Nonempty.fromString content of
                                         Just a ->
-                                            discordParseLoop source (closeIndex + 1) len modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                            discordParseLoop source (closeIndex + 1) sourceLength modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                         Nothing ->
-                                            discordParseLoop source (closeIndex + 1) len modifiers (accText ++ "``") revNodes
+                                            discordParseLoop source (closeIndex + 1) sourceLength modifiers (accText ++ "``") revNodes
 
                                 Nothing ->
-                                    discordParseLoop source (index + 1) len modifiers (accText ++ "`") revNodes
+                                    discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "`") revNodes
 
                 else
-                    case findSingleBacktick source (index + 1) len of
+                    case findSingleBacktick source (index + 1) sourceLength of
                         Just closeIndex ->
                             let
                                 content =
@@ -3007,70 +2998,40 @@ discordParseLoop source index len modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString content of
                                 Just a ->
-                                    discordParseLoop source (closeIndex + 1) len modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                    discordParseLoop source (closeIndex + 1) sourceLength modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                 Nothing ->
-                                    discordParseLoop source (closeIndex + 1) len modifiers (accText ++ "``") revNodes
+                                    discordParseLoop source (closeIndex + 1) sourceLength modifiers (accText ++ "``") revNodes
 
                         Nothing ->
-                            discordParseLoop source (index + 1) len modifiers (accText ++ "`") revNodes
+                            discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "`") revNodes
 
             "h" ->
-                if String.slice index (index + 8) source == "https://" then
-                    let
-                        protocolEnd =
-                            index + 8
+                case parseUrlBody discordModifierToSymbol modifiers index source of
+                    Ok url ->
+                        discordParseLoop
+                            source
+                            (index + String.length (Url.toString url))
+                            sourceLength
+                            modifiers
+                            ""
+                            (Hyperlink url :: flushText accText revNodes)
 
-                        urlEnd =
-                            skipUrlChars source protocolEnd len
-
-                        urlBody =
-                            String.slice protocolEnd urlEnd source
-
-                        result =
-                            parseUrlBody Https urlBody
-                    in
-                    case result.hyperlink of
-                        Ok url ->
-                            discordParseLoop source urlEnd len modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
-
-                        Err errText ->
-                            discordParseLoop source urlEnd len modifiers (accText ++ errText ++ result.trailing) revNodes
-
-                else if String.slice index (index + 7) source == "http://" then
-                    let
-                        protocolEnd =
-                            index + 7
-
-                        urlEnd =
-                            skipUrlChars source protocolEnd len
-
-                        urlBody =
-                            String.slice protocolEnd urlEnd source
-
-                        result =
-                            parseUrlBody Http urlBody
-                    in
-                    case result.hyperlink of
-                        Ok url ->
-                            discordParseLoop source urlEnd len modifiers result.trailing (Hyperlink url :: flushText accText revNodes)
-
-                        Err errText ->
-                            discordParseLoop source urlEnd len modifiers (accText ++ errText ++ result.trailing) revNodes
-
-                else
-                    let
-                        nextIndex =
-                            skipDiscordNormalChars source (index + 1) len
-                    in
-                    discordParseLoop source nextIndex len modifiers (accText ++ String.slice index nextIndex source) revNodes
+                    Err errText ->
+                        discordParseLoop
+                            source
+                            (index + String.length errText)
+                            sourceLength
+                            modifiers
+                            (accText ++ errText)
+                            revNodes
 
             _ ->
                 let
                     nextIndex =
-                        skipDiscordNormalChars source (index + 1) len
+                        skipDiscordNormalChars source (index + 1) sourceLength
                 in
-                discordParseLoop source nextIndex len modifiers (accText ++ String.slice index nextIndex source) revNodes
+                discordParseLoop source nextIndex sourceLength modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
 toDiscord :
