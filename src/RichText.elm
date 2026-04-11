@@ -1112,13 +1112,16 @@ parseUrlBody modifierToString modifiers index source =
                 urlBodyLen =
                     String.length urlBody
 
+                modifierChars =
+                    List.map (\modifier -> modifierToString modifier |> String.Nonempty.head) modifiers |> Set.fromList
+
                 ( trimIdx, _ ) =
                     String.foldr
                         (\char ( idx, stop ) ->
                             if stop then
                                 ( idx, True )
 
-                            else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' then
+                            else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' || Set.member char modifierChars then
                                 ( idx - 1, False )
 
                             else

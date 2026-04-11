@@ -194,10 +194,8 @@ test =
         , fromNonemptyStringTest "ahttps://example.com/" (Nonempty (NormalText 'a' "") [ Hyperlink (unsafeUrl "https://example.com/") ])
         , fromNonemptyStringTest
             "_https://example.com/_"
-            (Nonempty
-                (Italic (Nonempty (Hyperlink (unsafeUrl "https://example.com/")) []))
-                []
-            )
+            (Nonempty (Italic (Nonempty (Hyperlink (unsafeUrl "https://example.com/")) [])) [])
+        , fromNonemptyStringTest "https://example.com/_" (Nonempty (Hyperlink (unsafeUrl "https://example.com/_")) [])
         , fromNonemptyStringTest
             "http://example.com/"
             (Nonempty
