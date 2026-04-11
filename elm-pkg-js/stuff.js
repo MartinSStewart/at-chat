@@ -78,7 +78,8 @@ exports.init = async function init(app)
               renderer: 'canvas',
               loop: true,
               autoplay: true,
-              path: src
+              path: src,
+              rendererSettings: { runExpressions: false }
             });
 
             this._playIndex += 1;
