@@ -1018,25 +1018,34 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                 in
                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
                                     Ok ( _, channel4 ) ->
-                                        ( { model
-                                            | discordGuilds =
-                                                SeqDict.insert
-                                                    discordGuildId
-                                                    { guild
-                                                        | channels = SeqDict.insert channelId channel4 guild.channels
-                                                        , membersAndOwner =
-                                                            MembersAndOwner.addMember
-                                                                discordMessage.author.id
-                                                                { joinedAt = Just discordMessage.timestamp }
-                                                                guild.membersAndOwner
-                                                                |> Result.withDefault guild.membersAndOwner
-                                                    }
-                                                    model.discordGuilds
-                                            , discordUsers =
-                                                addDiscordUserData
-                                                    (Discord.userToPartialUser discordMessage.author)
-                                                    model.discordUsers
-                                          }
+                                        let
+                                            userAvatars : Command BackendOnly ToFrontend BackendMsg
+                                            userAvatars =
+                                                getUserAvatars model.discordUsers [ discordMessage.author ]
+
+                                            model2 : BackendModel
+                                            model2 =
+                                                { model
+                                                    | discordGuilds =
+                                                        SeqDict.insert
+                                                            discordGuildId
+                                                            { guild
+                                                                | channels = SeqDict.insert channelId channel4 guild.channels
+                                                                , membersAndOwner =
+                                                                    MembersAndOwner.addMember
+                                                                        discordMessage.author.id
+                                                                        { joinedAt = Just discordMessage.timestamp }
+                                                                        guild.membersAndOwner
+                                                                        |> Result.withDefault guild.membersAndOwner
+                                                            }
+                                                            model.discordGuilds
+                                                    , discordUsers =
+                                                        addDiscordUserData
+                                                            (Discord.userToPartialUser discordMessage.author)
+                                                            model.discordUsers
+                                                }
+                                        in
+                                        ( model2
                                         , Command.batch
                                             [ Broadcast.toDiscordGuild
                                                 discordGuildId
@@ -1048,8 +1057,8 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     (PersonName.fromStringLossy discordMessage.author.username)
                                                     |> ServerChange
                                                 )
-                                                model
-                                            , getUserAvatars model.discordUsers [ discordMessage.author ]
+                                                model2
+                                            , userAvatars
                                             , Broadcast.discordGuildMessageNotification
                                                 SeqSet.empty
                                                 discordMessage.timestamp
@@ -1059,7 +1068,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                 NoThread
                                                 (Nonempty (UserMention discordMessage.author.id) [ NormalText ' ' "joined!" ])
                                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                model
+                                                model2
                                             ]
                                         )
 
