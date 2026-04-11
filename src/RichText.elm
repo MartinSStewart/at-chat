@@ -1749,11 +1749,19 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             , embedIndex2
                             , currentList
                                 ++ [ Html.div
-                                        [ Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                        [ Html.Attributes.style
+                                            "background-color"
+                                            (if state.spoiler then
+                                                "rgb(0,0,0)"
+
+                                             else
+                                                "rgb(90,100,120)"
+                                            )
                                         , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
                                         , Html.Attributes.style "padding" "0 4px 0 4px"
                                         , Html.Attributes.style "border-radius" "4px"
                                         , Html.Attributes.style "font-family" "monospace"
+                                        , htmlAttrIf state.spoiler (Html.Attributes.style "color" "transparent")
                                         ]
                                         [ Html.text text ]
                                    ]
