@@ -88,16 +88,17 @@ basicFormattingTests =
         , Test.test "escaped characters" <|
             \_ ->
                 fromDiscordHelper "\\*Bullet point 1\n\\*Bullet point 2"
-                    |> Expect.equal
-                        [ NormalText '*' "Bullet point 1\n*Bullet point 2"
-                        ]
-
-        --, fromNonemptyStringTest "[link](https://abc.com/)" (Nonempty (MarkdownLink (NonemptyString 'l' "ink") (unsafeUrl "https://abc.com")) [])
+                    |> Expect.equal [ NormalText '*' "Bullet point 1\n*Bullet point 2" ]
+        , fromNonemptyStringTest "[link](https://abc.com/)" (Nonempty (MarkdownLink (NonemptyString 'l' "ink") (unsafeUrl "https://abc.com")) [])
         , fromNonemptyStringTest "_https://abc.com/_" (Nonempty (Italic (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [])) [])
         , fromNonemptyStringTest "https://abc.com/," (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [ NormalText ',' "" ])
         , fromNonemptyStringTest "https://abc.com/:" (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [ NormalText ':' "" ])
-
-        --, fromNonemptyStringTest "<https://abc.com/>" (Nonempty (Hyperlink (unsafeUrl "https://abc.com")) [])
+        , fromNonemptyStringTest "<https://abc.com/>" (Nonempty (Hyperlink (unsafeUrl "https://abc.com/")) [])
+        , fromNonemptyStringTest "https://abc.com/>" (Nonempty (Hyperlink (unsafeUrl "https://abc.com/>")) [])
+        , fromNonemptyStringTest "<https://abc.com/" (Nonempty (NormalText '<' "") [ Hyperlink (unsafeUrl "https://abc.com/") ])
+        , fromNonemptyStringTest "<https://abc.com/,>" (Nonempty (Hyperlink (unsafeUrl "https://abc.com/,")) [])
+        , fromNonemptyStringTest "https://abc.com/,>" (Nonempty (Hyperlink (unsafeUrl "https://abc.com/,>")) [])
+        , fromNonemptyStringTest "<https://abc.com/,>," (Nonempty (Hyperlink (unsafeUrl "https://abc.com/,")) [ NormalText ',' "" ])
         ]
 
 

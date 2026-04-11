@@ -1022,7 +1022,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                             parseLoop source (index + 1) sourceLength users modifiers (accText ++ "`") revNodes
 
             "h" ->
-                case parseUrlBody modifierToSymbol modifiers index source of
+                case parseUrlBody False modifierToSymbol modifiers index source of
                     Ok url ->
                         parseLoop
                             source
@@ -1087,8 +1087,8 @@ tryMatchUser users remaining =
         |> List.head
 
 
-parseUrlBody : (modifier -> NonemptyString) -> List modifier -> Int -> String -> Result String Url
-parseUrlBody modifierToString modifiers index source =
+parseUrlBody : Bool -> (modifier -> NonemptyString) -> List modifier -> Int -> String -> Result String Url
+parseUrlBody startedWithAngleBracket modifierToString modifiers index source =
     let
         protocolResult =
             if String.slice index (index + 8) source == "https://" then
@@ -1123,6 +1123,9 @@ parseUrlBody modifierToString modifiers index source =
 
                             else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' || Set.member char modifierChars then
                                 ( idx - 1, False )
+
+                            else if startedWithAngleBracket && char == '>' then
+                                ( idx - 1, True )
 
                             else
                                 ( idx, True )
@@ -2776,7 +2779,39 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                         discordParseLoop source nextIndex sourceLength modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
-                        discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "<") revNodes
+                        case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
+                            Ok url ->
+                                let
+                                    index2 =
+                                        index + 1 + String.length (Url.toString url)
+                                in
+                                case stringAt index2 source of
+                                    Just ">" ->
+                                        discordParseLoop
+                                            source
+                                            (index2 + 1)
+                                            sourceLength
+                                            modifiers
+                                            ""
+                                            (Hyperlink url :: flushText accText revNodes)
+
+                                    _ ->
+                                        discordParseLoop
+                                            source
+                                            (index2 + 1)
+                                            sourceLength
+                                            modifiers
+                                            ""
+                                            (Hyperlink url :: flushText (accText ++ "<") revNodes)
+
+                            Err errText ->
+                                discordParseLoop
+                                    source
+                                    (index + 1 + String.length errText)
+                                    sourceLength
+                                    modifiers
+                                    (accText ++ "<" ++ errText)
+                                    revNodes
 
             "*" ->
                 if String.slice index (index + 2) source == "**" then
@@ -3010,7 +3045,7 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                             discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "`") revNodes
 
             "h" ->
-                case parseUrlBody discordModifierToSymbol modifiers index source of
+                case parseUrlBody False discordModifierToSymbol modifiers index source of
                     Ok url ->
                         discordParseLoop
                             source
