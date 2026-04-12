@@ -138,8 +138,8 @@ normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
 
 
-removeAttachedFile : Id FileId -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
-removeAttachedFile fileId list =
+removeAttachedFile : (Id FileId -> Bool) -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
+removeAttachedFile shouldRemove list =
     List.filterMap
         (\richText ->
             case richText of
@@ -150,19 +150,19 @@ removeAttachedFile fileId list =
                     Just richText
 
                 Bold nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Bold
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Bold
 
                 Italic nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Italic
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Italic
 
                 Underline nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Underline
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Underline
 
                 Strikethrough nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Strikethrough
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Strikethrough
 
                 Spoiler nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Spoiler
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Spoiler
 
                 Hyperlink _ ->
                     Just richText
@@ -176,8 +176,8 @@ removeAttachedFile fileId list =
                 CodeBlock _ _ ->
                     Just richText
 
-                AttachedFile id ->
-                    if id == fileId then
+                AttachedFile fileId ->
+                    if shouldRemove fileId then
                         Nothing
 
                     else
@@ -1833,15 +1833,6 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         ++ [ case fileData.imageMetadata of
                                                 Just { imageSize } ->
                                                     let
-                                                        fileUrl =
-                                                            FileStatus.fileUrl fileData.contentType fileData.fileHash
-
-                                                        thumbnailUrl =
-                                                            FileStatus.thumbnailUrl
-                                                                imageSize
-                                                                fileData.contentType
-                                                                fileData.fileHash
-
                                                         ( width, height ) =
                                                             actualImageSize FileStatus.imageMaxHeight containerWidth2 imageSize
                                                     in
@@ -1855,6 +1846,16 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                                             []
 
                                                     else
+                                                        let
+                                                            fileUrl =
+                                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+
+                                                            thumbnailUrl =
+                                                                FileStatus.thumbnailUrl
+                                                                    imageSize
+                                                                    fileData.contentType
+                                                                    fileData.fileHash
+                                                        in
                                                         Html.a
                                                             [ Html.Attributes.href fileUrl
                                                             , Html.Attributes.target "_blank"
@@ -2697,7 +2698,7 @@ formatText text =
 
 fromDiscord :
     String
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
     -> List (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
@@ -2759,8 +2760,8 @@ fromDiscord text attachments2 embeds stickers2 =
         spoileredAttachments : List (RichText userId)
         spoileredAttachments =
             List.map
-                (\( fileId, fileData ) ->
-                    if String.startsWith "SPOILER_" (FileName.toString fileData.fileName) then
+                (\( fileId, { fileData, isSpoilered } ) ->
+                    if isSpoilered then
                         Spoiler (Nonempty (AttachedFile fileId) [])
 
                     else

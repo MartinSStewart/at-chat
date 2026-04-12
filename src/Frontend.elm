@@ -1887,7 +1887,7 @@ updateLoaded msg model =
                                         Just draft ->
                                             case
                                                 RichText.fromNonemptyString allUsers draft
-                                                    |> RichText.removeAttachedFile fileId
+                                                    |> RichText.removeAttachedFile (\a -> a == fileId)
                                             of
                                                 Just richText ->
                                                     RichText.toString False allUsers richText
@@ -1928,7 +1928,7 @@ updateLoaded msg model =
                                                     Just nonempty ->
                                                         case
                                                             RichText.fromNonemptyString allUsers nonempty
-                                                                |> RichText.removeAttachedFile fileId
+                                                                |> RichText.removeAttachedFile (\a -> a == fileId)
                                                         of
                                                             Just richText ->
                                                                 RichText.toString False allUsers richText
