@@ -43,6 +43,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (Id, StickerId)
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyExtra
@@ -135,6 +136,208 @@ type Language
 normalTextFromNonempty : NonemptyString -> RichText userId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
+
+
+spoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
+spoilerAttachedFile fileId nonempty =
+    List.Nonempty.map
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    richText
+
+                UserMention userId ->
+                    richText
+
+                Bold nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Bold
+
+                Italic nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Italic
+
+                Underline nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Underline
+
+                Strikethrough nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Strikethrough
+
+                Spoiler nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Spoiler
+
+                Hyperlink url ->
+                    richText
+
+                MarkdownLink nonemptyString url ->
+                    richText
+
+                InlineCode char string ->
+                    richText
+
+                CodeBlock language string ->
+                    richText
+
+                AttachedFile id ->
+                    if id == fileId then
+                        Spoiler (Nonempty (AttachedFile fileId) [])
+
+                    else
+                        richText
+
+                EscapedChar escapedChar ->
+                    richText
+
+                Sticker id ->
+                    richText
+        )
+        nonempty
+
+
+unspoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
+unspoilerAttachedFile fileId nonempty =
+    List.Nonempty.concatMap
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    Nonempty richText []
+
+                UserMention userId ->
+                    Nonempty richText []
+
+                Bold nonempty2 ->
+                    Nonempty (Bold (unspoilerAttachedFile fileId nonempty2)) []
+
+                Italic nonempty2 ->
+                    Nonempty (Italic (unspoilerAttachedFile fileId nonempty2)) []
+
+                Underline nonempty2 ->
+                    Nonempty (Underline (unspoilerAttachedFile fileId nonempty2)) []
+
+                Strikethrough nonempty2 ->
+                    Nonempty (Strikethrough (unspoilerAttachedFile fileId nonempty2)) []
+
+                Spoiler nonempty2 ->
+                    let
+                        nonempty3 : Nonempty ( Bool, RichText userId )
+                        nonempty3 =
+                            unspoilerAttachedFileHelper fileId nonempty2
+                    in
+                    if List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3 then
+                        List.Nonempty.map Tuple.second nonempty3
+
+                    else
+                        Nonempty (Spoiler nonempty2) []
+
+                Hyperlink url ->
+                    Nonempty richText []
+
+                MarkdownLink nonemptyString url ->
+                    Nonempty richText []
+
+                InlineCode char string ->
+                    Nonempty richText []
+
+                CodeBlock language string ->
+                    Nonempty richText []
+
+                AttachedFile id ->
+                    Nonempty richText []
+
+                EscapedChar escapedChar ->
+                    Nonempty richText []
+
+                Sticker id ->
+                    Nonempty richText []
+        )
+        nonempty
+
+
+unspoilerAttachedFileHelper : Id FileId -> Nonempty (RichText userId) -> Nonempty ( Bool, RichText userId )
+unspoilerAttachedFileHelper fileId nonempty =
+    let
+        helper : (Nonempty (RichText userId) -> RichText userId) -> Nonempty (RichText userId) -> ( Bool, RichText userId )
+        helper container nonempty2 =
+            let
+                nonempty3 =
+                    unspoilerAttachedFileHelper fileId nonempty2
+            in
+            ( List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3
+            , List.Nonempty.toList nonempty3
+                |> List.Extra.groupWhile
+                    (\( removeSpoilerA, _ ) ( removeSpoilerB, _ ) ->
+                        removeSpoilerA == removeSpoilerB
+                    )
+                |> List.concatMap
+                    (\( ( removeSpoiler, head ), rest ) ->
+                        if removeSpoiler then
+                            head :: List.map Tuple.second rest
+
+                        else
+                            [ Spoiler (Nonempty head (List.map Tuple.second rest)) ]
+                    )
+                |> List.Nonempty.fromList
+                |> Maybe.withDefault nonempty2
+                |> container
+            )
+    in
+    List.Nonempty.concatMap
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    Nonempty ( False, richText ) []
+
+                UserMention userId ->
+                    Nonempty ( False, richText ) []
+
+                Bold nonempty2 ->
+                    Nonempty (helper Bold nonempty2) []
+
+                Italic nonempty2 ->
+                    Nonempty (helper Italic nonempty2) []
+
+                Underline nonempty2 ->
+                    Nonempty (helper Underline nonempty2) []
+
+                Strikethrough nonempty2 ->
+                    Nonempty (helper Strikethrough nonempty2) []
+
+                Spoiler nonempty2 ->
+                    let
+                        nonempty3 : Nonempty ( Bool, RichText userId )
+                        nonempty3 =
+                            unspoilerAttachedFileHelper fileId nonempty2
+                    in
+                    if List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3 then
+                        nonempty3
+
+                    else
+                        Nonempty ( False, Spoiler nonempty2 ) []
+
+                Hyperlink url ->
+                    Nonempty ( False, richText ) []
+
+                MarkdownLink nonemptyString url ->
+                    Nonempty ( False, richText ) []
+
+                InlineCode char string ->
+                    Nonempty ( False, richText ) []
+
+                CodeBlock language string ->
+                    Nonempty ( False, richText ) []
+
+                AttachedFile id ->
+                    if id == fileId then
+                        Nonempty ( True, richText ) []
+
+                    else
+                        Nonempty ( False, richText ) []
+
+                EscapedChar escapedChar ->
+                    Nonempty ( False, richText ) []
+
+                Sticker id ->
+                    Nonempty ( False, richText ) []
+        )
+        nonempty
 
 
 removeAttachedFile : (Id FileId -> Bool) -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
