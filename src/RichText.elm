@@ -196,6 +196,85 @@ spoilerAttachedFile fileId nonempty =
 
 unspoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
 unspoilerAttachedFile fileId nonempty =
+    let
+        helper : Nonempty (RichText userId) -> ( Bool, Nonempty (RichText userId) )
+        helper nonempty2 =
+            let
+                nonempty3 =
+                    unspoilerAttachedFileHelper nonempty2
+            in
+            ( List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3
+            , List.Nonempty.toList nonempty3
+                |> List.Extra.groupWhile
+                    (\( removeSpoilerA, _ ) ( removeSpoilerB, _ ) ->
+                        removeSpoilerA == removeSpoilerB
+                    )
+                |> List.concatMap
+                    (\( ( removeSpoiler, head ), rest ) ->
+                        if removeSpoiler then
+                            head :: List.map Tuple.second rest
+
+                        else
+                            [ Spoiler (Nonempty head (List.map Tuple.second rest)) ]
+                    )
+                |> List.Nonempty.fromList
+                |> Maybe.withDefault nonempty2
+            )
+
+        unspoilerAttachedFileHelper : Nonempty (RichText userId) -> Nonempty ( Bool, RichText userId )
+        unspoilerAttachedFileHelper nonempty2 =
+            List.Nonempty.concatMap
+                (\richText ->
+                    case richText of
+                        NormalText _ _ ->
+                            Nonempty ( False, richText ) []
+
+                        UserMention userId ->
+                            Nonempty ( False, richText ) []
+
+                        Bold nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Bold) []
+
+                        Italic nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Italic) []
+
+                        Underline nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Underline) []
+
+                        Strikethrough nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Strikethrough) []
+
+                        Spoiler nonempty3 ->
+                            -- This shouldn't be reachable since spoilers can't be nested
+                            Nonempty ( False, richText ) []
+
+                        Hyperlink url ->
+                            Nonempty ( False, richText ) []
+
+                        MarkdownLink nonemptyString url ->
+                            Nonempty ( False, richText ) []
+
+                        InlineCode char string ->
+                            Nonempty ( False, richText ) []
+
+                        CodeBlock language string ->
+                            Nonempty ( False, richText ) []
+
+                        AttachedFile id ->
+                            if id == fileId then
+                                Nonempty ( True, richText ) []
+
+                            else
+                                Nonempty ( False, richText ) []
+
+                        EscapedChar escapedChar ->
+                            Nonempty ( False, richText ) []
+
+                        Sticker id ->
+                            Nonempty ( False, richText ) []
+                )
+                nonempty2
+    in
     List.Nonempty.concatMap
         (\richText ->
             case richText of
@@ -219,15 +298,14 @@ unspoilerAttachedFile fileId nonempty =
 
                 Spoiler nonempty2 ->
                     let
-                        nonempty3 : Nonempty ( Bool, RichText userId )
-                        nonempty3 =
-                            unspoilerAttachedFileHelper fileId nonempty2
+                        ( removeSpoiler, nonempty4 ) =
+                            helper nonempty2
                     in
-                    if List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3 then
-                        List.Nonempty.map Tuple.second nonempty3
+                    if removeSpoiler then
+                        nonempty4
 
                     else
-                        Nonempty (Spoiler nonempty2) []
+                        Nonempty richText []
 
                 Hyperlink url ->
                     Nonempty richText []
@@ -249,95 +327,6 @@ unspoilerAttachedFile fileId nonempty =
 
                 Sticker id ->
                     Nonempty richText []
-        )
-        nonempty
-
-
-unspoilerAttachedFileHelper : Id FileId -> Nonempty (RichText userId) -> Nonempty ( Bool, RichText userId )
-unspoilerAttachedFileHelper fileId nonempty =
-    let
-        helper : (Nonempty (RichText userId) -> RichText userId) -> Nonempty (RichText userId) -> ( Bool, RichText userId )
-        helper container nonempty2 =
-            let
-                nonempty3 =
-                    unspoilerAttachedFileHelper fileId nonempty2
-            in
-            ( List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3
-            , List.Nonempty.toList nonempty3
-                |> List.Extra.groupWhile
-                    (\( removeSpoilerA, _ ) ( removeSpoilerB, _ ) ->
-                        removeSpoilerA == removeSpoilerB
-                    )
-                |> List.concatMap
-                    (\( ( removeSpoiler, head ), rest ) ->
-                        if removeSpoiler then
-                            head :: List.map Tuple.second rest
-
-                        else
-                            [ Spoiler (Nonempty head (List.map Tuple.second rest)) ]
-                    )
-                |> List.Nonempty.fromList
-                |> Maybe.withDefault nonempty2
-                |> container
-            )
-    in
-    List.Nonempty.concatMap
-        (\richText ->
-            case richText of
-                NormalText _ _ ->
-                    Nonempty ( False, richText ) []
-
-                UserMention userId ->
-                    Nonempty ( False, richText ) []
-
-                Bold nonempty2 ->
-                    Nonempty (helper Bold nonempty2) []
-
-                Italic nonempty2 ->
-                    Nonempty (helper Italic nonempty2) []
-
-                Underline nonempty2 ->
-                    Nonempty (helper Underline nonempty2) []
-
-                Strikethrough nonempty2 ->
-                    Nonempty (helper Strikethrough nonempty2) []
-
-                Spoiler nonempty2 ->
-                    let
-                        nonempty3 : Nonempty ( Bool, RichText userId )
-                        nonempty3 =
-                            unspoilerAttachedFileHelper fileId nonempty2
-                    in
-                    if List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3 then
-                        nonempty3
-
-                    else
-                        Nonempty ( False, Spoiler nonempty2 ) []
-
-                Hyperlink url ->
-                    Nonempty ( False, richText ) []
-
-                MarkdownLink nonemptyString url ->
-                    Nonempty ( False, richText ) []
-
-                InlineCode char string ->
-                    Nonempty ( False, richText ) []
-
-                CodeBlock language string ->
-                    Nonempty ( False, richText ) []
-
-                AttachedFile id ->
-                    if id == fileId then
-                        Nonempty ( True, richText ) []
-
-                    else
-                        Nonempty ( False, richText ) []
-
-                EscapedChar escapedChar ->
-                    Nonempty ( False, richText ) []
-
-                Sticker id ->
-                    Nonempty ( False, richText ) []
         )
         nonempty
 
@@ -1157,7 +1146,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                         parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
             "~" ->
-                if String.slice index (index + 4) source == "~~~~" then
+                if not (List.head modifiers == Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
                     parseLoop source (index + 4) sourceLength users modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
@@ -1188,7 +1177,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                     parseLoop source (index + 1) sourceLength users modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if String.slice index (index + 4) source == "||||" then
+                if not (List.head modifiers == Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
                     parseLoop source (index + 4) sourceLength users modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
@@ -3219,7 +3208,10 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                         discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
             "~" ->
-                if String.slice index (index + 2) source == "~~" then
+                if not (List.head modifiers == Just DiscordIsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
+                    discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "~~~~") revNodes
+
+                else if String.slice index (index + 2) source == "~~" then
                     let
                         afterSymbol =
                             index + 2
@@ -3247,7 +3239,10 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                     discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if String.slice index (index + 2) source == "||" then
+                if not (List.head modifiers == Just DiscordIsSpoilered) && String.slice index (index + 4) source == "||||" then
+                    discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "||||") revNodes
+
+                else if String.slice index (index + 2) source == "||" then
                     let
                         afterSymbol =
                             index + 2
