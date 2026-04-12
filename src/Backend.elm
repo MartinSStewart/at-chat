@@ -1456,7 +1456,7 @@ attachmentsUploadedHelper :
     BackendModel
     -> { a | attachments : List Discord.Attachment }
     -> List (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
-    -> ( SeqDict (Id FileId) FileData, SeqDict DiscordAttachmentId DiscordAttachmentData )
+    -> ( SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }, SeqDict DiscordAttachmentId DiscordAttachmentData )
 attachmentsUploadedHelper model message results =
     let
         uploadResponses : SeqDict (Discord.Id Discord.AttachmentId) FileStatus.UploadResponse
@@ -1477,7 +1477,15 @@ attachmentsUploadedHelper model message results =
                 Just { fileHash, imageMetadata } ->
                     ( SeqDict.insert
                         fileId
-                        (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
+                        { fileData = DiscordSync.attachmentsToFileData attachment fileHash imageMetadata
+                        , isSpoilered =
+                            case attachment.flags of
+                                Included flags ->
+                                    flags.isSpoiler
+
+                                Missing ->
+                                    False
+                        }
                         fileDataDict
                     , discordAttachments
                     )
@@ -1487,7 +1495,19 @@ attachmentsUploadedHelper model message results =
                         Just uploadResponse ->
                             ( SeqDict.insert
                                 fileId
-                                (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
+                                { fileData =
+                                    DiscordSync.attachmentsToFileData
+                                        attachment
+                                        uploadResponse.fileHash
+                                        uploadResponse.imageSize
+                                , isSpoilered =
+                                    case attachment.flags of
+                                        Included flags ->
+                                            flags.isSpoiler
+
+                                        Missing ->
+                                            False
+                                }
                                 fileDataDict
                             , SeqDict.insert
                                 attachmentId
@@ -2955,8 +2975,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             , content =
-                                                                RichText.toDiscord newContent
-                                                                    |> Discord.Markdown.toString
+                                                                case RichText.removeAttachedFile (\_ -> True) newContent of
+                                                                    Just text2 ->
+                                                                        RichText.toDiscord text2 |> Discord.Markdown.toString
+
+                                                                    Nothing ->
+                                                                        ""
                                                             }
                                                             |> DiscordSync.http
                                                             |> Task.attempt

@@ -349,6 +349,20 @@ test =
             "\n\u{200B}\n\n\u{200C}\u{200B}\n\n"
         , toStringTest (Nonempty (Sticker (Id.fromInt 4)) []) "\n\u{200C}\u{200B}\n\n"
         , fromNonemptyStringTest "\n\u{200B}\n\n" (Nonempty (Sticker (Id.fromInt 0)) [])
+        , fromNonemptyStringTest "||test |||| |||| test||"
+            (Nonempty
+                (Spoiler (Nonempty (NormalText 't' "est ") []))
+                [ Spoiler (Nonempty (NormalText ' ' "") [])
+                , Spoiler (Nonempty (NormalText ' ' "test") [])
+                ]
+            )
+        , fromNonemptyStringTest "~~test ~~~~ ~~~~ test~~"
+            (Nonempty
+                (Strikethrough (Nonempty (NormalText 't' "est ") []))
+                [ Strikethrough (Nonempty (NormalText ' ' "") [])
+                , Strikethrough (Nonempty (NormalText ' ' "test") [])
+                ]
+            )
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"
@@ -361,7 +375,22 @@ test =
                     |> RichText.toString False users
                     |> Expect.equal (String.Nonempty.toString text)
             )
+        , simpleTest
+            "Unspoiler attachment"
+            (Nonempty (Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) [])) [])
+            (Nonempty (AttachedFile (Id.fromInt 1)) [])
+            (RichText.unspoilerAttachedFile (Id.fromInt 1))
+        , simpleTest
+            "Unspoiler attachment 2"
+            (Nonempty (Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) [ NormalText ' ' "test" ])) [])
+            (Nonempty (AttachedFile (Id.fromInt 1)) [ Spoiler (Nonempty (NormalText ' ' "test") []) ])
+            (RichText.unspoilerAttachedFile (Id.fromInt 1))
         ]
+
+
+simpleTest : String -> b -> c -> (b -> c) -> Test
+simpleTest name input output function =
+    Test.test name (\_ -> function input |> Expect.equal output)
 
 
 fromNonemptyStringTest : String -> Nonempty (RichText (Id userId)) -> Test

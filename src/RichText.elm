@@ -7,6 +7,7 @@ module RichText exposing
     , RichTextState
     , attachedFilePrefix
     , attachedFileSuffix
+    , attachments
     , domainToString
     , emptyPlaceholder
     , escapedCharToString
@@ -16,12 +17,14 @@ module RichText exposing
     , mentionsUser
     , preview
     , removeAttachedFile
+    , spoilerAttachedFile
     , stickers
     , stringToStickers
     , textInputView
     , toDiscord
     , toString
     , toStringWithGetter
+    , unspoilerAttachedFile
     , urlToDomain
     , view
     )
@@ -42,9 +45,9 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (Id, StickerId)
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
-import NonemptyDict
 import NonemptyExtra
 import PersonName exposing (PersonName)
 import Range exposing (Range)
@@ -137,8 +140,199 @@ normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
 
 
-removeAttachedFile : Id FileId -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
-removeAttachedFile fileId list =
+spoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
+spoilerAttachedFile fileId nonempty =
+    List.Nonempty.map
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    richText
+
+                UserMention _ ->
+                    richText
+
+                Bold nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Bold
+
+                Italic nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Italic
+
+                Underline nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Underline
+
+                Strikethrough nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Strikethrough
+
+                Spoiler nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Spoiler
+
+                Hyperlink _ ->
+                    richText
+
+                MarkdownLink _ _ ->
+                    richText
+
+                InlineCode _ _ ->
+                    richText
+
+                CodeBlock _ _ ->
+                    richText
+
+                AttachedFile id ->
+                    if id == fileId then
+                        Spoiler (Nonempty (AttachedFile fileId) [])
+
+                    else
+                        richText
+
+                EscapedChar _ ->
+                    richText
+
+                Sticker _ ->
+                    richText
+        )
+        nonempty
+
+
+unspoilerAttachedFile : Id FileId -> Nonempty (RichText userId) -> Nonempty (RichText userId)
+unspoilerAttachedFile fileId nonempty =
+    let
+        helper : Nonempty (RichText userId) -> ( Bool, Nonempty (RichText userId) )
+        helper nonempty2 =
+            let
+                unspoilered =
+                    unspoilerAttachedFileHelper nonempty2
+            in
+            ( List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) unspoilered
+            , List.Nonempty.toList unspoilered
+                |> List.Extra.groupWhile
+                    (\( removeSpoilerA, _ ) ( removeSpoilerB, _ ) ->
+                        removeSpoilerA == removeSpoilerB
+                    )
+                |> List.concatMap
+                    (\( ( removeSpoiler, head ), rest ) ->
+                        if removeSpoiler then
+                            head :: List.map Tuple.second rest
+
+                        else
+                            [ Spoiler (Nonempty head (List.map Tuple.second rest)) ]
+                    )
+                |> List.Nonempty.fromList
+                |> Maybe.withDefault nonempty2
+            )
+
+        unspoilerAttachedFileHelper : Nonempty (RichText userId) -> Nonempty ( Bool, RichText userId )
+        unspoilerAttachedFileHelper nonempty2 =
+            List.Nonempty.concatMap
+                (\richText ->
+                    case richText of
+                        NormalText _ _ ->
+                            Nonempty ( False, richText ) []
+
+                        UserMention _ ->
+                            Nonempty ( False, richText ) []
+
+                        Bold nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Bold) []
+
+                        Italic nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Italic) []
+
+                        Underline nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Underline) []
+
+                        Strikethrough nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond Strikethrough) []
+
+                        Spoiler _ ->
+                            -- This shouldn't be reachable since spoilers can't be nested
+                            Nonempty ( False, richText ) []
+
+                        Hyperlink _ ->
+                            Nonempty ( False, richText ) []
+
+                        MarkdownLink _ _ ->
+                            Nonempty ( False, richText ) []
+
+                        InlineCode _ _ ->
+                            Nonempty ( False, richText ) []
+
+                        CodeBlock _ _ ->
+                            Nonempty ( False, richText ) []
+
+                        AttachedFile id ->
+                            if id == fileId then
+                                Nonempty ( True, richText ) []
+
+                            else
+                                Nonempty ( False, richText ) []
+
+                        EscapedChar _ ->
+                            Nonempty ( False, richText ) []
+
+                        Sticker _ ->
+                            Nonempty ( False, richText ) []
+                )
+                nonempty2
+    in
+    List.Nonempty.concatMap
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    Nonempty richText []
+
+                UserMention _ ->
+                    Nonempty richText []
+
+                Bold nonempty2 ->
+                    Nonempty (Bold (unspoilerAttachedFile fileId nonempty2)) []
+
+                Italic nonempty2 ->
+                    Nonempty (Italic (unspoilerAttachedFile fileId nonempty2)) []
+
+                Underline nonempty2 ->
+                    Nonempty (Underline (unspoilerAttachedFile fileId nonempty2)) []
+
+                Strikethrough nonempty2 ->
+                    Nonempty (Strikethrough (unspoilerAttachedFile fileId nonempty2)) []
+
+                Spoiler nonempty2 ->
+                    let
+                        ( removeSpoiler, nonempty4 ) =
+                            helper nonempty2
+                    in
+                    if removeSpoiler then
+                        nonempty4
+
+                    else
+                        Nonempty richText []
+
+                Hyperlink _ ->
+                    Nonempty richText []
+
+                MarkdownLink _ _ ->
+                    Nonempty richText []
+
+                InlineCode _ _ ->
+                    Nonempty richText []
+
+                CodeBlock _ _ ->
+                    Nonempty richText []
+
+                AttachedFile _ ->
+                    Nonempty richText []
+
+                EscapedChar _ ->
+                    Nonempty richText []
+
+                Sticker _ ->
+                    Nonempty richText []
+        )
+        nonempty
+
+
+removeAttachedFile : (Id FileId -> Bool) -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
+removeAttachedFile shouldRemove list =
     List.filterMap
         (\richText ->
             case richText of
@@ -149,19 +343,19 @@ removeAttachedFile fileId list =
                     Just richText
 
                 Bold nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Bold
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Bold
 
                 Italic nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Italic
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Italic
 
                 Underline nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Underline
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Underline
 
                 Strikethrough nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Strikethrough
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Strikethrough
 
                 Spoiler nonempty ->
-                    removeAttachedFile fileId nonempty |> Maybe.map Spoiler
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map Spoiler
 
                 Hyperlink _ ->
                     Just richText
@@ -175,8 +369,8 @@ removeAttachedFile fileId list =
                 CodeBlock _ _ ->
                     Just richText
 
-                AttachedFile id ->
-                    if id == fileId then
+                AttachedFile fileId ->
+                    if shouldRemove fileId then
                         Nothing
 
                     else
@@ -232,6 +426,61 @@ hyperlinks nonempty =
 
                 AttachedFile _ ->
                     []
+
+                EscapedChar _ ->
+                    []
+
+                Sticker _ ->
+                    []
+        )
+        (List.Nonempty.toList nonempty)
+
+
+attachments : Nonempty (RichText userId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
+attachments nonempty =
+    attachmentsHelper False nonempty
+
+
+attachmentsHelper : Bool -> Nonempty (RichText userId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
+attachmentsHelper isSpoilered nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink _ ->
+                    []
+
+                MarkdownLink _ _ ->
+                    []
+
+                UserMention _ ->
+                    []
+
+                NormalText _ _ ->
+                    []
+
+                Bold nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Italic nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Underline nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Strikethrough nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Spoiler nonempty2 ->
+                    attachmentsHelper True nonempty2
+
+                InlineCode _ _ ->
+                    []
+
+                CodeBlock _ _ ->
+                    []
+
+                AttachedFile fileId ->
+                    [ { attachmentId = fileId, isSpoilered = isSpoilered } ]
 
                 EscapedChar _ ->
                     []
@@ -897,7 +1146,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                         parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
             "~" ->
-                if String.slice index (index + 4) source == "~~~~" then
+                if (List.head modifiers /= Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
                     parseLoop source (index + 4) sourceLength users modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
@@ -928,7 +1177,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                     parseLoop source (index + 1) sourceLength users modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if String.slice index (index + 4) source == "||||" then
+                if (List.head modifiers /= Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
                     parseLoop source (index + 4) sourceLength users modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
@@ -1777,15 +2026,6 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         ++ [ case fileData.imageMetadata of
                                                 Just { imageSize } ->
                                                     let
-                                                        fileUrl =
-                                                            FileStatus.fileUrl fileData.contentType fileData.fileHash
-
-                                                        thumbnailUrl =
-                                                            FileStatus.thumbnailUrl
-                                                                imageSize
-                                                                fileData.contentType
-                                                                fileData.fileHash
-
                                                         ( width, height ) =
                                                             actualImageSize FileStatus.imageMaxHeight containerWidth2 imageSize
                                                     in
@@ -1799,6 +2039,16 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                                             []
 
                                                     else
+                                                        let
+                                                            fileUrl =
+                                                                FileStatus.fileUrl fileData.contentType fileData.fileHash
+
+                                                            thumbnailUrl =
+                                                                FileStatus.thumbnailUrl
+                                                                    imageSize
+                                                                    fileData.contentType
+                                                                    fileData.fileHash
+                                                        in
                                                         Html.a
                                                             [ Html.Attributes.href fileUrl
                                                             , Html.Attributes.target "_blank"
@@ -2641,11 +2891,11 @@ formatText text =
 
 fromDiscord :
     String
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
     -> List (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments embeds stickers2 =
+fromDiscord text attachments2 embeds stickers2 =
     let
         embedSet : SeqSet Url
         embedSet =
@@ -2699,6 +2949,18 @@ fromDiscord text attachments embeds stickers2 =
 
                 Nothing ->
                     emptyPlaceholder
+
+        spoileredAttachments : List (RichText userId)
+        spoileredAttachments =
+            List.map
+                (\( fileId, attachment ) ->
+                    if attachment.isSpoilered then
+                        Spoiler (Nonempty (AttachedFile fileId) [])
+
+                    else
+                        AttachedFile fileId
+                )
+                (SeqDict.toList attachments2)
     in
     case String.Nonempty.fromString text of
         Just nonempty ->
@@ -2714,18 +2976,15 @@ fromDiscord text attachments embeds stickers2 =
                     Nothing ->
                         Nonempty (normalTextFromNonempty nonempty) []
                 )
-                (List.map AttachedFile (SeqDict.keys attachments))
+                spoileredAttachments
                 |> applyExtraEmbeds
                 |> List.Nonempty.toList
                 |> applyStickers
 
         Nothing ->
-            case NonemptyDict.fromSeqDict attachments of
-                Just attachments2 ->
-                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
-                        |> applyExtraEmbeds
-                        |> List.Nonempty.toList
-                        |> applyStickers
+            case List.Nonempty.fromList spoileredAttachments of
+                Just spoileredAttachments2 ->
+                    applyExtraEmbeds spoileredAttachments2 |> List.Nonempty.toList |> applyStickers
 
                 Nothing ->
                     SeqSet.toList embedSet
@@ -2949,7 +3208,10 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                         discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
             "~" ->
-                if String.slice index (index + 2) source == "~~" then
+                if (List.head modifiers /= Just DiscordIsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
+                    discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "~~~~") revNodes
+
+                else if String.slice index (index + 2) source == "~~" then
                     let
                         afterSymbol =
                             index + 2
@@ -2977,7 +3239,10 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                     discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if String.slice index (index + 2) source == "||" then
+                if (List.head modifiers /= Just DiscordIsSpoilered) && String.slice index (index + 4) source == "||||" then
+                    discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "||||") revNodes
+
+                else if String.slice index (index + 2) source == "||" then
                     let
                         afterSymbol =
                             index + 2

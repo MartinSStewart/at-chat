@@ -70,6 +70,7 @@ import Ui.Font
 import Ui.Lazy
 import Untrusted
 import Url exposing (Url)
+import User exposing (FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
@@ -1887,7 +1888,7 @@ updateLoaded msg model =
                                         Just draft ->
                                             case
                                                 RichText.fromNonemptyString allUsers draft
-                                                    |> RichText.removeAttachedFile fileId
+                                                    |> RichText.removeAttachedFile (\a -> a == fileId)
                                             of
                                                 Just richText ->
                                                     RichText.toString False allUsers richText
@@ -1928,7 +1929,7 @@ updateLoaded msg model =
                                                     Just nonempty ->
                                                         case
                                                             RichText.fromNonemptyString allUsers nonempty
-                                                                |> RichText.removeAttachedFile fileId
+                                                                |> RichText.removeAttachedFile (\a -> a == fileId)
                                                         of
                                                             Just richText ->
                                                                 RichText.toString False allUsers richText
@@ -3391,6 +3392,76 @@ updateLoaded msg model =
 
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
+
+        PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | drafts =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (\text ->
+                                    let
+                                        allUsers : SeqDict (Id UserId) FrontendUser
+                                        allUsers =
+                                            Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                    in
+                                    (if removeSpoiler then
+                                        RichText.fromNonemptyString allUsers text
+                                            |> RichText.unspoilerAttachedFile fileId
+
+                                     else
+                                        RichText.fromNonemptyString allUsers text
+                                            |> RichText.spoilerAttachedFile fileId
+                                    )
+                                        |> RichText.toString False allUsers
+                                        |> String.Nonempty.fromString
+                                        |> Maybe.withDefault text
+                                )
+                                loggedIn.drafts
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (\edit ->
+                                    case String.Nonempty.fromString edit.text of
+                                        Just nonempty ->
+                                            let
+                                                allUsers : SeqDict (Id UserId) FrontendUser
+                                                allUsers =
+                                                    Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                            in
+                                            { edit
+                                                | text =
+                                                    (if removeSpoiler then
+                                                        RichText.fromNonemptyString allUsers nonempty
+                                                            |> RichText.unspoilerAttachedFile fileId
+
+                                                     else
+                                                        RichText.fromNonemptyString allUsers nonempty
+                                                            |> RichText.spoilerAttachedFile fileId
+                                                    )
+                                                        |> RichText.toString False allUsers
+                                            }
+
+                                        Nothing ->
+                                            edit
+                                )
+                                loggedIn.editMessage
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg

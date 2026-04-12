@@ -200,7 +200,7 @@ handleDiscordRemoveReactionForEmoji _ model =
 
 handleDiscordDmEditMessage :
     Discord.UserMessageUpdate
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordDmEditMessage edit attachments model =
@@ -341,7 +341,7 @@ handleDiscordGuildEditMessage :
     Discord.Id Discord.GuildId
     -> DiscordBackendGuild
     -> Discord.UserMessageUpdate
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordGuildEditMessage guildId guild edit attachments model =
@@ -688,7 +688,7 @@ messagesAndLinks messages discordStickers discordAttachments =
     ( List.map
         (\message ->
             let
-                attachments : SeqDict (Id FileId) FileData
+                attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
                 attachments =
                     messageToFileData message discordAttachments
             in
@@ -717,7 +717,7 @@ messagesAndLinks messages discordStickers discordAttachments =
                     Discord.NoReference ->
                         Nothing
                 )
-                attachments
+                (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
         )
         messages
         |> Array.fromList
@@ -789,7 +789,7 @@ joinThread authentication guildId threadId =
 handleCreateMessage :
     String
     -> Discord.Message
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleCreateMessage websocketJson discordMessage attachments model =
@@ -827,13 +827,17 @@ handleCreateMessage websocketJson discordMessage attachments model =
                             replyTo =
                                 referencedMessageToMessageId discordMessage channel
 
+                            attachments2 : SeqDict (Id FileId) FileData
+                            attachments2 =
+                                SeqDict.map (\_ attachment -> attachment.fileData) attachments
+
                             ( message, embedCmds, stickersToFrontend ) =
                                 Message.userTextMessage
                                     discordMessage.timestamp
                                     discordMessage.author.id
                                     richText
                                     replyTo
-                                    attachments
+                                    attachments2
                                     model.stickers
 
                             guildOrDmId : DiscordGuildOrDmId
@@ -893,7 +897,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         guildOrDmId
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
-                                                        attachments
+                                                        attachments2
                                                     )
                                                     |> Lamdera.sendToFrontend clientId
                                                 , Broadcast.toDiscordDmChannelExcludingOne
@@ -904,7 +908,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         guildOrDmId
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
-                                                        attachments
+                                                        attachments2
                                                         stickersToFrontend
                                                         |> ServerChange
                                                     )
@@ -920,7 +924,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         guildOrDmId
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
-                                                        attachments
+                                                        attachments2
                                                         stickersToFrontend
                                                         |> ServerChange
                                                     )
@@ -994,7 +998,7 @@ handleDiscordCreateGuildMessage :
     -> Discord.Id Discord.GuildId
     -> String
     -> Discord.Message
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMessage attachments model =
@@ -1139,7 +1143,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             discordMessage.author.id
                                                             richText
                                                             maybeReplyTo
-                                                            attachments
+                                                            (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
                                                 case LocalState.createDiscordThreadMessageBackend discordMessage.id threadId message2 channel of
@@ -1164,7 +1168,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             discordMessage.author.id
                                                             richText
                                                             maybeReplyTo
-                                                            attachments
+                                                            (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             model.stickers
                                                 in
                                                 case LocalState.createDiscordChannelMessageBackend discordMessage.id message channel of
@@ -1248,7 +1252,13 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     Command.batch
                                                         [ LocalChangeResponse
                                                             changeId
-                                                            (Local_Discord_SendMessage discordMessage.timestamp guildOrDmId richText threadRoute attachments)
+                                                            (Local_Discord_SendMessage
+                                                                discordMessage.timestamp
+                                                                guildOrDmId
+                                                                richText
+                                                                threadRoute
+                                                                (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
+                                                            )
                                                             |> Lamdera.sendToFrontend clientId
                                                         , Broadcast.toDiscordGuildExcludingOne
                                                             clientId
@@ -1258,7 +1268,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 guildOrDmId
                                                                 richText
                                                                 threadRoute
-                                                                attachments
+                                                                (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                                 stickers
                                                                 |> ServerChange
                                                             )
@@ -1273,7 +1283,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             guildOrDmId
                                                             richText
                                                             threadRoute
-                                                            attachments
+                                                            (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             stickers
                                                             |> ServerChange
                                                         )
@@ -1390,7 +1400,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_UserCreatedMessage _ message ->
                             let
-                                attachments : SeqDict (Id FileId) FileData
+                                attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
                                 attachments =
                                     messageToFileData message model2.discordAttachments
 
@@ -1450,7 +1460,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_UserEditedMessage edit ->
                             let
-                                attachments : SeqDict (Id FileId) FileData
+                                attachments : SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
                                 attachments =
                                     messageToFileData edit model2.discordAttachments
 
@@ -1968,7 +1978,7 @@ handleTypingStarted typingStart model =
 
 handleEditMessage :
     Discord.UserMessageUpdate
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleEditMessage edit attachments model2 =
@@ -1997,19 +2007,28 @@ loadMessageAttachment attachment =
 messageToFileData :
     { a | attachments : List Discord.Attachment }
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
 messageToFileData message discordAttachments =
     List.filterMap
         (\attachment ->
             case SeqDict.get (DiscordAttachmentId.fromUrl attachment.url) discordAttachments of
                 Just { fileHash, imageMetadata } ->
-                    attachmentsToFileData attachment fileHash imageMetadata |> Just
+                    { fileData = attachmentsToFileData attachment fileHash imageMetadata
+                    , isSpoilered =
+                        case attachment.flags of
+                            Included flag ->
+                                flag.isSpoiler
+
+                            Missing ->
+                                False
+                    }
+                        |> Just
 
                 Nothing ->
                     Nothing
         )
         message.attachments
-        |> List.indexedMap (\index fileData -> ( Id.fromInt index, fileData ))
+        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
         |> SeqDict.fromList
 
 
@@ -2819,7 +2838,7 @@ sendMessage :
     -> Task BackendOnly Discord.HttpError Discord.Message
 sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers text =
     List.map
-        (\attachment ->
+        (\( attachmentId, attachment ) ->
             Http.task
                 { method = "GET"
                 , headers = []
@@ -2846,15 +2865,15 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                         )
                 , timeout = Duration.seconds 30 |> Just
                 }
-                |> Task.map (\bytes -> Ok ( attachment, bytes ))
+                |> Task.map (\bytes -> Ok ( attachmentId, attachment, bytes ))
                 |> Task.onError (\() -> Task.succeed (Err ()))
         )
-        (SeqDict.values attachedFiles)
+        (SeqDict.toList attachedFiles)
         |> Task.sequence
         |> Task.andThen
             (\attachments ->
                 let
-                    attachments2 : List ( FileData, Bytes )
+                    attachments2 : List ( Id FileId, FileData, Bytes )
                     attachments2 =
                         List.filterMap Result.toMaybe attachments
                 in
@@ -2866,7 +2885,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                         discordUser.auth
                         channelId
                         (List.map
-                            (\( fileData, bytes ) ->
+                            (\( _, fileData, bytes ) ->
                                 { fileSize = Bytes.width bytes
                                 , filename = FileName.toString fileData.fileName
                                 }
@@ -2880,23 +2899,51 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                             uploadAttachments attachments2 uploadAttachmentsResponse
                                 |> Task.andThen
                                     (\_ ->
-                                        Discord.createMessagePayload
-                                            (Discord.userToken discordUser.auth)
-                                            { channelId = channelId
-                                            , content = RichText.toDiscord text |> Discord.Markdown.toString
-                                            , replyTo = maybeReplyTo
-                                            , attachments =
+                                        let
+                                            uploadAttachmentDict : SeqDict (Id FileId) { filename : String, uploadedFilename : String, contentType : String }
+                                            uploadAttachmentDict =
                                                 List.map2
-                                                    (\a ( fileData, _ ) ->
-                                                        { filename = FileName.toString fileData.fileName
-                                                        , uploadedFilename = a.uploadFilename
-                                                        , contentType =
-                                                            OneToOne.second fileData.contentType FileStatus.contentTypes
-                                                                |> Maybe.withDefault ""
-                                                        }
+                                                    (\a ( fileId, fileData, _ ) ->
+                                                        ( fileId
+                                                        , { filename = FileName.toString fileData.fileName
+                                                          , uploadedFilename = a.uploadFilename
+                                                          , contentType =
+                                                                OneToOne.second fileData.contentType FileStatus.contentTypes
+                                                                    |> Maybe.withDefault ""
+                                                          }
+                                                        )
                                                     )
                                                     uploadAttachmentsResponse
                                                     attachments2
+                                                    |> SeqDict.fromList
+                                        in
+                                        Discord.createMessagePayload
+                                            (Discord.userToken discordUser.auth)
+                                            { channelId = channelId
+                                            , content =
+                                                case RichText.removeAttachedFile (\_ -> True) text of
+                                                    Just text2 ->
+                                                        RichText.toDiscord text2 |> Discord.Markdown.toString
+
+                                                    Nothing ->
+                                                        ""
+                                            , replyTo = maybeReplyTo
+                                            , attachments =
+                                                List.filterMap
+                                                    (\attachment ->
+                                                        case SeqDict.get attachment.attachmentId uploadAttachmentDict of
+                                                            Just data ->
+                                                                { filename = data.filename
+                                                                , uploadedFilename = data.uploadedFilename
+                                                                , contentType = data.contentType
+                                                                , isSpoilered = attachment.isSpoilered
+                                                                }
+                                                                    |> Just
+
+                                                            Nothing ->
+                                                                Nothing
+                                                    )
+                                                    (RichText.attachments text)
                                             , stickers =
                                                 RichText.stickers text
                                                     |> List.filterMap (\stickerId -> OneToOne.first stickerId discordStickers)
@@ -2911,10 +2958,10 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
             )
 
 
-uploadAttachments : List ( FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
+uploadAttachments : List ( Id FileId, FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
 uploadAttachments files uploadAttachmentsResponses =
     List.map2
-        (\( _, bytes ) uploadAttachmentsResponse ->
+        (\( _, _, bytes ) uploadAttachmentsResponse ->
             Http.task
                 { method = "PUT"
                 , headers = []

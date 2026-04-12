@@ -14,18 +14,20 @@ module FileStatus exposing
     , UploadUrlRequest
     , addFileHash
     , contentType
+    , contentTypeType
     , contentTypes
     , discordStickerUrl
     , domain
     , fileHash
-    , fileUploadPreview
     , fileUrl
     , gifContent
+    , imageHasMetadata
     , imageInfoView
     , imageMaxHeight
     , jsonContent
     , onlyUploadedFiles
     , pngContent
+    , progressToString
     , sizeToString
     , thumbnailUrl
     , unknownContentType
@@ -53,20 +55,15 @@ import Effect.Http as Http
 import Effect.Task exposing (Task)
 import Env
 import FileName exposing (FileName)
-import Html
-import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
 import MyUi
-import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import StringExtra
 import Ui exposing (Element)
-import Ui.Font
-import Ui.Shadow
 
 
 type alias FileData =
@@ -536,191 +533,6 @@ domain =
         "http://localhost:3000"
 
 
-previewSize : number
-previewSize =
-    150
-
-
-fileUploadPreview : (Id FileId -> msg) -> (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Element msg
-fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
-    Ui.row
-        [ Ui.spacing 2
-        , Ui.move { x = 0, y = -previewSize, z = 0 }
-        , Ui.width Ui.shrink
-        , Ui.paddingXY 8 0
-        ]
-        (List.map
-            (\( fileStatusId, fileStatus ) ->
-                Ui.el
-                    [ Ui.width (Ui.px previewSize)
-                    , Ui.height (Ui.px previewSize)
-                    , Ui.Shadow.shadows
-                        [ { x = 0
-                          , y = -2
-                          , size = 0
-                          , blur = 8
-                          , color = Ui.rgba 0 0 0 0.5
-                          }
-                        ]
-                    , Ui.background MyUi.background1
-                    , Ui.borderColor MyUi.background1
-                    , Ui.border 1
-                    , Ui.rounded 8
-                    , MyUi.elButton
-                        (Dom.id ("fileStatus_delete_" ++ Id.toString fileStatusId))
-                        (onPressDelete fileStatusId)
-                        [ Ui.width (Ui.px 42)
-                        , Ui.height (Ui.px 42)
-                        , Ui.rounded 16
-                        , Ui.move { x = -3, y = -3, z = 0 }
-                        ]
-                        (Ui.el
-                            [ Ui.width (Ui.px 34)
-                            , Ui.height (Ui.px 34)
-                            , Ui.rounded 16
-                            , Ui.contentCenterX
-                            , Ui.contentCenterY
-                            , Ui.background MyUi.deleteButtonBackground
-                            ]
-                            (Ui.html Icons.delete)
-                        )
-                        |> Ui.inFront
-                    , case fileStatus of
-                        FileUploaded fileData ->
-                            case fileData.imageMetadata of
-                                Just metadata ->
-                                    if imageHasMetadata metadata then
-                                        MyUi.elButton
-                                            (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
-                                            (onPressInfo fileStatusId)
-                                            [ Ui.width (Ui.px 42)
-                                            , Ui.height (Ui.px 42)
-                                            , Ui.rounded 16
-                                            , Ui.move { x = -3, y = 40, z = 0 }
-                                            ]
-                                            (Ui.el
-                                                [ Ui.width (Ui.px 34)
-                                                , Ui.height (Ui.px 34)
-                                                , Ui.rounded 16
-                                                , Ui.contentCenterX
-                                                , Ui.contentCenterY
-                                                , Ui.background MyUi.buttonBackground
-                                                ]
-                                                (case metadata.gpsLocation of
-                                                    Just _ ->
-                                                        Ui.html Icons.map
-
-                                                    Nothing ->
-                                                        Ui.html Icons.info
-                                                )
-                                            )
-                                            |> Ui.inFront
-
-                                    else
-                                        Ui.noAttr
-
-                                Nothing ->
-                                    Ui.noAttr
-
-                        FileUploading _ _ _ ->
-                            Ui.noAttr
-
-                        FileError _ _ _ _ ->
-                            Ui.noAttr
-                    , Ui.el
-                        [ Ui.alignBottom
-                        , Ui.padding 4
-                        , Ui.Font.bold
-                        , Ui.Shadow.font
-                            { offset = ( 0, 0 )
-                            , blur = 3
-                            , color = Ui.rgb 0 0 0
-                            }
-                        ]
-                        (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
-                        |> Ui.inFront
-                    , case fileStatus of
-                        FileUploading _ fileSize _ ->
-                            progressToString fileSize
-                                |> Ui.text
-                                |> Ui.el
-                                    [ Ui.alignRight
-                                    , Ui.Font.size 14
-                                    , Ui.paddingRight 8
-                                    , Ui.Shadow.font
-                                        { offset = ( 0, 0 )
-                                        , blur = 3
-                                        , color = Ui.rgb 0 0 0
-                                        }
-                                    ]
-                                |> Ui.inFront
-
-                        FileUploaded _ ->
-                            Ui.noAttr
-
-                        FileError _ _ _ _ ->
-                            Ui.noAttr
-                    ]
-                    (case fileStatus of
-                        FileUploading _ _ _ ->
-                            Ui.none
-
-                        FileUploaded fileData ->
-                            case contentTypeType fileData.contentType of
-                                Image ->
-                                    Html.img
-                                        [ Html.Attributes.src
-                                            (case fileData.imageMetadata of
-                                                Just metadata ->
-                                                    thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
-
-                                                Nothing ->
-                                                    fileUrl fileData.contentType fileData.fileHash
-                                            )
-                                        , Html.Attributes.style "object-fit" "cover"
-                                        , Html.Attributes.width (previewSize - 2)
-                                        , Html.Attributes.height (previewSize - 2)
-                                        , Html.Attributes.style "display" "flex"
-                                        , Html.Attributes.style "align-self" "center"
-                                        , Html.Attributes.style "border-radius" "8px"
-                                        ]
-                                        []
-                                        |> Ui.html
-
-                                Text ->
-                                    Ui.el
-                                        [ Ui.width (Ui.px 42)
-                                        , Ui.centerX
-                                        , Ui.centerY
-                                        , Ui.Font.color MyUi.font3
-                                        ]
-                                        (Ui.html Icons.document)
-
-                                _ ->
-                                    Ui.el
-                                        [ Ui.Font.bold
-                                        , Ui.Font.letterSpacing -1
-                                        , Ui.Font.lineHeight 1.1
-                                        , Ui.centerX
-                                        , Ui.centerY
-                                        , MyUi.prewrap
-                                        , Ui.Font.color MyUi.font3
-                                        ]
-                                        (Ui.text "0110\n0001")
-
-                        FileError _ _ _ _ ->
-                            Ui.el
-                                [ Ui.centerX
-                                , Ui.centerY
-                                , Ui.width Ui.shrink
-                                ]
-                                (Ui.html Icons.x)
-                    )
-            )
-            (NonemptyDict.toList filesToUpload2)
-        )
-
-
 imageInfoView : msg -> FileDataWithImage -> Element msg
 imageInfoView onPressClose fileData =
     let
@@ -851,7 +663,7 @@ addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 ->
-            case result |> Debug.log "error" of
+            case result of
                 Ok data ->
                     FileUploaded
                         { fileName = fileName

@@ -432,8 +432,10 @@ type FrontendMsg
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
+    | PressedToggleAttachedFileSpoiler ( AnyGuildOrDmId, ThreadRoute ) { fileId : Id FileId, removeSpoiler : Bool }
     | EditMessage_PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
     | EditMessage_PressedViewAttachedFileInfo ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
+    | EditMessage_PressedToggleAttachedFileSpoiler ( AnyGuildOrDmId, ThreadRoute ) { fileId : Id FileId, removeSpoiler : Bool }
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmId, ThreadRoute ) File (List File)
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
