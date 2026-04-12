@@ -2975,8 +2975,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             , content =
-                                                                RichText.toDiscord newContent
-                                                                    |> Discord.Markdown.toString
+                                                                case RichText.removeAttachedFile (\_ -> True) newContent of
+                                                                    Just text2 ->
+                                                                        RichText.toDiscord text2 |> Discord.Markdown.toString
+
+                                                                    Nothing ->
+                                                                        ""
                                                             }
                                                             |> DiscordSync.http
                                                             |> Task.attempt

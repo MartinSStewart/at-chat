@@ -2028,7 +2028,7 @@ messageToFileData message discordAttachments =
                     Nothing
         )
         message.attachments
-        |> List.indexedMap (\index fileData -> ( Id.fromInt index, fileData ))
+        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
         |> SeqDict.fromList
 
 
