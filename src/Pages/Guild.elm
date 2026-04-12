@@ -30,7 +30,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji, EmojiConfig)
 import Env
-import FileStatus exposing (FileHash)
+import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName
 import Html exposing (Html)
@@ -40,7 +40,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
-import List.Nonempty
+import List.Nonempty exposing (Nonempty)
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
@@ -54,12 +54,12 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
-import RichText
+import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker
-import String.Nonempty
+import String.Nonempty exposing (NonemptyString)
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
@@ -73,6 +73,7 @@ import Ui.Input
 import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
+import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
 
@@ -3183,6 +3184,24 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        draft : String
+        draft =
+            case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.drafts of
+                Just text ->
+                    String.Nonempty.toString text
+
+                Nothing ->
+                    ""
+
+        draftRichText : Maybe (Nonempty (RichText (Id UserId)))
+        draftRichText =
+            case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.drafts of
+                Just text ->
+                    Just (RichText.fromNonemptyString allUsers text)
+
+                Nothing ->
+                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3275,9 +3294,11 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             , MyUi.noShrinking
             , case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview
+                    fileUploadPreview
                         (PressedDeleteAttachedFile ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
                         (PressedViewAttachedFileInfo ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
+                        (PressedToggleAttachedFileSpoiler ( GuildOrDmId guildOrDmIdNoThread, NoThread ))
+                        draftRichText
                         filesToUpload2
                         |> Ui.inFront
 
@@ -3321,13 +3342,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                     name
                                )
                 )
-                (case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.drafts of
-                    Just text ->
-                        String.Nonempty.toString text
-
-                    Nothing ->
-                        ""
-                )
+                draft
                 (case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -3389,6 +3404,24 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        draft : String
+        draft =
+            case SeqDict.get guildOrDmId loggedIn.drafts of
+                Just text ->
+                    String.Nonempty.toString text
+
+                Nothing ->
+                    ""
+
+        draftRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+        draftRichText =
+            case SeqDict.get guildOrDmId loggedIn.drafts of
+                Just text ->
+                    Just (RichText.fromNonemptyString allUsers text)
+
+                Nothing ->
+                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3477,9 +3510,11 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview
+                    fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
+                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        draftRichText
                         filesToUpload2
                         |> Ui.inFront
 
@@ -3525,13 +3560,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                             name
                                        )
                         )
-                        (case SeqDict.get guildOrDmId loggedIn.drafts of
-                            Just text ->
-                                String.Nonempty.toString text
-
-                            Nothing ->
-                                ""
-                        )
+                        draft
                         (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                             Just attachedFiles ->
                                 NonemptyDict.toSeqDict attachedFiles
@@ -3663,6 +3692,24 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        draft : String
+        draft =
+            case SeqDict.get guildOrDmId loggedIn.drafts of
+                Just text ->
+                    String.Nonempty.toString text
+
+                Nothing ->
+                    ""
+
+        draftRichText : Maybe (Nonempty (RichText (Id UserId)))
+        draftRichText =
+            case SeqDict.get guildOrDmId loggedIn.drafts of
+                Just text ->
+                    Just (RichText.fromNonemptyString allUsers text)
+
+                Nothing ->
+                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3770,9 +3817,11 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview
+                    fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
+                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        draftRichText
                         filesToUpload2
                         |> Ui.inFront
 
@@ -3810,13 +3859,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     GuildOrDmId_Dm _ ->
                         "Write a message in this thread"
                 )
-                (case SeqDict.get guildOrDmId loggedIn.drafts of
-                    Just text ->
-                        String.Nonempty.toString text
-
-                    Nothing ->
-                        ""
-                )
+                draft
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -3863,6 +3906,24 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         isMobile : Bool
         isMobile =
             MyUi.isMobile model
+
+        draft : String
+        draft =
+            case SeqDict.get guildOrDmId loggedIn.drafts of
+                Just text ->
+                    String.Nonempty.toString text
+
+                Nothing ->
+                    ""
+
+        draftRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+        draftRichText =
+            case SeqDict.get guildOrDmId loggedIn.drafts of
+                Just text ->
+                    Just (RichText.fromNonemptyString allUsers text)
+
+                Nothing ->
+                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3959,9 +4020,11 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview
+                    fileUploadPreview
                         (PressedDeleteAttachedFile guildOrDmId)
                         (PressedViewAttachedFileInfo guildOrDmId)
+                        (PressedToggleAttachedFileSpoiler guildOrDmId)
+                        draftRichText
                         filesToUpload2
                         |> Ui.inFront
 
@@ -3999,13 +4062,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     DiscordGuildOrDmId_Dm _ ->
                         "Write a message in this thread"
                 )
-                (case SeqDict.get guildOrDmId loggedIn.drafts of
-                    Just text ->
-                        String.Nonempty.toString text
-
-                    Nothing ->
-                        ""
-                )
+                draft
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -4335,6 +4392,15 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
 
+                editRichText : Maybe (Nonempty (RichText userId))
+                editRichText =
+                    case String.Nonempty.fromString editing.text of
+                        Just text ->
+                            Just (RichText.fromNonemptyString allUsers text)
+
+                        Nothing ->
+                            Nothing
+
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
@@ -4383,9 +4449,11 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                 , Ui.column
                     [ case NonemptyDict.fromSeqDict editing.attachedFiles of
                         Just filesToUpload ->
-                            FileStatus.fileUploadPreview
+                            fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
+                                (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
+                                editRichText
                                 filesToUpload
                                 |> Ui.inFront
 
@@ -4469,6 +4537,15 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 threadRouteWithMessage =
                     ViewThreadWithMessage threadId messageId
 
+                editRichText : Maybe (Nonempty (RichText userId))
+                editRichText =
+                    case String.Nonempty.fromString editing.text of
+                        Just text ->
+                            Just (RichText.fromNonemptyString allUsers text)
+
+                        Nothing ->
+                            Nothing
+
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
@@ -4508,9 +4585,11 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 , Ui.column
                     [ case NonemptyDict.fromSeqDict editing.attachedFiles of
                         Just filesToUpload ->
-                            FileStatus.fileUploadPreview
+                            fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
+                                (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
+                                editRichText
                                 filesToUpload
                                 |> Ui.inFront
 
@@ -7013,3 +7092,236 @@ guildNameInput form =
             _ ->
                 Ui.none
         ]
+
+
+fileUploadPreview :
+    (Id FileId -> msg)
+    -> (Id FileId -> msg)
+    -> ({ fileId : Id FileId, removeSpoiler : Bool } -> msg)
+    -> Maybe (Nonempty (RichText userId))
+    -> NonemptyDict (Id FileId) FileStatus
+    -> Element msg
+fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUpload2 =
+    let
+        previewSize : number
+        previewSize =
+            150
+
+        isSpoilered : SeqDict (Id FileId) Bool
+        isSpoilered =
+            case richText of
+                Just richText2 ->
+                    RichText.attachments richText2
+                        |> List.map (\a -> ( a.attachmentId, a.isSpoilered ))
+                        |> SeqDict.fromList
+
+                Nothing ->
+                    SeqDict.empty
+    in
+    Ui.row
+        [ Ui.spacing 2
+        , Ui.move { x = 0, y = -previewSize, z = 0 }
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 8 0
+        ]
+        (List.indexedMap
+            (\index ( fileStatusId, fileStatus ) ->
+                let
+                    isSpoilered2 : Bool
+                    isSpoilered2 =
+                        SeqDict.get (Id.fromInt (index + 1)) isSpoilered |> Maybe.withDefault False
+                in
+                Ui.el
+                    [ Ui.width (Ui.px previewSize)
+                    , Ui.height (Ui.px previewSize)
+                    , Ui.Shadow.shadows
+                        [ { x = 0
+                          , y = -2
+                          , size = 0
+                          , blur = 8
+                          , color = Ui.rgba 0 0 0 0.5
+                          }
+                        ]
+                    , Ui.background MyUi.background1
+                    , Ui.borderColor MyUi.background1
+                    , Ui.border 1
+                    , Ui.rounded 8
+                    , MyUi.elButton
+                        (Dom.id ("fileStatus_delete_" ++ Id.toString fileStatusId))
+                        (onPressDelete fileStatusId)
+                        [ Ui.width (Ui.px 42)
+                        , Ui.height (Ui.px 42)
+                        , Ui.rounded 16
+                        , Ui.move { x = -3, y = -3, z = 0 }
+                        ]
+                        (Ui.el
+                            [ Ui.width (Ui.px 34)
+                            , Ui.height (Ui.px 34)
+                            , Ui.rounded 16
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            , Ui.background MyUi.deleteButtonBackground
+                            ]
+                            (Ui.html Icons.delete)
+                        )
+                        |> Ui.inFront
+                    , MyUi.elButton
+                        (Dom.id ("fileStatus_spoiler_" ++ Id.toString fileStatusId))
+                        (onPressSpoiler { fileId = fileStatusId, removeSpoiler = isSpoilered2 })
+                        [ Ui.width (Ui.px 42)
+                        , Ui.height (Ui.px 42)
+                        , Ui.rounded 16
+                        , Ui.move { x = -3, y = 40, z = 0 }
+                        ]
+                        (Ui.el
+                            [ Ui.width (Ui.px 34)
+                            , Ui.height (Ui.px 34)
+                            , Ui.rounded 16
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            , Ui.background MyUi.buttonBackground
+                            ]
+                            (Ui.html
+                                (if isSpoilered2 then
+                                    Icons.closedEye
+
+                                 else
+                                    Icons.openEye
+                                )
+                            )
+                        )
+                        |> Ui.inFront
+                    , case fileStatus of
+                        FileStatus.FileUploaded fileData ->
+                            case fileData.imageMetadata of
+                                Just metadata ->
+                                    if FileStatus.imageHasMetadata metadata then
+                                        MyUi.elButton
+                                            (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
+                                            (onPressInfo fileStatusId)
+                                            [ Ui.width (Ui.px 42)
+                                            , Ui.height (Ui.px 42)
+                                            , Ui.rounded 16
+                                            , Ui.move { x = -3, y = 77, z = 0 }
+                                            ]
+                                            (Ui.el
+                                                [ Ui.width (Ui.px 34)
+                                                , Ui.height (Ui.px 34)
+                                                , Ui.rounded 16
+                                                , Ui.contentCenterX
+                                                , Ui.contentCenterY
+                                                , Ui.background MyUi.buttonBackground
+                                                ]
+                                                (case metadata.gpsLocation of
+                                                    Just _ ->
+                                                        Ui.html Icons.map
+
+                                                    Nothing ->
+                                                        Ui.html Icons.info
+                                                )
+                                            )
+                                            |> Ui.inFront
+
+                                    else
+                                        Ui.noAttr
+
+                                Nothing ->
+                                    Ui.noAttr
+
+                        FileStatus.FileUploading _ _ _ ->
+                            Ui.noAttr
+
+                        FileStatus.FileError _ _ _ _ ->
+                            Ui.noAttr
+                    , Ui.el
+                        [ Ui.alignBottom
+                        , Ui.padding 4
+                        , Ui.Font.bold
+                        , Ui.Shadow.font
+                            { offset = ( 0, 0 )
+                            , blur = 3
+                            , color = Ui.rgb 0 0 0
+                            }
+                        ]
+                        (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
+                        |> Ui.inFront
+                    , case fileStatus of
+                        FileStatus.FileUploading _ fileSize _ ->
+                            FileStatus.progressToString fileSize
+                                |> Ui.text
+                                |> Ui.el
+                                    [ Ui.alignRight
+                                    , Ui.Font.size 14
+                                    , Ui.paddingRight 8
+                                    , Ui.Shadow.font
+                                        { offset = ( 0, 0 )
+                                        , blur = 3
+                                        , color = Ui.rgb 0 0 0
+                                        }
+                                    ]
+                                |> Ui.inFront
+
+                        FileStatus.FileUploaded _ ->
+                            Ui.noAttr
+
+                        FileStatus.FileError _ _ _ _ ->
+                            Ui.noAttr
+                    ]
+                    (case fileStatus of
+                        FileStatus.FileUploading _ _ _ ->
+                            Ui.none
+
+                        FileStatus.FileUploaded fileData ->
+                            case FileStatus.contentTypeType fileData.contentType of
+                                FileStatus.Image ->
+                                    Html.img
+                                        [ Html.Attributes.src
+                                            (case fileData.imageMetadata of
+                                                Just metadata ->
+                                                    FileStatus.thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
+
+                                                Nothing ->
+                                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                            )
+                                        , Html.Attributes.style "object-fit" "cover"
+                                        , Html.Attributes.width (previewSize - 2)
+                                        , Html.Attributes.height (previewSize - 2)
+                                        , Html.Attributes.style "display" "flex"
+                                        , Html.Attributes.style "align-self" "center"
+                                        , Html.Attributes.style "border-radius" "8px"
+                                        ]
+                                        []
+                                        |> Ui.html
+
+                                FileStatus.Text ->
+                                    Ui.el
+                                        [ Ui.width (Ui.px 42)
+                                        , Ui.centerX
+                                        , Ui.centerY
+                                        , Ui.Font.color MyUi.font3
+                                        ]
+                                        (Ui.html Icons.document)
+
+                                _ ->
+                                    Ui.el
+                                        [ Ui.Font.bold
+                                        , Ui.Font.letterSpacing -1
+                                        , Ui.Font.lineHeight 1.1
+                                        , Ui.centerX
+                                        , Ui.centerY
+                                        , MyUi.prewrap
+                                        , Ui.Font.color MyUi.font3
+                                        ]
+                                        (Ui.text "0110\n0001")
+
+                        FileStatus.FileError _ _ _ _ ->
+                            Ui.el
+                                [ Ui.centerX
+                                , Ui.centerY
+                                , Ui.width Ui.shrink
+                                ]
+                                (Ui.html Icons.x)
+                    )
+            )
+            (NonemptyDict.toList filesToUpload2)
+        )

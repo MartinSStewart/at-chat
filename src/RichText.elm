@@ -17,12 +17,14 @@ module RichText exposing
     , mentionsUser
     , preview
     , removeAttachedFile
+    , spoilerAttachedFile
     , stickers
     , stringToStickers
     , textInputView
     , toDiscord
     , toString
     , toStringWithGetter
+    , unspoilerAttachedFile
     , urlToDomain
     , view
     )

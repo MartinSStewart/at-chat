@@ -1392,6 +1392,12 @@ isPressMsg msg =
         DomFocusChanged _ ->
             False
 
+        PressedToggleAttachedFileSpoiler ( anyGuildOrDmId, threadRoute ) id ->
+            True
+
+        EditMessage_PressedToggleAttachedFileSpoiler ( anyGuildOrDmId, threadRoute ) id ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

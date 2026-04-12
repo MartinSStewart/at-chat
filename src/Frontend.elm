@@ -70,6 +70,7 @@ import Ui.Font
 import Ui.Lazy
 import Untrusted
 import Url exposing (Url)
+import User exposing (FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
@@ -3391,6 +3392,41 @@ updateLoaded msg model =
 
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
+
+        PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | drafts =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (\text ->
+                                    let
+                                        allUsers : SeqDict (Id UserId) FrontendUser
+                                        allUsers =
+                                            Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                    in
+                                    (if removeSpoiler then
+                                        RichText.fromNonemptyString allUsers text
+                                            |> RichText.unspoilerAttachedFile fileId
+
+                                     else
+                                        RichText.fromNonemptyString allUsers text
+                                            |> RichText.spoilerAttachedFile fileId
+                                    )
+                                        |> RichText.toString False allUsers
+                                        |> String.Nonempty.fromString
+                                        |> Maybe.withDefault text
+                                )
+                                loggedIn.drafts
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
+            Debug.todo ""
 
 
 removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg
