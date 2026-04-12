@@ -25,7 +25,7 @@ import MessageInput
 import MyUi
 import OneOrGreater
 import Postmark
-import RichText exposing (Domain, RichText(..))
+import RichText exposing (Domain, Language(..), RichText(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData, StickerUrl(..))
@@ -39,7 +39,14 @@ import Unsafe
 main : Html ()
 main =
     Ui.layout
-        [ Ui.Font.color MyUi.font1, Ui.background MyUi.background1, Ui.behindContent (Ui.html MyUi.css), Ui.scrollable, MyUi.prewrap ]
+        [ Ui.Font.color MyUi.font1
+        , Ui.background MyUi.background1
+        , Ui.behindContent (Ui.html MyUi.css)
+        , Ui.scrollable
+        , Ui.heightMin 0
+        , MyUi.prewrap
+        , Ui.Font.size 16
+        ]
         (Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ Ui.column
@@ -66,7 +73,7 @@ main =
                     (\_ -> ())
                     (\_ -> ())
                     { domainWhitelist = SeqSet.empty
-                    , revealedSpoilers = SeqSet.fromList [ 1, 3, 5 ]
+                    , revealedSpoilers = SeqSet.fromList [ 1, 3, 5, 7 ]
                     , users = SeqDict.empty
                     , attachedFiles = attachments
                     , stickers = stickers
@@ -97,6 +104,12 @@ main =
                                 (NormalText '\n' "Normal text ")
                                 [ Bold (Nonempty (NormalText 'w' "ith") []), NormalText ' ' "spoiler revealed" ]
                             )
+                        , NormalText '\n' "Code block without spoiler"
+                        , CodeBlock NoLanguage "123\nabcd"
+                        , NormalText '\n' "Code block with spoilers"
+                        , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
+                        , NormalText '\n' "Code block with spoilers revealed"
+                        , Spoiler (Nonempty (CodeBlock NoLanguage "123\nabcd") [])
                         ]
                     )
                     |> Html.div []

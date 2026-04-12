@@ -1610,10 +1610,8 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     , embedIndex3
                     , currentList
                         ++ [ Html.span
-                                ([ Html.Attributes.style "padding" "0 2px 0 2px"
-                                 , Html.Attributes.style "border-radius" "2px"
-                                 ]
-                                    ++ (if revealed then
+                                (Html.Attributes.style "border-radius" "2px"
+                                    :: (if revealed then
                                             [ Html.Attributes.style "background" "rgb(30,30,30)" ]
 
                                         else
@@ -1755,9 +1753,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         , Html.Attributes.style "padding" "0 4px 0 4px"
                                         , Html.Attributes.style "border-radius" "4px"
                                         , Html.Attributes.style "font-family" "monospace"
-                                        , htmlAttrIf state.spoiler (Html.Attributes.style "color" "transparent")
                                         ]
-                                        [ Html.text text ]
+                                        [ if state.spoiler then
+                                            Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
+
+                                          else
+                                            Html.text text
+                                        ]
                                    ]
                             )
 
