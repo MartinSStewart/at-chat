@@ -1392,10 +1392,10 @@ isPressMsg msg =
         DomFocusChanged _ ->
             False
 
-        PressedToggleAttachedFileSpoiler ( anyGuildOrDmId, threadRoute ) id ->
+        PressedToggleAttachedFileSpoiler _ _ ->
             True
 
-        EditMessage_PressedToggleAttachedFileSpoiler ( anyGuildOrDmId, threadRoute ) id ->
+        EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             True
 
 

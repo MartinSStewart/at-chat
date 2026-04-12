@@ -55,20 +55,15 @@ import Effect.Http as Http
 import Effect.Task exposing (Task)
 import Env
 import FileName exposing (FileName)
-import Html
-import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
 import MyUi
-import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import StringExtra
 import Ui exposing (Element)
-import Ui.Font
-import Ui.Shadow
 
 
 type alias FileData =

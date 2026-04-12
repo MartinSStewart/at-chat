@@ -148,7 +148,7 @@ spoilerAttachedFile fileId nonempty =
                 NormalText _ _ ->
                     richText
 
-                UserMention userId ->
+                UserMention _ ->
                     richText
 
                 Bold nonempty2 ->
@@ -166,16 +166,16 @@ spoilerAttachedFile fileId nonempty =
                 Spoiler nonempty2 ->
                     spoilerAttachedFile fileId nonempty2 |> Spoiler
 
-                Hyperlink url ->
+                Hyperlink _ ->
                     richText
 
-                MarkdownLink nonemptyString url ->
+                MarkdownLink _ _ ->
                     richText
 
-                InlineCode char string ->
+                InlineCode _ _ ->
                     richText
 
-                CodeBlock language string ->
+                CodeBlock _ _ ->
                     richText
 
                 AttachedFile id ->
@@ -185,10 +185,10 @@ spoilerAttachedFile fileId nonempty =
                     else
                         richText
 
-                EscapedChar escapedChar ->
+                EscapedChar _ ->
                     richText
 
-                Sticker id ->
+                Sticker _ ->
                     richText
         )
         nonempty
@@ -229,7 +229,7 @@ unspoilerAttachedFile fileId nonempty =
                         NormalText _ _ ->
                             Nonempty ( False, richText ) []
 
-                        UserMention userId ->
+                        UserMention _ ->
                             Nonempty ( False, richText ) []
 
                         Bold nonempty3 ->
@@ -244,20 +244,20 @@ unspoilerAttachedFile fileId nonempty =
                         Strikethrough nonempty3 ->
                             Nonempty (helper nonempty3 |> Tuple.mapSecond Strikethrough) []
 
-                        Spoiler nonempty3 ->
+                        Spoiler _ ->
                             -- This shouldn't be reachable since spoilers can't be nested
                             Nonempty ( False, richText ) []
 
-                        Hyperlink url ->
+                        Hyperlink _ ->
                             Nonempty ( False, richText ) []
 
-                        MarkdownLink nonemptyString url ->
+                        MarkdownLink _ _ ->
                             Nonempty ( False, richText ) []
 
-                        InlineCode char string ->
+                        InlineCode _ _ ->
                             Nonempty ( False, richText ) []
 
-                        CodeBlock language string ->
+                        CodeBlock _ _ ->
                             Nonempty ( False, richText ) []
 
                         AttachedFile id ->
@@ -267,10 +267,10 @@ unspoilerAttachedFile fileId nonempty =
                             else
                                 Nonempty ( False, richText ) []
 
-                        EscapedChar escapedChar ->
+                        EscapedChar _ ->
                             Nonempty ( False, richText ) []
 
-                        Sticker id ->
+                        Sticker _ ->
                             Nonempty ( False, richText ) []
                 )
                 nonempty2
@@ -281,7 +281,7 @@ unspoilerAttachedFile fileId nonempty =
                 NormalText _ _ ->
                     Nonempty richText []
 
-                UserMention userId ->
+                UserMention _ ->
                     Nonempty richText []
 
                 Bold nonempty2 ->
@@ -307,25 +307,25 @@ unspoilerAttachedFile fileId nonempty =
                     else
                         Nonempty richText []
 
-                Hyperlink url ->
+                Hyperlink _ ->
                     Nonempty richText []
 
-                MarkdownLink nonemptyString url ->
+                MarkdownLink _ _ ->
                     Nonempty richText []
 
-                InlineCode char string ->
+                InlineCode _ _ ->
                     Nonempty richText []
 
-                CodeBlock language string ->
+                CodeBlock _ _ ->
                     Nonempty richText []
 
-                AttachedFile id ->
+                AttachedFile _ ->
                     Nonempty richText []
 
-                EscapedChar escapedChar ->
+                EscapedChar _ ->
                     Nonempty richText []
 
-                Sticker id ->
+                Sticker _ ->
                     Nonempty richText []
         )
         nonempty
@@ -1146,7 +1146,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                         parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
 
             "~" ->
-                if not (List.head modifiers == Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
+                if (List.head modifiers /= Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
                     parseLoop source (index + 4) sourceLength users modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
@@ -1177,7 +1177,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                     parseLoop source (index + 1) sourceLength users modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if not (List.head modifiers == Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
+                if (List.head modifiers /= Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
                     parseLoop source (index + 4) sourceLength users modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
@@ -3208,7 +3208,7 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                         discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
 
             "~" ->
-                if not (List.head modifiers == Just DiscordIsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
+                if (List.head modifiers /= Just DiscordIsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
                     discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
@@ -3239,7 +3239,7 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                     discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "~") revNodes
 
             "|" ->
-                if not (List.head modifiers == Just DiscordIsSpoilered) && String.slice index (index + 4) source == "||||" then
+                if (List.head modifiers /= Just DiscordIsSpoilered) && String.slice index (index + 4) source == "||||" then
                     discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then

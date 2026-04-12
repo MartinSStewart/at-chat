@@ -3425,7 +3425,7 @@ updateLoaded msg model =
                 )
                 model
 
-        EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
+        EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             Debug.todo ""
 
 

@@ -59,7 +59,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRoute
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
