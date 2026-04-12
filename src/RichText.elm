@@ -2699,6 +2699,18 @@ fromDiscord text attachments embeds stickers2 =
 
                 Nothing ->
                     emptyPlaceholder
+
+        spoileredAttachments : List (RichText userId)
+        spoileredAttachments =
+            List.map
+                (\( fileId, fileData ) ->
+                    if String.startsWith "SPOILER_" (FileName.toString fileData.fileName) then
+                        Spoiler (Nonempty (AttachedFile fileId) [])
+
+                    else
+                        AttachedFile fileId
+                )
+                (SeqDict.toList attachments)
     in
     case String.Nonempty.fromString text of
         Just nonempty ->
@@ -2714,18 +2726,15 @@ fromDiscord text attachments embeds stickers2 =
                     Nothing ->
                         Nonempty (normalTextFromNonempty nonempty) []
                 )
-                (List.map AttachedFile (SeqDict.keys attachments))
+                spoileredAttachments
                 |> applyExtraEmbeds
                 |> List.Nonempty.toList
                 |> applyStickers
 
         Nothing ->
-            case NonemptyDict.fromSeqDict attachments of
+            case List.Nonempty.fromList spoileredAttachments of
                 Just attachments2 ->
-                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
-                        |> applyExtraEmbeds
-                        |> List.Nonempty.toList
-                        |> applyStickers
+                    applyExtraEmbeds attachments2 |> List.Nonempty.toList |> applyStickers
 
                 Nothing ->
                     SeqSet.toList embedSet

@@ -439,6 +439,7 @@ type alias CreateMessageAttachment =
     { filename : String
     , uploadedFilename : String
     , contentType : String
+    , isSpoilered : Bool
     }
 
 
@@ -449,6 +450,7 @@ encodeCreateMessageAttachment index attachment =
         , ( "filename", JE.string attachment.filename )
         , ( "uploaded_filename", JE.string attachment.uploadedFilename )
         , ( "original_content_type", JE.string attachment.contentType )
+        , ( "is_spoiler", JE.bool attachment.isSpoilered )
         ]
 
 
