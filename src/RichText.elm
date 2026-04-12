@@ -1623,7 +1623,11 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                                 ++ (case maybePressedSpoiler of
                                                         Just ( htmlIdPrefix, pressedSpoiler ) ->
                                                             [ Html.Events.onClick (pressedSpoiler spoilerIndex2)
-                                                            , Html.Attributes.id (Dom.idToString htmlIdPrefix ++ "_" ++ String.fromInt spoilerIndex2)
+                                                            , Html.Attributes.id
+                                                                (Dom.idToString htmlIdPrefix
+                                                                    ++ "_"
+                                                                    ++ String.fromInt spoilerIndex2
+                                                                )
                                                             ]
 
                                                         Nothing ->
@@ -1783,21 +1787,31 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                                         ( width, height ) =
                                                             actualImageSize FileStatus.imageMaxHeight containerWidth2 imageSize
                                                     in
-                                                    Html.a
-                                                        [ Html.Attributes.href fileUrl
-                                                        , Html.Attributes.target "_blank"
-                                                        , Html.Attributes.rel "noreferrer"
-                                                        , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
-                                                        , Html.Attributes.style "display" "block"
-                                                        ]
-                                                        [ Html.img
-                                                            [ Html.Attributes.src thumbnailUrl
+                                                    if state.spoiler then
+                                                        Html.div
+                                                            [ Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
+                                                            , Html.Attributes.style "height" (String.fromInt (round height) ++ "px")
                                                             , Html.Attributes.style "display" "block"
-                                                            , Html.Attributes.width (round width)
-                                                            , Html.Attributes.height (round height)
+                                                            , Html.Attributes.style "background-color" "rgb(0,0,0)"
                                                             ]
                                                             []
-                                                        ]
+
+                                                    else
+                                                        Html.a
+                                                            [ Html.Attributes.href fileUrl
+                                                            , Html.Attributes.target "_blank"
+                                                            , Html.Attributes.rel "noreferrer"
+                                                            , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
+                                                            , Html.Attributes.style "display" "block"
+                                                            ]
+                                                            [ Html.img
+                                                                [ Html.Attributes.src thumbnailUrl
+                                                                , Html.Attributes.style "display" "block"
+                                                                , Html.Attributes.width (round width)
+                                                                , Html.Attributes.height (round height)
+                                                                ]
+                                                                []
+                                                            ]
 
                                                 _ ->
                                                     fileDownloadView state.spoiler fileData

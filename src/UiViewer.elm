@@ -66,7 +66,7 @@ main =
                     (\_ -> ())
                     (\_ -> ())
                     { domainWhitelist = SeqSet.empty
-                    , revealedSpoilers = SeqSet.fromList [ 1, 3 ]
+                    , revealedSpoilers = SeqSet.fromList [ 1, 3, 5 ]
                     , users = SeqDict.empty
                     , attachedFiles = attachments
                     , stickers = stickers
@@ -86,6 +86,17 @@ main =
                         , Spoiler (Nonempty (AttachedFile (Id.fromInt 2)) [])
                         , NormalText '\n' "Image with spoiler revealed"
                         , Spoiler (Nonempty (AttachedFile (Id.fromInt 2)) [])
+                        , NormalText '\n' "Normal text without spoiler"
+                        , Spoiler
+                            (Nonempty
+                                (NormalText '\n' "Normal text ")
+                                [ Bold (Nonempty (NormalText 'w' "ith") []), NormalText ' ' "spoiler" ]
+                            )
+                        , Spoiler
+                            (Nonempty
+                                (NormalText '\n' "Normal text ")
+                                [ Bold (Nonempty (NormalText 'w' "ith") []), NormalText ' ' "spoiler revealed" ]
+                            )
                         ]
                     )
                     |> Html.div []
