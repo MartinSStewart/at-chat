@@ -7,6 +7,7 @@ module RichText exposing
     , RichTextState
     , attachedFilePrefix
     , attachedFileSuffix
+    , attachments
     , domainToString
     , emptyPlaceholder
     , escapedCharToString
@@ -232,6 +233,61 @@ hyperlinks nonempty =
 
                 AttachedFile _ ->
                     []
+
+                EscapedChar _ ->
+                    []
+
+                Sticker _ ->
+                    []
+        )
+        (List.Nonempty.toList nonempty)
+
+
+attachments : Nonempty (RichText userId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
+attachments nonempty =
+    attachmentsHelper False nonempty
+
+
+attachmentsHelper : Bool -> Nonempty (RichText userId) -> List { attachmentId : Id FileId, isSpoilered : Bool }
+attachmentsHelper isSpoilered nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink data ->
+                    []
+
+                MarkdownLink _ url ->
+                    []
+
+                UserMention _ ->
+                    []
+
+                NormalText _ _ ->
+                    []
+
+                Bold nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Italic nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Underline nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Strikethrough nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
+                Spoiler nonempty2 ->
+                    attachmentsHelper True nonempty2
+
+                InlineCode _ _ ->
+                    []
+
+                CodeBlock _ _ ->
+                    []
+
+                AttachedFile fileId ->
+                    [ { attachmentId = fileId, isSpoilered = isSpoilered } ]
 
                 EscapedChar _ ->
                     []
@@ -2645,7 +2701,7 @@ fromDiscord :
     -> Discord.OptionalData (List Discord.Embed)
     -> List (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments embeds stickers2 =
+fromDiscord text attachments2 embeds stickers2 =
     let
         embedSet : SeqSet Url
         embedSet =
@@ -2710,7 +2766,7 @@ fromDiscord text attachments embeds stickers2 =
                     else
                         AttachedFile fileId
                 )
-                (SeqDict.toList attachments)
+                (SeqDict.toList attachments2)
     in
     case String.Nonempty.fromString text of
         Just nonempty ->
@@ -2733,8 +2789,8 @@ fromDiscord text attachments embeds stickers2 =
 
         Nothing ->
             case List.Nonempty.fromList spoileredAttachments of
-                Just attachments2 ->
-                    applyExtraEmbeds attachments2 |> List.Nonempty.toList |> applyStickers
+                Just spoileredAttachments2 ->
+                    applyExtraEmbeds spoileredAttachments2 |> List.Nonempty.toList |> applyStickers
 
                 Nothing ->
                     SeqSet.toList embedSet

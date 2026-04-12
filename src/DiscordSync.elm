@@ -2819,7 +2819,7 @@ sendMessage :
     -> Task BackendOnly Discord.HttpError Discord.Message
 sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers text =
     List.map
-        (\attachment ->
+        (\( attachmentId, attachment ) ->
             Http.task
                 { method = "GET"
                 , headers = []
@@ -2846,15 +2846,15 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                         )
                 , timeout = Duration.seconds 30 |> Just
                 }
-                |> Task.map (\bytes -> Ok ( attachment, bytes ))
+                |> Task.map (\bytes -> Ok ( attachmentId, attachment, bytes ))
                 |> Task.onError (\() -> Task.succeed (Err ()))
         )
-        (SeqDict.values attachedFiles)
+        (SeqDict.toList attachedFiles)
         |> Task.sequence
         |> Task.andThen
             (\attachments ->
                 let
-                    attachments2 : List ( FileData, Bytes )
+                    attachments2 : List ( Id FileId, FileData, Bytes )
                     attachments2 =
                         List.filterMap Result.toMaybe attachments
                 in
@@ -2866,7 +2866,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                         discordUser.auth
                         channelId
                         (List.map
-                            (\( fileData, bytes ) ->
+                            (\( _, fileData, bytes ) ->
                                 { fileSize = Bytes.width bytes
                                 , filename = FileName.toString fileData.fileName
                                 }
@@ -2880,23 +2880,45 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                             uploadAttachments attachments2 uploadAttachmentsResponse
                                 |> Task.andThen
                                     (\_ ->
+                                        let
+                                            uploadAttachmentDict : SeqDict (Id FileId) { filename : String, uploadedFilename : String, contentType : String }
+                                            uploadAttachmentDict =
+                                                List.map2
+                                                    (\a ( fileId, fileData, _ ) ->
+                                                        ( fileId
+                                                        , { filename = FileName.toString fileData.fileName
+                                                          , uploadedFilename = a.uploadFilename
+                                                          , contentType =
+                                                                OneToOne.second fileData.contentType FileStatus.contentTypes
+                                                                    |> Maybe.withDefault ""
+                                                          }
+                                                        )
+                                                    )
+                                                    uploadAttachmentsResponse
+                                                    attachments2
+                                                    |> SeqDict.fromList
+                                        in
                                         Discord.createMessagePayload
                                             (Discord.userToken discordUser.auth)
                                             { channelId = channelId
                                             , content = RichText.toDiscord text |> Discord.Markdown.toString
                                             , replyTo = maybeReplyTo
                                             , attachments =
-                                                List.map2
-                                                    (\a ( fileData, _ ) ->
-                                                        { filename = FileName.toString fileData.fileName
-                                                        , uploadedFilename = a.uploadFilename
-                                                        , contentType =
-                                                            OneToOne.second fileData.contentType FileStatus.contentTypes
-                                                                |> Maybe.withDefault ""
-                                                        }
+                                                List.filterMap
+                                                    (\attachment ->
+                                                        case SeqDict.get attachment.attachmentId uploadAttachmentDict of
+                                                            Just data ->
+                                                                { filename = data.filename
+                                                                , uploadedFilename = data.uploadedFilename
+                                                                , contentType = data.contentType
+                                                                , isSpoilered = attachment.isSpoilered
+                                                                }
+                                                                    |> Just
+
+                                                            Nothing ->
+                                                                Nothing
                                                     )
-                                                    uploadAttachmentsResponse
-                                                    attachments2
+                                                    (RichText.attachments text)
                                             , stickers =
                                                 RichText.stickers text
                                                     |> List.filterMap (\stickerId -> OneToOne.first stickerId discordStickers)
@@ -2911,10 +2933,10 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
             )
 
 
-uploadAttachments : List ( FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
+uploadAttachments : List ( Id FileId, FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
 uploadAttachments files uploadAttachmentsResponses =
     List.map2
-        (\( _, bytes ) uploadAttachmentsResponse ->
+        (\( _, _, bytes ) uploadAttachmentsResponse ->
             Http.task
                 { method = "PUT"
                 , headers = []
