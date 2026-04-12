@@ -45,7 +45,6 @@ import Icons
 import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
-import NonemptyDict
 import NonemptyExtra
 import PersonName exposing (PersonName)
 import Range exposing (Range)
@@ -253,10 +252,10 @@ attachmentsHelper isSpoilered nonempty =
     List.concatMap
         (\richText ->
             case richText of
-                Hyperlink data ->
+                Hyperlink _ ->
                     []
 
-                MarkdownLink _ url ->
+                MarkdownLink _ _ ->
                     []
 
                 UserMention _ ->
@@ -2760,8 +2759,8 @@ fromDiscord text attachments2 embeds stickers2 =
         spoileredAttachments : List (RichText userId)
         spoileredAttachments =
             List.map
-                (\( fileId, { fileData, isSpoilered } ) ->
-                    if isSpoilered then
+                (\( fileId, attachment ) ->
+                    if attachment.isSpoilered then
                         Spoiler (Nonempty (AttachedFile fileId) [])
 
                     else
