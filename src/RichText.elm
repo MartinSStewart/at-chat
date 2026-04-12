@@ -200,11 +200,11 @@ unspoilerAttachedFile fileId nonempty =
         helper : Nonempty (RichText userId) -> ( Bool, Nonempty (RichText userId) )
         helper nonempty2 =
             let
-                nonempty3 =
+                unspoilered =
                     unspoilerAttachedFileHelper nonempty2
             in
-            ( List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) nonempty3
-            , List.Nonempty.toList nonempty3
+            ( List.Nonempty.any (\( removeSpoiler, _ ) -> removeSpoiler) unspoilered
+            , List.Nonempty.toList unspoilered
                 |> List.Extra.groupWhile
                     (\( removeSpoilerA, _ ) ( removeSpoilerB, _ ) ->
                         removeSpoilerA == removeSpoilerB

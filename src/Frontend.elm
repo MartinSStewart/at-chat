@@ -3425,8 +3425,43 @@ updateLoaded msg model =
                 )
                 model
 
-        EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
-            Debug.todo ""
+        EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (\edit ->
+                                    case String.Nonempty.fromString edit.text of
+                                        Just nonempty ->
+                                            let
+                                                allUsers : SeqDict (Id UserId) FrontendUser
+                                                allUsers =
+                                                    Local.model loggedIn.localState |> .localUser |> LocalState.allUsers
+                                            in
+                                            { edit
+                                                | text =
+                                                    (if removeSpoiler then
+                                                        RichText.fromNonemptyString allUsers nonempty
+                                                            |> RichText.unspoilerAttachedFile fileId
+
+                                                     else
+                                                        RichText.fromNonemptyString allUsers nonempty
+                                                            |> RichText.spoilerAttachedFile fileId
+                                                    )
+                                                        |> RichText.toString False allUsers
+                                            }
+
+                                        Nothing ->
+                                            edit
+                                )
+                                loggedIn.editMessage
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg

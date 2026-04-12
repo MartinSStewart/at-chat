@@ -7124,12 +7124,12 @@ fileUploadPreview onPressDelete onPressInfo onPressSpoiler richText filesToUploa
         , Ui.width Ui.shrink
         , Ui.paddingXY 8 0
         ]
-        (List.indexedMap
-            (\index ( fileStatusId, fileStatus ) ->
+        (List.map
+            (\( fileStatusId, fileStatus ) ->
                 let
                     isSpoilered2 : Bool
                     isSpoilered2 =
-                        SeqDict.get (Id.fromInt (index + 1)) isSpoilered |> Maybe.withDefault False
+                        SeqDict.get fileStatusId isSpoilered |> Maybe.withDefault False
                 in
                 Ui.el
                     [ Ui.width (Ui.px previewSize)
