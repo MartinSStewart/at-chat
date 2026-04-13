@@ -22,6 +22,8 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
+use std::time::Duration;
+use std::time::SystemTime;
 use subtle::ConstantTimeEq;
 
 #[tokio::main]
@@ -261,10 +263,47 @@ fn create_dir_if_missing(path: String) {
     }
 }
 
-async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Response<String> {
+const BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
+fn remove_old_backups(dir: String) {
+    let now = SystemTime::now();
+
+    match fs::read_dir(&dir) {
+        Ok(entries) => {
+            for entry in entries {
+                match entry {
+                    Ok(entry2) => match (entry2.metadata(), entry2.file_name().to_str()) {
+                        (Ok(metadata), Some(filename)) => match (metadata.is_file(), metadata.created()) {
+                            (true, Ok(time)) => {
+                                let should_delete = match now.duration_since(time) {
+                                    Ok(duration) => {
+                                        duration > BACKUP_MAX_AGE
+                                            && filename.starts_with("backend-export-")
+                                    }
+                                    Err(_) => false,
+                                };
+                                if should_delete {
+                                    let _ = fs::remove_file(entry2.path());
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    },
+                    Err(_) => {}
+                }
+            }
+        }
+        Err(_) => {}
+    }
+}
+
+async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Response<String> {
     create_dir_if_missing(SERVER_BACKUPS_PATH.to_string());
     create_dir_if_missing(BUCKET_BACKUPS_PATH.to_string());
+
+    remove_old_backups(SERVER_BACKUPS_PATH.to_string());
+    remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
 
     // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
     let write_a = fs::write(String::from(SERVER_BACKUPS_PATH) + &filename, &body);

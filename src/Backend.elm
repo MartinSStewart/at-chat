@@ -1288,7 +1288,11 @@ update msg model =
                                 ++ "-"
                                 ++ String.padLeft 2 '0' (String.fromInt (Time.toDay Time.utc time))
                                 ++ "-"
-                                ++ MyUi.timestamp time Time.utc
+                                ++ String.padLeft 2 '0' (String.fromInt (Time.toHour Time.utc time))
+                                ++ ":"
+                                ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute Time.utc time))
+                                ++ ":"
+                                ++ String.padLeft 2 '0' (String.fromInt (Time.toSecond Time.utc time))
                     in
                     ( { model | scheduledExportState = progressState }
                     , case progress of
