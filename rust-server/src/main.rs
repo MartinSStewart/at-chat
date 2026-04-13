@@ -110,18 +110,22 @@ async fn require_internal_secret(
             .get("x-secret-key")
             .and_then(|v| v.to_str().ok());
 
-        let authorized = match provided {
-            Some(token) => token.as_bytes().ct_eq(state.secret_key.as_bytes()).into(),
-            None => false,
-        };
-
-        if authorized {
-            next.run(req).await
-        } else {
-            Response::builder()
+        match provided {
+            Some(token) => {
+                let authorized = token.as_bytes().ct_eq(state.secret_key.as_bytes()).into();
+                if authorized {
+                    next.run(req).await
+                } else {
+                    Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .body(Body::from("Invalid secret key"))
+                        .unwrap()
+                }
+            }
+            None => Response::builder()
                 .status(StatusCode::FORBIDDEN)
-                .body(Body::from("Invalid secret key"))
-                .unwrap()
+                .body(Body::from("Missing x-secret-key"))
+                .unwrap(),
         }
     } else {
         next.run(req).await
