@@ -273,21 +273,23 @@ fn remove_old_backups(dir: String) {
             for entry in entries {
                 match entry {
                     Ok(entry2) => match (entry2.metadata(), entry2.file_name().to_str()) {
-                        (Ok(metadata), Some(filename)) => match (metadata.is_file(), metadata.created()) {
-                            (true, Ok(time)) => {
-                                let should_delete = match now.duration_since(time) {
-                                    Ok(duration) => {
-                                        duration > BACKUP_MAX_AGE
-                                            && filename.starts_with("backend-export-")
+                        (Ok(metadata), Some(filename)) => {
+                            match (metadata.is_file(), metadata.created()) {
+                                (true, Ok(time)) => {
+                                    let should_delete = match now.duration_since(time) {
+                                        Ok(duration) => {
+                                            duration > BACKUP_MAX_AGE
+                                                && filename.starts_with("backend-export-")
+                                        }
+                                        Err(_) => false,
+                                    };
+                                    if should_delete {
+                                        let _ = fs::remove_file(entry2.path());
                                     }
-                                    Err(_) => false,
-                                };
-                                if should_delete {
-                                    let _ = fs::remove_file(entry2.path());
                                 }
+                                _ => {}
                             }
-                            _ => {}
-                        },
+                        }
                         _ => {}
                     },
                     Err(_) => {}

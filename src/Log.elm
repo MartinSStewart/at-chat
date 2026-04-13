@@ -117,7 +117,7 @@ shouldNotifyAdmin log =
         FailedToLoadDiscordStandardStickerPacks _ ->
             Nothing
 
-        FailedToGenerateScheduledBackup error ->
+        FailedToGenerateScheduledBackup _ ->
             Nothing
 
 

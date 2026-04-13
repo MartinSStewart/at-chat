@@ -61,7 +61,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportState, ExportStateProgress, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))

@@ -509,7 +509,7 @@ uploadBackup name bytes =
             Http.stringResolver
                 (\result ->
                     case result of
-                        Http.GoodStatus_ _ text ->
+                        Http.GoodStatus_ _ _ ->
                             Ok ()
 
                         Http.BadUrl_ string ->
