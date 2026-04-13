@@ -112,7 +112,7 @@ async fn require_internal_secret(
 
         match provided {
             Some(token) => {
-                let authorized = token.trim().as_bytes().ct_eq(state.secret_key.as_bytes()).into();
+                let authorized = token.trim().as_bytes().ct_eq(state.secret_key.trim().as_bytes()).into();
                 if authorized {
                     next.run(req).await
                 } else {
