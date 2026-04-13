@@ -33,7 +33,10 @@ async fn main() {
 
             let app = Router::new()
                 .route("/file/embed", post(post_embed).options(options_endpoint))
-                .route("/file/internal/embed", post(post_embed).options(options_endpoint))
+                .route(
+                    "/file/internal/embed",
+                    post(post_embed).options(options_endpoint),
+                )
                 .route(
                     "/file/upload",
                     post(upload_endpoint).options(options_endpoint),
