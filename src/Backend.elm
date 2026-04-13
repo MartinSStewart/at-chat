@@ -1618,7 +1618,7 @@ discordStartThread :
     -> Id ChannelMessageId
     -> Discord.Id Discord.MessageId
     -> { d | discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData }
-    -> Task restriction Discord.HttpError Discord.Channel
+    -> Task BackendOnly Discord.HttpError Discord.Channel
 discordStartThread discordUser channel channelId threadId messageId model =
     Discord.startThreadFromMessagePayload
         (Discord.userToken discordUser.auth)
@@ -1685,9 +1685,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             else
                 ( { model | isInitialized = True }
                 , Command.batch
-                    [ Http.get
-                        { url = FileStatus.domain ++ "/file/internal/vapid"
+                    [ Http.request
+                        { method = "GET"
+                        , headers = [ Http.header "x-secret-key" Env.secretKey ]
+                        , url = FileStatus.domain ++ "/file/internal/vapid"
+                        , body = Http.emptyBody
                         , expect = Http.expectString GotVapidKeys
+                        , timeout = Nothing
+                        , tracker = Nothing
                         }
                     , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
                     , cmd

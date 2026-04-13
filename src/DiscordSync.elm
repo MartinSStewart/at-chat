@@ -777,7 +777,7 @@ nonemptyTaskSequence nonempty =
     Task.map2 Nonempty (List.Nonempty.head nonempty) (Task.sequence (List.Nonempty.tail nonempty))
 
 
-joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.MessageId -> Command restriction toMsg BackendMsg
+joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.MessageId -> Command BackendOnly toMsg BackendMsg
 joinThread authentication guildId threadId =
     Discord.joinThreadPayload (Discord.userToken authentication) threadId
         |> http
@@ -2768,11 +2768,11 @@ loadImage url =
             )
 
 
-http : Discord.HttpRequest value -> Task restriction Discord.HttpError value
+http : Discord.HttpRequest value -> Task BackendOnly Discord.HttpError value
 http request =
     Http.task
         { method = "POST"
-        , headers = []
+        , headers = [ Http.header "x-secret-key" Env.secretKey ]
         , url = FileStatus.domain ++ "/file/internal/custom-request"
         , body =
             Json.Encode.object

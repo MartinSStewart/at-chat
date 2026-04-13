@@ -2,9 +2,11 @@ module Embed exposing (Embed(..), EmbedData, EmbedImageData, EmbedImageFormat(..
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Effect.Command exposing (Command)
+import Duration
+import Effect.Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Time as Time
+import Env
 import FileStatus
 import Json.Decode
 import Json.Encode
@@ -58,12 +60,16 @@ type EmbedImageFormat
     | Qoi
 
 
-request : Url -> Command restriction toFrontend ( Url, Result Http.Error EmbedData )
+request : Url -> Command BackendOnly toFrontend ( Url, Result Http.Error EmbedData )
 request url =
-    Http.post
-        { url = FileStatus.domain ++ "/file/internal/embed"
+    Http.request
+        { method = "POST"
+        , url = FileStatus.domain ++ "/file/internal/embed"
+        , headers = [ Http.header "x-secret-key" Env.secretKey ]
         , body = Json.Encode.object [ ( "url", Json.Encode.string (Url.toString url) ) ] |> Http.jsonBody
         , expect = Http.expectJson (Tuple.pair url) decodeEmbedData
+        , timeout = Just (Duration.seconds 30)
+        , tracker = Nothing
         }
 
 
