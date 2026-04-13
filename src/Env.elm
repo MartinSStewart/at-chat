@@ -20,6 +20,8 @@ isProduction =
     isProduction_ == "True"
 
 
+{-| Make sure this value is present in ./var/lib/atchat/secret.txt
+-}
 secretKey : String
 secretKey =
     "123"
