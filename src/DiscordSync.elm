@@ -2773,7 +2773,7 @@ http request =
     Http.task
         { method = "POST"
         , headers = []
-        , url = FileStatus.domain ++ "/file/custom-request"
+        , url = FileStatus.domain ++ "/file/internal/custom-request"
         , body =
             Json.Encode.object
                 [ ( "method", Json.Encode.string request.method )

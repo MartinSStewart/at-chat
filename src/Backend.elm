@@ -1686,7 +1686,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 ( { model | isInitialized = True }
                 , Command.batch
                     [ Http.get
-                        { url = FileStatus.domain ++ "/file/vapid"
+                        { url = FileStatus.domain ++ "/file/internal/vapid"
                         , expect = Http.expectString GotVapidKeys
                         }
                     , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)

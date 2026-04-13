@@ -61,7 +61,7 @@ type EmbedImageFormat
 request : Url -> Command restriction toFrontend ( Url, Result Http.Error EmbedData )
 request url =
     Http.post
-        { url = FileStatus.domain ++ "/file/embed"
+        { url = FileStatus.domain ++ "/file/internal/embed"
         , body = Json.Encode.object [ ( "url", Json.Encode.string (Url.toString url) ) ] |> Http.jsonBody
         , expect = Http.expectJson (Tuple.pair url) decodeEmbedData
         }

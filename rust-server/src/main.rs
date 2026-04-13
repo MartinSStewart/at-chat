@@ -4,11 +4,11 @@ use axum::{Json, RequestExt};
 use axum::{
     Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, Path, Request, State },
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::{StatusCode, Uri},
+    middleware::Next,
     routing::get,
     routing::post,
-    middleware::Next,
 };
 
 use chrono;
@@ -29,10 +29,12 @@ async fn main() {
     // secret.txt should match Env.secretKey
     match fs::read_to_string("./var/lib/atchat/secret.txt") {
         Ok(secret_key) => {
+            println!("Got secret key!");
             let state = AppState { secret_key };
 
             let app = Router::new()
                 .route("/file/embed", post(post_embed).options(options_endpoint))
+                .route("/file/internal/embed", post(post_embed).options(options_endpoint))
                 .route(
                     "/file/upload",
                     post(upload_endpoint).options(options_endpoint),
@@ -46,7 +48,15 @@ async fn main() {
                     post(push_notification_endpoint).options(options_endpoint),
                 )
                 .route(
+                    "/file/internal/push-notification",
+                    post(push_notification_endpoint).options(options_endpoint),
+                )
+                .route(
                     "/file/custom-request",
+                    post(custom_request_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
                 )
                 .route(
@@ -54,14 +64,15 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/vapid", get(vapid_endpoint))
+                .route("/file/internal/vapid", get(vapid_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
-                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-                .fallback(fallback)
+                //.layer(DefaultBodyLimit::max(100 * 1024 * 1024))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
                     require_internal_secret,
                 ))
+                .fallback(fallback)
                 .with_state(state);
 
             match tokio::net::TcpListener::bind("0.0.0.0:3000").await {
@@ -89,17 +100,17 @@ async fn require_internal_secret(
     req: Request,
     next: Next,
 ) -> Response<Body> {
-    if req.path().to_string() == "/file/internal/" {
+    let path = req.uri().path();
+    println!("request {:?}", path);
+    if path.to_string().starts_with("/file/internal/") {
+        println!("internal");
         let provided = req
             .headers()
             .get("x-internal-secret")
             .and_then(|v| v.to_str().ok());
 
         let authorized = match provided {
-            Some(token) => token
-                .as_bytes()
-                .ct_eq(state.secret_key.as_bytes())
-                .into(),
+            Some(token) => token.as_bytes().ct_eq(state.secret_key.as_bytes()).into(),
             None => false,
         };
 
@@ -107,11 +118,12 @@ async fn require_internal_secret(
             next.run(req).await
         } else {
             Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Body::from(""))
-                    .unwrap()
+                .status(StatusCode::FORBIDDEN)
+                .body(Body::from(""))
+                .unwrap()
         }
     } else {
+        println!("public");
         next.run(req).await
     }
 }
@@ -223,11 +235,7 @@ fn is_authorized(State(state): State<AppState>, request: Request) -> bool {
     }
 }
 
-async fn vapid_endpoint(state: State<AppState>, request: Request) -> Response<String> {
-    if !is_authorized(state, request) {
-        return response_with_headers(StatusCode::FORBIDDEN, String::from(""));
-    }
-
+async fn vapid_endpoint(_request: Request) -> Response<String> {
     match vapid::Key::generate() {
         Ok(key) => response_with_headers(
             StatusCode::OK,

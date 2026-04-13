@@ -751,7 +751,7 @@ pushNotification sessionId userId time title body icon navigateTo pushSubscripti
     Http.request
         { method = "POST"
         , headers = []
-        , url = FileStatus.domain ++ "/file/push-notification"
+        , url = FileStatus.domain ++ "/file/internal/push-notification"
         , body =
             Codec.encodeToValue
                 pushNotificationCodec
