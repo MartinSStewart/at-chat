@@ -2772,7 +2772,7 @@ http : Discord.HttpRequest value -> Task BackendOnly Discord.HttpError value
 http request =
     Http.task
         { method = "POST"
-        , headers = [ Http.header "x-secret-key" Env.secretKey ]
+        , headers = [ Env.secretKeyHeader ]
         , url = FileStatus.domain ++ "/file/internal/custom-request"
         , body =
             Json.Encode.object

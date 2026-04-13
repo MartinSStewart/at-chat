@@ -1687,7 +1687,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 , Command.batch
                     [ Http.request
                         { method = "GET"
-                        , headers = [ Http.header "x-secret-key" Env.secretKey ]
+                        , headers = [ Env.secretKeyHeader ]
                         , url = FileStatus.domain ++ "/file/internal/vapid"
                         , body = Http.emptyBody
                         , expect = Http.expectString GotVapidKeys

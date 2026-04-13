@@ -65,7 +65,7 @@ request url =
     Http.request
         { method = "POST"
         , url = FileStatus.domain ++ "/file/internal/embed"
-        , headers = [ Http.header "x-secret-key" Env.secretKey ]
+        , headers = [ Env.secretKeyHeader ]
         , body = Json.Encode.object [ ( "url", Json.Encode.string (Url.toString url) ) ] |> Http.jsonBody
         , expect = Http.expectJson (Tuple.pair url) decodeEmbedData
         , timeout = Just (Duration.seconds 30)

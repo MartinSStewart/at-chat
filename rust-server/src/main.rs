@@ -107,13 +107,16 @@ async fn require_internal_secret(
     if path.to_string().starts_with("/file/internal/") {
         let provided = req
             .headers()
-            .get("x-internal-secret")
+            .get("x-secret-key")
             .and_then(|v| v.to_str().ok());
 
         let authorized = match provided {
             Some(token) => token.as_bytes().ct_eq(state.secret_key.as_bytes()).into(),
             None => false,
         };
+
+        println!("{}", authorized);
+        println!("{:?}", provided);
 
         if authorized {
             next.run(req).await

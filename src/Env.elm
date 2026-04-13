@@ -1,5 +1,6 @@
 module Env exposing (..)
 
+import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Postmark
 import Unsafe
@@ -25,6 +26,13 @@ isProduction =
 secretKey : String
 secretKey =
     "123"
+
+
+{-| Header name needs to stay in sync with Rust code
+-}
+secretKeyHeader : Http.Header
+secretKeyHeader =
+    Http.header "x-secret-key" secretKey
 
 
 postmarkServerToken_ : String
