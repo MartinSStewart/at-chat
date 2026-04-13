@@ -221,20 +221,6 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
     )
 }
 
-fn is_authorized(State(state): State<AppState>, request: Request) -> bool {
-    let header_secret_key: Option<&str> = request
-        .headers()
-        .get("x-internal-secret")
-        .and_then(|v| v.to_str().ok());
-    match header_secret_key {
-        Some(header_secret_key) => header_secret_key
-            .as_bytes()
-            .ct_eq(state.secret_key.as_bytes())
-            .into(),
-        None => false,
-    }
-}
-
 async fn vapid_endpoint(_request: Request) -> Response<String> {
     match vapid::Key::generate() {
         Ok(key) => response_with_headers(
