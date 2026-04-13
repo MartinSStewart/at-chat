@@ -29,7 +29,9 @@ async fn main() {
     // secret.txt should match Env.secretKey
     match fs::read_to_string("./var/lib/atchat/secret.txt") {
         Ok(secret_key) => {
-            let state = AppState { secret_key };
+            let state = AppState {
+                secret_key: secret_key.trim().as_bytes().to_vec(),
+            };
 
             let app = Router::new()
                 .route("/file/embed", post(post_embed).options(options_endpoint))
@@ -94,7 +96,7 @@ async fn main() {
 
 #[derive(Clone)]
 struct AppState {
-    secret_key: String,
+    secret_key: Vec<u8>,
 }
 
 async fn require_internal_secret(
@@ -112,7 +114,7 @@ async fn require_internal_secret(
 
         match provided {
             Some(token) => {
-                let authorized = token.trim().as_bytes().ct_eq(state.secret_key.trim().as_bytes()).into();
+                let authorized = token.as_bytes().to_vec().ct_eq(&state.secret_key).into();
                 if authorized {
                     next.run(req).await
                 } else {
