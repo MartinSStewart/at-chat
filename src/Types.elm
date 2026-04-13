@@ -607,7 +607,7 @@ type BackendMsg
     | GotDiscordGuildStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
-    | ScheduledExportUploadResult (Result Http.Error ())
+    | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
 
 
 type alias ExportStateProgress =

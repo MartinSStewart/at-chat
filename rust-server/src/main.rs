@@ -249,16 +249,41 @@ fn vec_to_headermap(
     Ok(header_map)
 }
 
-async fn post_backup_endpoint(Path(filename): Path<String>, request: Request) -> Response<String> {
-    match request.extract::<Bytes, _>().await {
-        Ok(body) => match (
-            fs::write(String::from("./var/lib/atchat/backups/") + &filename, &body),
-            fs::write(String::from("./var/lib/atchat/storage/backups/") + &filename, &body),
-        ) {
-            (Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
-            _ => response_with_headers(StatusCode::BAD_REQUEST, format!("Error 2")),
-        },
-        Err(_) => response_with_headers(StatusCode::BAD_REQUEST, format!("Error 1")),
+const SERVER_BACKUPS_PATH: &str = "./var/lib/atchat/backups/";
+const BUCKET_BACKUPS_PATH: &str = "./var/lib/atchat/storage/backups/";
+
+fn create_dir_if_missing(path: String) {
+    match fs::exists(&path) {
+        Ok(true) => (),
+        _ => {
+            let _ = fs::create_dir(&path);
+        }
+    }
+}
+
+async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Response<String> {
+
+    create_dir_if_missing(SERVER_BACKUPS_PATH.to_string());
+    create_dir_if_missing(BUCKET_BACKUPS_PATH.to_string());
+
+    // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
+    let write_a = fs::write(String::from(SERVER_BACKUPS_PATH) + &filename, &body);
+    let write_b = fs::write(String::from(BUCKET_BACKUPS_PATH) + &filename, &body);
+
+    match (write_a, write_b) {
+        (Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
+        (Err(error), Ok(_)) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("First write failed\n{:?}", error),
+        ),
+        (Ok(_), Err(error)) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("Second write failed\n{:?}", error),
+        ),
+        (Err(error_a), Err(error_b)) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
+        ),
     }
 }
 

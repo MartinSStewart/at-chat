@@ -505,7 +505,30 @@ uploadBackup name bytes =
         , headers = [ Env.secretKeyHeader ]
         , url = domain ++ "/file/internal/upload-backup/" ++ name
         , body = Http.bytesBody "application/octet-stream" bytes
-        , resolver = resolver (Codec.succeed ())
+        , resolver =
+            Http.stringResolver
+                (\result ->
+                    case result of
+                        Http.GoodStatus_ _ text ->
+                            Ok ()
+
+                        Http.BadUrl_ string ->
+                            Err (Http.BadUrl string)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+
+                        Http.BadStatus_ metadata text ->
+                            "Status code: "
+                                ++ String.fromInt metadata.statusCode
+                                ++ " Message: "
+                                ++ text
+                                |> Http.BadBody
+                                |> Err
+                )
         , timeout = Nothing
         }
 

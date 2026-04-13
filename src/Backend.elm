@@ -1287,14 +1287,14 @@ update msg model =
                                 ++ String.padLeft 2 '0' (String.fromInt (MyUi.monthToInt (Time.toMonth Time.utc time)))
                                 ++ "-"
                                 ++ String.padLeft 2 '0' (String.fromInt (Time.toDay Time.utc time))
-                                ++ " "
+                                ++ "-"
                                 ++ MyUi.timestamp time Time.utc
                     in
                     ( { model | scheduledExportState = progressState }
                     , case progress of
                         Pages.Admin.ExportingFinalStep bytes ->
                             FileStatus.uploadBackup ("backend-export-" ++ timestamp ++ ".bin") bytes
-                                |> Task.attempt ScheduledExportUploadResult
+                                |> Task.attempt (ScheduledExportUploadResult time)
 
                         _ ->
                             Command.none
@@ -1423,7 +1423,7 @@ update msg model =
                 shouldExport =
                     case model.lastScheduledExportTime of
                         Nothing ->
-                            True
+                            False
 
                         Just lastScheduledExportTime ->
                             Duration.from lastScheduledExportTime time |> Quantity.greaterThanOrEqualTo (Duration.hours 4)
@@ -1458,7 +1458,15 @@ update msg model =
                 }
 
               else
-                model
+                { model
+                    | lastScheduledExportTime =
+                        case model.lastScheduledExportTime of
+                            Just _ ->
+                                model.lastScheduledExportTime
+
+                            Nothing ->
+                                Just time
+                }
             , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
             )
 
@@ -1511,8 +1519,13 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToLoadDiscordStandardStickerPacks error) model
 
-        ScheduledExportUploadResult result ->
-            Debug.todo "Add logging for if this failed"
+        ScheduledExportUploadResult time result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error) model
 
 
 addDiscordGuildData :
