@@ -142,9 +142,8 @@ type ExportSubset
 
 
 type ToFrontend
-    = ExportBackendResponse ExportSubset Bytes
-    | ImportBackendResponse (Result () ())
-    | ExportBackendProgress ExportProgress
+    = ImportBackendResponse (Result () ())
+    | ExportBackendProgress ExportSubset ExportProgress
 
 
 type ExportProgress
@@ -153,7 +152,7 @@ type ExportProgress
     | ExportingDmChannels { encoded : Int, total : Int }
     | ExportingDiscordGuilds { encoded : Int, total : Int }
     | ExportingDiscordDmChannels { encoded : Int, total : Int }
-    | ExportingFinalStep
+    | ExportingFinalStep Bytes
 
 
 type alias Model =
@@ -1171,22 +1170,24 @@ updateUserTable updateFunc model =
 updateFromBackend : ToFrontend -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 updateFromBackend toFrontend model =
     case toFrontend of
-        ExportBackendResponse isPartial bytes ->
-            ( { model | exportProgress = Nothing }
-            , Effect.File.Download.bytes
-                (case isPartial of
-                    ExportAll ->
-                        "backend-export.bin"
+        ExportBackendProgress isPartial progress ->
+            case progress of
+                ExportingFinalStep bytes ->
+                    ( { model | exportProgress = Nothing }
+                    , Effect.File.Download.bytes
+                        (case isPartial of
+                            ExportAll ->
+                                "backend-export.bin"
 
-                    ExportSubset ->
-                        "backend-export-subset.bin"
-                )
-                "application/octet-stream"
-                bytes
-            )
+                            ExportSubset ->
+                                "backend-export-subset.bin"
+                        )
+                        "application/octet-stream"
+                        bytes
+                    )
 
-        ExportBackendProgress progress ->
-            ( { model | exportProgress = Just progress }, Command.none )
+                _ ->
+                    ( { model | exportProgress = Just progress }, Command.none )
 
         ImportBackendResponse result ->
             case result of
@@ -1641,7 +1642,7 @@ exportProgressText progress =
         ExportingDiscordDmChannels { encoded, total } ->
             "Encoding Discord DM channels " ++ String.fromInt encoded ++ "/" ++ String.fromInt total
 
-        ExportingFinalStep ->
+        ExportingFinalStep _ ->
             "Assembling export..."
 
 

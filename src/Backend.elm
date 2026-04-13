@@ -43,6 +43,7 @@ import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
+import MyUi
 import NonemptyDict
 import OneToOne
 import Pages.Admin exposing (ExportSubset(..))
@@ -60,7 +61,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportState, ExportTarget(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportState, ExportStateProgress, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -213,6 +214,7 @@ init =
       , loadingDiscordChannels = SeqDict.empty
       , signupsEnabled = True
       , exportState = Nothing
+      , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
       , sendMessageRateLimits = SeqDict.empty
       , toBackendLogs = Array.empty
@@ -261,8 +263,13 @@ subscriptions model =
 
             Nothing ->
                 Subscription.none
+        , case model.scheduledExportState of
+            Just _ ->
+                Time.every (Duration.milliseconds 30) ScheduledExportBackendStep
+
+            Nothing ->
+                Subscription.none
         , Time.every Duration.hour HourlyUpdate
-        , Time.every (Duration.hours 4) ScheduledExportCheck
         ]
 
 
@@ -1248,7 +1255,50 @@ update msg model =
         ExportBackendStep ->
             case model.exportState of
                 Just exportState ->
-                    handleExportBackendStep exportState model
+                    let
+                        ( progress, progressState ) =
+                            handleExportBackendStep exportState.progress
+                    in
+                    ( case progressState of
+                        Just progressState2 ->
+                            { model | exportState = Just { exportState | progress = progressState2 } }
+
+                        Nothing ->
+                            { model | exportState = Nothing }
+                    , Pages.Admin.ExportBackendProgress exportState.exportSubset progress
+                        |> AdminToFrontend
+                        |> Lamdera.sendToFrontend exportState.clientId
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        ScheduledExportBackendStep time ->
+            case model.scheduledExportState of
+                Just exportState ->
+                    let
+                        ( progress, progressState ) =
+                            handleExportBackendStep exportState
+
+                        timestamp : String
+                        timestamp =
+                            String.fromInt (Time.toYear Time.utc time)
+                                ++ "-"
+                                ++ String.padLeft 2 '0' (String.fromInt (MyUi.monthToInt (Time.toMonth Time.utc time)))
+                                ++ "-"
+                                ++ String.padLeft 2 '0' (String.fromInt (Time.toDay Time.utc time))
+                                ++ " "
+                                ++ MyUi.timestamp time Time.utc
+                    in
+                    ( { model | scheduledExportState = progressState }
+                    , case progress of
+                        Pages.Admin.ExportingFinalStep bytes ->
+                            FileStatus.uploadBackup ("backend-export-" ++ timestamp ++ ".bin") bytes
+                                |> Task.attempt ScheduledExportUploadResult
+
+                        _ ->
+                            Command.none
+                    )
 
                 Nothing ->
                     ( model, Command.none )
@@ -1368,7 +1418,47 @@ update msg model =
                     )
 
         HourlyUpdate time ->
-            ( model
+            let
+                shouldExport : Bool
+                shouldExport =
+                    case model.lastScheduledExportTime of
+                        Nothing ->
+                            True
+
+                        Just lastScheduledExportTime ->
+                            Duration.from lastScheduledExportTime time |> Quantity.greaterThanOrEqualTo (Duration.hours 4)
+            in
+            ( if shouldExport then
+                let
+                    baseModel : BackendModel
+                    baseModel =
+                        { model
+                            | guilds = SeqDict.empty
+                            , dmChannels = SeqDict.empty
+                            , discordGuilds = SeqDict.empty
+                            , discordDmChannels = SeqDict.empty
+                            , exportState = Nothing
+                            , scheduledExportState = Nothing
+                        }
+                in
+                { model
+                    | scheduledExportState =
+                        { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
+                        , remainingGuilds = SeqDict.toList model.guilds
+                        , encodedGuilds = []
+                        , remainingDmChannels = SeqDict.toList model.dmChannels
+                        , encodedDmChannels = []
+                        , remainingDiscordGuilds = SeqDict.toList model.discordGuilds
+                        , encodedDiscordGuilds = []
+                        , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels
+                        , encodedDiscordDmChannels = []
+                        }
+                            |> Just
+                    , lastScheduledExportTime = Just time
+                }
+
+              else
+                model
             , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
             )
 
@@ -1421,46 +1511,8 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToLoadDiscordStandardStickerPacks error) model
 
-        ScheduledExportCheck time ->
-            case model.exportState of
-                Just _ ->
-                    ( model, Command.none )
-
-                Nothing ->
-                    let
-                        baseModel : BackendModel
-                        baseModel =
-                            { model
-                                | guilds = SeqDict.empty
-                                , dmChannels = SeqDict.empty
-                                , discordGuilds = SeqDict.empty
-                                , discordDmChannels = SeqDict.empty
-                                , exportState = Nothing
-                                , lastScheduledExportTime = Nothing
-                            }
-                    in
-                    ( { model
-                        | exportState =
-                            { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
-                            , remainingGuilds = SeqDict.toList model.guilds
-                            , encodedGuilds = []
-                            , remainingDmChannels = SeqDict.toList model.dmChannels
-                            , encodedDmChannels = []
-                            , remainingDiscordGuilds = SeqDict.toList model.discordGuilds
-                            , encodedDiscordGuilds = []
-                            , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels
-                            , encodedDiscordDmChannels = []
-                            , exportSubset = ExportAll
-                            , exportTarget = ScheduledExport
-                            }
-                                |> Just
-                        , lastScheduledExportTime = Just time
-                      }
-                    , Command.none
-                    )
-
-        ScheduledExportUploadResult _ ->
-            ( model, Command.none )
+        ScheduledExportUploadResult result ->
+            Debug.todo "Add logging for if this failed"
 
 
 addDiscordGuildData :
@@ -4980,6 +5032,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         , discordGuilds = SeqDict.empty
                         , discordDmChannels = SeqDict.empty
                         , exportState = Nothing
+                        , scheduledExportState = Nothing
                     }
 
                 partialList : List a -> List a
@@ -4993,21 +5046,23 @@ updateFromFrontendAdmin clientId toBackend model =
             in
             ( { model
                 | exportState =
-                    { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
-                    , remainingGuilds = SeqDict.toList model.guilds |> partialList
-                    , encodedGuilds = []
-                    , remainingDmChannels = SeqDict.toList model.dmChannels |> partialList
-                    , encodedDmChannels = []
-                    , remainingDiscordGuilds = SeqDict.toList model.discordGuilds |> partialList
-                    , encodedDiscordGuilds = []
-                    , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels |> partialList
-                    , encodedDiscordDmChannels = []
+                    { progress =
+                        { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
+                        , remainingGuilds = SeqDict.toList model.guilds |> partialList
+                        , encodedGuilds = []
+                        , remainingDmChannels = SeqDict.toList model.dmChannels |> partialList
+                        , encodedDmChannels = []
+                        , remainingDiscordGuilds = SeqDict.toList model.discordGuilds |> partialList
+                        , encodedDiscordGuilds = []
+                        , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels |> partialList
+                        , encodedDiscordDmChannels = []
+                        }
                     , exportSubset = isPartial
-                    , exportTarget = AdminExport clientId
+                    , clientId = clientId
                     }
                         |> Just
               }
-            , Pages.Admin.ExportBackendProgress Pages.Admin.ExportStarting
+            , Pages.Admin.ExportBackendProgress isPartial Pages.Admin.ExportStarting
                 |> AdminToFrontend
                 |> Lamdera.sendToFrontend clientId
             )
@@ -5025,22 +5080,8 @@ updateFromFrontendAdmin clientId toBackend model =
                     )
 
 
-handleExportBackendStep : ExportState -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleExportBackendStep exportState model =
-    let
-        sendProgress : Pages.Admin.ExportProgress -> ExportState -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-        sendProgress progress newState =
-            ( { model | exportState = Just newState }
-            , case exportState.exportTarget of
-                AdminExport clientId ->
-                    Pages.Admin.ExportBackendProgress progress
-                        |> AdminToFrontend
-                        |> Lamdera.sendToFrontend clientId
-
-                ScheduledExport ->
-                    Command.none
-            )
-    in
+handleExportBackendStep : ExportStateProgress -> ( Pages.Admin.ExportProgress, Maybe ExportStateProgress )
+handleExportBackendStep exportState =
     case exportState.remainingGuilds of
         entry :: rest ->
             let
@@ -5048,16 +5089,16 @@ handleExportBackendStep exportState model =
                 encodedCount =
                     List.length exportState.encodedGuilds
             in
-            sendProgress
-                (Pages.Admin.ExportingGuilds
-                    { encoded = encodedCount + 1
-                    , total = encodedCount + List.length exportState.remainingGuilds
-                    }
-                )
-                { exportState
-                    | remainingGuilds = rest
-                    , encodedGuilds = Bytes.Encode.encode (WireHelper.encodeGuild entry) :: exportState.encodedGuilds
+            ( Pages.Admin.ExportingGuilds
+                { encoded = encodedCount + 1
+                , total = encodedCount + List.length exportState.remainingGuilds
                 }
+            , { exportState
+                | remainingGuilds = rest
+                , encodedGuilds = Bytes.Encode.encode (WireHelper.encodeGuild entry) :: exportState.encodedGuilds
+              }
+                |> Just
+            )
 
         [] ->
             case exportState.remainingDmChannels of
@@ -5067,16 +5108,16 @@ handleExportBackendStep exportState model =
                         encodedCount =
                             List.length exportState.encodedDmChannels
                     in
-                    sendProgress
-                        (Pages.Admin.ExportingDmChannels
-                            { encoded = encodedCount + 1
-                            , total = encodedCount + List.length exportState.remainingDmChannels
-                            }
-                        )
-                        { exportState
-                            | remainingDmChannels = rest
-                            , encodedDmChannels = Bytes.Encode.encode (WireHelper.encodeDmChannel entry) :: exportState.encodedDmChannels
+                    ( Pages.Admin.ExportingDmChannels
+                        { encoded = encodedCount + 1
+                        , total = encodedCount + List.length exportState.remainingDmChannels
                         }
+                    , { exportState
+                        | remainingDmChannels = rest
+                        , encodedDmChannels = Bytes.Encode.encode (WireHelper.encodeDmChannel entry) :: exportState.encodedDmChannels
+                      }
+                        |> Just
+                    )
 
                 [] ->
                     case exportState.remainingDiscordGuilds of
@@ -5086,16 +5127,18 @@ handleExportBackendStep exportState model =
                                 encodedCount =
                                     List.length exportState.encodedDiscordGuilds
                             in
-                            sendProgress
-                                (Pages.Admin.ExportingDiscordGuilds
-                                    { encoded = encodedCount + 1
-                                    , total = encodedCount + List.length exportState.remainingDiscordGuilds
-                                    }
-                                )
-                                { exportState
-                                    | remainingDiscordGuilds = rest
-                                    , encodedDiscordGuilds = Bytes.Encode.encode (WireHelper.encodeDiscordGuild entry) :: exportState.encodedDiscordGuilds
+                            ( Pages.Admin.ExportingDiscordGuilds
+                                { encoded = encodedCount + 1
+                                , total = encodedCount + List.length exportState.remainingDiscordGuilds
                                 }
+                            , { exportState
+                                | remainingDiscordGuilds = rest
+                                , encodedDiscordGuilds =
+                                    Bytes.Encode.encode (WireHelper.encodeDiscordGuild entry)
+                                        :: exportState.encodedDiscordGuilds
+                              }
+                                |> Just
+                            )
 
                         [] ->
                             case exportState.remainingDiscordDmChannels of
@@ -5105,16 +5148,18 @@ handleExportBackendStep exportState model =
                                         encodedCount =
                                             List.length exportState.encodedDiscordDmChannels
                                     in
-                                    sendProgress
-                                        (Pages.Admin.ExportingDiscordDmChannels
-                                            { encoded = encodedCount + 1
-                                            , total = encodedCount + List.length exportState.remainingDiscordDmChannels
-                                            }
-                                        )
-                                        { exportState
-                                            | remainingDiscordDmChannels = rest
-                                            , encodedDiscordDmChannels = Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry) :: exportState.encodedDiscordDmChannels
+                                    ( Pages.Admin.ExportingDiscordDmChannels
+                                        { encoded = encodedCount + 1
+                                        , total = encodedCount + List.length exportState.remainingDiscordDmChannels
                                         }
+                                    , { exportState
+                                        | remainingDiscordDmChannels = rest
+                                        , encodedDiscordDmChannels =
+                                            Bytes.Encode.encode (WireHelper.encodeDiscordDmChannel entry)
+                                                :: exportState.encodedDiscordDmChannels
+                                      }
+                                        |> Just
+                                    )
 
                                 [] ->
                                     let
@@ -5137,22 +5182,8 @@ handleExportBackendStep exportState model =
                                                     ]
                                                 )
                                     in
-                                    ( { model | exportState = Nothing }
-                                    , case exportState.exportTarget of
-                                        AdminExport clientId ->
-                                            Command.batch
-                                                [ Pages.Admin.ExportBackendProgress Pages.Admin.ExportingFinalStep
-                                                    |> AdminToFrontend
-                                                    |> Lamdera.sendToFrontend clientId
-                                                , exportedBytes
-                                                    |> Pages.Admin.ExportBackendResponse exportState.exportSubset
-                                                    |> AdminToFrontend
-                                                    |> Lamdera.sendToFrontend clientId
-                                                ]
-
-                                        ScheduledExport ->
-                                            FileStatus.uploadBytes DiscordSync.backendSessionIdHash exportedBytes
-                                                |> Task.attempt ScheduledExportUploadResult
+                                    ( Pages.Admin.ExportingFinalStep exportedBytes
+                                    , Nothing
                                     )
 
 

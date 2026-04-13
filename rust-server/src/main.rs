@@ -39,6 +39,10 @@ async fn main() {
                     post(post_embed).options(options_endpoint),
                 )
                 .route(
+                    "/file/internal/upload-backup/{filename}",
+                    post(post_backup_endpoint).options(options_endpoint),
+                )
+                .route(
                     "/file/upload",
                     post(upload_endpoint).options(options_endpoint),
                 )
@@ -243,6 +247,19 @@ fn vec_to_headermap(
     }
 
     Ok(header_map)
+}
+
+async fn post_backup_endpoint(Path(filename): Path<String>, request: Request) -> Response<String> {
+    match request.extract::<Bytes, _>().await {
+        Ok(body) => match (
+            fs::write(String::from("./var/lib/atchat/backups/") + &filename, &body),
+            fs::write(String::from("./var/lib/atchat/storage/backups/") + &filename, &body),
+        ) {
+            (Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
+            _ => response_with_headers(StatusCode::BAD_REQUEST, format!("Error 2")),
+        },
+        Err(_) => response_with_headers(StatusCode::BAD_REQUEST, format!("Error 1")),
+    }
 }
 
 async fn custom_request_endpoint(
