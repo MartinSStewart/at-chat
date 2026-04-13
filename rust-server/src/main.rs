@@ -120,7 +120,7 @@ async fn require_internal_secret(
         } else {
             Response::builder()
                 .status(StatusCode::FORBIDDEN)
-                .body(Body::from(""))
+                .body(Body::from("Invalid secret key"))
                 .unwrap()
         }
     } else {
