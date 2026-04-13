@@ -4,8 +4,9 @@ use axum::{Json, RequestExt};
 use axum::{
     Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, Path, Request},
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::{StatusCode, Uri},
+    middleware::Next,
     routing::get,
     routing::post,
 };
@@ -21,45 +22,110 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
+use subtle::ConstantTimeEq;
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new()
-        .route("/file/embed", post(post_embed).options(options_endpoint))
-        .route(
-            "/file/upload",
-            post(upload_endpoint).options(options_endpoint),
-        )
-        .route(
-            "/file/upload-url",
-            post(upload_url_endpoint).options(options_endpoint),
-        )
-        .route(
-            "/file/push-notification",
-            post(push_notification_endpoint).options(options_endpoint),
-        )
-        .route(
-            "/file/custom-request",
-            post(custom_request_endpoint).options(options_endpoint),
-        )
-        .route(
-            "/file/discord-sticker/{sticker_id}",
-            get(discord_sticker_endpoint).options(options_endpoint),
-        )
-        .route("/file/vapid", get(vapid_endpoint))
-        .route("/file/{content_type}/{filename}", get(get_file_endpoint))
-        .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-        .fallback(fallback);
+    // secret.txt should match Env.secretKey
+    match fs::read_to_string("./var/lib/atchat/secret.txt") {
+        Ok(secret_key) => {
+            let state = AppState { secret_key };
 
-    match tokio::net::TcpListener::bind("0.0.0.0:3000").await {
-        Ok(listener) => {
-            let _ = axum::serve(listener, app).await;
+            let app = Router::new()
+                .route("/file/embed", post(post_embed).options(options_endpoint))
+                .route(
+                    "/file/internal/embed",
+                    post(post_embed).options(options_endpoint),
+                )
+                .route(
+                    "/file/upload",
+                    post(upload_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/upload-url",
+                    post(upload_url_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/push-notification",
+                    post(push_notification_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/internal/push-notification",
+                    post(push_notification_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/custom-request",
+                    post(custom_request_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/internal/custom-request",
+                    post(custom_request_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/discord-sticker/{sticker_id}",
+                    get(discord_sticker_endpoint).options(options_endpoint),
+                )
+                .route("/file/vapid", get(vapid_endpoint))
+                .route("/file/internal/vapid", get(vapid_endpoint))
+                .route("/file/{content_type}/{filename}", get(get_file_endpoint))
+                .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    require_internal_secret,
+                ))
+                .fallback(fallback)
+                .with_state(state);
+
+            match tokio::net::TcpListener::bind("0.0.0.0:3000").await {
+                Ok(listener) => {
+                    let _ = axum::serve(listener, app).await;
+                }
+                Err(error) => {
+                    println!("Server didn't start: {error}");
+                }
+            };
         }
         Err(error) => {
-            println!("Server didn't start:{error}");
+            println!("Server didn't start due to secret.txt not getting loaded: {error}");
         }
-    };
+    }
+}
+
+#[derive(Clone)]
+struct AppState {
+    secret_key: String,
+}
+
+async fn require_internal_secret(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response<Body> {
+    let path = req.uri().path();
+
+    if path.to_string().starts_with("/file/internal/") {
+        let provided = req
+            .headers()
+            .get("x-secret-key")
+            .and_then(|v| v.to_str().ok());
+
+        let authorized = match provided {
+            Some(token) => token.as_bytes().ct_eq(state.secret_key.as_bytes()).into(),
+            None => false,
+        };
+
+        if authorized {
+            next.run(req).await
+        } else {
+            Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Body::from(""))
+                .unwrap()
+        }
+    } else {
+        next.run(req).await
+    }
 }
 
 async fn options_endpoint() -> Response<String> {
@@ -153,6 +219,20 @@ async fn post_embed(Json(EmbedRequest { url }): Json<EmbedRequest>) -> Response<
         StatusCode::OK,
         serde_json::to_string::<EmbedResponse>(&response).unwrap(),
     )
+}
+
+fn is_authorized(State(state): State<AppState>, request: Request) -> bool {
+    let header_secret_key: Option<&str> = request
+        .headers()
+        .get("x-internal-secret")
+        .and_then(|v| v.to_str().ok());
+    match header_secret_key {
+        Some(header_secret_key) => header_secret_key
+            .as_bytes()
+            .ct_eq(state.secret_key.as_bytes())
+            .into(),
+        None => false,
+    }
 }
 
 async fn vapid_endpoint(_request: Request) -> Response<String> {
@@ -670,7 +750,10 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
 
 async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<Body> {
     let sticker_path2 = sticker_path.to_string();
-    if sticker_path2.chars().all(|x| x.is_ascii_alphanumeric() || x == '.') && sticker_path2.len() < 50
+    if sticker_path2
+        .chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '.')
+        && sticker_path2.len() < 50
     {
         match reqwest::get(format!("https://discord.com/stickers/{}", sticker_path2)).await {
             Ok(bytes) => Response::builder()
@@ -682,9 +765,7 @@ async fn discord_sticker_endpoint(sticker_path: Path<String>) -> http::Response<
                 .body(Body::from(format!("Sticker does not exist")))
                 .unwrap(),
         }
-    }
-    else
-    {
+    } else {
         Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(format!("Invalid sticker format")))

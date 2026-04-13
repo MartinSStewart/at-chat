@@ -339,7 +339,7 @@ checkNotification body =
                                 case Codec.decodeValue Broadcast.pushNotificationCodec json of
                                     Ok pushNotification ->
                                         (pushNotification.body == body)
-                                            && (request.url == "http://localhost:3000/file/push-notification")
+                                            && (request.url == "http://localhost:3000/file/internal/push-notification")
 
                                     Err _ ->
                                         False
@@ -373,7 +373,7 @@ checkNoNotification body =
                                 case Codec.decodeValue Broadcast.pushNotificationCodec json of
                                     Ok pushNotification ->
                                         (pushNotification.body == body)
-                                            && (request.url == "http://localhost:3000/file/push-notification")
+                                            && (request.url == "http://localhost:3000/file/internal/push-notification")
 
                                     Err _ ->
                                         False
@@ -879,6 +879,102 @@ decodeCustomRequest request =
             Nothing
 
 
+handleInternalRequests : String -> HttpRequest -> List String -> HttpResponse
+handleInternalRequests discordStickerPacks currentRequest rest =
+    if List.member ( "x-secret-key", Env.secretKey ) currentRequest.headers then
+        case rest of
+            [ "custom-request" ] ->
+                case decodeCustomRequest currentRequest of
+                    Just customRequest2 ->
+                        handleCustomRequest discordStickerPacks customRequest2
+
+                    Nothing ->
+                        let
+                            _ =
+                                Debug.log "Failed to decode custom request" ()
+                        in
+                        UnhandledHttpRequest
+
+            [ "vapid" ] ->
+                StringHttpResponse
+                    { url = currentRequest.url
+                    , statusCode = 200
+                    , statusText = "OK"
+                    , headers = Dict.empty
+                    }
+                    "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
+
+            [ "push-notification" ] ->
+                StringHttpResponse
+                    { url = currentRequest.url
+                    , statusCode = 200
+                    , statusText = "OK"
+                    , headers = Dict.empty
+                    }
+                    ""
+
+            [ "embed" ] ->
+                case currentRequest.body of
+                    T.JsonBody json ->
+                        case Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) json of
+                            Ok embedUrl ->
+                                StringHttpResponse
+                                    { url = currentRequest.url
+                                    , statusCode = 200
+                                    , statusText = "OK"
+                                    , headers = Dict.empty
+                                    }
+                                    (Json.Encode.object
+                                        [ ( "title", Json.Encode.string ("Title for " ++ embedUrl) )
+                                        , if String.startsWith "https://elm.camp" embedUrl then
+                                            ( "image"
+                                            , Json.Encode.object
+                                                [ ( "url", Json.Encode.string "https://elm.camp/logo-26.png" )
+                                                , ( "width", Json.Encode.int 1080 )
+                                                , ( "height", Json.Encode.int 1080 )
+                                                , ( "format", Json.Encode.string "Png" )
+                                                ]
+                                            )
+
+                                          else
+                                            ( "image", Json.Encode.null )
+                                        , ( "description", Json.Encode.string ("Description for " ++ embedUrl) )
+                                        , ( "created_at", Json.Encode.null )
+                                        ]
+                                        |> Json.Encode.encode 0
+                                    )
+
+                            Err _ ->
+                                StringHttpResponse
+                                    { url = currentRequest.url
+                                    , statusCode = 500
+                                    , statusText = "Bad request"
+                                    , headers = Dict.empty
+                                    }
+                                    ""
+
+                    _ ->
+                        StringHttpResponse
+                            { url = currentRequest.url
+                            , statusCode = 500
+                            , statusText = "Bad request"
+                            , headers = Dict.empty
+                            }
+                            ""
+
+            _ ->
+                UnhandledHttpRequest
+
+    else
+        StringHttpResponse
+            { url = currentRequest.url
+            , statusCode = 403
+            , statusText = "Forbidden"
+            , headers = Dict.empty
+            }
+            ""
+
+
 tests :
     String
     -> String
@@ -895,8 +991,8 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     response
 
                 Nothing ->
-                    case currentRequest.url of
-                        "/_i" ->
+                    case String.split "/" currentRequest.url of
+                        [ "", "_i" ] ->
                             StringHttpResponse
                                 { url = currentRequest.url
                                 , statusCode = 200
@@ -905,7 +1001,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 }
                                 infoEndpointResponse
 
-                        "/compact-emoji.json" ->
+                        [ "", "compact-emoji.json" ] ->
                             StringHttpResponse
                                 { url = currentRequest.url
                                 , statusCode = 200
@@ -914,171 +1010,100 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                 }
                                 emojiJson
 
-                        "http://localhost:3000/file/custom-request" ->
-                            case decodeCustomRequest currentRequest of
-                                Just customRequest2 ->
-                                    handleCustomRequest discordStickerPacks customRequest2
+                        "http:" :: "" :: "localhost:3000" :: "file" :: rest ->
+                            case rest of
+                                "internal" :: rest2 ->
+                                    handleInternalRequests discordStickerPacks currentRequest rest2
 
-                                Nothing ->
-                                    let
-                                        _ =
-                                            Debug.log "Failed to decode custom request" ()
-                                    in
+                                [ "upload" ] ->
+                                    StringHttpResponse
+                                        { url = currentRequest.url
+                                        , statusCode = 200
+                                        , statusText = "OK"
+                                        , headers = Dict.empty
+                                        }
+                                        (Codec.encodeToString
+                                            0
+                                            FileStatus.uploadResponseCodec
+                                            { fileHash = FileStatus.fileHash "123123123"
+                                            , imageSize =
+                                                { imageSize = Coord.xy 128 128
+                                                , orientation = Nothing
+                                                , gpsLocation = Nothing
+                                                , cameraOwner = Nothing
+                                                , exposureTime = Nothing
+                                                , fNumber = Nothing
+                                                , focalLength = Nothing
+                                                , isoSpeedRating = Nothing
+                                                , make = Nothing
+                                                , model = Nothing
+                                                , software = Nothing
+                                                , userComment = Nothing
+                                                }
+                                                    |> Just
+                                            }
+                                        )
+
+                                [ "upload-url" ] ->
+                                    case currentRequest.body of
+                                        T.JsonBody json ->
+                                            case Codec.decodeValue FileStatus.uploadUrlCodec json of
+                                                Ok request ->
+                                                    -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
+                                                    if String.contains "796138864933863456" request.url then
+                                                        UnhandledHttpRequest
+
+                                                    else
+                                                        StringHttpResponse
+                                                            { url = currentRequest.url
+                                                            , statusCode = 200
+                                                            , statusText = "OK"
+                                                            , headers = Dict.empty
+                                                            }
+                                                            (Codec.encodeToString
+                                                                0
+                                                                FileStatus.uploadResponseCodec
+                                                                { fileHash = FileStatus.fileHash request.url
+                                                                , imageSize =
+                                                                    { imageSize = Coord.xy 128 128
+                                                                    , orientation = Nothing
+                                                                    , gpsLocation = Nothing
+                                                                    , cameraOwner = Nothing
+                                                                    , exposureTime = Nothing
+                                                                    , fNumber = Nothing
+                                                                    , focalLength = Nothing
+                                                                    , isoSpeedRating = Nothing
+                                                                    , make = Nothing
+                                                                    , model = Nothing
+                                                                    , software = Nothing
+                                                                    , userComment = Nothing
+                                                                    }
+                                                                        |> Just
+                                                                }
+                                                            )
+
+                                                Err _ ->
+                                                    StringHttpResponse
+                                                        { url = currentRequest.url
+                                                        , statusCode = 500
+                                                        , statusText = "Bad request"
+                                                        , headers = Dict.empty
+                                                        }
+                                                        ""
+
+                                        _ ->
+                                            StringHttpResponse
+                                                { url = currentRequest.url
+                                                , statusCode = 500
+                                                , statusText = "Bad request"
+                                                , headers = Dict.empty
+                                                }
+                                                ""
+
+                                _ ->
                                     UnhandledHttpRequest
 
-                        "http://localhost:3000/file/vapid" ->
-                            StringHttpResponse
-                                { url = currentRequest.url
-                                , statusCode = 200
-                                , statusText = "OK"
-                                , headers = Dict.empty
-                                }
-                                "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
-
-                        "http://localhost:3000/file/upload" ->
-                            StringHttpResponse
-                                { url = currentRequest.url
-                                , statusCode = 200
-                                , statusText = "OK"
-                                , headers = Dict.empty
-                                }
-                                (Codec.encodeToString
-                                    0
-                                    FileStatus.uploadResponseCodec
-                                    { fileHash = FileStatus.fileHash "123123123"
-                                    , imageSize =
-                                        { imageSize = Coord.xy 128 128
-                                        , orientation = Nothing
-                                        , gpsLocation = Nothing
-                                        , cameraOwner = Nothing
-                                        , exposureTime = Nothing
-                                        , fNumber = Nothing
-                                        , focalLength = Nothing
-                                        , isoSpeedRating = Nothing
-                                        , make = Nothing
-                                        , model = Nothing
-                                        , software = Nothing
-                                        , userComment = Nothing
-                                        }
-                                            |> Just
-                                    }
-                                )
-
-                        "http://localhost:3000/file/upload-url" ->
-                            case currentRequest.body of
-                                T.JsonBody json ->
-                                    case Codec.decodeValue FileStatus.uploadUrlCodec json of
-                                        Ok request ->
-                                            -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
-                                            if String.contains "796138864933863456" request.url then
-                                                UnhandledHttpRequest
-
-                                            else
-                                                StringHttpResponse
-                                                    { url = currentRequest.url
-                                                    , statusCode = 200
-                                                    , statusText = "OK"
-                                                    , headers = Dict.empty
-                                                    }
-                                                    (Codec.encodeToString
-                                                        0
-                                                        FileStatus.uploadResponseCodec
-                                                        { fileHash = FileStatus.fileHash request.url
-                                                        , imageSize =
-                                                            { imageSize = Coord.xy 128 128
-                                                            , orientation = Nothing
-                                                            , gpsLocation = Nothing
-                                                            , cameraOwner = Nothing
-                                                            , exposureTime = Nothing
-                                                            , fNumber = Nothing
-                                                            , focalLength = Nothing
-                                                            , isoSpeedRating = Nothing
-                                                            , make = Nothing
-                                                            , model = Nothing
-                                                            , software = Nothing
-                                                            , userComment = Nothing
-                                                            }
-                                                                |> Just
-                                                        }
-                                                    )
-
-                                        Err _ ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 500
-                                                , statusText = "Bad request"
-                                                , headers = Dict.empty
-                                                }
-                                                ""
-
-                                _ ->
-                                    StringHttpResponse
-                                        { url = currentRequest.url
-                                        , statusCode = 500
-                                        , statusText = "Bad request"
-                                        , headers = Dict.empty
-                                        }
-                                        ""
-
-                        "http://localhost:3000/file/push-notification" ->
-                            StringHttpResponse
-                                { url = currentRequest.url
-                                , statusCode = 200
-                                , statusText = "OK"
-                                , headers = Dict.empty
-                                }
-                                ""
-
-                        "http://localhost:3000/file/embed" ->
-                            case currentRequest.body of
-                                T.JsonBody json ->
-                                    case Json.Decode.decodeValue (Json.Decode.field "url" Json.Decode.string) json of
-                                        Ok embedUrl ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 200
-                                                , statusText = "OK"
-                                                , headers = Dict.empty
-                                                }
-                                                (Json.Encode.object
-                                                    [ ( "title", Json.Encode.string ("Title for " ++ embedUrl) )
-                                                    , if String.startsWith "https://elm.camp" embedUrl then
-                                                        ( "image"
-                                                        , Json.Encode.object
-                                                            [ ( "url", Json.Encode.string "https://elm.camp/logo-26.png" )
-                                                            , ( "width", Json.Encode.int 1080 )
-                                                            , ( "height", Json.Encode.int 1080 )
-                                                            , ( "format", Json.Encode.string "Png" )
-                                                            ]
-                                                        )
-
-                                                      else
-                                                        ( "image", Json.Encode.null )
-                                                    , ( "description", Json.Encode.string ("Description for " ++ embedUrl) )
-                                                    , ( "created_at", Json.Encode.null )
-                                                    ]
-                                                    |> Json.Encode.encode 0
-                                                )
-
-                                        Err _ ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 500
-                                                , statusText = "Bad request"
-                                                , headers = Dict.empty
-                                                }
-                                                ""
-
-                                _ ->
-                                    StringHttpResponse
-                                        { url = currentRequest.url
-                                        , statusCode = 500
-                                        , statusText = "Bad request"
-                                        , headers = Dict.empty
-                                        }
-                                        ""
-
-                        "https://api.postmarkapp.com/email" ->
+                        [ "https:", "", "api.postmarkapp.com", "email" ] ->
                             case currentRequest.body of
                                 T.JsonBody json ->
                                     case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of
@@ -3434,7 +3459,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     List.filter
                                         (\request ->
                                             case ( request.url, decodeCustomRequest request ) of
-                                                ( "http://localhost:3000/file/custom-request", Just customRequest ) ->
+                                                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
                                                     (customRequest.url == "https://discord.com/api/v9/channels/705745250815311942/thread-members/@me")
                                                         && (customRequest.method == "PUT")
 
@@ -3504,7 +3529,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     List.filter
                                         (\request ->
                                             case ( request.url, decodeCustomRequest request ) of
-                                                ( "http://localhost:3000/file/custom-request", Just customRequest ) ->
+                                                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
                                                     (customRequest.url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
                                                         && (customRequest.method == "PUT")
 
@@ -3615,7 +3640,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     --                                List.filter
     --                                    (\request ->
     --                                        case ( request.url, decodeCustomRequest request ) of
-    --                                            ( "http://localhost:3000/file/custom-request", Just ( method, url ) ) ->
+    --                                            ( "http://localhost:3000/file/internal/custom-request", Just ( method, url ) ) ->
     --                                                (url == "https://discord.com/api/v9/channels/1486698771915083887/thread-members/@me")
     --                                                    && (method == "PUT")
     --

@@ -18,7 +18,7 @@ module Message exposing
     )
 
 import Array exposing (Array)
-import Effect.Command as Command exposing (Command)
+import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (Emoji)
@@ -72,7 +72,7 @@ userTextMessage :
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
-    -> ( Message messageId userId, Command r toMsg ( Url, Result Http.Error EmbedData ), SeqDict (Id StickerId) StickerData )
+    -> ( Message messageId userId, Command BackendOnly toMsg ( Url, Result Http.Error EmbedData ), SeqDict (Id StickerId) StickerData )
 userTextMessage createdAt2 createdBy content repliedTo attachedFiles allStickers =
     let
         hyperlinks : List Url
@@ -89,10 +89,7 @@ userTextMessage createdAt2 createdBy content repliedTo attachedFiles allStickers
       , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
       }
         |> UserTextMessage
-    , SeqSet.fromList hyperlinks
-        |> SeqSet.toList
-        |> List.map Embed.request
-        |> Command.batch
+    , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map Embed.request |> Command.batch
     , List.foldl
         (\stickerId dict ->
             SeqDict.update
