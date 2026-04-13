@@ -115,9 +115,6 @@ async fn require_internal_secret(
             None => false,
         };
 
-        println!("{}", authorized);
-        println!("{:?}", provided);
-
         if authorized {
             next.run(req).await
         } else {
