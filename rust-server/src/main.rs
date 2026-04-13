@@ -29,7 +29,6 @@ async fn main() {
     // secret.txt should match Env.secretKey
     match fs::read_to_string("./var/lib/atchat/secret.txt") {
         Ok(secret_key) => {
-            println!("Got secret key!");
             let state = AppState { secret_key };
 
             let app = Router::new()
@@ -67,7 +66,7 @@ async fn main() {
                 .route("/file/internal/vapid", get(vapid_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
-                //.layer(DefaultBodyLimit::max(100 * 1024 * 1024))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
                     require_internal_secret,
@@ -101,9 +100,8 @@ async fn require_internal_secret(
     next: Next,
 ) -> Response<Body> {
     let path = req.uri().path();
-    println!("request {:?}", path);
+
     if path.to_string().starts_with("/file/internal/") {
-        println!("internal");
         let provided = req
             .headers()
             .get("x-internal-secret")
@@ -123,7 +121,6 @@ async fn require_internal_secret(
                 .unwrap()
         }
     } else {
-        println!("public");
         next.run(req).await
     }
 }
