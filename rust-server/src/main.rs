@@ -34,7 +34,6 @@ async fn main() {
             };
 
             let app = Router::new()
-                .route("/file/embed", post(post_embed).options(options_endpoint))
                 .route(
                     "/file/internal/embed",
                     post(post_embed).options(options_endpoint),
@@ -48,16 +47,8 @@ async fn main() {
                     post(upload_url_endpoint).options(options_endpoint),
                 )
                 .route(
-                    "/file/push-notification",
-                    post(push_notification_endpoint).options(options_endpoint),
-                )
-                .route(
                     "/file/internal/push-notification",
                     post(push_notification_endpoint).options(options_endpoint),
-                )
-                .route(
-                    "/file/custom-request",
-                    post(custom_request_endpoint).options(options_endpoint),
                 )
                 .route(
                     "/file/internal/custom-request",
@@ -67,7 +58,6 @@ async fn main() {
                     "/file/discord-sticker/{sticker_id}",
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
-                .route("/file/vapid", get(vapid_endpoint))
                 .route("/file/internal/vapid", get(vapid_endpoint))
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
