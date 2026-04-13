@@ -115,3 +115,27 @@ jobs:
           mode: recreate
           message: |
             The compile time was ${{ steps.build.outputs.time }}
+  Rust:
+    name: Check rust-server compiles
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-server/target
+          key: rust-${{ hashFiles('rust-server/Cargo.lock') }}
+
+      - name: Check rust-server compiles
+        working-directory: rust-server
+        run: cargo check
