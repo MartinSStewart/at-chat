@@ -9,6 +9,7 @@ module Types exposing
     , EditMessage
     , EmojiSelector(..)
     , ExportState
+    , ExportTarget(..)
     , FrontendModel(..)
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
@@ -317,6 +318,7 @@ type alias BackendModel =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
     , signupsEnabled : Bool
     , exportState : Maybe ExportState
+    , lastScheduledExportTime : Maybe Time.Posix
     , sendMessageRateLimits : SeqDict (Id UserId) (Array Time.Posix)
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
@@ -603,6 +605,8 @@ type BackendMsg
     | GotDiscordGuildStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
+    | ScheduledExportCheck Time.Posix
+    | ScheduledExportUploadResult (Result Http.Error FileStatus.UploadResponse)
 
 
 type alias ExportState =
@@ -616,8 +620,13 @@ type alias ExportState =
     , remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel )
     , encodedDiscordDmChannels : List Bytes
     , exportSubset : ExportSubset
-    , clientId : ClientId
+    , exportTarget : ExportTarget
     }
+
+
+type ExportTarget
+    = AdminExport ClientId
+    | ScheduledExport
 
 
 type LoginResult
