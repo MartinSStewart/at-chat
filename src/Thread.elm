@@ -15,6 +15,8 @@ module Thread exposing
     )
 
 import Array exposing (Array)
+import ArrayWithOffset exposing (ArrayWithOffset)
+import Dict
 import Discord
 import Effect.Time as Time
 import Id exposing (Id, ThreadMessageId, UserId)
@@ -38,21 +40,21 @@ type alias DiscordBackendThread =
 
 
 type alias FrontendGenericThread userId =
-    { messages : Array (MessageState ThreadMessageId userId)
+    { messages : ArrayWithOffset ThreadMessageId userId
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
     }
 
 
 type alias FrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Id UserId))
+    { messages : ArrayWithOffset ThreadMessageId (Id UserId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     }
 
 
 type alias DiscordFrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Discord.Id Discord.UserId))
+    { messages : ArrayWithOffset ThreadMessageId (Discord.Id Discord.UserId)
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ThreadMessageId)
     }
@@ -71,7 +73,7 @@ backendInit =
 
 frontendInit : FrontendGenericThread userId
 frontendInit =
-    { messages = Array.empty
+    { messages = ArrayWithOffset.init
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     }
@@ -87,7 +89,7 @@ discordBackendInit =
 
 discordFrontendInit : DiscordFrontendThread
 discordFrontendInit =
-    { messages = Array.empty
+    { messages = ArrayWithOffset.init
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     }
@@ -109,7 +111,7 @@ discordToFrontend preloadMessages thread =
     }
 
 
-loadMessages : Bool -> Array (Message messageId userId) -> Array (MessageState messageId userId)
+loadMessages : Bool -> Array (Message messageId userId) -> ArrayWithOffset messageId userId
 loadMessages preloadMessages messages =
     let
         messageCount : Int
@@ -117,20 +119,25 @@ loadMessages preloadMessages messages =
             Array.length messages
     in
     if preloadMessages then
-        Array.initialize
-            messageCount
-            (\index ->
-                if messageCount - index <= VisibleMessages.pageSize then
-                    case Array.get index messages of
-                        Just message ->
-                            MessageLoaded message
-
-                        Nothing ->
-                            MessageUnloaded
-
-                else
-                    MessageUnloaded
-            )
+        { offset = messageCount - VisibleMessages.pageSize
+        , array = Array.slice (messageCount - VisibleMessages.pageSize) messageCount messages
+        , size = messageCount
+        , sparseItems = Dict.empty
+        }
+        --Array.initialize
+        --messageCount
+        --(\index ->
+        --    if messageCount - index <= VisibleMessages.pageSize then
+        --        case Array.get index messages of
+        --            Just message ->
+        --                MessageLoaded message
+        --
+        --            Nothing ->
+        --                MessageUnloaded
+        --
+        --    else
+        --        MessageUnloaded
+        --)
 
     else
         -- Load the latest message for each channel/thread in case it's needed for a preview somewhere

@@ -218,14 +218,18 @@ loadMessages :
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
-            { channel
-                | messages =
-                    SeqDict.foldl
-                        (\messageId message messages -> setArray messageId (MessageLoaded message) messages)
-                        channel.messages
-                        messagesLoaded2
-                , visibleMessages = VisibleMessages.firstLoad channel
-            }
+            let
+                channel2 : { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+                channel2 =
+                    { channel
+                        | messages =
+                            SeqDict.foldl
+                                (\messageId message messages -> setArray messageId (MessageLoaded message) messages)
+                                channel.messages
+                                messagesLoaded2
+                    }
+            in
+            { channel2 | visibleMessages = VisibleMessages.subsequentLoads channel2 }
 
         EmptyPlaceholder ->
             channel

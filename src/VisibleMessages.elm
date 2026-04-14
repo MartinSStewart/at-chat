@@ -8,6 +8,7 @@ module VisibleMessages exposing
     , pageSize
     , slice
     , startIsVisible
+    , subsequentLoads
     )
 
 import Array exposing (Array)
@@ -58,6 +59,13 @@ loadOlder previousOldestVisibleMessage visibleMessages =
 
 firstLoad : { a | messages : Array b } -> VisibleMessages messageId
 firstLoad channel =
+    { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
+    , count = pageSize
+    }
+
+
+subsequentLoads : { a | messages : Array (MessageState messageId userId) } -> VisibleMessages messageId
+subsequentLoads channel =
     { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
     , count = pageSize
     }
