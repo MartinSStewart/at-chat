@@ -786,7 +786,7 @@ adminData model lastLogPageViewed =
                                 "decodeInt not patched! " ++ String.fromInt int
 
                             Nothing ->
-                                "OK"
+                                ""
     }
 
 
