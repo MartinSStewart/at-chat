@@ -1434,8 +1434,8 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                             stickers
                                                         )
                                                         { tasks = []
-                                                        , stickers = model.stickers
-                                                        , discordStickers = model.discordStickers
+                                                        , stickers = model2.stickers
+                                                        , discordStickers = model2.discordStickers
                                                         }
                                             in
                                             ( { model2
