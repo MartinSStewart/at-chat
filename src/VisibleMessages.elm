@@ -12,6 +12,7 @@ module VisibleMessages exposing
     )
 
 import Array exposing (Array)
+import ArrayWithOffset exposing (ArrayWithOffset)
 import Id exposing (Id)
 import Message exposing (Message, MessageState)
 
@@ -36,9 +37,9 @@ empty =
     { oldest = Id.fromInt 0, count = 0 }
 
 
-increment : { a | messages : Array b } -> VisibleMessages messageId -> VisibleMessages messageId
+increment : { a | messages : ArrayWithOffset messageId userId } -> VisibleMessages messageId -> VisibleMessages messageId
 increment channel visibleMessages =
-    if Id.toInt visibleMessages.oldest + visibleMessages.count == Array.length channel.messages then
+    if Id.toInt visibleMessages.oldest + visibleMessages.count == channel.messages.size then
         { oldest = visibleMessages.oldest, count = visibleMessages.count + 1 }
 
     else
@@ -64,9 +65,9 @@ firstLoad channel =
     }
 
 
-subsequentLoads : { a | messages : Array (MessageState messageId userId) } -> VisibleMessages messageId
+subsequentLoads : { a | messages : ArrayWithOffset messageId userId } -> VisibleMessages messageId
 subsequentLoads channel =
-    { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
+    { oldest = channel.messages.size - pageSize |> max 0 |> Id.fromInt
     , count = pageSize
     }
 

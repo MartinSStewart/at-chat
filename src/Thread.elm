@@ -119,35 +119,8 @@ loadMessages preloadMessages messages =
             Array.length messages
     in
     if preloadMessages then
-        { offset = messageCount - VisibleMessages.pageSize
-        , array = Array.slice (messageCount - VisibleMessages.pageSize) messageCount messages
-        , size = messageCount
-        , sparseItems = Dict.empty
-        }
-        --Array.initialize
-        --messageCount
-        --(\index ->
-        --    if messageCount - index <= VisibleMessages.pageSize then
-        --        case Array.get index messages of
-        --            Just message ->
-        --                MessageLoaded message
-        --
-        --            Nothing ->
-        --                MessageUnloaded
-        --
-        --    else
-        --        MessageUnloaded
-        --)
+        ArrayWithOffset.initFromSlice (messageCount - VisibleMessages.pageSize) messageCount messages
 
     else
         -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
-        Array.repeat messageCount MessageUnloaded
-            |> Array.set
-                (messageCount - 1)
-                (case Array.get (messageCount - 1) messages of
-                    Just message ->
-                        MessageLoaded message
-
-                    Nothing ->
-                        MessageUnloaded
-                )
+        ArrayWithOffset.initFromSlice (messageCount - 1) messageCount messages

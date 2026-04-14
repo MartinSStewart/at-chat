@@ -21,6 +21,7 @@ module DmChannel exposing
     )
 
 import Array exposing (Array)
+import ArrayWithOffset exposing (ArrayWithOffset)
 import Discord
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
@@ -48,7 +49,7 @@ type alias DiscordDmChannel =
 
 
 type alias DiscordFrontendDmChannel =
-    { messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+    { messages : ArrayWithOffset ChannelMessageId (Discord.Id Discord.UserId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
     , members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
@@ -56,7 +57,7 @@ type alias DiscordFrontendDmChannel =
 
 
 type alias FrontendDmChannel =
-    { messages : Array (MessageState ChannelMessageId (Id UserId))
+    { messages : ArrayWithOffset ChannelMessageId (Id UserId)
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -79,7 +80,7 @@ backendInit =
 
 frontendInit : FrontendDmChannel
 frontendInit =
-    { messages = Array.empty
+    { messages = ArrayWithOffset.init
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
@@ -115,20 +116,16 @@ latestThreadMessageId thread =
 toFrontendHelper :
     Bool
     -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
-    -> Array (MessageState messageId userId)
+    -> ArrayWithOffset messageId userId
 toFrontendHelper preloadMessages channel =
     SeqDict.foldl
-        (\threadId _ messages ->
-            setArray
-                threadId
-                (case getArray threadId channel.messages of
-                    Just message ->
-                        MessageLoaded message
+        (\threadId _ arrayWithOffset ->
+            case getArray threadId channel.messages of
+                Just message ->
+                    ArrayWithOffset.set threadId message arrayWithOffset
 
-                    Nothing ->
-                        MessageUnloaded
-                )
-                messages
+                Nothing ->
+                    arrayWithOffset
         )
         (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
@@ -137,20 +134,16 @@ toFrontendHelper preloadMessages channel =
 toDiscordFrontendHelper :
     Bool
     -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) DiscordBackendThread }
-    -> Array (MessageState messageId userId)
+    -> ArrayWithOffset messageId userId
 toDiscordFrontendHelper preloadMessages channel =
     SeqDict.foldl
-        (\threadId _ messages ->
-            setArray
-                threadId
-                (case getArray threadId channel.messages of
-                    Just message ->
-                        MessageLoaded message
+        (\threadId _ arrayWithOffset ->
+            case getArray threadId channel.messages of
+                Just message ->
+                    ArrayWithOffset.set threadId message arrayWithOffset
 
-                    Nothing ->
-                        MessageUnloaded
-                )
-                messages
+                Nothing ->
+                    arrayWithOffset
         )
         (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
@@ -191,19 +184,13 @@ otherUserId userId (DmChannelId userIdA userIdB) =
 loadOlderMessages :
     Id messageId
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : ArrayWithOffset messageId userId, visibleMessages : VisibleMessages messageId }
+    -> { a | messages : ArrayWithOffset messageId userId, visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel
-                | messages =
-                    SeqDict.foldl
-                        (\messageId message messages ->
-                            setArray messageId (MessageLoaded message) messages
-                        )
-                        channel.messages
-                        messagesLoaded2
+                | messages = SeqDict.foldl ArrayWithOffset.set channel.messages messagesLoaded2
                 , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
             }
 
@@ -213,21 +200,15 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
 loadMessages :
     ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : ArrayWithOffset messageId userId, visibleMessages : VisibleMessages messageId }
+    -> { a | messages : ArrayWithOffset messageId userId, visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             let
-                channel2 : { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+                channel2 : { a | messages : ArrayWithOffset messageId userId, visibleMessages : VisibleMessages messageId }
                 channel2 =
-                    { channel
-                        | messages =
-                            SeqDict.foldl
-                                (\messageId message messages -> setArray messageId (MessageLoaded message) messages)
-                                channel.messages
-                                messagesLoaded2
-                    }
+                    { channel | messages = SeqDict.foldl ArrayWithOffset.set channel.messages messagesLoaded2 }
             in
             { channel2 | visibleMessages = VisibleMessages.subsequentLoads channel2 }
 

@@ -19,6 +19,7 @@ module Pages.Guild exposing
 
 import Array exposing (Array)
 import Array.Extra
+import ArrayWithOffset exposing (ArrayWithOffset)
 import Bitwise
 import ChannelName
 import Coord exposing (Coord)
@@ -86,7 +87,7 @@ channelOrThreadHasNotifications :
     -> channelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : ArrayWithOffset messageId userId }
     -> ChannelNotificationType
 channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -111,14 +112,14 @@ channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelI
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId userId) } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : ArrayWithOffset messageId userId } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
-            Array.length channel.messages - 1 - Id.toInt lastViewed
+            ArrayWithOffset.length channel.messages - 1 - Id.toInt lastViewed
 
         Nothing ->
-            Array.length channel.messages
+            ArrayWithOffset.length channel.messages
 
 
 channelNewMessageCount :
@@ -126,8 +127,8 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : Array (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+            | messages : ArrayWithOffset ChannelMessageId userId
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : ArrayWithOffset ThreadMessageId userId }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =
@@ -1431,10 +1432,10 @@ pageMissingMobile text =
 threadPreviewText :
     SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
-    -> { b | messages : Array (MessageState ChannelMessageId userId) }
+    -> { b | messages : ArrayWithOffset ChannelMessageId userId }
     -> String
 threadPreviewText allUsers threadMessageIndex channel =
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case ArrayWithOffset.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             LocalState.messageToString allUsers message
 
@@ -1771,7 +1772,7 @@ conversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : ArrayWithOffset ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -1884,7 +1885,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                 UserTextMessage data ->
                                     case data.repliedTo of
                                         Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex channel.messages of
+                                            case ArrayWithOffset.get repliedToIndex channel.messages of
                                                 Just (MessageLoaded message2) ->
                                                     Just ( repliedToIndex, message2 )
 
@@ -2023,7 +2024,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
+        ( ArrayWithOffset.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
@@ -2035,7 +2036,7 @@ discordConversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : ArrayWithOffset ChannelMessageId (Discord.Id Discord.UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -2148,7 +2149,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                 UserTextMessage data ->
                                     case data.repliedTo of
                                         Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex channel.messages of
+                                            case ArrayWithOffset.get repliedToIndex channel.messages of
                                                 Just (MessageLoaded message2) ->
                                                     Just ( repliedToIndex, message2 )
 
@@ -2288,7 +2289,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
+        ( ArrayWithOffset.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
@@ -2460,7 +2461,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                 UserTextMessage data ->
                                     case data.repliedTo of
                                         Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex thread.messages of
+                                            case ArrayWithOffset.get repliedToIndex thread.messages of
                                                 Just (MessageLoaded message2) ->
                                                     Just ( Id.changeType repliedToIndex, message2 )
 
@@ -2562,7 +2563,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length thread.messages - 1, Nothing, [] )
+        ( ArrayWithOffset.length thread.messages - 1, Nothing, [] )
         (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
@@ -2677,7 +2678,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                 UserTextMessage data ->
                                     case data.repliedTo of
                                         Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex thread.messages of
+                                            case ArrayWithOffset.get repliedToIndex thread.messages of
                                                 Just (MessageLoaded message2) ->
                                                     Just ( Id.changeType repliedToIndex, message2 )
 
@@ -2780,7 +2781,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                 MessageUnloaded ->
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
-        ( Array.length thread.messages - 1, Nothing, [] )
+        ( ArrayWithOffset.length thread.messages - 1, Nothing, [] )
         (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
@@ -3165,7 +3166,7 @@ conversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : ArrayWithOffset ChannelMessageId (Id UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -3307,7 +3308,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             ]
             [ case replyTo of
                 Just messageIndex ->
-                    case DmChannel.getArray messageIndex channel.messages of
+                    case ArrayWithOffset.get messageIndex channel.messages of
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
@@ -3380,7 +3381,7 @@ discordConversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : ArrayWithOffset ChannelMessageId (Discord.Id Discord.UserId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
@@ -3523,7 +3524,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             ]
             [ case replyTo of
                 Just messageIndex ->
-                    case DmChannel.getArray messageIndex channel.messages of
+                    case ArrayWithOffset.get messageIndex channel.messages of
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
@@ -3830,7 +3831,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             ]
             [ case replyTo of
                 Just messageIndex ->
-                    case DmChannel.getArray (Id.changeType messageIndex) channel.messages of
+                    case ArrayWithOffset.get (Id.changeType messageIndex) channel.messages of
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
@@ -4033,7 +4034,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             ]
             [ case replyTo of
                 Just messageIndex ->
-                    case DmChannel.getArray (Id.changeType messageIndex) channel.messages of
+                    case ArrayWithOffset.get (Id.changeType messageIndex) channel.messages of
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
@@ -4083,7 +4084,7 @@ threadStarterMessage :
     Bool
     -> GuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)) }
+    -> { a | messages : ArrayWithOffset ChannelMessageId (Id UserId) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -4115,7 +4116,7 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                 Nothing ->
                     SeqDict.empty
     in
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case ArrayWithOffset.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just editMessage ->
@@ -4178,7 +4179,7 @@ discordThreadStarterMessage :
     Bool
     -> DiscordGuildOrDmId
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId)) }
+    -> { a | messages : ArrayWithOffset ChannelMessageId (Discord.Id Discord.UserId) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -4219,7 +4220,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                 Nothing ->
                     SeqDict.empty
     in
-    case DmChannel.getArray threadMessageIndex channel.messages of
+    case ArrayWithOffset.get threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just editMessage ->
@@ -5545,7 +5546,7 @@ previewThreadLastMessage :
 previewThreadLastMessage timezone allUsers messageId thread =
     let
         lastMessage =
-            Array.Extra.last thread.messages
+            ArrayWithOffset.last thread.messages
     in
     Html.button
         [ Html.Attributes.style "white-space" "nowrap"

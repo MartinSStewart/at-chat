@@ -8,6 +8,7 @@ module MessageMenu exposing
     )
 
 import Array exposing (Array)
+import ArrayWithOffset exposing (ArrayWithOffset)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
@@ -355,9 +356,9 @@ editMessageTextInputId =
 menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
-        helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String )
+        helper : Id messageId -> { a | messages : ArrayWithOffset messageId (Id UserId) } -> Maybe ( Bool, String )
         helper messageId thread =
-            case DmChannel.getArray messageId thread.messages of
+            case ArrayWithOffset.get messageId thread.messages of
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
@@ -372,9 +373,9 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 _ ->
                     Nothing
 
-        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String )
+        discordHelper : Id messageId -> { a | messages : ArrayWithOffset messageId (Discord.Id Discord.UserId) } -> Maybe ( Bool, String )
         discordHelper messageId thread =
-            case DmChannel.getArray messageId thread.messages of
+            case ArrayWithOffset.get messageId thread.messages of
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
