@@ -1426,7 +1426,8 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                         (List.map
                                                             (\sticker ->
                                                                 { id = sticker.id
-                                                                , stickerType = Discord.GuildSticker
+                                                                , -- Assume that these are all custom stickers since we very likely have loaded all of the built-in stickers
+                                                                  stickerType = Discord.GuildSticker
                                                                 , formatType = sticker.formatType
                                                                 , name = sticker.name
                                                                 }
