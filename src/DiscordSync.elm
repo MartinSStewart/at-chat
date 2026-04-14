@@ -60,7 +60,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData, StickerUrl(..))
 import Thread exposing (DiscordBackendThread)
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
 import User
 
 
@@ -1416,11 +1416,61 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                                         _ ->
                                             Command.none
+
+                                ( model3, stickerCmds ) =
+                                    case message.stickerItems of
+                                        Included stickers ->
+                                            let
+                                                stickerData =
+                                                    handleStickers
+                                                        (List.map
+                                                            (\sticker ->
+                                                                { id = sticker.id
+                                                                , stickerType = Discord.GuildSticker
+                                                                , formatType = sticker.formatType
+                                                                , name = sticker.name
+                                                                }
+                                                            )
+                                                            stickers
+                                                        )
+                                                        { tasks = []
+                                                        , stickers = model.stickers
+                                                        , discordStickers = model.discordStickers
+                                                        }
+                                            in
+                                            ( { model2
+                                                | stickers = stickerData.stickers
+                                                , discordStickers = stickerData.discordStickers
+                                              }
+                                            , Task.sequence stickerData.tasks
+                                                |> Task.andThen
+                                                    (\stickers2 ->
+                                                        Task.map
+                                                            (GotDiscordMessageStickers
+                                                                (case message.guildId of
+                                                                    Included guildId ->
+                                                                        MessageFromGuildOrDm_Guild guildId
+
+                                                                    Missing ->
+                                                                        Discord.idToUInt64 message.channelId
+                                                                            |> Discord.idFromUInt64
+                                                                            |> MessageFromGuildOrDm_Dm
+                                                                )
+                                                                stickers2
+                                                            )
+                                                            Time.now
+                                                    )
+                                                |> Task.perform identity
+                                            )
+
+                                        Missing ->
+                                            ( model2, Command.none )
                             in
                             case ( SeqDict.size attachments == List.length message.attachments, List.Nonempty.fromList message.attachments ) of
                                 ( False, Just nonempty ) ->
-                                    ( model2
+                                    ( model3
                                     , joinThreadCmd
+                                        :: stickerCmds
                                         :: Task.perform
                                             (DiscordMessageCreate_AttachmentsUploaded message)
                                             (nonemptyTaskSequence (List.Nonempty.map loadMessageAttachment nonempty))
@@ -1429,7 +1479,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                                 _ ->
                                     let
-                                        ( model3, cmd2 ) =
+                                        ( model4, cmd2 ) =
                                             handleCreateMessage
                                                 (case discordMsg of
                                                     Discord.GotWebsocketData data ->
@@ -1440,9 +1490,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                 )
                                                 message
                                                 attachments
-                                                model2
+                                                model3
                                     in
-                                    ( model3, joinThreadCmd :: cmd2 :: cmds )
+                                    ( model4, joinThreadCmd :: stickerCmds :: cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
@@ -2226,6 +2276,69 @@ handleReadySupplementalData data model =
             ( model, [] )
 
 
+handleStickers :
+    List
+        { a
+            | id : Discord.Id Discord.StickerId
+            , stickerType : Discord.StickerType
+            , formatType : Discord.StickerFormatType
+            , name : String
+        }
+    ->
+        { tasks : List (Task BackendOnly x ( Id StickerId, Result Http.Error FileStatus.UploadResponse ))
+        , stickers : SeqDict (Id StickerId) StickerData
+        , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+        }
+    ->
+        { tasks : List (Task BackendOnly x ( Id StickerId, Result Http.Error FileStatus.UploadResponse ))
+        , stickers : SeqDict (Id StickerId) StickerData
+        , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+        }
+handleStickers stickersToCheck state =
+    List.foldl
+        (\sticker { stickers, tasks, discordStickers } ->
+            case OneToOne.second sticker.id discordStickers of
+                Just _ ->
+                    { tasks = tasks, stickers = stickers, discordStickers = discordStickers }
+
+                Nothing ->
+                    case sticker.stickerType of
+                        Discord.StandardSticker ->
+                            { tasks = tasks
+                            , stickers = stickers
+                            , discordStickers = discordStickers
+                            }
+
+                        Discord.GuildSticker ->
+                            let
+                                stickerId : Id StickerId
+                                stickerId =
+                                    Id.nextId stickers
+                            in
+                            { tasks =
+                                (FileStatus.uploadUrl
+                                    { sessionId = backendSessionIdHash
+                                    , url = Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id
+                                    }
+                                    |> taskResult
+                                    |> Task.map (\result -> ( stickerId, result ))
+                                )
+                                    :: tasks
+                            , stickers =
+                                SeqDict.insert
+                                    stickerId
+                                    { url = StickerLoading
+                                    , name = sticker.name
+                                    , format = sticker.formatType
+                                    }
+                                    stickers
+                            , discordStickers = OneToOne.insert sticker.id stickerId discordStickers
+                            }
+        )
+        state
+        stickersToCheck
+
+
 handleReadyData : Id UserId -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleReadyData userId readyData model =
     let
@@ -2251,50 +2364,7 @@ handleReadyData userId readyData model =
             }
         stickerData =
             List.foldl
-                (\guild state ->
-                    List.foldl
-                        (\sticker { stickers, tasks, discordStickers } ->
-                            case OneToOne.second sticker.id discordStickers of
-                                Just _ ->
-                                    { tasks = tasks, stickers = stickers, discordStickers = discordStickers }
-
-                                Nothing ->
-                                    case sticker.stickerType of
-                                        Discord.StandardSticker ->
-                                            { tasks = tasks
-                                            , stickers = stickers
-                                            , discordStickers = discordStickers
-                                            }
-
-                                        Discord.GuildSticker ->
-                                            let
-                                                stickerId : Id StickerId
-                                                stickerId =
-                                                    Id.nextId stickers
-                                            in
-                                            { tasks =
-                                                (FileStatus.uploadUrl
-                                                    { sessionId = backendSessionIdHash
-                                                    , url = Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id
-                                                    }
-                                                    |> taskResult
-                                                    |> Task.map (\result -> ( stickerId, result ))
-                                                )
-                                                    :: tasks
-                                            , stickers =
-                                                SeqDict.insert
-                                                    stickerId
-                                                    { url = StickerLoading
-                                                    , name = sticker.name
-                                                    , format = sticker.formatType
-                                                    }
-                                                    stickers
-                                            , discordStickers = OneToOne.insert sticker.id stickerId discordStickers
-                                            }
-                        )
-                        state
-                        guild.stickers
-                )
+                (\guild state -> handleStickers guild.stickers state)
                 { tasks = [], stickers = model.stickers, discordStickers = model.discordStickers }
                 readyData.guilds
     in
@@ -2326,7 +2396,7 @@ handleReadyData userId readyData model =
     , Command.batch
         [ getUserAvatars model.discordUsers discordUsers
         , Task.sequence stickerData.tasks
-            |> Task.andThen (\stickers -> Task.map (GotDiscordGuildStickers userId stickers) Time.now)
+            |> Task.andThen (\stickers -> Task.map (GotDiscordReadyDataStickers userId stickers) Time.now)
             |> Task.perform identity
         , (List.filterMap
             (\guild ->

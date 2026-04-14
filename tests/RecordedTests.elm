@@ -3693,6 +3693,72 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , startTest
+        "Handle new sticker in guild message"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString
+                            100
+                            connection
+                            """{"t":"MESSAGE_CREATE","s":521,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-14T04:41:03.112000+00:00","sticker_items":[{"name":"Yippee","id":"1490556070756618301","format_type":1}],"pinned":false,"nonce":"1493471122245550080","mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":["1039567586788122624","1113304630558986240","910335245230944266","686309065940533259","686292987625472082","639296395513430037"],"premium_since":"2022-09-10T14:38:28.084000+00:00","pending":false,"nick":"yargle's gargle marble","mute":false,"joined_at":"2020-03-08T20:30:03.582000+00:00","flags":0,"display_name_styles":{"font_id":4,"effect_id":1,"colors":[]},"deaf":false,"communication_disabled_until":null,"banner":"0aba747031ece851b97166a093d1c509","avatar":"dc78d57d93da1b00fbf15a005821ffa5"},"id":"1493471123155714198","flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"puncharoonie","public_flags":0,"primary_guild":{"tag":"BoNY","identity_guild_id":"821802567876083743","identity_enabled":true,"badge":"4ef966b9bdd3ca7155e184e893314cd6"},"id":"313112240758718464","global_name":"puncharoonie","display_name_styles":{"font_id":7,"effect_id":5,"colors":[1027403]},"discriminator":"0","collectibles":{"nameplate":{"sku_id":"1417311919429128312","palette":"berry","label":"COLLECTIBLES_NAMEPLATE_BONANZA_BERRY_BUNNY_NP_A11Y","expires_at":null,"asset":"nameplates/nameplate_bonanza/berry_bunny/"}},"clan":{"tag":"BoNY","identity_guild_id":"821802567876083743","identity_enabled":true,"badge":"4ef966b9bdd3ca7155e184e893314cd6"},"avatar_decoration_data":{"sku_id":"1354894010522800158","expires_at":null,"asset":"a_b70f0a0cecf3097eae17a8f7d8c659a8"},"avatar":"ae79bf23d7d379b2465eadc6994a2583"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute
+                                    (Html.Attributes.src
+                                        "http://localhost:3000/file/2/https://media.discordapp.net/stickers/1490556070756618301.png?size=480&quality=lossless"
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , startTest
+        "Handle new sticker in DM message"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_discordFriendLabel_1472236476401057854")
+                , andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString
+                            100
+                            connection
+                            """{"t":"MESSAGE_CREATE","s":521,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-14T04:41:03.112000+00:00","sticker_items":[{"name":"Yippee","id":"1490556070756618301","format_type":1}],"pinned":false,"nonce":"1493471122245550080","mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":["1039567586788122624","1113304630558986240","910335245230944266","686309065940533259","686292987625472082","639296395513430037"],"premium_since":"2022-09-10T14:38:28.084000+00:00","pending":false,"nick":"yargle's gargle marble","mute":false,"joined_at":"2020-03-08T20:30:03.582000+00:00","flags":0,"display_name_styles":{"font_id":4,"effect_id":1,"colors":[]},"deaf":false,"communication_disabled_until":null,"banner":"0aba747031ece851b97166a093d1c509","avatar":"dc78d57d93da1b00fbf15a005821ffa5"},"id":"1493471123155714198","flags":0,"embeds":[],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1472236476401057854","author":{"username":"purplelite","public_flags":0,"primary_guild":{"tag":"BoNY","identity_guild_id":"821802567876083743","identity_enabled":true,"badge":"4ef966b9bdd3ca7155e184e893314cd6"},"id":"137748026084163584","global_name":"purplelite","display_name_styles":{"font_id":7,"effect_id":5,"colors":[1027403]},"discriminator":"0","collectibles":{"nameplate":{"sku_id":"1417311919429128312","palette":"berry","label":"COLLECTIBLES_NAMEPLATE_BONANZA_BERRY_BUNNY_NP_A11Y","expires_at":null,"asset":"nameplates/nameplate_bonanza/berry_bunny/"}},"clan":{"tag":"BoNY","identity_guild_id":"821802567876083743","identity_enabled":true,"badge":"4ef966b9bdd3ca7155e184e893314cd6"},"avatar_decoration_data":{"sku_id":"1354894010522800158","expires_at":null,"asset":"a_b70f0a0cecf3097eae17a8f7d8c659a8"},"avatar":"ae79bf23d7d379b2465eadc6994a2583"},"attachments":[]}}"""
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.attribute
+                                    (Html.Attributes.src
+                                        "http://localhost:3000/file/2/https://media.discordapp.net/stickers/1490556070756618301.png?size=480&quality=lossless"
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"

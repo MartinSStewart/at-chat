@@ -24,6 +24,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , MessageFromGuildOrDm(..)
     , MessageHover(..)
     , MessageHoverMobileMode(..)
     , MessageMenuExtraOptions
@@ -604,10 +605,16 @@ type BackendMsg
         )
     | JoinedDiscordThread (Discord.Id Discord.GuildId) (Result Discord.HttpError ()) Time.Posix
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
-    | GotDiscordGuildStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
+
+
+type MessageFromGuildOrDm
+    = MessageFromGuildOrDm_Guild (Discord.Id Discord.GuildId)
+    | MessageFromGuildOrDm_Dm (Discord.Id Discord.PrivateChannelId)
 
 
 type alias ExportStateProgress =

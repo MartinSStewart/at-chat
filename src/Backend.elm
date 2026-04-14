@@ -32,7 +32,7 @@ import Emoji
 import Env
 import FileStatus exposing (FileData, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
 import List.Extra
@@ -55,13 +55,13 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
-import Sticker exposing (StickerUrl(..))
+import Sticker exposing (StickerData, StickerUrl(..))
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -1370,33 +1370,10 @@ update msg model =
             , Command.none
             )
 
-        GotDiscordGuildStickers userId results time ->
+        GotDiscordReadyDataStickers userId results time ->
             let
                 ( errors, stickers, newStickers ) =
-                    List.foldl
-                        (\( stickerId, result ) ( errors2, stickers2, newStickers2 ) ->
-                            case result of
-                                Ok uploadResponse ->
-                                    case SeqDict.get stickerId stickers2 of
-                                        Just sticker ->
-                                            case Sticker.addUrl uploadResponse sticker of
-                                                Ok sticker2 ->
-                                                    ( errors2
-                                                    , SeqDict.insert stickerId sticker2 stickers2
-                                                    , SeqDict.insert stickerId sticker2 newStickers2
-                                                    )
-
-                                                Err () ->
-                                                    ( errors2, stickers2, newStickers2 )
-
-                                        Nothing ->
-                                            ( errors2, stickers2, newStickers2 )
-
-                                Err error ->
-                                    ( ( stickerId, error ) :: errors2, stickers2, newStickers2 )
-                        )
-                        ( [], model.stickers, SeqDict.empty )
-                        results
+                    gotDiscordStickers results model
             in
             case List.Nonempty.fromList errors of
                 Just nonempty ->
@@ -1419,6 +1396,34 @@ update msg model =
                         userId
                         (Server_LinkedDiscordUserStickersLoaded newStickers |> ServerChange)
                         model
+                    )
+
+        GotDiscordMessageStickers guildOrDmId results time ->
+            let
+                ( errors, stickers, newStickers ) =
+                    gotDiscordStickers results model
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildStickers nonempty (List.length results))
+                        { model | stickers = stickers }
+
+                Nothing ->
+                    ( { model | stickers = stickers }
+                    , case guildOrDmId of
+                        MessageFromGuildOrDm_Guild guildId ->
+                            Broadcast.toDiscordGuild
+                                guildId
+                                (Server_LinkedDiscordUserStickersLoaded newStickers |> ServerChange)
+                                model
+
+                        MessageFromGuildOrDm_Dm channelId ->
+                            Broadcast.toDiscordDmChannel
+                                channelId
+                                (Server_LinkedDiscordUserStickersLoaded newStickers |> ServerChange)
+                                model
                     )
 
         HourlyUpdate time ->
@@ -1530,6 +1535,37 @@ update msg model =
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error) model
+
+
+gotDiscordStickers :
+    List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )
+    -> BackendModel
+    -> ( List ( Id StickerId, Http.Error ), SeqDict (Id StickerId) StickerData, SeqDict (Id StickerId) StickerData )
+gotDiscordStickers results model =
+    List.foldl
+        (\( stickerId, result ) ( errors2, stickers2, newStickers2 ) ->
+            case result of
+                Ok uploadResponse ->
+                    case SeqDict.get stickerId stickers2 of
+                        Just sticker ->
+                            case Sticker.addUrl uploadResponse sticker of
+                                Ok sticker2 ->
+                                    ( errors2
+                                    , SeqDict.insert stickerId sticker2 stickers2
+                                    , SeqDict.insert stickerId sticker2 newStickers2
+                                    )
+
+                                Err () ->
+                                    ( errors2, stickers2, newStickers2 )
+
+                        Nothing ->
+                            ( errors2, stickers2, newStickers2 )
+
+                Err error ->
+                    ( ( stickerId, error ) :: errors2, stickers2, newStickers2 )
+        )
+        ( [], model.stickers, SeqDict.empty )
+        results
 
 
 addDiscordGuildData :
@@ -5087,6 +5123,10 @@ updateFromFrontendAdmin clientId toBackend model =
         Pages.Admin.ImportBackendRequest bytes ->
             case Bytes.Decode.decode WireHelper.decodeStreamedBackendModel bytes of
                 Just model2 ->
+                    let
+                        _ =
+                            Debug.log "asdf" model2.lastScheduledExportTime
+                    in
                     ( model2
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
                     )
