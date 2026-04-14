@@ -498,6 +498,7 @@ type alias AdminData =
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
+    , vulnerabilityChecks : String
     }
 
 

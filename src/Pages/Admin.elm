@@ -212,6 +212,7 @@ type alias InitAdminData =
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
+    , vulnerabilityChecks : String
     }
 
 
@@ -1324,6 +1325,7 @@ view isMobile2 version local adminData user model =
                             Ui.text "Version unknown"
                     )
                 ]
+            , adminData.vulnerabilityChecks |> Ui.text
             , userSection user adminData model
             , guildsSection user adminData
             , discordGuildsSection user adminData

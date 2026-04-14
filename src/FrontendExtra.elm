@@ -3277,6 +3277,7 @@ initAdminData adminData =
     , connections = adminData.connections
     , filesCount = adminData.filesCount
     , toBackendLogs = adminData.toBackendLogs
+    , vulnerabilityChecks = adminData.vulnerabilityChecks
     }
 
 
