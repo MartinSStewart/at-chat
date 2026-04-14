@@ -22,6 +22,8 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
+use std::time::Duration;
+use std::time::SystemTime;
 use subtle::ConstantTimeEq;
 
 #[tokio::main]
@@ -37,6 +39,10 @@ async fn main() {
                 .route(
                     "/file/internal/embed",
                     post(post_embed).options(options_endpoint),
+                )
+                .route(
+                    "/file/internal/upload-backup/{filename}",
+                    post(post_backup_endpoint).options(options_endpoint),
                 )
                 .route(
                     "/file/upload",
@@ -243,6 +249,83 @@ fn vec_to_headermap(
     }
 
     Ok(header_map)
+}
+
+const SERVER_BACKUPS_PATH: &str = "./var/lib/atchat/backups/";
+const BUCKET_BACKUPS_PATH: &str = "./var/lib/atchat/storage/backups/";
+
+fn create_dir_if_missing(path: String) {
+    match fs::exists(&path) {
+        Ok(true) => (),
+        _ => {
+            let _ = fs::create_dir(&path);
+        }
+    }
+}
+
+const BACKUP_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+fn remove_old_backups(dir: String) {
+    let now = SystemTime::now();
+
+    match fs::read_dir(&dir) {
+        Ok(entries) => {
+            for entry in entries {
+                match entry {
+                    Ok(entry2) => match (entry2.metadata(), entry2.file_name().to_str()) {
+                        (Ok(metadata), Some(filename)) => {
+                            match (metadata.is_file(), metadata.created()) {
+                                (true, Ok(time)) => {
+                                    let should_delete = match now.duration_since(time) {
+                                        Ok(duration) => {
+                                            duration > BACKUP_MAX_AGE
+                                                && filename.starts_with("backend-export-")
+                                        }
+                                        Err(_) => false,
+                                    };
+                                    if should_delete {
+                                        let _ = fs::remove_file(entry2.path());
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    },
+                    Err(_) => {}
+                }
+            }
+        }
+        Err(_) => {}
+    }
+}
+
+async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Response<String> {
+    create_dir_if_missing(SERVER_BACKUPS_PATH.to_string());
+    create_dir_if_missing(BUCKET_BACKUPS_PATH.to_string());
+
+    remove_old_backups(SERVER_BACKUPS_PATH.to_string());
+    remove_old_backups(BUCKET_BACKUPS_PATH.to_string());
+
+    // The first path is on the main server and the second path is the S3 bucket. We write to both to improve the odds that we don't lose all backups
+    let write_a = fs::write(String::from(SERVER_BACKUPS_PATH) + &filename, &body);
+    let write_b = fs::write(String::from(BUCKET_BACKUPS_PATH) + &filename, &body);
+
+    match (write_a, write_b) {
+        (Ok(_), Ok(_)) => response_with_headers(StatusCode::OK, ""),
+        (Err(error), Ok(_)) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("First write failed\n{:?}", error),
+        ),
+        (Ok(_), Err(error)) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("Second write failed\n{:?}", error),
+        ),
+        (Err(error_a), Err(error_b)) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
+        ),
+    }
 }
 
 async fn custom_request_endpoint(

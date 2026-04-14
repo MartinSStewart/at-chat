@@ -883,6 +883,19 @@ handleInternalRequests : String -> HttpRequest -> List String -> HttpResponse
 handleInternalRequests discordStickerPacks currentRequest rest =
     if List.member ( "x-secret-key", Env.secretKey ) currentRequest.headers then
         case rest of
+            [ "upload-backup", filename ] ->
+                if String.startsWith "backend-export-" filename then
+                    StringHttpResponse
+                        { url = currentRequest.url
+                        , statusCode = 200
+                        , statusText = "OK"
+                        , headers = Dict.empty
+                        }
+                        ""
+
+                else
+                    UnhandledHttpRequest
+
             [ "custom-request" ] ->
                 case decodeCustomRequest currentRequest of
                     Just customRequest2 ->
@@ -2131,6 +2144,85 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , sendMessageRateLimitTest normalConfig
+    , startTest
+        "Scheduled backend export uploads bytes"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if backend.lastScheduledExportTime == Nothing then
+                            Ok ()
+
+                        else
+                            Err "lastScheduledExportTime should be Nothing before scheduled export"
+                    )
+                , T.checkState
+                    (Duration.hours 5 |> Duration.inMilliseconds)
+                    (\data ->
+                        if data.backend.lastScheduledExportTime == Nothing then
+                            Err "Expected lastScheduledExportTime to be set after 4 hours"
+
+                        else if data.backend.exportState /= Nothing then
+                            Err "Expected export state to be cleared after export completes"
+
+                        else
+                            case
+                                List.filter
+                                    (\request ->
+                                        String.startsWith "http://localhost:3000/file/internal/upload-backup/backend-export-" request.url
+                                            && (request.method == "POST")
+                                            && (request.requestedBy == RequestedByBackend)
+                                    )
+                                    data.httpRequests
+                            of
+                                [ _ ] ->
+                                    Ok ()
+
+                                [] ->
+                                    Err "Expected one upload HTTP request for scheduled export"
+
+                                _ ->
+                                    Err "Expected exactly one upload HTTP request for scheduled export"
+                    )
+                ]
+            )
+        , T.checkState
+            (Duration.hours 4 |> Duration.inMilliseconds)
+            (\data ->
+                if data.backend.lastScheduledExportTime == Nothing then
+                    Err "Expected lastScheduledExportTime to be set after 4 hours"
+
+                else if data.backend.exportState /= Nothing then
+                    Err "Expected export state to be cleared after export completes"
+
+                else
+                    case
+                        List.filter
+                            (\request ->
+                                String.startsWith "http://localhost:3000/file/internal/upload-backup/backend-export-" request.url
+                                    && (request.method == "POST")
+                                    && (request.requestedBy == RequestedByBackend)
+                            )
+                            data.httpRequests
+                    of
+                        [ _, _ ] ->
+                            Ok ()
+
+                        [] ->
+                            Err "Expected two upload HTTP request for scheduled export"
+
+                        _ ->
+                            Err "Expected exactly one upload HTTP request for scheduled export"
+            )
+        ]
     ]
 
 

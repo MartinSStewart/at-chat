@@ -32,6 +32,7 @@ module FileStatus exposing
     , thumbnailUrl
     , unknownContentType
     , uploadAvatar
+    , uploadBackup
     , uploadBytes
     , uploadFile
     , uploadResponseCodec
@@ -49,7 +50,7 @@ import CssPixels exposing (CssPixels)
 import Discord
 import Duration
 import Effect.Browser.Dom as Dom
-import Effect.Command exposing (Command)
+import Effect.Command exposing (BackendOnly, Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Task exposing (Task)
@@ -493,6 +494,41 @@ uploadBytes sessionId bytes =
         , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" bytes
         , resolver = resolver uploadResponseCodec
+        , timeout = Nothing
+        }
+
+
+uploadBackup : String -> Bytes -> Task BackendOnly Http.Error ()
+uploadBackup name bytes =
+    Http.task
+        { method = "POST"
+        , headers = [ Env.secretKeyHeader ]
+        , url = domain ++ "/file/internal/upload-backup/" ++ name
+        , body = Http.bytesBody "application/octet-stream" bytes
+        , resolver =
+            Http.stringResolver
+                (\result ->
+                    case result of
+                        Http.GoodStatus_ _ _ ->
+                            Ok ()
+
+                        Http.BadUrl_ string ->
+                            Err (Http.BadUrl string)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+
+                        Http.BadStatus_ metadata text ->
+                            "Status code: "
+                                ++ String.fromInt metadata.statusCode
+                                ++ " Message: "
+                                ++ text
+                                |> Http.BadBody
+                                |> Err
+                )
         , timeout = Nothing
         }
 

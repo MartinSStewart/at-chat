@@ -45,6 +45,7 @@ module MyUi exposing
     , isMobile
     , label
     , mentionColor
+    , monthToInt
     , montserrat
     , noPointerEvents
     , noShrinking

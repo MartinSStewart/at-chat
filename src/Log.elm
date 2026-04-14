@@ -42,6 +42,7 @@ type Log
     | EmptyDiscordMessage String
     | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
     | FailedToLoadDiscordStandardStickerPacks Discord.HttpError
+    | FailedToGenerateScheduledBackup Http.Error
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -114,6 +115,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToLoadDiscordStandardStickerPacks _ ->
+            Nothing
+
+        FailedToGenerateScheduledBackup _ ->
             Nothing
 
 
@@ -464,6 +468,13 @@ logContent onPressCopy log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord standard sticker packs failed to load"
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToGenerateScheduledBackup httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Scheduled backend backup generation failed"
+                , fieldRow "Error" (Ui.text (httpErrorToString httpError))
                 ]
 
 
