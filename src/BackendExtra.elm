@@ -25,10 +25,7 @@ Most of the stuff in there doesn't neatly fit into it's own module so instead I'
 -}
 
 import Array
-import Basics.Extra
 import Broadcast
-import Bytes.Decode as D
-import Bytes.Encode as E
 import Discord
 import DiscordUserData exposing (DiscordUserData(..), DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
@@ -761,45 +758,32 @@ adminData model lastLogPageViewed =
     , toBackendLogs = Array.slice (Array.length model.toBackendLogs - 1000) (Array.length model.toBackendLogs) model.toBackendLogs
     , vulnerabilityChecks =
         case
-            E.sequence [ E.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (0 / 0) ]
-                |> E.encode
-                |> D.decode Lamdera.Wire3.decodeInt
+            Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (0 / 0) ]
+                |> Bytes.Encode.encode
+                |> Bytes.Decode.decode Lamdera.Wire3.decodeInt
         of
             Just int ->
                 "decodeInt not patched! " ++ String.fromInt int
 
             Nothing ->
                 case
-                    E.sequence [ E.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (1 / 0) ]
-                        |> E.encode
-                        |> D.decode Lamdera.Wire3.decodeInt
+                    Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (1 / 0) ]
+                        |> Bytes.Encode.encode
+                        |> Bytes.Decode.decode Lamdera.Wire3.decodeInt
                 of
                     Just int ->
                         "decodeInt not patched! " ++ String.fromInt int
 
                     Nothing ->
                         case
-                            E.sequence [ E.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (-1 / 0) ]
-                                |> E.encode
-                                |> D.decode Lamdera.Wire3.decodeInt
+                            Bytes.Encode.sequence [ Bytes.Encode.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (-1 / 0) ]
+                                |> Bytes.Encode.encode
+                                |> Bytes.Decode.decode Lamdera.Wire3.decodeInt
                         of
                             Just int ->
                                 "decodeInt not patched! " ++ String.fromInt int
 
                             Nothing ->
-                                --case
-                                --    E.sequence [ E.unsignedInt8 255, Lamdera.Wire3.encodeFloat64 (2.123 ^ 100) ]
-                                --        |> E.encode
-                                --        |> D.decode Lamdera.Wire3.decodeInt
-                                --of
-                                --    Just int ->
-                                --        if int > Basics.Extra.maxSafeInteger then
-                                --            "decodeInt not patched! " ++ String.fromInt int
-                                --
-                                --        else
-                                --            "OK"
-                                --
-                                --    Nothing ->
                                 "OK"
     }
 
