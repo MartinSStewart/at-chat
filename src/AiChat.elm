@@ -1,4 +1,4 @@
-port module AiChat exposing (AiModel, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message(..), Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
+port module AiChat exposing (AiModel, AiModelName, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message(..), Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -312,11 +312,11 @@ pendingResponseCodec =
                 Pending arg0 ->
                     pendingEncoder arg0
 
-                GotResponse arg0 arg1 ->
-                    gotResponseEncoder arg0 arg1
+                GotResponse argA argB ->
+                    gotResponseEncoder argA argB
 
-                GotError arg0 arg1 ->
-                    gotErrorEncoder arg0 arg1
+                GotError argA argB ->
+                    gotErrorEncoder argA argB
         )
         |> Serialize.variant1 Pending aiModelCodec
         |> Serialize.variant2 GotResponse aiModelCodec Serialize.string
@@ -688,6 +688,7 @@ update msg model =
             )
 
 
+aiModelNameToString : AiModelName -> String
 aiModelNameToString (AiModelName a) =
     a
 
