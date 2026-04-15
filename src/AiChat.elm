@@ -99,9 +99,9 @@ type ResponseId
 
 
 type PendingResponse
-    = Pending
-    | GotResponse String
-    | GotError Http.Error
+    = Pending String
+    | GotResponse String String
+    | GotError String Http.Error
 
 
 type SendMessageWith
@@ -300,18 +300,18 @@ pendingResponseCodec =
     Serialize.customType
         (\pendingEncoder gotResponseEncoder gotErrorEncoder value ->
             case value of
-                Pending ->
-                    pendingEncoder
+                Pending arg0 ->
+                    pendingEncoder arg0
 
-                GotResponse arg0 ->
-                    gotResponseEncoder arg0
+                GotResponse arg0 arg1 ->
+                    gotResponseEncoder arg0 arg1
 
-                GotError arg0 ->
-                    gotErrorEncoder arg0
+                GotError arg0 arg1 ->
+                    gotErrorEncoder arg0 arg1
         )
-        |> Serialize.variant0 Pending
-        |> Serialize.variant1 GotResponse Serialize.string
-        |> Serialize.variant1 GotError errorCodec
+        |> Serialize.variant1 Pending Serialize.string
+        |> Serialize.variant2 GotResponse Serialize.string Serialize.string
+        |> Serialize.variant2 GotError Serialize.string errorCodec
         |> Serialize.finishCustomType
 
 
@@ -514,7 +514,7 @@ update msg model =
                             , pendingResponses =
                                 SeqDict.insert
                                     responseId
-                                    Pending
+                                    (Pending aiModel.id)
                                     model.pendingResponses
                             , responseCounter = model.responseCounter + 1
                           }
@@ -541,7 +541,7 @@ update msg model =
 
         PressedKeep responseId ->
             case SeqDict.get responseId model.pendingResponses of
-                Just (GotResponse text) ->
+                Just (GotResponse _ text) ->
                     saveToLocalStorage
                         { model
                             | pendingResponses = SeqDict.empty
@@ -556,22 +556,31 @@ update msg model =
             saveToLocalStorage { model | pendingResponses = SeqDict.remove responseId model.pendingResponses }
 
         PressedRetry responseId ->
-            case getAiModel model of
-                Just aiModel ->
-                    ( { model
-                        | pendingResponses = SeqDict.insert responseId Pending model.pendingResponses
-                      }
-                    , Command.batch
-                        [ (if List.member "image" aiModel.inputs then
-                            AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
+            case SeqDict.get responseId model.pendingResponses of
+                Just pendingResponse ->
+                    let
+                        modelId =
+                            pendingResponseModelId pendingResponse
+                    in
+                    case getAiModelById modelId model of
+                        Just aiModel ->
+                            ( { model
+                                | pendingResponses = SeqDict.insert responseId (Pending modelId) model.pendingResponses
+                              }
+                            , Command.batch
+                                [ (if List.member "image" aiModel.inputs then
+                                    AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
 
-                           else
-                            AiMessageRequestSimple aiModel.id responseId model.chatHistory
-                          )
-                            |> Lamdera.sendToBackend
-                        , scrollToTop (responseContainerId responseId)
-                        ]
-                    )
+                                   else
+                                    AiMessageRequestSimple aiModel.id responseId model.chatHistory
+                                  )
+                                    |> Lamdera.sendToBackend
+                                , scrollToTop (responseContainerId responseId)
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
 
                 Nothing ->
                     ( model, Command.none )
@@ -631,13 +640,13 @@ update msg model =
                         SeqDict.updateIfExists responseId
                             (\response ->
                                 case response of
-                                    GotResponse _ ->
-                                        GotResponse text
+                                    GotResponse modelId _ ->
+                                        GotResponse modelId text
 
-                                    Pending ->
+                                    Pending _ ->
                                         response
 
-                                    GotError _ ->
+                                    GotError _ _ ->
                                         response
                             )
                             model.pendingResponses
@@ -680,6 +689,29 @@ getAiModel model =
             Nothing
 
 
+getAiModelById : String -> FrontendModel -> Maybe AiModel
+getAiModelById modelId model =
+    case model.aiModels of
+        LoadedAiModels aiModels ->
+            List.Extra.find (\aiModel -> aiModel.id == modelId) aiModels
+
+        _ ->
+            Nothing
+
+
+pendingResponseModelId : PendingResponse -> String
+pendingResponseModelId response =
+    case response of
+        Pending modelId ->
+            modelId
+
+        GotResponse modelId _ ->
+            modelId
+
+        GotError modelId _ ->
+            modelId
+
+
 prefixWrapper : String -> String
 prefixWrapper prefix =
     "\n\n" ++ prefix ++ "\n"
@@ -705,7 +737,7 @@ updateFromBackend msg model =
     case msg of
         AiMessageResponse responseId result ->
             case SeqDict.get responseId model.pendingResponses of
-                Just Pending ->
+                Just (Pending modelId) ->
                     { model
                         | pendingResponses =
                             SeqDict.insert
@@ -726,10 +758,10 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        String.replace "\\\"" "\"" aiMessage2 |> GotResponse
+                                        String.replace "\\\"" "\"" aiMessage2 |> GotResponse modelId
 
                                     Err error ->
-                                        GotError error
+                                        GotError modelId error
                                 )
                                 model.pendingResponses
                     }
@@ -899,6 +931,10 @@ view windowSize model =
 
 responseView : Int -> Int -> ResponseId -> PendingResponse -> Element Msg
 responseView windowWidth responseCount responseId response =
+    let
+        modelId =
+            pendingResponseModelId response
+    in
     Ui.el
         [ min
             1000
@@ -906,13 +942,13 @@ responseView windowWidth responseCount responseId response =
             |> Ui.px
             |> Ui.width
         , [ case response of
-                GotResponse _ ->
+                GotResponse _ _ ->
                     responseButton (PressedKeep responseId) MyUi.background2 Icons.checkmark "Keep"
 
-                Pending ->
+                Pending _ ->
                     Ui.none
 
-                GotError _ ->
+                GotError _ _ ->
                     Ui.none
           , responseButton (PressedRetry responseId) MyUi.background3 refreshIcon "Retry"
           , responseButton (PressedDelete responseId) MyUi.deleteButtonBackground deleteIcon "Delete"
@@ -931,70 +967,85 @@ responseView windowWidth responseCount responseId response =
         , containerShadow
         , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
         ]
-        (case response of
-            Pending ->
-                Ui.el
-                    [ Ui.border 1
-                    , Ui.paddingXY 8 8
-                    , Ui.height Ui.fill
-                    , Ui.scrollable
-                    , responseContainerId responseId |> MyUi.id
-                    , Ui.rounded 4
-                    , Ui.borderColor MyUi.inputBorder
-                    ]
-                    (Ui.text "Loading...")
-
-            GotResponse response2 ->
-                Ui.el
-                    [ Ui.scrollable
-                    , Ui.rounded 4
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.inputBorder
-                    , responseContainerId responseId |> MyUi.id
-                    , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
-                    ]
-                    (Ui.Input.multiline
-                        [ Ui.paddingXY 8 8
-                        , MyUi.htmlStyle "white-space" "pre-wrap"
-                        , Ui.border 0
-                        , Ui.background MyUi.inputBackground
+        (Ui.column
+            [ Ui.height Ui.fill
+            , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
+            ]
+            [ case response of
+                Pending _ ->
+                    Ui.el
+                        [ Ui.border 1
+                        , Ui.paddingXY 8 8
+                        , Ui.height Ui.fill
+                        , Ui.scrollable
+                        , responseContainerId responseId |> MyUi.id
+                        , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
+                        , Ui.borderColor MyUi.inputBorder
                         ]
-                        { text = response2
-                        , onChange = EditedResponse responseId
-                        , placeholder = Just "No response"
-                        , spellcheck = True
-                        , label = Ui.Input.labelHidden "AI response"
-                        }
-                    )
+                        (Ui.text "Loading...")
 
-            GotError error ->
-                Ui.el
-                    [ Ui.border 1
-                    , Ui.paddingXY 8 8
-                    , Ui.height Ui.fill
-                    , Ui.rounded 4
-                    , Ui.borderColor MyUi.inputBorder
-                    , Ui.scrollable
-                    , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
-                    , Ui.Font.italic
-                    , Ui.Font.color MyUi.errorColor
-                    ]
-                    (case error of
-                        Http.NetworkError ->
-                            Ui.text "Network error"
+                GotResponse _ response2 ->
+                    Ui.el
+                        [ Ui.scrollable
+                        , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.inputBorder
+                        , responseContainerId responseId |> MyUi.id
+                        , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
+                        ]
+                        (Ui.Input.multiline
+                            [ Ui.paddingXY 8 8
+                            , MyUi.htmlStyle "white-space" "pre-wrap"
+                            , Ui.border 0
+                            , Ui.background MyUi.inputBackground
+                            ]
+                            { text = response2
+                            , onChange = EditedResponse responseId
+                            , placeholder = Just "No response"
+                            , spellcheck = True
+                            , label = Ui.Input.labelHidden "AI response"
+                            }
+                        )
 
-                        Http.BadUrl url ->
-                            Ui.text ("Bad url: " ++ url)
+                GotError _ error ->
+                    Ui.el
+                        [ Ui.border 1
+                        , Ui.paddingXY 8 8
+                        , Ui.height Ui.fill
+                        , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
+                        , Ui.borderColor MyUi.inputBorder
+                        , Ui.scrollable
+                        , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
+                        , Ui.Font.italic
+                        , Ui.Font.color MyUi.errorColor
+                        ]
+                        (case error of
+                            Http.NetworkError ->
+                                Ui.text "Network error"
 
-                        Http.Timeout ->
-                            Ui.text "Request timed out"
+                            Http.BadUrl url ->
+                                Ui.text ("Bad url: " ++ url)
 
-                        Http.BadStatus int ->
-                            Ui.text ("Bad status code: " ++ String.fromInt int)
+                            Http.Timeout ->
+                                Ui.text "Request timed out"
 
-                        Http.BadBody string ->
-                            Ui.text ("Error in response body: " ++ string)
-                    )
+                            Http.BadStatus int ->
+                                Ui.text ("Bad status code: " ++ String.fromInt int)
+
+                            Http.BadBody string ->
+                                Ui.text ("Error in response body: " ++ string)
+                        )
+            , Ui.el
+                [ Ui.Font.size 11
+                , Ui.Font.color MyUi.font3
+                , Ui.paddingXY 8 3
+                , Ui.borderWith { left = 1, right = 1, top = 0, bottom = 1 }
+                , Ui.borderColor MyUi.inputBorder
+                , Ui.roundedWith { topLeft = 0, topRight = 0, bottomRight = 4, bottomLeft = 4 }
+                , Ui.width Ui.fill
+                ]
+                (Ui.text modelId)
+            ]
         )
 
 
