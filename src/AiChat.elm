@@ -1,4 +1,4 @@
-port module AiChat exposing (AiModel, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message(..), Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
+port module AiChat exposing (AiModel, AiModelName, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message(..), Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -72,7 +72,7 @@ type alias FrontendModel =
     , pendingResponses : SeqDict ResponseId PendingResponse
     , responseCounter : Int
     , showOptions : Bool
-    , selectedModel : Maybe String
+    , selectedModel : Maybe AiModelName
     , userPrefix : String
     , botPrefix : String
     , debounceCounter : Int
@@ -81,12 +81,16 @@ type alias FrontendModel =
     }
 
 
+type AiModelName
+    = AiModelName String
+
+
 type alias LocalStorage =
     { message : String
     , chatHistory : String
     , pendingResponses : SeqDict ResponseId PendingResponse
     , showOptions : Bool
-    , selectedModel : Maybe String
+    , selectedModel : Maybe AiModelName
     , userPrefix : String
     , botPrefix : String
     , sendMessageWith : SendMessageWith
@@ -99,9 +103,9 @@ type ResponseId
 
 
 type PendingResponse
-    = Pending
-    | GotResponse String
-    | GotError Http.Error
+    = Pending AiModelName
+    | GotResponse AiModelName String
+    | GotError AiModelName Http.Error
 
 
 type SendMessageWith
@@ -119,7 +123,7 @@ type Msg
     | PressedChatHistoryContainer
     | PressedClearChatHistory
     | PressedOptionsButton
-    | SelectedAiModel String
+    | SelectedAiModel AiModelName
     | SelectedSendMessageWith SendMessageWith
     | TypedUserPrefix String
     | TypedBotPrefix String
@@ -131,8 +135,8 @@ type Msg
 
 
 type ToBackend
-    = AiMessageRequest String ResponseId (List Message)
-    | AiMessageRequestSimple String ResponseId String
+    = AiMessageRequest AiModelName ResponseId (List Message)
+    | AiMessageRequestSimple AiModelName ResponseId String
 
 
 {-| OpaqueVariants
@@ -245,7 +249,7 @@ type AiModelsStatus
 
 
 type alias AiModel =
-    { id : String
+    { id : AiModelName
     , inputs : List String
     }
 
@@ -257,7 +261,7 @@ decodeModels =
         (Json.Decode.list
             (Json.Decode.map2
                 AiModel
-                (Json.Decode.field "id" Json.Decode.string)
+                (Json.Decode.field "id" Json.Decode.string |> Json.Decode.map AiModelName)
                 (Json.Decode.at [ "architecture", "input_modalities" ] (Json.Decode.list Json.Decode.string))
             )
         )
@@ -275,12 +279,17 @@ localStorageCodec =
         |> Serialize.field .chatHistory Serialize.string
         |> Serialize.field .pendingResponses (seqDictCodec responseIdCodec pendingResponseCodec)
         |> Serialize.field .showOptions Serialize.bool
-        |> Serialize.field .selectedModel (Serialize.maybe Serialize.string)
+        |> Serialize.field .selectedModel (Serialize.maybe aiModelCodec)
         |> Serialize.field .userPrefix Serialize.string
         |> Serialize.field .botPrefix Serialize.string
         |> Serialize.field .sendMessageWith sendMessageWithCodec
         |> Serialize.field .responseCounter Serialize.int
         |> Serialize.finishRecord
+
+
+aiModelCodec : Codec e AiModelName
+aiModelCodec =
+    Serialize.map AiModelName (\(AiModelName a) -> a) Serialize.string
 
 
 responseIdCodec : Codec e ResponseId
@@ -300,18 +309,18 @@ pendingResponseCodec =
     Serialize.customType
         (\pendingEncoder gotResponseEncoder gotErrorEncoder value ->
             case value of
-                Pending ->
-                    pendingEncoder
+                Pending arg0 ->
+                    pendingEncoder arg0
 
-                GotResponse arg0 ->
-                    gotResponseEncoder arg0
+                GotResponse argA argB ->
+                    gotResponseEncoder argA argB
 
-                GotError arg0 ->
-                    gotErrorEncoder arg0
+                GotError argA argB ->
+                    gotErrorEncoder argA argB
         )
-        |> Serialize.variant0 Pending
-        |> Serialize.variant1 GotResponse Serialize.string
-        |> Serialize.variant1 GotError errorCodec
+        |> Serialize.variant1 Pending aiModelCodec
+        |> Serialize.variant2 GotResponse aiModelCodec Serialize.string
+        |> Serialize.variant2 GotError aiModelCodec errorCodec
         |> Serialize.finishCustomType
 
 
@@ -514,7 +523,7 @@ update msg model =
                             , pendingResponses =
                                 SeqDict.insert
                                     responseId
-                                    Pending
+                                    (Pending aiModel.id)
                                     model.pendingResponses
                             , responseCounter = model.responseCounter + 1
                           }
@@ -541,7 +550,7 @@ update msg model =
 
         PressedKeep responseId ->
             case SeqDict.get responseId model.pendingResponses of
-                Just (GotResponse text) ->
+                Just (GotResponse _ text) ->
                     saveToLocalStorage
                         { model
                             | pendingResponses = SeqDict.empty
@@ -556,22 +565,31 @@ update msg model =
             saveToLocalStorage { model | pendingResponses = SeqDict.remove responseId model.pendingResponses }
 
         PressedRetry responseId ->
-            case getAiModel model of
-                Just aiModel ->
-                    ( { model
-                        | pendingResponses = SeqDict.insert responseId Pending model.pendingResponses
-                      }
-                    , Command.batch
-                        [ (if List.member "image" aiModel.inputs then
-                            AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
+            case SeqDict.get responseId model.pendingResponses of
+                Just pendingResponse ->
+                    let
+                        modelId =
+                            pendingResponseModelId pendingResponse
+                    in
+                    case getAiModelById modelId model of
+                        Just aiModel ->
+                            ( { model
+                                | pendingResponses = SeqDict.insert responseId (Pending modelId) model.pendingResponses
+                              }
+                            , Command.batch
+                                [ (if List.member "image" aiModel.inputs then
+                                    AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
 
-                           else
-                            AiMessageRequestSimple aiModel.id responseId model.chatHistory
-                          )
-                            |> Lamdera.sendToBackend
-                        , scrollToTop (responseContainerId responseId)
-                        ]
-                    )
+                                   else
+                                    AiMessageRequestSimple aiModel.id responseId model.chatHistory
+                                  )
+                                    |> Lamdera.sendToBackend
+                                , scrollToTop (responseContainerId responseId)
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
 
                 Nothing ->
                     ( model, Command.none )
@@ -631,13 +649,13 @@ update msg model =
                         SeqDict.updateIfExists responseId
                             (\response ->
                                 case response of
-                                    GotResponse _ ->
-                                        GotResponse text
+                                    GotResponse modelId _ ->
+                                        GotResponse modelId text
 
-                                    Pending ->
+                                    Pending _ ->
                                         response
 
-                                    GotError _ ->
+                                    GotError _ _ ->
                                         response
                             )
                             model.pendingResponses
@@ -650,13 +668,13 @@ update msg model =
             ( case result of
                 Ok ok ->
                     { model
-                        | aiModels = LoadedAiModels (List.sortBy .id ok)
+                        | aiModels = LoadedAiModels (List.sortBy (\a -> aiModelNameToString a.id) ok)
                         , selectedModel =
                             if
-                                List.any (\a -> a.id == "anthropic/claude-sonnet-4") ok
+                                List.any (\a -> a.id == AiModelName "anthropic/claude-sonnet-4") ok
                                     && (model.selectedModel == Nothing)
                             then
-                                Just "anthropic/claude-sonnet-4"
+                                Just (AiModelName "anthropic/claude-sonnet-4")
 
                             else
                                 model.selectedModel
@@ -670,6 +688,11 @@ update msg model =
             )
 
 
+aiModelNameToString : AiModelName -> String
+aiModelNameToString (AiModelName a) =
+    a
+
+
 getAiModel : FrontendModel -> Maybe AiModel
 getAiModel model =
     case ( model.selectedModel, model.aiModels ) of
@@ -678,6 +701,29 @@ getAiModel model =
 
         _ ->
             Nothing
+
+
+getAiModelById : AiModelName -> FrontendModel -> Maybe AiModel
+getAiModelById modelId model =
+    case model.aiModels of
+        LoadedAiModels aiModels ->
+            List.Extra.find (\aiModel -> aiModel.id == modelId) aiModels
+
+        _ ->
+            Nothing
+
+
+pendingResponseModelId : PendingResponse -> AiModelName
+pendingResponseModelId response =
+    case response of
+        Pending modelId ->
+            modelId
+
+        GotResponse modelId _ ->
+            modelId
+
+        GotError modelId _ ->
+            modelId
 
 
 prefixWrapper : String -> String
@@ -705,7 +751,7 @@ updateFromBackend msg model =
     case msg of
         AiMessageResponse responseId result ->
             case SeqDict.get responseId model.pendingResponses of
-                Just Pending ->
+                Just (Pending modelId) ->
                     { model
                         | pendingResponses =
                             SeqDict.insert
@@ -726,10 +772,10 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        String.replace "\\\"" "\"" aiMessage2 |> GotResponse
+                                        String.replace "\\\"" "\"" aiMessage2 |> GotResponse modelId
 
                                     Err error ->
-                                        GotError error
+                                        GotError modelId error
                                 )
                                 model.pendingResponses
                     }
@@ -899,6 +945,10 @@ view windowSize model =
 
 responseView : Int -> Int -> ResponseId -> PendingResponse -> Element Msg
 responseView windowWidth responseCount responseId response =
+    let
+        modelId =
+            pendingResponseModelId response
+    in
     Ui.el
         [ min
             1000
@@ -906,13 +956,13 @@ responseView windowWidth responseCount responseId response =
             |> Ui.px
             |> Ui.width
         , [ case response of
-                GotResponse _ ->
+                GotResponse _ _ ->
                     responseButton (PressedKeep responseId) MyUi.background2 Icons.checkmark "Keep"
 
-                Pending ->
+                Pending _ ->
                     Ui.none
 
-                GotError _ ->
+                GotError _ _ ->
                     Ui.none
           , responseButton (PressedRetry responseId) MyUi.background3 refreshIcon "Retry"
           , responseButton (PressedDelete responseId) MyUi.deleteButtonBackground deleteIcon "Delete"
@@ -931,70 +981,85 @@ responseView windowWidth responseCount responseId response =
         , containerShadow
         , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
         ]
-        (case response of
-            Pending ->
-                Ui.el
-                    [ Ui.border 1
-                    , Ui.paddingXY 8 8
-                    , Ui.height Ui.fill
-                    , Ui.scrollable
-                    , responseContainerId responseId |> MyUi.id
-                    , Ui.rounded 4
-                    , Ui.borderColor MyUi.inputBorder
-                    ]
-                    (Ui.text "Loading...")
-
-            GotResponse response2 ->
-                Ui.el
-                    [ Ui.scrollable
-                    , Ui.rounded 4
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.inputBorder
-                    , responseContainerId responseId |> MyUi.id
-                    , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
-                    ]
-                    (Ui.Input.multiline
-                        [ Ui.paddingXY 8 8
-                        , MyUi.htmlStyle "white-space" "pre-wrap"
-                        , Ui.border 0
-                        , Ui.background MyUi.inputBackground
+        (Ui.column
+            [ Ui.height Ui.fill
+            , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
+            ]
+            [ case response of
+                Pending _ ->
+                    Ui.el
+                        [ Ui.border 1
+                        , Ui.paddingXY 8 8
+                        , Ui.height Ui.fill
+                        , Ui.scrollable
+                        , responseContainerId responseId |> MyUi.id
+                        , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
+                        , Ui.borderColor MyUi.inputBorder
                         ]
-                        { text = response2
-                        , onChange = EditedResponse responseId
-                        , placeholder = Just "No response"
-                        , spellcheck = True
-                        , label = Ui.Input.labelHidden "AI response"
-                        }
-                    )
+                        (Ui.text "Loading...")
 
-            GotError error ->
-                Ui.el
-                    [ Ui.border 1
-                    , Ui.paddingXY 8 8
-                    , Ui.height Ui.fill
-                    , Ui.rounded 4
-                    , Ui.borderColor MyUi.inputBorder
-                    , Ui.scrollable
-                    , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
-                    , Ui.Font.italic
-                    , Ui.Font.color MyUi.errorColor
-                    ]
-                    (case error of
-                        Http.NetworkError ->
-                            Ui.text "Network error"
+                GotResponse _ response2 ->
+                    Ui.el
+                        [ Ui.scrollable
+                        , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.inputBorder
+                        , responseContainerId responseId |> MyUi.id
+                        , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
+                        ]
+                        (Ui.Input.multiline
+                            [ Ui.paddingXY 8 8
+                            , MyUi.htmlStyle "white-space" "pre-wrap"
+                            , Ui.border 0
+                            , Ui.background MyUi.inputBackground
+                            ]
+                            { text = response2
+                            , onChange = EditedResponse responseId
+                            , placeholder = Just "No response"
+                            , spellcheck = True
+                            , label = Ui.Input.labelHidden "AI response"
+                            }
+                        )
 
-                        Http.BadUrl url ->
-                            Ui.text ("Bad url: " ++ url)
+                GotError _ error ->
+                    Ui.el
+                        [ Ui.border 1
+                        , Ui.paddingXY 8 8
+                        , Ui.height Ui.fill
+                        , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
+                        , Ui.borderColor MyUi.inputBorder
+                        , Ui.scrollable
+                        , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
+                        , Ui.Font.italic
+                        , Ui.Font.color MyUi.errorColor
+                        ]
+                        (case error of
+                            Http.NetworkError ->
+                                Ui.text "Network error"
 
-                        Http.Timeout ->
-                            Ui.text "Request timed out"
+                            Http.BadUrl url ->
+                                Ui.text ("Bad url: " ++ url)
 
-                        Http.BadStatus int ->
-                            Ui.text ("Bad status code: " ++ String.fromInt int)
+                            Http.Timeout ->
+                                Ui.text "Request timed out"
 
-                        Http.BadBody string ->
-                            Ui.text ("Error in response body: " ++ string)
-                    )
+                            Http.BadStatus int ->
+                                Ui.text ("Bad status code: " ++ String.fromInt int)
+
+                            Http.BadBody string ->
+                                Ui.text ("Error in response body: " ++ string)
+                        )
+            , Ui.el
+                [ Ui.Font.size 14
+                , Ui.Font.color MyUi.font3
+                , Ui.paddingXY 8 3
+                , Ui.borderWith { left = 1, right = 1, top = 0, bottom = 1 }
+                , Ui.borderColor MyUi.inputBorder
+                , Ui.roundedWith { topLeft = 0, topRight = 0, bottomRight = 4, bottomLeft = 4 }
+                , Ui.width Ui.fill
+                ]
+                (Ui.text (aiModelNameToString modelId))
+            ]
         )
 
 
@@ -1222,13 +1287,13 @@ userMessageView model =
         ]
 
 
-aiModelDropdown : AiModelsStatus -> Maybe String -> Html Msg
+aiModelDropdown : AiModelsStatus -> Maybe AiModelName -> Html Msg
 aiModelDropdown status selected =
     case status of
         LoadedAiModels aiModels ->
             Html.select
-                [ Html.Attributes.value (Maybe.withDefault "" selected)
-                , Html.Events.onInput SelectedAiModel
+                [ Html.Attributes.value (Maybe.withDefault "" (Maybe.map aiModelNameToString selected))
+                , Html.Events.onInput (\a -> AiModelName a |> SelectedAiModel)
                 , Html.Attributes.style "width" "100%"
                 , Html.Attributes.style "padding" "7px 8px"
                 , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
@@ -1241,10 +1306,10 @@ aiModelDropdown status selected =
                 (List.map
                     (\aiModel ->
                         Html.option
-                            [ Html.Attributes.value aiModel.id
+                            [ Html.Attributes.value (aiModelNameToString aiModel.id)
                             , Html.Attributes.selected (Just aiModel.id == selected)
                             ]
-                            [ Html.text (aiModel.id ++ " ")
+                            [ Html.text (aiModelNameToString aiModel.id ++ " ")
                             , if List.member "image" aiModel.inputs then
                                 Html.text "🖼️"
 
@@ -1376,7 +1441,7 @@ updateFromFrontend clientId msg maybeOpenRouterKey =
                 )
 
 
-openRouterRequest : String -> String -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
+openRouterRequest : String -> AiModelName -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
 openRouterRequest openRouterKey aiModel message =
     Http.task
         { method = "POST"
@@ -1384,7 +1449,7 @@ openRouterRequest openRouterKey aiModel message =
         , url = "https://openrouter.ai/api/v1/chat/completions"
         , body =
             Json.Encode.object
-                [ ( "model", Json.Encode.string aiModel )
+                [ ( "model", Json.Encode.string (aiModelNameToString aiModel) )
                 , message
                 , ( "reasoning"
                   , Json.Encode.object [ ( "effort", Json.Encode.string "high" ), ( "enabled", Json.Encode.bool True ) ]
