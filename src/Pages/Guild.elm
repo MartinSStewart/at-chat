@@ -6675,7 +6675,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
 
         message : MessageState ChannelMessageId (Id UserId)
         message =
-            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+            ArrayWithOffset.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =
@@ -6788,7 +6788,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
         message : MessageState ChannelMessageId (Discord.Id Discord.UserId)
         message =
-            Array.Extra.last channel.messages |> Maybe.withDefault MessageUnloaded
+            ArrayWithOffset.last channel.messages |> Maybe.withDefault MessageUnloaded
 
         messagePreview : String
         messagePreview =

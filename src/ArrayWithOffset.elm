@@ -1,4 +1,4 @@
-module ArrayWithOffset exposing (ArrayWithOffset, get, init, initFromSlice, length, push, set, update)
+module ArrayWithOffset exposing (ArrayWithOffset, get, init, initFromSlice, last, length, push, set, update)
 
 import Array exposing (Array)
 import Dict exposing (Dict)
@@ -110,3 +110,8 @@ push message { offset, array, size, sparseItems } =
 length : ArrayWithOffset messageId userId -> Int
 length arrayWithOffset =
     arrayWithOffset.size
+
+
+last : ArrayWithOffset messageId userId -> Maybe (MessageState messageId userId)
+last arrayWithOffset =
+    get (Id.fromInt (arrayWithOffset.size - 1)) arrayWithOffset
