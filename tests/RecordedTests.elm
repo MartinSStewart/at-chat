@@ -1,6 +1,6 @@
 module RecordedTests exposing (main, setup)
 
-import AiChat
+import AiChat exposing (AiModelName(..))
 import Array exposing (Array)
 import Backend
 import Broadcast
@@ -3033,7 +3033,7 @@ attackerToBackendChanges =
     , TwoFactorToBackend TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest
     , JoinGuildByInviteRequest (Id.fromInt 0) (SecretId "fake-invite-link")
     , FinishUserCreationRequest InitialLoadRequested_None (Unsafe.personName "hacked") UserAgent.init
-    , AiChatToBackend (AiChat.AiMessageRequestSimple "model" (AiChat.RespondId 0) "hacked")
+    , AiChatToBackend (AiChat.AiMessageRequestSimple (AiModelName "model") (AiChat.RespondId 0) "hacked")
     , ReloadDataRequest InitialLoadRequested_None
     , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
