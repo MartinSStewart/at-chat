@@ -72,7 +72,7 @@ type alias FrontendModel =
     , pendingResponses : SeqDict ResponseId PendingResponse
     , responseCounter : Int
     , showOptions : Bool
-    , selectedModel : Maybe String
+    , selectedModel : Maybe AiModelName
     , userPrefix : String
     , botPrefix : String
     , debounceCounter : Int
@@ -81,12 +81,16 @@ type alias FrontendModel =
     }
 
 
+type AiModelName
+    = AiModelName String
+
+
 type alias LocalStorage =
     { message : String
     , chatHistory : String
     , pendingResponses : SeqDict ResponseId PendingResponse
     , showOptions : Bool
-    , selectedModel : Maybe String
+    , selectedModel : Maybe AiModelName
     , userPrefix : String
     , botPrefix : String
     , sendMessageWith : SendMessageWith
@@ -99,9 +103,9 @@ type ResponseId
 
 
 type PendingResponse
-    = Pending String
-    | GotResponse String String
-    | GotError String Http.Error
+    = Pending AiModelName
+    | GotResponse AiModelName String
+    | GotError AiModelName Http.Error
 
 
 type SendMessageWith
@@ -119,7 +123,7 @@ type Msg
     | PressedChatHistoryContainer
     | PressedClearChatHistory
     | PressedOptionsButton
-    | SelectedAiModel String
+    | SelectedAiModel AiModelName
     | SelectedSendMessageWith SendMessageWith
     | TypedUserPrefix String
     | TypedBotPrefix String
@@ -131,8 +135,8 @@ type Msg
 
 
 type ToBackend
-    = AiMessageRequest String ResponseId (List Message)
-    | AiMessageRequestSimple String ResponseId String
+    = AiMessageRequest AiModelName ResponseId (List Message)
+    | AiMessageRequestSimple AiModelName ResponseId String
 
 
 {-| OpaqueVariants
@@ -245,7 +249,7 @@ type AiModelsStatus
 
 
 type alias AiModel =
-    { id : String
+    { id : AiModelName
     , inputs : List String
     }
 
@@ -257,7 +261,7 @@ decodeModels =
         (Json.Decode.list
             (Json.Decode.map2
                 AiModel
-                (Json.Decode.field "id" Json.Decode.string)
+                (Json.Decode.field "id" Json.Decode.string |> Json.Decode.map AiModelName)
                 (Json.Decode.at [ "architecture", "input_modalities" ] (Json.Decode.list Json.Decode.string))
             )
         )
@@ -275,12 +279,17 @@ localStorageCodec =
         |> Serialize.field .chatHistory Serialize.string
         |> Serialize.field .pendingResponses (seqDictCodec responseIdCodec pendingResponseCodec)
         |> Serialize.field .showOptions Serialize.bool
-        |> Serialize.field .selectedModel (Serialize.maybe Serialize.string)
+        |> Serialize.field .selectedModel (Serialize.maybe aiModelCodec)
         |> Serialize.field .userPrefix Serialize.string
         |> Serialize.field .botPrefix Serialize.string
         |> Serialize.field .sendMessageWith sendMessageWithCodec
         |> Serialize.field .responseCounter Serialize.int
         |> Serialize.finishRecord
+
+
+aiModelCodec : Codec e AiModelName
+aiModelCodec =
+    Serialize.map AiModelName (\(AiModelName a) -> a) Serialize.string
 
 
 responseIdCodec : Codec e ResponseId
@@ -309,9 +318,9 @@ pendingResponseCodec =
                 GotError arg0 arg1 ->
                     gotErrorEncoder arg0 arg1
         )
-        |> Serialize.variant1 Pending Serialize.string
-        |> Serialize.variant2 GotResponse Serialize.string Serialize.string
-        |> Serialize.variant2 GotError Serialize.string errorCodec
+        |> Serialize.variant1 Pending aiModelCodec
+        |> Serialize.variant2 GotResponse aiModelCodec Serialize.string
+        |> Serialize.variant2 GotError aiModelCodec errorCodec
         |> Serialize.finishCustomType
 
 
@@ -659,13 +668,13 @@ update msg model =
             ( case result of
                 Ok ok ->
                     { model
-                        | aiModels = LoadedAiModels (List.sortBy .id ok)
+                        | aiModels = LoadedAiModels (List.sortBy (\a -> aiModelNameToString a.id) ok)
                         , selectedModel =
                             if
-                                List.any (\a -> a.id == "anthropic/claude-sonnet-4") ok
+                                List.any (\a -> a.id == AiModelName "anthropic/claude-sonnet-4") ok
                                     && (model.selectedModel == Nothing)
                             then
-                                Just "anthropic/claude-sonnet-4"
+                                Just (AiModelName "anthropic/claude-sonnet-4")
 
                             else
                                 model.selectedModel
@@ -679,6 +688,10 @@ update msg model =
             )
 
 
+aiModelNameToString (AiModelName a) =
+    a
+
+
 getAiModel : FrontendModel -> Maybe AiModel
 getAiModel model =
     case ( model.selectedModel, model.aiModels ) of
@@ -689,7 +702,7 @@ getAiModel model =
             Nothing
 
 
-getAiModelById : String -> FrontendModel -> Maybe AiModel
+getAiModelById : AiModelName -> FrontendModel -> Maybe AiModel
 getAiModelById modelId model =
     case model.aiModels of
         LoadedAiModels aiModels ->
@@ -699,7 +712,7 @@ getAiModelById modelId model =
             Nothing
 
 
-pendingResponseModelId : PendingResponse -> String
+pendingResponseModelId : PendingResponse -> AiModelName
 pendingResponseModelId response =
     case response of
         Pending modelId ->
@@ -1036,7 +1049,7 @@ responseView windowWidth responseCount responseId response =
                                 Ui.text ("Error in response body: " ++ string)
                         )
             , Ui.el
-                [ Ui.Font.size 11
+                [ Ui.Font.size 14
                 , Ui.Font.color MyUi.font3
                 , Ui.paddingXY 8 3
                 , Ui.borderWith { left = 1, right = 1, top = 0, bottom = 1 }
@@ -1044,7 +1057,7 @@ responseView windowWidth responseCount responseId response =
                 , Ui.roundedWith { topLeft = 0, topRight = 0, bottomRight = 4, bottomLeft = 4 }
                 , Ui.width Ui.fill
                 ]
-                (Ui.text modelId)
+                (Ui.text (aiModelNameToString modelId))
             ]
         )
 
@@ -1273,13 +1286,13 @@ userMessageView model =
         ]
 
 
-aiModelDropdown : AiModelsStatus -> Maybe String -> Html Msg
+aiModelDropdown : AiModelsStatus -> Maybe AiModelName -> Html Msg
 aiModelDropdown status selected =
     case status of
         LoadedAiModels aiModels ->
             Html.select
-                [ Html.Attributes.value (Maybe.withDefault "" selected)
-                , Html.Events.onInput SelectedAiModel
+                [ Html.Attributes.value (Maybe.withDefault "" (Maybe.map aiModelNameToString selected))
+                , Html.Events.onInput (\a -> AiModelName a |> SelectedAiModel)
                 , Html.Attributes.style "width" "100%"
                 , Html.Attributes.style "padding" "7px 8px"
                 , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
@@ -1292,10 +1305,10 @@ aiModelDropdown status selected =
                 (List.map
                     (\aiModel ->
                         Html.option
-                            [ Html.Attributes.value aiModel.id
+                            [ Html.Attributes.value (aiModelNameToString aiModel.id)
                             , Html.Attributes.selected (Just aiModel.id == selected)
                             ]
-                            [ Html.text (aiModel.id ++ " ")
+                            [ Html.text (aiModelNameToString aiModel.id ++ " ")
                             , if List.member "image" aiModel.inputs then
                                 Html.text "🖼️"
 
@@ -1427,7 +1440,7 @@ updateFromFrontend clientId msg maybeOpenRouterKey =
                 )
 
 
-openRouterRequest : String -> String -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
+openRouterRequest : String -> AiModelName -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
 openRouterRequest openRouterKey aiModel message =
     Http.task
         { method = "POST"
@@ -1435,7 +1448,7 @@ openRouterRequest openRouterKey aiModel message =
         , url = "https://openrouter.ai/api/v1/chat/completions"
         , body =
             Json.Encode.object
-                [ ( "model", Json.Encode.string aiModel )
+                [ ( "model", Json.Encode.string (aiModelNameToString aiModel) )
                 , message
                 , ( "reasoning"
                   , Json.Encode.object [ ( "effort", Json.Encode.string "high" ), ( "enabled", Json.Encode.bool True ) ]
