@@ -2897,11 +2897,30 @@ fromDiscord :
     -> Nonempty (RichText (Discord.Id Discord.UserId))
 fromDiscord text attachments2 embeds stickers2 =
     let
-        embedSet : SeqSet Url
-        embedSet =
+        embedUrls : SeqSet Url
+        embedUrls =
             List.filterMap
                 (\embed ->
                     case embed.url of
+                        Discord.Included url ->
+                            Url.fromString url
+
+                        Discord.Missing ->
+                            Nothing
+                )
+                (case embeds of
+                    Discord.Included embeds2 ->
+                        embeds2
+
+                    Discord.Missing ->
+                        []
+                )
+                |> SeqSet.fromList
+
+        richTextEmbeds =
+            List.filterMap
+                (\embed ->
+                    case embed.type_ of
                         Discord.Included url ->
                             Url.fromString url
 
@@ -2925,9 +2944,9 @@ fromDiscord text attachments2 embeds stickers2 =
                     hyperlinks richText
             in
             --This is to detect if we actually have embeds that are not attached to any url or if we just have embeds with canonicalized urls that don't match up with the urls in the message
-            if SeqSet.size embedSet > List.length urls then
+            if SeqSet.size embedUrls > List.length urls then
                 case
-                    List.foldl SeqSet.remove embedSet urls
+                    List.foldl SeqSet.remove embedUrls urls
                         |> SeqSet.toList
                         |> List.concatMap (\url -> [ NormalText ' ' "", Hyperlink url ])
                         |> List.Nonempty.fromList
@@ -2987,7 +3006,7 @@ fromDiscord text attachments2 embeds stickers2 =
                     applyExtraEmbeds spoileredAttachments2 |> List.Nonempty.toList |> applyStickers
 
                 Nothing ->
-                    SeqSet.toList embedSet
+                    SeqSet.toList embedUrls
                         |> List.map Hyperlink
                         |> List.intersperse (NormalText ' ' "")
                         |> applyStickers

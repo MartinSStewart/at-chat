@@ -3182,6 +3182,33 @@ discordTests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ startTest
+        "Got rich text embed"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ andThenWebsocket
+                    (\connection _ ->
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString 100 connection """{"t":"MESSAGE_CREATE","s":173,"op":0,"d":{"webhook_id":"1374332266083254363","type":0,"tts":false,"timestamp":"2026-04-16T01:36:56.515000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"id":"1494149566100930611","flags":0,"embeds":[{"type":"rich","title":"[compiler] Branch distribute was force-pushed to `c7b3d5e`","id":"1494149566100930612","description":"[Compare changes](https://github.com/lamdera/compiler/compare/01daaf8875d1...c7b3d5e6f412)","content_scan_version":4,"color":16525609,"author":{"url":"https://github.com/supermario","proxy_icon_url":"https://images-ext-1.discordapp.net/external/EOjvf3Ly7SSCVe7o-8EBJBz6V_MUyiX7n4TkBiIkZnI/%3Fv%3D4/https/avatars.githubusercontent.com/u/102781","name":"supermario","icon_url":"https://avatars.githubusercontent.com/u/102781?v=4"}}],"edited_timestamp":null,"content":"","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"GitHub","id":"1374332266083254363","global_name":null,"discriminator":"0000","bot":true,"avatar":"e57fd67dc7ca0cc840a0e87a82281bc5"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                        , admin.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.find [ Test.Html.Selector.id "spoiler_0_0" ] html
+                                    |> Test.Html.Query.hasNot [ Test.Html.Selector.tag "img" ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , startTest
         "Got spoilered image"
         startTime
         normalConfig

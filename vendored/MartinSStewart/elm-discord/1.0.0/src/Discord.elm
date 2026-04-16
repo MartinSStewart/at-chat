@@ -3178,13 +3178,87 @@ decodeStickerItem =
 
 
 type alias Embed =
-    { url : OptionalData String
+    { title : OptionalData String
+    , type_ : OptionalData EmbedType
+    , url : OptionalData String
     }
+
+
+type EmbedType
+    = EmbedType_AgeVerificationSystemNotification
+    | EmbedType_Article
+    | EmbedType_AutoModerationMessage
+    | EmbedType_AutoModerationNotification
+    | EmbedType_Gift
+    | EmbedType_Gifv
+    | EmbedType_Image
+    | EmbedType_Link
+    | EmbedType_PollResult
+    | EmbedType_PostPreview
+    | EmbedType_Rich
+    | EmbedType_SafetyPolicyNotice
+    | EmbedType_SafetySystemNotification
+    | EmbedType_Video
+
+
+decodeEmbedType : JD.Decoder EmbedType
+decodeEmbedType =
+    JD.andThen
+        (\text ->
+            case text of
+                "age_verification_system_notification" ->
+                    JD.succeed EmbedType_AgeVerificationSystemNotification
+
+                "article" ->
+                    JD.succeed EmbedType_Article
+
+                "auto_moderation_message" ->
+                    JD.succeed EmbedType_AutoModerationMessage
+
+                "auto_moderation_notification" ->
+                    JD.succeed EmbedType_AutoModerationNotification
+
+                "gift" ->
+                    JD.succeed EmbedType_Gift
+
+                "gifv" ->
+                    JD.succeed EmbedType_Gifv
+
+                "image" ->
+                    JD.succeed EmbedType_Image
+
+                "link" ->
+                    JD.succeed EmbedType_Link
+
+                "poll_result" ->
+                    JD.succeed EmbedType_PollResult
+
+                "post_preview" ->
+                    JD.succeed EmbedType_PostPreview
+
+                "rich" ->
+                    JD.succeed EmbedType_Rich
+
+                "safety_policy_notice" ->
+                    JD.succeed EmbedType_SafetyPolicyNotice
+
+                "safety_system_notification" ->
+                    JD.succeed EmbedType_SafetySystemNotification
+
+                "video" ->
+                    JD.succeed EmbedType_Video
+
+                _ ->
+                    JD.fail ("Unknown embed type: " ++ text)
+        )
+        JD.string
 
 
 decodeEmbed : JD.Decoder Embed
 decodeEmbed =
     JD.succeed Embed
+        |> JD.andMap (decodeOptionalData "title" JD.string)
+        |> JD.andMap (decodeOptionalData "type" decodeEmbedType)
         |> JD.andMap (decodeOptionalData "url" JD.string)
 
 
