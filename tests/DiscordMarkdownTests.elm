@@ -104,6 +104,9 @@ basicFormattingTests =
         , fromNonemptyStringTest "<https://abc.com/,>," (Nonempty (Hyperlink (unsafeUrl "https://abc.com/,")) [ NormalText ',' "" ])
         , fromNonemptyStringTest "||||" (Nonempty (NormalText '|' "|||") [])
         , fromNonemptyStringTest "~~~~" (Nonempty (NormalText '~' "~~~") [])
+        , fromNonemptyStringTest
+            "] [a](http://a.com/)"
+            (Nonempty (NormalText ']' " ") [ MarkdownLink (NonemptyString 'a' "") (unsafeUrl "http://a.com/") ])
         ]
 
 
