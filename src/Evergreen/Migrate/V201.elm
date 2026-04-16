@@ -146,7 +146,6 @@ import Maybe
 import Quantity
 import SeqDict
 import SeqSet
-import String
 
 
 frontendModel : Evergreen.V199.Types.FrontendModel -> ModelMigration Evergreen.V201.Types.FrontendModel Evergreen.V201.Types.FrontendMsg
