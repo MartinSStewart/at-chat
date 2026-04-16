@@ -2147,7 +2147,28 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     , startTest
         "Scheduled backend export uploads bytes"
         startTime
-        normalConfig
+        (T.Config
+            Frontend.app_
+            Backend.app_
+            (handleNormalHttpRequests (\_ -> Nothing))
+            handlePortToJs
+            (\requestData ->
+                case requestData.data.downloads of
+                    [ backup ] ->
+                        case backup.content of
+                            T.BytesFile bytes ->
+                                UploadFile
+                                    (T.uploadBytesFile backup.filename backup.mimeType bytes startTime)
+
+                            T.StringFile _ ->
+                                UnhandledFileUpload
+
+                    _ ->
+                        UnhandledFileUpload
+            )
+            handleMultiFileUpload
+            domain
+        )
         [ T.connectFrontend
             100
             sessionId0
@@ -2170,7 +2191,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         if data.backend.lastScheduledExportTime == Nothing then
                             Err "Expected lastScheduledExportTime to be set after 4 hours"
 
-                        else if data.backend.exportState /= Nothing then
+                        else if data.backend.scheduledExportState /= Nothing then
                             Err "Expected export state to be cleared after export completes"
 
                         else
@@ -2200,7 +2221,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 if data.backend.lastScheduledExportTime == Nothing then
                     Err "Expected lastScheduledExportTime to be set after 4 hours"
 
-                else if data.backend.exportState /= Nothing then
+                else if data.backend.scheduledExportState /= Nothing then
                     Err "Expected export state to be cleared after export completes"
 
                 else
