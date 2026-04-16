@@ -33,7 +33,7 @@ import Array exposing (Array)
 import Basics.Extra
 import Coord exposing (Coord)
 import Dict exposing (Dict)
-import Discord
+import Discord exposing (EmbedType(..))
 import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
@@ -1292,7 +1292,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                             parseLoop source (index + 1) sourceLength users modifiers (accText ++ "[") revNodes
 
                 else
-                    case parseMarkdownLink source (index + 1) sourceLength of
+                    case parseMarkdownLink source (index + 1) of
                         Just ( alias, url, nextIndex ) ->
                             parseLoop source nextIndex sourceLength users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
@@ -1482,9 +1482,13 @@ findSingleBacktick source index len =
         findSingleBacktick source (index + 1) len
 
 
-parseMarkdownLink : String -> Int -> Int -> Maybe ( NonemptyString, Url, Int )
-parseMarkdownLink source index len =
-    case findChar source index len ']' of
+parseMarkdownLink : String -> Int -> Maybe ( NonemptyString, Url, Int )
+parseMarkdownLink source index =
+    let
+        len =
+            String.length source
+    in
+    case findChar source index len ']' |> Debug.log "a" of
         Just closeBracket ->
             let
                 alias =
@@ -2897,17 +2901,44 @@ fromDiscord :
     -> Nonempty (RichText (Discord.Id Discord.UserId))
 fromDiscord text attachments2 embeds stickers2 =
     let
-        embedUrls : SeqSet Url
-        embedUrls =
-            List.filterMap
-                (\embed ->
+        ( urlEmbeds, richTextEmbeds ) =
+            List.foldl
+                (\embed ( urlEmbeds2, richTextEmbeds2 ) ->
                     case embed.url of
                         Discord.Included url ->
-                            Url.fromString url
+                            case Url.fromString url of
+                                Just url2 ->
+                                    ( SeqSet.insert url2 urlEmbeds2, richTextEmbeds2 )
+
+                                Nothing ->
+                                    ( urlEmbeds2, richTextEmbeds2 )
 
                         Discord.Missing ->
-                            Nothing
+                            case embed.type_ of
+                                Discord.Included EmbedType_Rich ->
+                                    ( urlEmbeds2
+                                    , richTextEmbeds2
+                                        ++ [ (case embed.title of
+                                                Discord.Included title ->
+                                                    title ++ "\n"
+
+                                                Discord.Missing ->
+                                                    ""
+                                             )
+                                                ++ (case embed.description of
+                                                        Discord.Included description ->
+                                                            description ++ "\n"
+
+                                                        Discord.Missing ->
+                                                            ""
+                                                   )
+                                           ]
+                                    )
+
+                                _ ->
+                                    ( urlEmbeds2, richTextEmbeds2 )
                 )
+                ( SeqSet.empty, [] )
                 (case embeds of
                     Discord.Included embeds2 ->
                         embeds2
@@ -2915,26 +2946,6 @@ fromDiscord text attachments2 embeds stickers2 =
                     Discord.Missing ->
                         []
                 )
-                |> SeqSet.fromList
-
-        richTextEmbeds =
-            List.filterMap
-                (\embed ->
-                    case embed.type_ of
-                        Discord.Included url ->
-                            Url.fromString url
-
-                        Discord.Missing ->
-                            Nothing
-                )
-                (case embeds of
-                    Discord.Included embeds2 ->
-                        embeds2
-
-                    Discord.Missing ->
-                        []
-                )
-                |> SeqSet.fromList
 
         applyExtraEmbeds : Nonempty (RichText userId) -> Nonempty (RichText userId)
         applyExtraEmbeds richText =
@@ -2944,9 +2955,9 @@ fromDiscord text attachments2 embeds stickers2 =
                     hyperlinks richText
             in
             --This is to detect if we actually have embeds that are not attached to any url or if we just have embeds with canonicalized urls that don't match up with the urls in the message
-            if SeqSet.size embedUrls > List.length urls then
+            if SeqSet.size urlEmbeds > List.length urls then
                 case
-                    List.foldl SeqSet.remove embedUrls urls
+                    List.foldl SeqSet.remove urlEmbeds urls
                         |> SeqSet.toList
                         |> List.concatMap (\url -> [ NormalText ' ' "", Hyperlink url ])
                         |> List.Nonempty.fromList
@@ -2981,12 +2992,12 @@ fromDiscord text attachments2 embeds stickers2 =
                 )
                 (SeqDict.toList attachments2)
     in
-    case String.Nonempty.fromString text of
+    case String.Nonempty.fromString (text ++ "\n" ++ String.join "\n" richTextEmbeds |> String.trim) of
         Just nonempty ->
             NonemptyExtra.appendList
                 (let
                     result =
-                        discordParseLoop text 0 (String.length text) [] "" []
+                        discordParseLoop (String.Nonempty.toString nonempty) 0 [] "" []
                  in
                  case List.Nonempty.fromList result.nodes of
                     Just nonempty2 ->
@@ -3006,7 +3017,7 @@ fromDiscord text attachments2 embeds stickers2 =
                     applyExtraEmbeds spoileredAttachments2 |> List.Nonempty.toList |> applyStickers
 
                 Nothing ->
-                    SeqSet.toList embedUrls
+                    SeqSet.toList urlEmbeds
                         |> List.map Hyperlink
                         |> List.intersperse (NormalText ' ' "")
                         |> applyStickers
@@ -3053,13 +3064,12 @@ discordModifierToSymbol modifier =
 discordParseLoop :
     String
     -> Int
-    -> Int
     -> List DiscordModifiers
     -> String
     -> List (RichText (Discord.Id Discord.UserId))
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordParseLoop source index sourceLength modifiers accText revNodes =
-    if index >= sourceLength then
+discordParseLoop source index modifiers accText revNodes =
+    if index >= String.length source then
         discordFinalizeResult accText revNodes modifiers index
 
     else
@@ -3072,18 +3082,18 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                 case stringAt afterBackslash source of
                     Just nextChar ->
                         if Set.member nextChar discordEscapableChars then
-                            discordParseLoop source (afterBackslash + 1) sourceLength modifiers (accText ++ nextChar) revNodes
+                            discordParseLoop source (afterBackslash + 1) modifiers (accText ++ nextChar) revNodes
 
                         else
-                            discordParseLoop source (afterBackslash + 1) sourceLength modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            discordParseLoop source (afterBackslash + 1) modifiers (accText ++ "\\" ++ nextChar) revNodes
 
                     Nothing ->
-                        discordParseLoop source afterBackslash sourceLength modifiers (accText ++ "\\") revNodes
+                        discordParseLoop source afterBackslash modifiers (accText ++ "\\") revNodes
 
             "<" ->
-                case tryParseDiscordMention source index sourceLength of
+                case tryParseDiscordMention source index (String.length source) of
                     Just ( userId, nextIndex ) ->
-                        discordParseLoop source nextIndex sourceLength modifiers "" (UserMention userId :: flushText accText revNodes)
+                        discordParseLoop source nextIndex modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
                         case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
@@ -3097,7 +3107,6 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                         discordParseLoop
                                             source
                                             (index2 + 1)
-                                            sourceLength
                                             modifiers
                                             ""
                                             (Hyperlink url :: flushText accText revNodes)
@@ -3106,7 +3115,6 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                         discordParseLoop
                                             source
                                             (index2 + 1)
-                                            sourceLength
                                             modifiers
                                             ""
                                             (Hyperlink url :: flushText (accText ++ "<") revNodes)
@@ -3115,7 +3123,6 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 discordParseLoop
                                     source
                                     (index + 1 + String.length errText)
-                                    sourceLength
                                     modifiers
                                     (accText ++ "<" ++ errText)
                                     revNodes
@@ -3138,12 +3145,12 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol sourceLength (DiscordIsBold :: modifiers)
+                                discordParseInner source afterSymbol (DiscordIsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
 
                 else
                     let
@@ -3162,7 +3169,7 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 String.slice afterSymbol (afterSymbol + 1) source
                         in
                         if nextChar == "*" || nextChar == " " then
-                            discordParseLoop source afterSymbol sourceLength modifiers (accText ++ "*") revNodes
+                            discordParseLoop source afterSymbol modifiers (accText ++ "*") revNodes
 
                         else
                             let
@@ -3170,12 +3177,12 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                     flushText accText revNodes
 
                                 inner =
-                                    discordParseInner source afterSymbol sourceLength (DiscordIsItalic :: modifiers)
+                                    discordParseInner source afterSymbol (DiscordIsItalic :: modifiers)
 
                                 newRevNodes =
                                     List.foldl (\node acc -> node :: acc) flushed inner.nodes
                             in
-                            discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
+                            discordParseLoop source inner.nextIndex modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 2) source == "__" then
@@ -3195,12 +3202,12 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol sourceLength (DiscordIsUnderlined :: modifiers)
+                                discordParseInner source afterSymbol (DiscordIsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
 
                 else
                     let
@@ -3219,16 +3226,16 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol sourceLength (DiscordIsItalic2 :: modifiers)
+                                discordParseInner source afterSymbol (DiscordIsItalic2 :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
 
             "~" ->
                 if (List.head modifiers /= Just DiscordIsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
-                    discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "~~~~") revNodes
+                    discordParseLoop source (index + 4) modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
                     let
@@ -3247,19 +3254,19 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol sourceLength (DiscordIsStrikethrough :: modifiers)
+                                discordParseInner source afterSymbol (DiscordIsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
 
                 else
-                    discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "~") revNodes
+                    discordParseLoop source (index + 1) modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if (List.head modifiers /= Just DiscordIsSpoilered) && String.slice index (index + 4) source == "||||" then
-                    discordParseLoop source (index + 4) sourceLength modifiers (accText ++ "||||") revNodes
+                    discordParseLoop source (index + 4) modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
                     let
@@ -3278,19 +3285,19 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol sourceLength (DiscordIsSpoilered :: modifiers)
+                                discordParseInner source afterSymbol (DiscordIsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex sourceLength modifiers "" newRevNodes
+                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
 
                 else
-                    discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "|") revNodes
+                    discordParseLoop source (index + 1) modifiers (accText ++ "|") revNodes
 
             "`" ->
                 if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) sourceLength "```" of
+                    case findSubstring source (index + 3) (String.length source) "```" of
                         Just closeIndex ->
                             let
                                 content =
@@ -3318,13 +3325,13 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
-                                    discordParseLoop source (closeIndex + 3) sourceLength modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                    discordParseLoop source (closeIndex + 3) modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
                                 Nothing ->
-                                    discordParseLoop source (closeIndex + 3) sourceLength modifiers (accText ++ "``````") revNodes
+                                    discordParseLoop source (closeIndex + 3) modifiers (accText ++ "``````") revNodes
 
                         Nothing ->
-                            case findSingleBacktick source (index + 1) sourceLength of
+                            case findSingleBacktick source (index + 1) (String.length source) of
                                 Just closeIndex ->
                                     let
                                         content =
@@ -3332,16 +3339,16 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                                     in
                                     case String.Nonempty.fromString content of
                                         Just a ->
-                                            discordParseLoop source (closeIndex + 1) sourceLength modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                            discordParseLoop source (closeIndex + 1) modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                         Nothing ->
-                                            discordParseLoop source (closeIndex + 1) sourceLength modifiers (accText ++ "``") revNodes
+                                            discordParseLoop source (closeIndex + 1) modifiers (accText ++ "``") revNodes
 
                                 Nothing ->
-                                    discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "`") revNodes
+                                    discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
 
                 else
-                    case findSingleBacktick source (index + 1) sourceLength of
+                    case findSingleBacktick source (index + 1) (String.length source) of
                         Just closeIndex ->
                             let
                                 content =
@@ -3349,13 +3356,13 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString content of
                                 Just a ->
-                                    discordParseLoop source (closeIndex + 1) sourceLength modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                    discordParseLoop source (closeIndex + 1) modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                 Nothing ->
-                                    discordParseLoop source (closeIndex + 1) sourceLength modifiers (accText ++ "``") revNodes
+                                    discordParseLoop source (closeIndex + 1) modifiers (accText ++ "``") revNodes
 
                         Nothing ->
-                            discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "`") revNodes
+                            discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False discordModifierToSymbol modifiers index source of
@@ -3363,7 +3370,6 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                         discordParseLoop
                             source
                             (index + String.length (Url.toString url))
-                            sourceLength
                             modifiers
                             ""
                             (Hyperlink url :: flushText accText revNodes)
@@ -3372,25 +3378,24 @@ discordParseLoop source index sourceLength modifiers accText revNodes =
                         discordParseLoop
                             source
                             (index + String.length errText)
-                            sourceLength
                             modifiers
                             (accText ++ errText)
                             revNodes
 
             "[" ->
-                case parseMarkdownLink source (index + 1) sourceLength of
+                case parseMarkdownLink source (index + 1) |> Debug.log "b" of
                     Just ( alias, url, nextIndex ) ->
-                        discordParseLoop source nextIndex sourceLength modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+                        discordParseLoop source nextIndex modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
                     Nothing ->
-                        discordParseLoop source (index + 1) sourceLength modifiers (accText ++ "[") revNodes
+                        discordParseLoop source (index + 1) modifiers (accText ++ "[") revNodes
 
             _ ->
                 let
                     nextIndex =
-                        skipDiscordNormalChars source (index + 1) sourceLength
+                        skipDiscordNormalChars source (index + 1) (String.length source)
                 in
-                discordParseLoop source nextIndex sourceLength modifiers (accText ++ String.slice index nextIndex source) revNodes
+                discordParseLoop source nextIndex modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
 toDiscord :
@@ -3456,11 +3461,10 @@ toDiscord content =
 discordParseInner :
     String
     -> Int
-    -> Int
     -> List DiscordModifiers
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordParseInner source index len modifiers =
-    discordParseLoop source index len modifiers "" []
+discordParseInner source index modifiers =
+    discordParseLoop source index modifiers "" []
 
 
 discordFinalizeResult :
@@ -3538,7 +3542,7 @@ skipDiscordNormalChars source index len =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" then
+        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "[" then
             index
 
         else
