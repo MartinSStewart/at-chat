@@ -2153,14 +2153,22 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (handleNormalHttpRequests (\_ -> Nothing))
             handlePortToJs
             (\requestData ->
-                case requestData.data.downloads of
-                    [ backup ] ->
-                        case backup.content of
-                            T.BytesFile bytes ->
-                                UploadFile
-                                    (T.uploadBytesFile backup.filename backup.mimeType bytes startTime)
+                case backupRequests requestData.data of
+                    [ backupA, backupB ] ->
+                        let
+                            oldestBackup =
+                                if Time.posixToMillis backupA.sentAt < Time.posixToMillis backupB.sentAt then
+                                    backupA
 
-                            T.StringFile _ ->
+                                else
+                                    backupB
+                        in
+                        case oldestBackup.body of
+                            T.BytesBody mimeType bytes ->
+                                UploadFile
+                                    (T.uploadBytesFile "backup.bin" mimeType bytes startTime)
+
+                            _ ->
                                 UnhandledFileUpload
 
                     _ ->
@@ -2169,82 +2177,125 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             handleMultiFileUpload
             domain
         )
-        [ T.connectFrontend
-            100
-            sessionId0
-            "/"
-            desktopWindow
-            (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , T.checkBackend
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                [ writeMessage admin 100 "Hello export test!"
+                , user.click 100 (Dom.id "guild_openDm_0")
+                , writeMessage user 100 "Hello!"
+                , linkDiscordAndLogin
+                    (Lamdera.sessionIdFromString "JoeSession")
+                    "Joe"
+                    joeEmail
+                    True
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                    (\_ -> [])
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_Export/Import")
+                , T.andThen
                     100
-                    (\backend ->
-                        if backend.lastScheduledExportTime == Nothing then
-                            Ok ()
+                    (\beforeExportData ->
+                        [ T.checkState
+                            (Duration.hours 5 |> Duration.inMilliseconds)
+                            (\data ->
+                                case backupRequests data of
+                                    [ _ ] ->
+                                        Ok ()
 
-                        else
-                            Err "lastScheduledExportTime should be Nothing before scheduled export"
-                    )
-                , T.checkState
-                    (Duration.hours 5 |> Duration.inMilliseconds)
-                    (\data ->
-                        if data.backend.lastScheduledExportTime == Nothing then
-                            Err "Expected lastScheduledExportTime to be set after 4 hours"
+                                    [] ->
+                                        Err "Expected one upload HTTP request for scheduled export"
 
-                        else if data.backend.scheduledExportState /= Nothing then
-                            Err "Expected export state to be cleared after export completes"
+                                    _ ->
+                                        Err "Expected exactly one upload HTTP request for scheduled export"
+                            )
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Guilds")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Users")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Discord guilds")
+                        , admin.click 100 (Dom.id "admin_expandSectionButton_Discord DM channels")
+                        , T.andThen
+                            100
+                            (\data ->
+                                let
+                                    deleteGuildActions =
+                                        SeqDict.keys data.backend.guilds
+                                            |> List.map
+                                                (\guildId ->
+                                                    admin.click 100 (Dom.id ("Admin_deleteGuildButton_" ++ Id.toString guildId))
+                                                )
 
-                        else
-                            case
-                                List.filter
-                                    (\request ->
-                                        String.startsWith "http://localhost:3000/file/internal/upload-backup/backend-export-" request.url
-                                            && (request.method == "POST")
-                                            && (request.requestedBy == RequestedByBackend)
-                                    )
-                                    data.httpRequests
-                            of
-                                [ _ ] ->
+                                    deleteUserActions =
+                                        NonemptyDict.toList data.backend.users
+                                            |> List.filterMap
+                                                (\( userId, backendUser ) ->
+                                                    if backendUser.isAdmin then
+                                                        Nothing
+
+                                                    else
+                                                        Just (admin.click 100 (Dom.id ("Admin_deleteUserButton_a_" ++ Id.toString userId ++ "_")))
+                                                )
+                                in
+                                deleteGuildActions
+                                    ++ deleteUserActions
+                                    ++ [ admin.click 100 (Dom.id "admin_saveUserChangesButton")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordGuildButton_705745250815311942")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_185574444641550336")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_222087308516524036")
+                                       , admin.click 100 (Dom.id "Admin_deleteDiscordDmChannelButton_1215077285749858324")
+                                       ]
+                                    |> T.collapsableGroup "Delete stuff"
+                                    |> List.singleton
+                            )
+                        , T.checkState
+                            (Duration.hours 4 |> Duration.inMilliseconds)
+                            (\data ->
+                                case backupRequests data of
+                                    [ _, _ ] ->
+                                        Ok ()
+
+                                    [] ->
+                                        Err "Expected two upload HTTP request for scheduled export"
+
+                                    _ ->
+                                        Err "Expected exactly one upload HTTP request for scheduled export"
+                            )
+                        , admin.click 300 (Dom.id "admin_importBackendButton")
+                        , admin.checkView
+                            500
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Imported!" ])
+                        , T.checkState
+                            100
+                            (\afterImportData ->
+                                if
+                                    (beforeExportData.backend.guilds == afterImportData.backend.guilds)
+                                        && (beforeExportData.backend.dmChannels == afterImportData.backend.dmChannels)
+                                        && (beforeExportData.backend.discordGuilds == afterImportData.backend.discordGuilds)
+                                        && (beforeExportData.backend.discordDmChannels == afterImportData.backend.discordDmChannels)
+                                        && (beforeExportData.backend.users == afterImportData.backend.users)
+                                        && (beforeExportData.backend.discordUsers == afterImportData.backend.discordUsers)
+                                then
                                     Ok ()
 
-                                [] ->
-                                    Err "Expected one upload HTTP request for scheduled export"
-
-                                _ ->
-                                    Err "Expected exactly one upload HTTP request for scheduled export"
+                                else
+                                    Err "Expected at least one guild in backend after import"
+                            )
+                        ]
                     )
                 ]
             )
-        , T.checkState
-            (Duration.hours 4 |> Duration.inMilliseconds)
-            (\data ->
-                if data.backend.lastScheduledExportTime == Nothing then
-                    Err "Expected lastScheduledExportTime to be set after 4 hours"
-
-                else if data.backend.scheduledExportState /= Nothing then
-                    Err "Expected export state to be cleared after export completes"
-
-                else
-                    case
-                        List.filter
-                            (\request ->
-                                String.startsWith "http://localhost:3000/file/internal/upload-backup/backend-export-" request.url
-                                    && (request.method == "POST")
-                                    && (request.requestedBy == RequestedByBackend)
-                            )
-                            data.httpRequests
-                    of
-                        [ _, _ ] ->
-                            Ok ()
-
-                        [] ->
-                            Err "Expected two upload HTTP request for scheduled export"
-
-                        _ ->
-                            Err "Expected exactly one upload HTTP request for scheduled export"
-            )
         ]
     ]
+
+
+backupRequests : T.Data FrontendModel BackendModel -> List HttpRequest
+backupRequests data =
+    List.filter
+        (\request ->
+            String.startsWith "http://localhost:3000/file/internal/upload-backup/backend-export-" request.url
+                && (request.method == "POST")
+                && (request.requestedBy == RequestedByBackend)
+        )
+        data.httpRequests
 
 
 sendMessageRateLimitTest :
