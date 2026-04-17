@@ -7,6 +7,7 @@
 * Prevent messages longer than 2000 chars from being sent
 * Finding an emoji via text search and then trying to click it fails on mobile
 * Push notification sent even when viewing DM channel
+* Login/signup button doesn't work if failed to link Discord message is visible
 
 Requested features:
 
