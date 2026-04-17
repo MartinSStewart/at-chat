@@ -1,4 +1,4 @@
-module ArrayWithOffset exposing (ArrayWithOffset, get, init, initFromSlice, last, length, push, set, update)
+module ArrayWithOffset exposing (ArrayWithOffset, foldArrayNewToOld, get, init, initFromSlice, last, length, push, set, update)
 
 import Array exposing (Array)
 import Dict exposing (Dict)
@@ -115,3 +115,23 @@ length arrayWithOffset =
 last : ArrayWithOffset messageId userId -> Maybe (MessageState messageId userId)
 last arrayWithOffset =
     get (Id.fromInt (arrayWithOffset.size - 1)) arrayWithOffset
+
+
+foldArrayNewToOld : (Id messageId -> Message messageId userId -> a -> a) -> a -> ArrayWithOffset messageId userId -> a
+foldArrayNewToOld foldFunc a data =
+    Array.foldr
+        (\message ( index, a2 ) -> ( index - 1, foldFunc (Id.fromInt index) message a2 ))
+        ( data.offset + Array.length data.array - 1, a )
+        data.array
+        |> Tuple.second
+
+
+
+--foldNewToOld : (MessageState messageId userId -> a -> a) -> a -> ArrayWithOffset messageId userId -> a
+--foldNewToOld foldFunc a { offset, array, size, sparseItems } =
+--    Dict.foldr
+--        (\messageId message a2 ->
+--            if Id.toInt messageId <  a2
+--        )
+--        a
+--        sparseItems

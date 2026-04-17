@@ -4584,7 +4584,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model session use
                                 , users =
                                     NonemptyDict.insert
                                         session.userId
-                                        (LocalState.markAllChannelsAsViewed guildId guild2 user)
+                                        (LocalState.markAllChannelsAsViewedBackend guildId guild2 user)
                                         model.users
                             }
                     in

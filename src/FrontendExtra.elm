@@ -2,6 +2,7 @@ module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalCha
 
 import AiChat
 import Array exposing (Array)
+import ArrayWithOffset exposing (ArrayWithOffset)
 import ChannelDescription
 import ChannelName
 import Discord
@@ -477,7 +478,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
+            | messages : ArrayWithOffset ChannelMessageId (Id UserId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Id UserId))
         }
     -> LocalState
@@ -535,7 +536,7 @@ playNotificationSoundForDiscordMessage :
     -> ThreadRouteWithMaybeMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Discord.Id Discord.UserId))
+            | messages : ArrayWithOffset ChannelMessageId (Discord.Id Discord.UserId)
             , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id Discord.UserId))
         }
     -> LocalState
@@ -1484,7 +1485,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (GuildOrDmId guildOrDmId)
-                                                                (Array.length channel.messages |> Id.fromInt)
+                                                                (ArrayWithOffset.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -1541,7 +1542,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         (GuildOrDmId guildOrDmId)
-                                                        (DmChannel.latestMessageId dmChannel2)
+                                                        (ArrayWithOffset.length dmChannel2.messages - 1 |> Id.fromInt)
                                                         user.lastViewed
                                             }
                                     }
@@ -1579,7 +1580,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (Array.length channel.messages |> Id.fromInt)
+                                                                (ArrayWithOffset.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -1626,7 +1627,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (DiscordGuildOrDmId guildOrDmId)
-                                                                (Array.length dmChannel.messages |> Id.fromInt)
+                                                                (ArrayWithOffset.length dmChannel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -2229,7 +2230,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (GuildOrDmId guildOrDmId)
-                                                                    (Array.length channel.messages |> Id.fromInt)
+                                                                    (ArrayWithOffset.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -2313,7 +2314,7 @@ changeUpdate localMsg local =
                                                     | lastViewed =
                                                         SeqDict.insert
                                                             (GuildOrDmId guildOrDmId)
-                                                            (DmChannel.latestMessageId dmChannel2)
+                                                            (ArrayWithOffset.length dmChannel2.messages - 1 |> Id.fromInt)
                                                             user.lastViewed
                                                 }
 
@@ -2372,7 +2373,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
-                                                                    (Array.length channel.messages |> Id.fromInt)
+                                                                    (ArrayWithOffset.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -2446,7 +2447,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     (DiscordGuildOrDmId guildOrDmId)
-                                                                    (DmChannel.latestMessageId dmChannel2)
+                                                                    (ArrayWithOffset.length dmChannel2.messages - 1 |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -2528,7 +2529,7 @@ changeUpdate localMsg local =
                                                 localUser.otherUsers
                                                 |> SeqDict.union ok.members
                                         , user =
-                                            LocalState.markAllChannelsAsViewed
+                                            LocalState.markAllChannelsAsViewedFrontend
                                                 ok.guildId
                                                 ok.guild
                                                 localUser.user
@@ -2810,7 +2811,7 @@ changeUpdate localMsg local =
                                                                 LocalState.discordTopicToDescription
                                                                     topic
                                                                     ChannelDescription.empty
-                                                            , messages = Array.empty
+                                                            , messages = ArrayWithOffset.init
                                                             , visibleMessages = VisibleMessages.empty
                                                             , lastTypedAt = SeqDict.empty
                                                             , threads = SeqDict.empty
@@ -2834,7 +2835,7 @@ changeUpdate localMsg local =
                                             maybeChannel
 
                                         Nothing ->
-                                            { messages = Array.empty
+                                            { messages = ArrayWithOffset.init
                                             , visibleMessages = VisibleMessages.empty
                                             , lastTypedAt = SeqDict.empty
                                             , members = members

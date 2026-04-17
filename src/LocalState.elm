@@ -77,7 +77,8 @@ module LocalState exposing
     , isDiscordDmChannelReloading
     , isDiscordGuildChannelReloading
     , loadingDiscordChannelMap
-    , markAllChannelsAsViewed
+    , markAllChannelsAsViewedBackend
+    , markAllChannelsAsViewedFrontend
     , memberIsEditTypingBackend
     , memberIsEditTypingBackendHelper
     , memberIsEditTypingBackendHelperNoThread
@@ -1799,12 +1800,12 @@ removeReactionEmojiFrontendHelper emoji userId messageId channel =
     }
 
 
-markAllChannelsAsViewed :
+markAllChannelsAsViewedBackend :
     Id GuildId
     -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
     -> { d | lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
     -> { d | lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
-markAllChannelsAsViewed guildId guild user =
+markAllChannelsAsViewedBackend guildId guild user =
     { user
         | lastViewed =
             SeqDict.foldl
@@ -1812,6 +1813,26 @@ markAllChannelsAsViewed guildId guild user =
                     SeqDict.insert
                         (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
                         (DmChannel.latestMessageId channel)
+                        state
+                )
+                user.lastViewed
+                guild.channels
+    }
+
+
+markAllChannelsAsViewedFrontend :
+    Id GuildId
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : ArrayWithOffset ChannelMessageId c } }
+    -> { d | lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+markAllChannelsAsViewedFrontend guildId guild user =
+    { user
+        | lastViewed =
+            SeqDict.foldl
+                (\channelId channel state ->
+                    SeqDict.insert
+                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                        (ArrayWithOffset.length channel.messages - 1 |> Id.fromInt)
                         state
                 )
                 user.lastViewed

@@ -1830,203 +1830,193 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         isMobile =
             MyUi.isMobile model
     in
-    Array.foldr
-        (\messageState ( index, maybeLastDate, list ) ->
-            case messageState of
-                MessageLoaded message ->
-                    let
-                        messageId : Id ChannelMessageId
-                        messageId =
-                            Id.fromInt index
+    ArrayWithOffset.foldArrayNewToOld
+        (\messageId message ( maybeLastDate, list ) ->
+            let
+                threadRoute2 : ThreadRouteWithMessage
+                threadRoute2 =
+                    NoThreadWithMessage messageId
 
-                        threadRoute2 : ThreadRouteWithMessage
-                        threadRoute2 =
-                            NoThreadWithMessage messageId
+                threadId : Id ChannelMessageId
+                threadId =
+                    Id.fromInt (Id.toInt messageId)
 
-                        threadId : Id ChannelMessageId
-                        threadId =
-                            Id.fromInt index
+                messageHover2 : IsHovered
+                messageHover2 =
+                    messageHover (GuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
 
-                        messageHover2 : IsHovered
-                        messageHover2 =
-                            messageHover (GuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
+                otherUserIsEditing : Bool
+                otherUserIsEditing =
+                    SeqSet.member (Id.changeType messageId) othersEditing
 
-                        otherUserIsEditing : Bool
-                        otherUserIsEditing =
-                            SeqSet.member (Id.changeType messageId) othersEditing
+                isEditing : Maybe EditMessage
+                isEditing =
+                    case maybeEditing of
+                        Just editing ->
+                            if editing.messageIndex == messageId then
+                                Just editing
 
-                        isEditing : Maybe EditMessage
-                        isEditing =
-                            case maybeEditing of
-                                Just editing ->
-                                    if editing.messageIndex == messageId then
-                                        Just editing
+                            else
+                                Nothing
 
-                                    else
-                                        Nothing
+                        Nothing ->
+                            Nothing
+
+                highlight : HighlightMessage
+                highlight =
+                    if maybeUrlMessageId == Just messageId then
+                        UrlHighlight
+
+                    else if replyToIndex == Just messageId then
+                        ReplyToHighlight
+
+                    else
+                        NoHighlight
+
+                maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
+                maybeRepliedTo =
+                    case message of
+                        UserTextMessage data ->
+                            case data.repliedTo of
+                                Just repliedToIndex ->
+                                    case ArrayWithOffset.get repliedToIndex channel.messages of
+                                        Just (MessageLoaded message2) ->
+                                            Just ( repliedToIndex, message2 )
+
+                                        _ ->
+                                            Nothing
 
                                 Nothing ->
                                     Nothing
 
-                        highlight : HighlightMessage
-                        highlight =
-                            if maybeUrlMessageId == Just messageId then
-                                UrlHighlight
+                        UserJoinedMessage _ _ _ ->
+                            Nothing
 
-                            else if replyToIndex == Just messageId then
-                                ReplyToHighlight
+                        DeletedMessage _ ->
+                            Nothing
 
-                            else
-                                NoHighlight
+                date : Date
+                date =
+                    (case message of
+                        UserTextMessage data ->
+                            data.createdAt
 
-                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case ArrayWithOffset.get repliedToIndex channel.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( repliedToIndex, message2 )
+                        UserJoinedMessage posix _ _ ->
+                            posix
 
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
-
-                        date : Date
-                        date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
-                    in
-                    ( index - 1
-                    , Just date
-                    , ( String.fromInt index
-                      , case isEditing of
-                            Just editing ->
-                                if MyUi.isMobile model then
-                                    -- On mobile, we show the editor at the bottom instead
-                                    messageView
-                                        isMobile
-                                        containerWidth
-                                        False
-                                        revealedSpoilers
-                                        highlight
-                                        messageHover2
-                                        otherUserIsEditing
-                                        local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
-                                        local.localUser
-                                        maybeRepliedTo
-                                        (SeqDict.get threadId channel.threads)
-                                        messageId
-                                        message
-                                        |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                else
-                                    messageEditingView
-                                        isMobile
-                                        guildOrDmId
-                                        threadRoute2
-                                        message
-                                        maybeRepliedTo
-                                        (SeqDict.get threadId channel.threads)
-                                        revealedSpoilers
-                                        editing
-                                        loggedIn.textInputFocus
-                                        local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
-                                        local
-
-                            Nothing ->
-                                case SeqDict.get threadId channel.threads of
-                                    Nothing ->
-                                        case maybeRepliedTo of
-                                            Just _ ->
-                                                messageView
-                                                    isMobile
-                                                    containerWidth
-                                                    False
-                                                    revealedSpoilers
-                                                    highlight
-                                                    messageHover2
-                                                    otherUserIsEditing
-                                                    local.localUser.session.userId
-                                                    (LocalState.allUsers local.localUser)
-                                                    local.localUser
-                                                    maybeRepliedTo
-                                                    Nothing
-                                                    messageId
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                            Nothing ->
-                                                Ui.Lazy.lazy5
-                                                    messageViewNotThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                                    revealedSpoilers
-                                                    local.localUser
-                                                    index
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                    Just thread ->
-                                        case maybeRepliedTo of
-                                            Just _ ->
-                                                messageView
-                                                    isMobile
-                                                    containerWidth
-                                                    False
-                                                    revealedSpoilers
-                                                    highlight
-                                                    messageHover2
-                                                    otherUserIsEditing
-                                                    local.localUser.session.userId
-                                                    (LocalState.allUsers local.localUser)
-                                                    local.localUser
-                                                    maybeRepliedTo
-                                                    (Just thread)
-                                                    messageId
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                            Nothing ->
-                                                Ui.Lazy.lazy6
-                                                    messageViewThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                                    revealedSpoilers
-                                                    local.localUser
-                                                    index
-                                                    thread
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
-                      )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
-                        ++ list
+                        DeletedMessage posix ->
+                            posix
                     )
+                        |> Date.fromPosix local.localUser.timezone
+            in
+            ( Just date
+            , ( Id.toString messageId
+              , case isEditing of
+                    Just editing ->
+                        if MyUi.isMobile model then
+                            -- On mobile, we show the editor at the bottom instead
+                            messageView
+                                isMobile
+                                containerWidth
+                                False
+                                revealedSpoilers
+                                highlight
+                                messageHover2
+                                otherUserIsEditing
+                                local.localUser.session.userId
+                                (LocalState.allUsers local.localUser)
+                                local.localUser
+                                maybeRepliedTo
+                                (SeqDict.get threadId channel.threads)
+                                messageId
+                                message
+                                |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
-                MessageUnloaded ->
-                    ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
+                        else
+                            messageEditingView
+                                isMobile
+                                guildOrDmId
+                                threadRoute2
+                                message
+                                maybeRepliedTo
+                                (SeqDict.get threadId channel.threads)
+                                revealedSpoilers
+                                editing
+                                loggedIn.textInputFocus
+                                local.localUser.session.userId
+                                (LocalState.allUsers local.localUser)
+                                local
+
+                    Nothing ->
+                        case SeqDict.get threadId channel.threads of
+                            Nothing ->
+                                case maybeRepliedTo of
+                                    Just _ ->
+                                        messageView
+                                            isMobile
+                                            containerWidth
+                                            False
+                                            revealedSpoilers
+                                            highlight
+                                            messageHover2
+                                            otherUserIsEditing
+                                            local.localUser.session.userId
+                                            (LocalState.allUsers local.localUser)
+                                            local.localUser
+                                            maybeRepliedTo
+                                            Nothing
+                                            messageId
+                                            message
+                                            |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                    Nothing ->
+                                        Ui.Lazy.lazy5
+                                            messageViewNotThreadStarter
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            revealedSpoilers
+                                            local.localUser
+                                            (Id.toInt messageId)
+                                            message
+                                            |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                            Just thread ->
+                                case maybeRepliedTo of
+                                    Just _ ->
+                                        messageView
+                                            isMobile
+                                            containerWidth
+                                            False
+                                            revealedSpoilers
+                                            highlight
+                                            messageHover2
+                                            otherUserIsEditing
+                                            local.localUser.session.userId
+                                            (LocalState.allUsers local.localUser)
+                                            local.localUser
+                                            maybeRepliedTo
+                                            (Just thread)
+                                            messageId
+                                            message
+                                            |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                    Nothing ->
+                                        Ui.Lazy.lazy6
+                                            messageViewThreadStarter
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            revealedSpoilers
+                                            local.localUser
+                                            (Id.toInt messageId)
+                                            thread
+                                            message
+                                            |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
+              )
+                :: newMessageLine maybeLastDate date lastViewedIndex (Id.toInt messageId) messageId
+                ++ list
+            )
         )
-        ( ArrayWithOffset.length channel.messages - 1, Nothing, [] )
-        (VisibleMessages.slice channel)
-        |> (\( _, _, a ) -> a)
+        ( Nothing, [] )
+        channel.messages
+        |> Tuple.second
 
 
 discordConversationViewHelper :
@@ -2094,204 +2084,194 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
         isMobile =
             MyUi.isMobile model
     in
-    Array.foldr
-        (\messageState ( index, maybeLastDate, list ) ->
-            case messageState of
-                MessageLoaded message ->
-                    let
-                        messageId : Id ChannelMessageId
-                        messageId =
-                            Id.fromInt index
+    ArrayWithOffset.foldArrayNewToOld
+        (\messageId message ( maybeLastDate, list ) ->
+            let
+                threadRoute2 : ThreadRouteWithMessage
+                threadRoute2 =
+                    NoThreadWithMessage messageId
 
-                        threadRoute2 : ThreadRouteWithMessage
-                        threadRoute2 =
-                            NoThreadWithMessage messageId
+                threadId : Id ChannelMessageId
+                threadId =
+                    Id.fromInt (Id.toInt messageId)
 
-                        threadId : Id ChannelMessageId
-                        threadId =
-                            Id.fromInt index
+                messageHover2 : IsHovered
+                messageHover2 =
+                    messageHover (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
 
-                        messageHover2 : IsHovered
-                        messageHover2 =
-                            messageHover (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
+                otherUserIsEditing : Bool
+                otherUserIsEditing =
+                    SeqSet.member (Id.changeType messageId) othersEditing
 
-                        otherUserIsEditing : Bool
-                        otherUserIsEditing =
-                            SeqSet.member (Id.changeType messageId) othersEditing
+                isEditing : Maybe EditMessage
+                isEditing =
+                    case maybeEditing of
+                        Just editing ->
+                            if editing.messageIndex == messageId then
+                                Just editing
 
-                        isEditing : Maybe EditMessage
-                        isEditing =
-                            case maybeEditing of
-                                Just editing ->
-                                    if editing.messageIndex == messageId then
-                                        Just editing
+                            else
+                                Nothing
 
-                                    else
-                                        Nothing
+                        Nothing ->
+                            Nothing
+
+                highlight : HighlightMessage
+                highlight =
+                    if maybeUrlMessageId == Just messageId then
+                        UrlHighlight
+
+                    else if replyToIndex == Just messageId then
+                        ReplyToHighlight
+
+                    else
+                        NoHighlight
+
+                maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
+                maybeRepliedTo =
+                    case message of
+                        UserTextMessage data ->
+                            case data.repliedTo of
+                                Just repliedToIndex ->
+                                    case ArrayWithOffset.get repliedToIndex channel.messages of
+                                        Just (MessageLoaded message2) ->
+                                            Just ( repliedToIndex, message2 )
+
+                                        _ ->
+                                            Nothing
 
                                 Nothing ->
                                     Nothing
 
-                        highlight : HighlightMessage
-                        highlight =
-                            if maybeUrlMessageId == Just messageId then
-                                UrlHighlight
+                        UserJoinedMessage _ _ _ ->
+                            Nothing
 
-                            else if replyToIndex == Just messageId then
-                                ReplyToHighlight
+                        DeletedMessage _ ->
+                            Nothing
 
-                            else
-                                NoHighlight
+                date : Date
+                date =
+                    (case message of
+                        UserTextMessage data ->
+                            data.createdAt
 
-                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case ArrayWithOffset.get repliedToIndex channel.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( repliedToIndex, message2 )
+                        UserJoinedMessage posix _ _ ->
+                            posix
 
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
-
-                        date : Date
-                        date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
-                    in
-                    ( index - 1
-                    , Just date
-                    , ( String.fromInt index
-                      , case isEditing of
-                            Just editing ->
-                                if MyUi.isMobile model then
-                                    -- On mobile, we show the editor at the bottom instead
-                                    messageView
-                                        isMobile
-                                        containerWidth
-                                        False
-                                        revealedSpoilers
-                                        highlight
-                                        messageHover2
-                                        otherUserIsEditing
-                                        currentDiscordUserId
-                                        (LocalState.allDiscordUsers local.localUser)
-                                        local.localUser
-                                        maybeRepliedTo
-                                        (SeqDict.get threadId channel.threads)
-                                        messageId
-                                        message
-                                        |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                else
-                                    messageEditingView
-                                        isMobile
-                                        guildOrDmId
-                                        threadRoute2
-                                        message
-                                        maybeRepliedTo
-                                        (SeqDict.get threadId channel.threads)
-                                        revealedSpoilers
-                                        editing
-                                        loggedIn.textInputFocus
-                                        currentDiscordUserId
-                                        (LocalState.allDiscordUsers local.localUser)
-                                        local
-
-                            Nothing ->
-                                case SeqDict.get threadId channel.threads of
-                                    Nothing ->
-                                        case maybeRepliedTo of
-                                            Just _ ->
-                                                messageView
-                                                    isMobile
-                                                    containerWidth
-                                                    False
-                                                    revealedSpoilers
-                                                    highlight
-                                                    messageHover2
-                                                    otherUserIsEditing
-                                                    currentDiscordUserId
-                                                    (LocalState.allDiscordUsers local.localUser)
-                                                    local.localUser
-                                                    maybeRepliedTo
-                                                    Nothing
-                                                    messageId
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                            Nothing ->
-                                                Ui.Lazy.lazy6
-                                                    discordMessageViewNotThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                                    revealedSpoilers
-                                                    currentDiscordUserId
-                                                    local.localUser
-                                                    index
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                    Just thread ->
-                                        case maybeRepliedTo of
-                                            Just _ ->
-                                                messageView
-                                                    isMobile
-                                                    containerWidth
-                                                    False
-                                                    revealedSpoilers
-                                                    highlight
-                                                    messageHover2
-                                                    otherUserIsEditing
-                                                    currentDiscordUserId
-                                                    (LocalState.allDiscordUsers local.localUser)
-                                                    local.localUser
-                                                    maybeRepliedTo
-                                                    (Just thread)
-                                                    messageId
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                            Nothing ->
-                                                discordMessageViewThreadStarter
-                                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                                    revealedSpoilers
-                                                    currentDiscordUserId
-                                                    local.localUser
-                                                    index
-                                                    thread
-                                                    message
-                                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-                      )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
-                        ++ list
+                        DeletedMessage posix ->
+                            posix
                     )
+                        |> Date.fromPosix local.localUser.timezone
+            in
+            ( Just date
+            , ( Id.toString messageId
+              , case isEditing of
+                    Just editing ->
+                        if MyUi.isMobile model then
+                            -- On mobile, we show the editor at the bottom instead
+                            messageView
+                                isMobile
+                                containerWidth
+                                False
+                                revealedSpoilers
+                                highlight
+                                messageHover2
+                                otherUserIsEditing
+                                currentDiscordUserId
+                                (LocalState.allDiscordUsers local.localUser)
+                                local.localUser
+                                maybeRepliedTo
+                                (SeqDict.get threadId channel.threads)
+                                messageId
+                                message
+                                |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
-                MessageUnloaded ->
-                    ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
+                        else
+                            messageEditingView
+                                isMobile
+                                guildOrDmId
+                                threadRoute2
+                                message
+                                maybeRepliedTo
+                                (SeqDict.get threadId channel.threads)
+                                revealedSpoilers
+                                editing
+                                loggedIn.textInputFocus
+                                currentDiscordUserId
+                                (LocalState.allDiscordUsers local.localUser)
+                                local
+
+                    Nothing ->
+                        case SeqDict.get threadId channel.threads of
+                            Nothing ->
+                                case maybeRepliedTo of
+                                    Just _ ->
+                                        messageView
+                                            isMobile
+                                            containerWidth
+                                            False
+                                            revealedSpoilers
+                                            highlight
+                                            messageHover2
+                                            otherUserIsEditing
+                                            currentDiscordUserId
+                                            (LocalState.allDiscordUsers local.localUser)
+                                            local.localUser
+                                            maybeRepliedTo
+                                            Nothing
+                                            messageId
+                                            message
+                                            |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                    Nothing ->
+                                        Ui.Lazy.lazy6
+                                            discordMessageViewNotThreadStarter
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            revealedSpoilers
+                                            currentDiscordUserId
+                                            local.localUser
+                                            (Id.toInt messageId)
+                                            message
+                                            |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                            Just thread ->
+                                case maybeRepliedTo of
+                                    Just _ ->
+                                        messageView
+                                            isMobile
+                                            containerWidth
+                                            False
+                                            revealedSpoilers
+                                            highlight
+                                            messageHover2
+                                            otherUserIsEditing
+                                            currentDiscordUserId
+                                            (LocalState.allDiscordUsers local.localUser)
+                                            local.localUser
+                                            maybeRepliedTo
+                                            (Just thread)
+                                            messageId
+                                            message
+                                            |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+
+                                    Nothing ->
+                                        discordMessageViewThreadStarter
+                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                            revealedSpoilers
+                                            currentDiscordUserId
+                                            local.localUser
+                                            (Id.toInt messageId)
+                                            thread
+                                            message
+                                            |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+              )
+                :: newMessageLine maybeLastDate date lastViewedIndex (Id.toInt messageId) messageId
+                ++ list
+            )
         )
-        ( ArrayWithOffset.length channel.messages - 1, Nothing, [] )
-        (VisibleMessages.slice channel)
-        |> (\( _, _, a ) -> a)
+        ( Nothing, [] )
+        channel.messages
+        |> Tuple.second
 
 
 newMessageLine : Maybe Date -> Date -> Id messageId -> Int -> Id messageId -> List ( String, Element msg )
@@ -2411,161 +2391,151 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
         isMobile =
             MyUi.isMobile model
     in
-    Array.foldr
-        (\messageState ( index, maybeLastDate, list ) ->
-            case messageState of
-                MessageLoaded message ->
-                    let
-                        messageId : Id ThreadMessageId
-                        messageId =
-                            Id.fromInt index
+    ArrayWithOffset.foldArrayNewToOld
+        (\messageId message ( maybeLastDate, list ) ->
+            let
+                threadRoute2 =
+                    ViewThreadWithMessage threadId (Id.fromInt (Id.toInt messageId))
 
-                        threadRoute2 =
-                            ViewThreadWithMessage threadId (Id.fromInt index)
+                messageHover2 : IsHovered
+                messageHover2 =
+                    messageHover guildOrDmIdNoThread threadRoute2 loggedIn
 
-                        messageHover2 : IsHovered
-                        messageHover2 =
-                            messageHover guildOrDmIdNoThread threadRoute2 loggedIn
+                otherUserIsEditing : Bool
+                otherUserIsEditing =
+                    SeqSet.member messageId othersEditing
 
-                        otherUserIsEditing : Bool
-                        otherUserIsEditing =
-                            SeqSet.member messageId othersEditing
+                isEditing : Maybe EditMessage
+                isEditing =
+                    case maybeEditing of
+                        Just editing ->
+                            if editing.messageIndex == Id.changeType messageId then
+                                Just editing
 
-                        isEditing : Maybe EditMessage
-                        isEditing =
-                            case maybeEditing of
-                                Just editing ->
-                                    if editing.messageIndex == Id.changeType messageId then
-                                        Just editing
+                            else
+                                Nothing
 
-                                    else
-                                        Nothing
+                        Nothing ->
+                            Nothing
+
+                highlight : HighlightMessage
+                highlight =
+                    if maybeUrlMessageId == Just messageId then
+                        UrlHighlight
+
+                    else if replyToIndex == Just messageId then
+                        ReplyToHighlight
+
+                    else
+                        NoHighlight
+
+                maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
+                maybeRepliedTo =
+                    case message of
+                        UserTextMessage data ->
+                            case data.repliedTo of
+                                Just repliedToIndex ->
+                                    case ArrayWithOffset.get repliedToIndex thread.messages of
+                                        Just (MessageLoaded message2) ->
+                                            Just ( Id.changeType repliedToIndex, message2 )
+
+                                        _ ->
+                                            Nothing
 
                                 Nothing ->
                                     Nothing
 
-                        highlight : HighlightMessage
-                        highlight =
-                            if maybeUrlMessageId == Just messageId then
-                                UrlHighlight
+                        UserJoinedMessage _ _ _ ->
+                            Nothing
 
-                            else if replyToIndex == Just messageId then
-                                ReplyToHighlight
+                        DeletedMessage _ ->
+                            Nothing
 
-                            else
-                                NoHighlight
+                date : Date
+                date =
+                    (case message of
+                        UserTextMessage data ->
+                            data.createdAt
 
-                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case ArrayWithOffset.get repliedToIndex thread.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( Id.changeType repliedToIndex, message2 )
+                        UserJoinedMessage posix _ _ ->
+                            posix
 
-                                                _ ->
-                                                    Nothing
+                        DeletedMessage posix ->
+                            posix
+                    )
+                        |> Date.fromPosix local.localUser.timezone
+            in
+            ( Just date
+            , ( Id.toString messageId
+              , case isEditing of
+                    Just editing ->
+                        if MyUi.isMobile model then
+                            -- On mobile, we show the editor at the bottom instead
+                            threadMessageView
+                                isMobile
+                                containerWidth
+                                revealedSpoilers
+                                highlight
+                                messageHover2
+                                otherUserIsEditing
+                                (LocalState.allUsers local.localUser)
+                                local.localUser.session.userId
+                                local.localUser
+                                maybeRepliedTo
+                                messageId
+                                message
+                                |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
 
-                                        Nothing ->
-                                            Nothing
+                        else
+                            threadMessageEditingView
+                                isMobile
+                                guildOrDmId
+                                threadId
+                                (Id.fromInt (Id.toInt messageId))
+                                message
+                                maybeRepliedTo
+                                revealedSpoilers
+                                editing
+                                loggedIn.textInputFocus
+                                local.localUser.session.userId
+                                (LocalState.allUsers local.localUser)
+                                local
 
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
-
-                        date : Date
-                        date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
-                    in
-                    ( index - 1
-                    , Just date
-                    , ( String.fromInt index
-                      , case isEditing of
-                            Just editing ->
-                                if MyUi.isMobile model then
-                                    -- On mobile, we show the editor at the bottom instead
-                                    threadMessageView
-                                        isMobile
-                                        containerWidth
-                                        revealedSpoilers
-                                        highlight
-                                        messageHover2
-                                        otherUserIsEditing
-                                        (LocalState.allUsers local.localUser)
-                                        local.localUser.session.userId
-                                        local.localUser
-                                        maybeRepliedTo
-                                        messageId
-                                        message
-                                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
-
-                                else
-                                    threadMessageEditingView
-                                        isMobile
-                                        guildOrDmId
-                                        threadId
-                                        (Id.fromInt index)
-                                        message
-                                        maybeRepliedTo
-                                        revealedSpoilers
-                                        editing
-                                        loggedIn.textInputFocus
-                                        local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
-                                        local
+                    Nothing ->
+                        case maybeRepliedTo of
+                            Just _ ->
+                                threadMessageView
+                                    isMobile
+                                    containerWidth
+                                    revealedSpoilers
+                                    highlight
+                                    messageHover2
+                                    otherUserIsEditing
+                                    (LocalState.allUsers local.localUser)
+                                    local.localUser.session.userId
+                                    local.localUser
+                                    maybeRepliedTo
+                                    messageId
+                                    message
+                                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
 
                             Nothing ->
-                                case maybeRepliedTo of
-                                    Just _ ->
-                                        threadMessageView
-                                            isMobile
-                                            containerWidth
-                                            revealedSpoilers
-                                            highlight
-                                            messageHover2
-                                            otherUserIsEditing
-                                            (LocalState.allUsers local.localUser)
-                                            local.localUser.session.userId
-                                            local.localUser
-                                            maybeRepliedTo
-                                            messageId
-                                            message
-                                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
-
-                                    Nothing ->
-                                        Ui.Lazy.lazy5
-                                            threadMessageViewLazy
-                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                            revealedSpoilers
-                                            local.localUser
-                                            index
-                                            message
-                                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
-                      )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
-                        ++ list
-                    )
-
-                MessageUnloaded ->
-                    ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
+                                Ui.Lazy.lazy5
+                                    threadMessageViewLazy
+                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                    revealedSpoilers
+                                    local.localUser
+                                    (Id.toInt messageId)
+                                    message
+                                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
+              )
+                :: newMessageLine maybeLastDate date lastViewedIndex (Id.toInt messageId) messageId
+                ++ list
+            )
         )
-        ( ArrayWithOffset.length thread.messages - 1, Nothing, [] )
-        (VisibleMessages.slice thread)
-        |> (\( _, _, a ) -> a)
+        ( Nothing, [] )
+        thread.messages
+        |> Tuple.second
 
 
 discordThreadConversationViewHelper :
@@ -2628,172 +2598,152 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
         isMobile =
             MyUi.isMobile model
     in
-    Array.foldr
-        (\messageState ( index, maybeLastDate, list ) ->
-            case messageState of
-                MessageLoaded message ->
-                    let
-                        messageId : Id ThreadMessageId
-                        messageId =
-                            Id.fromInt index
+    ArrayWithOffset.foldArrayNewToOld
+        (\messageId message ( maybeLastDate, list ) ->
+            let
+                threadRoute2 =
+                    ViewThreadWithMessage threadId (Id.fromInt (Id.toInt messageId))
 
-                        threadRoute2 =
-                            ViewThreadWithMessage threadId (Id.fromInt index)
+                messageHover2 : IsHovered
+                messageHover2 =
+                    messageHover (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
 
-                        messageHover2 : IsHovered
-                        messageHover2 =
-                            messageHover (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
+                otherUserIsEditing : Bool
+                otherUserIsEditing =
+                    SeqSet.member messageId othersEditing
 
-                        otherUserIsEditing : Bool
-                        otherUserIsEditing =
-                            SeqSet.member messageId othersEditing
+                isEditing : Maybe EditMessage
+                isEditing =
+                    case maybeEditing of
+                        Just editing ->
+                            if editing.messageIndex == Id.changeType messageId then
+                                Just editing
 
-                        isEditing : Maybe EditMessage
-                        isEditing =
-                            case maybeEditing of
-                                Just editing ->
-                                    if editing.messageIndex == Id.changeType messageId then
-                                        Just editing
+                            else
+                                Nothing
 
-                                    else
-                                        Nothing
+                        Nothing ->
+                            Nothing
+
+                highlight : HighlightMessage
+                highlight =
+                    if maybeUrlMessageId == Just messageId then
+                        UrlHighlight
+
+                    else if replyToIndex == Just messageId then
+                        ReplyToHighlight
+
+                    else
+                        NoHighlight
+
+                maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
+                maybeRepliedTo =
+                    case message of
+                        UserTextMessage data ->
+                            case data.repliedTo of
+                                Just repliedToIndex ->
+                                    case ArrayWithOffset.get repliedToIndex thread.messages of
+                                        Just (MessageLoaded message2) ->
+                                            Just ( Id.changeType repliedToIndex, message2 )
+
+                                        _ ->
+                                            Nothing
 
                                 Nothing ->
                                     Nothing
 
-                        highlight : HighlightMessage
-                        highlight =
-                            if maybeUrlMessageId == Just messageId then
-                                UrlHighlight
+                        UserJoinedMessage _ _ _ ->
+                            Nothing
 
-                            else if replyToIndex == Just messageId then
-                                ReplyToHighlight
+                        DeletedMessage _ ->
+                            Nothing
 
-                            else
-                                NoHighlight
+                date : Date
+                date =
+                    (case message of
+                        UserTextMessage data ->
+                            data.createdAt
 
-                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case ArrayWithOffset.get repliedToIndex thread.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( Id.changeType repliedToIndex, message2 )
+                        UserJoinedMessage posix _ _ ->
+                            posix
 
-                                                _ ->
-                                                    Nothing
+                        DeletedMessage posix ->
+                            posix
+                    )
+                        |> Date.fromPosix local.localUser.timezone
+            in
+            ( Just date
+            , ( Id.toString messageId
+              , case isEditing of
+                    Just editing ->
+                        if MyUi.isMobile model then
+                            -- On mobile, we show the editor at the bottom instead
+                            threadMessageView
+                                isMobile
+                                containerWidth
+                                revealedSpoilers
+                                highlight
+                                messageHover2
+                                otherUserIsEditing
+                                (LocalState.allDiscordUsers local.localUser)
+                                currentDiscordUserId
+                                local.localUser
+                                maybeRepliedTo
+                                messageId
+                                message
+                                |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
-                                        Nothing ->
-                                            Nothing
+                        else
+                            threadMessageEditingView
+                                isMobile
+                                guildOrDmId
+                                threadId
+                                (Id.fromInt (Id.toInt messageId))
+                                message
+                                maybeRepliedTo
+                                revealedSpoilers
+                                editing
+                                loggedIn.textInputFocus
+                                currentDiscordUserId
+                                (LocalState.allDiscordUsers local.localUser)
+                                local
 
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
-
-                        date : Date
-                        date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
-                    in
-                    ( index - 1
-                    , Just date
-                    , ( String.fromInt index
-                      , case isEditing of
-                            Just editing ->
-                                if MyUi.isMobile model then
-                                    -- On mobile, we show the editor at the bottom instead
-                                    threadMessageView
-                                        isMobile
-                                        containerWidth
-                                        revealedSpoilers
-                                        highlight
-                                        messageHover2
-                                        otherUserIsEditing
-                                        (LocalState.allDiscordUsers local.localUser)
-                                        currentDiscordUserId
-                                        local.localUser
-                                        maybeRepliedTo
-                                        messageId
-                                        message
-                                        |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                else
-                                    threadMessageEditingView
-                                        isMobile
-                                        guildOrDmId
-                                        threadId
-                                        (Id.fromInt index)
-                                        message
-                                        maybeRepliedTo
-                                        revealedSpoilers
-                                        editing
-                                        loggedIn.textInputFocus
-                                        currentDiscordUserId
-                                        (LocalState.allDiscordUsers local.localUser)
-                                        local
+                    Nothing ->
+                        case maybeRepliedTo of
+                            Just _ ->
+                                threadMessageView
+                                    isMobile
+                                    containerWidth
+                                    revealedSpoilers
+                                    highlight
+                                    messageHover2
+                                    otherUserIsEditing
+                                    (LocalState.allDiscordUsers local.localUser)
+                                    currentDiscordUserId
+                                    local.localUser
+                                    maybeRepliedTo
+                                    messageId
+                                    message
+                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                             Nothing ->
-                                case maybeRepliedTo of
-                                    Just _ ->
-                                        threadMessageView
-                                            isMobile
-                                            containerWidth
-                                            revealedSpoilers
-                                            highlight
-                                            messageHover2
-                                            otherUserIsEditing
-                                            (LocalState.allDiscordUsers local.localUser)
-                                            currentDiscordUserId
-                                            local.localUser
-                                            maybeRepliedTo
-                                            messageId
-                                            message
-                                            |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-
-                                    Nothing ->
-                                        Ui.Lazy.lazy6
-                                            discordThreadMessageViewLazy
-                                            (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                            revealedSpoilers
-                                            currentDiscordUserId
-                                            local.localUser
-                                            index
-                                            message
-                                            |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
-                      )
-                        :: newMessageLine maybeLastDate date lastViewedIndex index messageId
-                        ++ list
-                    )
-
-                MessageUnloaded ->
-                    ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
+                                Ui.Lazy.lazy6
+                                    discordThreadMessageViewLazy
+                                    (encodeMessageView isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                    revealedSpoilers
+                                    currentDiscordUserId
+                                    local.localUser
+                                    (Id.toInt messageId)
+                                    message
+                                    |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
+              )
+                :: newMessageLine maybeLastDate date lastViewedIndex (Id.toInt messageId) messageId
+                ++ list
+            )
         )
-        ( ArrayWithOffset.length thread.messages - 1, Nothing, [] )
-        (VisibleMessages.slice thread)
-        |> (\( _, _, a ) -> a)
-
-
-unloadedMessageView : Int -> Element msg
-unloadedMessageView index =
-    Ui.el
-        [ Ui.paddingXY 8 8
-        , Ui.background MyUi.alertColor
-        , Ui.Font.italic
-        ]
-        (Ui.text ("Something went wrong when loading message " ++ String.fromInt index))
+        ( Nothing, [] )
+        thread.messages
+        |> Tuple.second
 
 
 dateDivider : Date -> Date -> Ui.Attribute msg
@@ -5572,7 +5522,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
             ]
             [ Icons.hashtag
-            , case Array.length thread.messages of
+            , case ArrayWithOffset.length thread.messages of
                 1 ->
                     Html.text "1 message"
 
@@ -6536,7 +6486,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             (\( otherUserId, dmChannel ) ->
                 case LocalState.getUser otherUserId localUser of
                     Just otherUser ->
-                        ( case Array.Extra.last dmChannel.messages of
+                        ( case ArrayWithOffset.last dmChannel.messages of
                             Just (MessageLoaded message2) ->
                                 Message.createdAt message2
 
@@ -6570,7 +6520,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
             (SeqDict.toList dmChannelsIncludingCurrentUser)
             ++ List.map
                 (\( channelId, dmChannel ) ->
-                    ( case Array.Extra.last dmChannel.messages of
+                    ( case ArrayWithOffset.last dmChannel.messages of
                         Just (MessageLoaded message2) ->
                             Message.createdAt message2
 
