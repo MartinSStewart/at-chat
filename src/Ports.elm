@@ -31,6 +31,7 @@ port module Ports exposing
     , serviceWorkerMessage
     , setCursorPosition
     , setFavicon
+    , shiftScrollByElementDelta
     , showNotification
     , textInputSelectAll
     , userAgentSub
@@ -282,6 +283,21 @@ port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 
 
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port shift_scroll_by_element_delta_to_js : Json.Encode.Value -> Cmd msg
+
+
+shiftScrollByElementDelta : HtmlId -> HtmlId -> Command FrontendOnly toMsg msg
+shiftScrollByElementDelta containerId elementId =
+    Command.sendToJs
+        "shift_scroll_by_element_delta_to_js"
+        shift_scroll_by_element_delta_to_js
+        (Json.Encode.object
+            [ ( "containerId", Json.Encode.string (Dom.idToString containerId) )
+            , ( "elementId", Json.Encode.string (Dom.idToString elementId) )
+            ]
+        )
 
 
 port set_cursor_position_to_js : Json.Encode.Value -> Cmd msg

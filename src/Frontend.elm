@@ -4893,6 +4893,42 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
+                        Local_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            if SeqDict.isEmpty messagesLoaded then
+                                Command.none
+
+                            else
+                                Ports.shiftScrollByElementDelta
+                                    Pages.Guild.conversationContainerId
+                                    (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+
+                        Local_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            if SeqDict.isEmpty messagesLoaded then
+                                Command.none
+
+                            else
+                                Ports.shiftScrollByElementDelta
+                                    Pages.Guild.conversationContainerId
+                                    (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+
+                        Local_Discord_LoadChannelMessages _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            if SeqDict.isEmpty messagesLoaded then
+                                Command.none
+
+                            else
+                                Ports.shiftScrollByElementDelta
+                                    Pages.Guild.conversationContainerId
+                                    (Pages.Guild.channelMessageHtmlId previousOldestVisibleMessage)
+
+                        Local_Discord_LoadThreadMessages _ _ previousOldestVisibleMessage (FilledInByBackend messagesLoaded) ->
+                            if SeqDict.isEmpty messagesLoaded then
+                                Command.none
+
+                            else
+                                Ports.shiftScrollByElementDelta
+                                    Pages.Guild.conversationContainerId
+                                    (Pages.Guild.threadMessageHtmlId previousOldestVisibleMessage)
+
                         _ ->
                             Command.none
                     )

@@ -299,6 +299,17 @@ exports.init = async function init(app)
 
     app.ports.user_agent_to_js.subscribe(() => { app.ports.user_agent_from_js.send(window.navigator.userAgent); });
 
+    app.ports.shift_scroll_by_element_delta_to_js.subscribe((data) => {
+        const element = document.getElementById(data.elementId);
+        const container = document.getElementById(data.containerId);
+        if (!element || !container) return;
+        const oldY = element.getBoundingClientRect().top;
+        requestAnimationFrame(() => {
+            const newY = element.getBoundingClientRect().top;
+            container.scrollTop += (newY - oldY);
+        });
+    });
+
     app.ports.set_cursor_position_to_js.subscribe((data) => {
         requestAnimationFrame(() =>
             {
