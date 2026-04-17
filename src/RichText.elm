@@ -687,11 +687,8 @@ fromNonemptyString users string =
         source =
             String.Nonempty.toString string
 
-        len =
-            String.length source
-
         result =
-            parseLoop source 0 len users [] "" []
+            parseLoop source 0 users [] "" []
     in
     case List.Nonempty.fromList result.nodes of
         Just nonempty ->
@@ -905,9 +902,9 @@ closeModifier afterSymbol accText revNodes container symbol =
             }
 
 
-parseInner : String -> Int -> Int -> SeqDict userId { a | name : PersonName } -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
-parseInner source index len users modifiers =
-    parseLoop source index len users modifiers "" []
+parseInner : String -> Int -> SeqDict userId { a | name : PersonName } -> List Modifiers -> { nodes : List (RichText userId), nextIndex : Int }
+parseInner source index users modifiers =
+    parseLoop source index users modifiers "" []
 
 
 stringAt : Int -> String -> Maybe String
@@ -1009,14 +1006,13 @@ stringToStickers text =
 parseLoop :
     String
     -> Int
-    -> Int
     -> SeqDict userId { a | name : PersonName }
     -> List Modifiers
     -> String
     -> List (RichText userId)
     -> { nodes : List (RichText userId), nextIndex : Int }
-parseLoop source index sourceLength users modifiers accText revNodes =
-    if index >= sourceLength then
+parseLoop source index users modifiers accText revNodes =
+    if index >= String.length source then
         finalizeResult accText revNodes modifiers index
 
     else
@@ -1024,10 +1020,10 @@ parseLoop source index sourceLength users modifiers accText revNodes =
             "\n" ->
                 case parseStickerId (index + 1) source of
                     ( index2, Just stickerId ) ->
-                        parseLoop source index2 sourceLength users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                        parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
 
                     ( _, Nothing ) ->
-                        parseLoop source (index + 1) sourceLength users modifiers (accText ++ "\n") revNodes
+                        parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
 
             "\\" ->
                 let
@@ -1038,13 +1034,13 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                     Just nextChar ->
                         case Dict.get nextChar charToEscaped of
                             Just escaped ->
-                                parseLoop source (afterBackslash + 1) sourceLength users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
+                                parseLoop source (afterBackslash + 1) users modifiers "" (EscapedChar escaped :: flushText accText revNodes)
 
                             Nothing ->
-                                parseLoop source (afterBackslash + 1) sourceLength users modifiers (accText ++ "\\" ++ nextChar) revNodes
+                                parseLoop source (afterBackslash + 1) users modifiers (accText ++ "\\" ++ nextChar) revNodes
 
                     Nothing ->
-                        parseLoop source afterBackslash sourceLength users modifiers (accText ++ "\\") revNodes
+                        parseLoop source afterBackslash users modifiers (accText ++ "\\") revNodes
 
             "@" ->
                 let
@@ -1052,14 +1048,14 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                         index + 1
 
                     remaining =
-                        String.slice afterAt sourceLength source
+                        String.slice afterAt (String.length source) source
                 in
                 case tryMatchUser users remaining of
                     Just ( userId, matchLen ) ->
-                        parseLoop source (afterAt + matchLen) sourceLength users modifiers "" (UserMention userId :: flushText accText revNodes)
+                        parseLoop source (afterAt + matchLen) users modifiers "" (UserMention userId :: flushText accText revNodes)
 
                     Nothing ->
-                        parseLoop source afterAt sourceLength users modifiers (accText ++ "@") revNodes
+                        parseLoop source afterAt users modifiers (accText ++ "@") revNodes
 
             "*" ->
                 let
@@ -1078,7 +1074,7 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                             String.slice afterSymbol (afterSymbol + 1) source
                     in
                     if nextChar == "*" || nextChar == " " then
-                        parseLoop source afterSymbol sourceLength users modifiers (accText ++ "*") revNodes
+                        parseLoop source afterSymbol users modifiers (accText ++ "*") revNodes
 
                     else
                         let
@@ -1086,16 +1082,16 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol sourceLength users (IsBold :: modifiers)
+                                parseInner source afterSymbol users (IsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 4) source == "____" then
-                    parseLoop source (index + 4) sourceLength users modifiers (accText ++ "____") revNodes
+                    parseLoop source (index + 4) users modifiers (accText ++ "____") revNodes
 
                 else if String.slice index (index + 2) source == "__" then
                     let
@@ -1114,12 +1110,12 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol sourceLength users (IsUnderlined :: modifiers)
+                                parseInner source afterSymbol users (IsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
 
                 else
                     let
@@ -1138,16 +1134,16 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol sourceLength users (IsItalic :: modifiers)
+                                parseInner source afterSymbol users (IsItalic :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
 
             "~" ->
                 if (List.head modifiers /= Just IsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
-                    parseLoop source (index + 4) sourceLength users modifiers (accText ++ "~~~~") revNodes
+                    parseLoop source (index + 4) users modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
                     let
@@ -1166,19 +1162,19 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol sourceLength users (IsStrikethrough :: modifiers)
+                                parseInner source afterSymbol users (IsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
 
                 else
-                    parseLoop source (index + 1) sourceLength users modifiers (accText ++ "~") revNodes
+                    parseLoop source (index + 1) users modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if (List.head modifiers /= Just IsSpoilered) && String.slice index (index + 4) source == "||||" then
-                    parseLoop source (index + 4) sourceLength users modifiers (accText ++ "||||") revNodes
+                    parseLoop source (index + 4) users modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
                     let
@@ -1197,19 +1193,19 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                parseInner source afterSymbol sourceLength users (IsSpoilered :: modifiers)
+                                parseInner source afterSymbol users (IsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        parseLoop source inner.nextIndex sourceLength users modifiers "" newRevNodes
+                        parseLoop source inner.nextIndex users modifiers "" newRevNodes
 
                 else
-                    parseLoop source (index + 1) sourceLength users modifiers (accText ++ "|") revNodes
+                    parseLoop source (index + 1) users modifiers (accText ++ "|") revNodes
 
             "`" ->
                 if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) sourceLength "```" of
+                    case findSubstring source (index + 3) "```" of
                         Just closeIndex ->
                             let
                                 content =
@@ -1220,14 +1216,14 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString codeContent of
                                 Just _ ->
-                                    parseLoop source (closeIndex + 3) sourceLength users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                    parseLoop source (closeIndex + 3) users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
                                 Nothing ->
-                                    parseLoop source (closeIndex + 3) sourceLength users modifiers (accText ++ "``````") revNodes
+                                    parseLoop source (closeIndex + 3) users modifiers (accText ++ "``````") revNodes
 
                         Nothing ->
                             -- No closing ```, try inline code
-                            case findSingleBacktick source (index + 1) sourceLength of
+                            case findSingleBacktick source (index + 1) of
                                 Just closeIndex ->
                                     let
                                         content =
@@ -1235,16 +1231,16 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                                     in
                                     case String.Nonempty.fromString content of
                                         Just a ->
-                                            parseLoop source (closeIndex + 1) sourceLength users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                            parseLoop source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                         Nothing ->
-                                            parseLoop source (closeIndex + 1) sourceLength users modifiers (accText ++ "``") revNodes
+                                            parseLoop source (closeIndex + 1) users modifiers (accText ++ "``") revNodes
 
                                 Nothing ->
-                                    parseLoop source (index + 1) sourceLength users modifiers (accText ++ "`") revNodes
+                                    parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
 
                 else
-                    case findSingleBacktick source (index + 1) sourceLength of
+                    case findSingleBacktick source (index + 1) of
                         Just closeIndex ->
                             let
                                 content =
@@ -1252,13 +1248,13 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                             in
                             case String.Nonempty.fromString content of
                                 Just a ->
-                                    parseLoop source (closeIndex + 1) sourceLength users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                    parseLoop source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                 Nothing ->
-                                    parseLoop source (closeIndex + 1) sourceLength users modifiers (accText ++ "``") revNodes
+                                    parseLoop source (closeIndex + 1) users modifiers (accText ++ "``") revNodes
 
                         Nothing ->
-                            parseLoop source (index + 1) sourceLength users modifiers (accText ++ "`") revNodes
+                            parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False modifierToSymbol modifiers index source of
@@ -1266,7 +1262,6 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                         parseLoop
                             source
                             (index + String.length (Url.toString url))
-                            sourceLength
                             users
                             modifiers
                             ""
@@ -1276,7 +1271,6 @@ parseLoop source index sourceLength users modifiers accText revNodes =
                         parseLoop
                             source
                             (index + String.length errText)
-                            sourceLength
                             users
                             modifiers
                             (accText ++ errText)
@@ -1284,27 +1278,27 @@ parseLoop source index sourceLength users modifiers accText revNodes =
 
             "[" ->
                 if String.slice index (index + 2) source == "[!" then
-                    case parseFileId source (index + 2) sourceLength of
+                    case parseFileId source (index + 2) of
                         Just ( fileId, nextIndex ) ->
-                            parseLoop source nextIndex sourceLength users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
+                            parseLoop source nextIndex users modifiers "" (AttachedFile (Id.fromInt fileId) :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop source (index + 1) sourceLength users modifiers (accText ++ "[") revNodes
+                            parseLoop source (index + 1) users modifiers (accText ++ "[") revNodes
 
                 else
                     case parseMarkdownLink source (index + 1) of
                         Just ( alias, url, nextIndex ) ->
-                            parseLoop source nextIndex sourceLength users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+                            parseLoop source nextIndex users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
                         Nothing ->
-                            parseLoop source (index + 1) sourceLength users modifiers (accText ++ "[") revNodes
+                            parseLoop source (index + 1) users modifiers (accText ++ "[") revNodes
 
             _ ->
                 let
                     nextIndex =
-                        skipNormalChars source (index + 1) sourceLength
+                        skipNormalChars source (index + 1)
                 in
-                parseLoop source nextIndex sourceLength users modifiers (accText ++ String.slice index nextIndex source) revNodes
+                parseLoop source nextIndex users modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
 tryMatchUser : SeqDict userId { a | name : PersonName } -> String -> Maybe ( userId, Int )
@@ -1454,32 +1448,32 @@ parseCodeBlockContent text =
             ( NoLanguage, "" )
 
 
-findSubstring : String -> Int -> Int -> String -> Maybe Int
-findSubstring source index len target =
+findSubstring : String -> Int -> String -> Maybe Int
+findSubstring source index target =
     let
         targetLen =
             String.length target
     in
-    if index + targetLen > len then
+    if index + targetLen > String.length source then
         Nothing
 
     else if String.slice index (index + targetLen) source == target then
         Just index
 
     else
-        findSubstring source (index + 1) len target
+        findSubstring source (index + 1) target
 
 
-findSingleBacktick : String -> Int -> Int -> Maybe Int
-findSingleBacktick source index len =
-    if index >= len then
+findSingleBacktick : String -> Int -> Maybe Int
+findSingleBacktick source index =
+    if index >= String.length source then
         Nothing
 
     else if String.slice index (index + 1) source == "`" then
         Just index
 
     else
-        findSingleBacktick source (index + 1) len
+        findSingleBacktick source (index + 1)
 
 
 parseMarkdownLink : String -> Int -> Maybe ( NonemptyString, Url, Int )
@@ -1544,9 +1538,12 @@ findChar source index len target =
         findChar source (index + 1) len target
 
 
-parseFileId : String -> Int -> Int -> Maybe ( Int, Int )
-parseFileId source index len =
+parseFileId : String -> Int -> Maybe ( Int, Int )
+parseFileId source index =
     let
+        len =
+            String.length source
+
         digitEnd =
             skipDigits source index len
     in
@@ -1579,9 +1576,9 @@ skipDigits source index len =
             index
 
 
-skipNormalChars : String -> Int -> Int -> Int
-skipNormalChars source index len =
-    if index >= len then
+skipNormalChars : String -> Int -> Int
+skipNormalChars source index =
+    if index >= String.length source then
         index
 
     else
@@ -1593,7 +1590,7 @@ skipNormalChars source index len =
             index
 
         else
-            skipNormalChars source (index + 1) len
+            skipNormalChars source (index + 1)
 
 
 mentionsUser : Nonempty (RichText userId) -> SeqSet userId
@@ -3297,7 +3294,7 @@ discordParseLoop source index modifiers accText revNodes =
 
             "`" ->
                 if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) (String.length source) "```" of
+                    case findSubstring source (index + 3) "```" of
                         Just closeIndex ->
                             let
                                 content =
@@ -3331,7 +3328,7 @@ discordParseLoop source index modifiers accText revNodes =
                                     discordParseLoop source (closeIndex + 3) modifiers (accText ++ "``````") revNodes
 
                         Nothing ->
-                            case findSingleBacktick source (index + 1) (String.length source) of
+                            case findSingleBacktick source (index + 1) of
                                 Just closeIndex ->
                                     let
                                         content =
@@ -3348,7 +3345,7 @@ discordParseLoop source index modifiers accText revNodes =
                                     discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
 
                 else
-                    case findSingleBacktick source (index + 1) (String.length source) of
+                    case findSingleBacktick source (index + 1) of
                         Just closeIndex ->
                             let
                                 content =

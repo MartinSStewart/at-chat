@@ -363,6 +363,7 @@ test =
                 , Strikethrough (Nonempty (NormalText ' ' "test") [])
                 ]
             )
+        , fromNonemptyStringTest "_*~~asdf" (Nonempty (NormalText '_' "*~~asdf") [])
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"
