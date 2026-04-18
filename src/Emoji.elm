@@ -10,11 +10,13 @@ module Emoji exposing
     , Model
     , Msg(..)
     , SkinTone(..)
+    , emojiButtonId
     , emojiWithSkinTone
     , fromDiscord
     , heart
     , isPressed
     , requestEmojiData
+    , scrollContainerId
     , searchInputId
     , selector
     , selectorHeight
@@ -291,6 +293,7 @@ type Msg
     | PressedSelectEmoji EmojiOrSticker
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji EmojiOrSticker
+    | KeyboardMovedHover EmojiOrSticker Int
     | ClearEmojiHover
     | TypedSearchText String
     | PressedClearSearch
@@ -312,6 +315,9 @@ isPressed msg =
             True
 
         MouseEnteredEmoji _ ->
+            False
+
+        KeyboardMovedHover _ _ ->
             False
 
         ClearEmojiHover ->
@@ -392,6 +398,16 @@ smiley =
 searchInputId : Dom.HtmlId
 searchInputId =
     Dom.id "emoji_search_input"
+
+
+scrollContainerId : Dom.HtmlId
+scrollContainerId =
+    Dom.id "emoji_scroll_container"
+
+
+emojiButtonId : Int -> Dom.HtmlId
+emojiButtonId index =
+    Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
 
 
 searchInput : Bool -> Model -> Array EmojiOrSticker -> Int -> Element Msg
@@ -490,7 +506,7 @@ arrowKeyDecoder model items columns =
                             in
                             case Array.get newIndex items of
                                 Just item ->
-                                    Json.Decode.succeed ( MouseEnteredEmoji item, True )
+                                    Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
 
                                 Nothing ->
                                     Json.Decode.fail ""
@@ -685,7 +701,7 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                                             Sticker.view "2lh" stickerId stickersData Sticker.LoopForever |> Ui.html
                             in
                             MyUi.elButton
-                                (Dom.id ("guild_emojiSelector_" ++ String.fromInt index))
+                                (emojiButtonId index)
                                 (PressedSelectEmoji item)
                                 [ Ui.Events.onMouseEnter (MouseEnteredEmoji item)
                                 , Ui.attrIf
@@ -698,7 +714,12 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                         )
                         (Array.toList emojis)
                     )
-                    |> Ui.el [ Ui.background MyUi.background3, Ui.scrollable, Ui.heightMin 0 ]
+                    |> Ui.el
+                        [ Ui.background MyUi.background3
+                        , Ui.scrollable
+                        , Ui.heightMin 0
+                        , Ui.id (Dom.idToString scrollContainerId)
+                        ]
                 , Ui.row
                     [ Ui.height (Ui.px emojiHeight)
                     , Ui.contentCenterY

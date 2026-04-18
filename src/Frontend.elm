@@ -1219,6 +1219,19 @@ updateLoaded msg model =
                         )
                         model
 
+                Emoji.KeyboardMovedHover emoji index ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Just emoji } }
+                            , scrollEmojiIntoView index
+                            )
+                        )
+                        model
+
                 Emoji.ClearEmojiHover ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
@@ -3545,6 +3558,36 @@ messageHasReaction emoji guildOrDmId threadRoute local =
 
                 Nothing ->
                     False
+
+
+scrollEmojiIntoView : Int -> Command FrontendOnly ToBackend FrontendMsg
+scrollEmojiIntoView index =
+    Task.map3
+        (\button container viewport -> ( button, container, viewport ))
+        (Dom.getElement (Emoji.emojiButtonId index))
+        (Dom.getElement Emoji.scrollContainerId)
+        (Dom.getViewportOf Emoji.scrollContainerId)
+        |> Task.andThen
+            (\( button, container, { viewport } ) ->
+                let
+                    buttonTop : Float
+                    buttonTop =
+                        button.element.y - container.element.y + viewport.y
+
+                    buttonBottom : Float
+                    buttonBottom =
+                        buttonTop + button.element.height
+                in
+                if buttonTop < viewport.y then
+                    Dom.setViewportOf Emoji.scrollContainerId viewport.x buttonTop
+
+                else if buttonBottom > viewport.y + viewport.height then
+                    Dom.setViewportOf Emoji.scrollContainerId viewport.x (buttonBottom - viewport.height)
+
+                else
+                    Task.succeed ()
+            )
+        |> Task.attempt (\_ -> FrontendNoOp)
 
 
 toggleReactionEmoji :
