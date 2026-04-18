@@ -440,7 +440,7 @@ searchInput searchHasFocus model items columns =
             , Ui.width Ui.fill
             , Ui.id (Dom.idToString searchInputId)
             , Ui.htmlAttribute
-                (Html.Events.preventDefaultOn "keydown" (arrowKeyDecoder model items columns))
+                (Html.Events.preventDefaultOn "keydown" (decodeArrowKey model items columns))
             ]
             { onChange = TypedSearchText
             , text = model.searchText
@@ -469,8 +469,8 @@ setSearch text model =
     { model | searchText = text, emojiHovered = Nothing }
 
 
-arrowKeyDecoder : Model -> Array EmojiOrSticker -> Int -> Json.Decode.Decoder ( Msg, Bool )
-arrowKeyDecoder model items columns =
+decodeArrowKey : Model -> Array EmojiOrSticker -> Int -> Json.Decode.Decoder ( Msg, Bool )
+decodeArrowKey model items columns =
     Json.Decode.field "key" Json.Decode.string
         |> Json.Decode.andThen
             (\key ->
