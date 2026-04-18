@@ -687,8 +687,9 @@ fromNonemptyString users string =
         source =
             String.Nonempty.toString string
 
+        result : { nodes : List (RichText userId), nextIndex : Int }
         result =
-            parseLoop source 0 users [] "" []
+            parseLoop source 0 users [] "" [] |> Debug.log "123"
     in
     case List.Nonempty.fromList result.nodes of
         Just nonempty ->
@@ -1013,17 +1014,26 @@ parseLoop :
     -> { nodes : List (RichText userId), nextIndex : Int }
 parseLoop source index users modifiers accText revNodes =
     if index >= String.length source then
+        let
+            _ =
+                Debug.log "asdf" ( modifiers, accText, revNodes )
+        in
         finalizeResult accText revNodes modifiers index
 
     else
         case String.slice index (index + 1) source of
             "\n" ->
-                case parseStickerId (index + 1) source of
-                    ( index2, Just stickerId ) ->
-                        parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                if List.isEmpty modifiers then
+                    case parseStickerId (index + 1) source of
+                        ( index2, Just stickerId ) ->
+                            parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
 
-                    ( _, Nothing ) ->
-                        parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
+                        ( _, Nothing ) ->
+                            parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
+
+                else
+                    -- Line breaks should terminate any open modifiers
+                    finalizeResult accText revNodes modifiers index
 
             "\\" ->
                 let
@@ -3071,6 +3081,14 @@ discordParseLoop source index modifiers accText revNodes =
 
     else
         case String.slice index (index + 1) source of
+            "\n" ->
+                if List.isEmpty modifiers then
+                    discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
+
+                else
+                    -- Line breaks should terminate any open modifiers
+                    discordFinalizeResult accText revNodes modifiers index
+
             "\\" ->
                 let
                     afterBackslash =
@@ -3539,7 +3557,7 @@ skipDiscordNormalChars source index len =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "[" then
+        if c == "<" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "[" || c == "\n" then
             index
 
         else

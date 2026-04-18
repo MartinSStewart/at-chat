@@ -251,7 +251,11 @@ test =
             "*a*_b_"
             (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ Italic (Nonempty (NormalText 'b' "") []) ])
         , fromNonemptyStringTest "a\nb\nc" (Nonempty (NormalText 'a' "\nb\nc") [])
-        , fromNonemptyStringTest "*a\nb*" (Nonempty (Bold (Nonempty (NormalText 'a' "\nb") [])) [])
+        , fromNonemptyStringTest "*a\nb*" (Nonempty (NormalText '*' "a\nb*") [])
+        , fromNonemptyStringTest "_a\na_" (Nonempty (NormalText '_' "a\na_") [])
+        , fromNonemptyStringTest "~~a\na~~" (Nonempty (NormalText '~' "~a\na~~") [])
+        , fromNonemptyStringTest "_~~a\na~~_" (Nonempty (NormalText '_' "~~a\na~~_") [])
+        , fromNonemptyStringTest "_~~a\na~~_a_" (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])
         , fromNonemptyStringTest "`*bold* _italic_`" (Nonempty (InlineCode '*' "bold* _italic_") [])
         , fromNonemptyStringTest "[!1][!2]" (Nonempty (AttachedFile (Id.fromInt 1)) [ AttachedFile (Id.fromInt 2) ])
         , fromNonemptyStringTest
@@ -363,7 +367,6 @@ test =
                 , Strikethrough (Nonempty (NormalText ' ' "test") [])
                 ]
             )
-        , fromNonemptyStringTest "_*~~asdf" (Nonempty (NormalText '_' "*~~asdf") [])
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"
