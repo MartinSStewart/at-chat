@@ -297,6 +297,7 @@ type Msg
     | ClearEmojiHover
     | TypedSearchText String
     | PressedClearSearch
+    | NoOp
 
 
 isPressed : Msg -> Bool
@@ -328,6 +329,9 @@ isPressed msg =
 
         PressedClearSearch ->
             True
+
+        NoOp ->
+            False
 
 
 categoryButtonId : Category -> Dom.HtmlId
@@ -518,7 +522,7 @@ arrowKeyDecoder model items columns =
                                 moveTo -1
 
                             Nothing ->
-                                Json.Decode.fail ""
+                                Json.Decode.succeed ( NoOp, False )
 
                     "ArrowRight" ->
                         case currentIndex of
@@ -526,7 +530,7 @@ arrowKeyDecoder model items columns =
                                 moveTo 1
 
                             Nothing ->
-                                Json.Decode.fail ""
+                                Json.Decode.succeed ( NoOp, False )
 
                     "ArrowUp" ->
                         case currentIndex of
@@ -538,7 +542,7 @@ arrowKeyDecoder model items columns =
                                     moveTo -columns
 
                             Nothing ->
-                                Json.Decode.fail ""
+                                Json.Decode.succeed ( NoOp, False )
 
                     "ArrowDown" ->
                         moveTo columns
@@ -554,10 +558,10 @@ arrowKeyDecoder model items columns =
                                         Json.Decode.succeed ( PressedSelectEmoji first, True )
 
                                     Nothing ->
-                                        Json.Decode.fail ""
+                                        Json.Decode.succeed ( NoOp, False )
 
                     _ ->
-                        Json.Decode.fail ""
+                        Json.Decode.succeed ( NoOp, False )
             )
 
 

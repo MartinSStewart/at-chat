@@ -1259,6 +1259,9 @@ updateLoaded msg model =
                         )
                         model
 
+                Emoji.NoOp ->
+                    ( model, Command.none )
+
         MessageMenu_PressedReply threadRoute ->
             case Route.toGuildOrDmId model.route of
                 Just ( guildOrDmId, _ ) ->

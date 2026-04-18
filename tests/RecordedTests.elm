@@ -3879,6 +3879,84 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                 ]
             )
         ]
+    , startTest
+        "Emoji selector arrow key navigation"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin _ ->
+                let
+                    checkHover :
+                        (Maybe Emoji.EmojiOrSticker -> Result String ())
+                        -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                    checkHover predicate =
+                        admin.checkModel
+                            100
+                            (\model ->
+                                case model of
+                                    Types.Loaded loaded ->
+                                        case loaded.loginStatus of
+                                            Types.LoggedIn loggedIn ->
+                                                predicate loggedIn.emojiSelector.emojiHovered
+
+                                            _ ->
+                                                Err "Admin isn't logged in"
+
+                                    Types.Loading _ ->
+                                        Err "Admin frontend didn't finish loading"
+                            )
+
+                    expectHovered : Maybe Emoji.EmojiOrSticker -> Maybe Emoji.EmojiOrSticker -> Result String ()
+                    expectHovered expected actual =
+                        if actual == expected then
+                            Ok ()
+
+                        else
+                            Err ("Expected emojiHovered to be " ++ Debug.toString expected ++ " but was " ++ Debug.toString actual)
+
+                    expectSomeHovered : Maybe Emoji.EmojiOrSticker -> Result String ()
+                    expectSomeHovered actual =
+                        case actual of
+                            Just _ ->
+                                Ok ()
+
+                            Nothing ->
+                                Err "Expected some emoji to be hovered but none was"
+                in
+                [ admin.click 100 (Dom.id "messageMenu_channelInput_openEmojiSelector")
+                , checkHover (expectHovered Nothing)
+
+                -- Left/right do nothing while no emoji is highlighted.
+                , admin.keyDown 100 Emoji.searchInputId "ArrowRight" []
+                , checkHover (expectHovered Nothing)
+                , admin.keyDown 100 Emoji.searchInputId "ArrowLeft" []
+                , checkHover (expectHovered Nothing)
+
+                -- ArrowDown enters keyboard navigation and highlights the first emoji.
+                , admin.keyDown 100 Emoji.searchInputId "ArrowDown" []
+                , checkHover expectSomeHovered
+
+                -- ArrowRight keeps navigation going while something is highlighted.
+                , admin.keyDown 100 Emoji.searchInputId "ArrowRight" []
+                , checkHover expectSomeHovered
+
+                -- ArrowUp from the top row clears the highlight so the cursor
+                -- is free again and no emoji is highlighted.
+                , admin.keyDown 100 Emoji.searchInputId "ArrowUp" []
+                , checkHover (expectHovered Nothing)
+
+                -- ArrowDown then Enter selects and closes the selector.
+                , admin.keyDown 100 Emoji.searchInputId "ArrowDown" []
+                , checkHover expectSomeHovered
+                , admin.keyDown 100 Emoji.searchInputId "Enter" []
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.id (Dom.idToString Emoji.searchInputId) ]
+                    )
+                ]
+            )
+        ]
 
     --, startTest
     --    "Discord guild thread typing indicator"
