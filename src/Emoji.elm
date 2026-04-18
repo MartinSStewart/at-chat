@@ -10,11 +10,13 @@ module Emoji exposing
     , Model
     , Msg(..)
     , SkinTone(..)
+    , emojiButtonId
     , emojiWithSkinTone
     , fromDiscord
     , heart
     , isPressed
     , requestEmojiData
+    , scrollContainerId
     , searchInputId
     , selector
     , selectorHeight
@@ -34,8 +36,10 @@ import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.Http as Http
 import Hex
+import Html.Events
 import Icons
 import Id exposing (Id, StickerId)
+import Json.Decode
 import MyUi
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -289,8 +293,11 @@ type Msg
     | PressedSelectEmoji EmojiOrSticker
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji EmojiOrSticker
+    | KeyboardMovedHover EmojiOrSticker Int
+    | ClearEmojiHover
     | TypedSearchText String
     | PressedClearSearch
+    | NoOp
 
 
 isPressed : Msg -> Bool
@@ -311,11 +318,20 @@ isPressed msg =
         MouseEnteredEmoji _ ->
             False
 
+        KeyboardMovedHover _ _ ->
+            False
+
+        ClearEmojiHover ->
+            False
+
         TypedSearchText _ ->
             False
 
         PressedClearSearch ->
             True
+
+        NoOp ->
+            False
 
 
 categoryButtonId : Category -> Dom.HtmlId
@@ -388,8 +404,18 @@ searchInputId =
     Dom.id "emoji_search_input"
 
 
-searchInput : Bool -> Model -> Element Msg
-searchInput searchHasFocus model =
+scrollContainerId : Dom.HtmlId
+scrollContainerId =
+    Dom.id "emoji_scroll_container"
+
+
+emojiButtonId : Int -> Dom.HtmlId
+emojiButtonId index =
+    Dom.id ("guild_emojiSelector_" ++ String.fromInt index)
+
+
+searchInput : Bool -> Model -> Array EmojiOrSticker -> Int -> Element Msg
+searchInput searchHasFocus model items columns =
     let
         isSearching =
             model.searchText /= ""
@@ -413,6 +439,8 @@ searchInput searchHasFocus model =
             , Ui.paddingXY 8 0
             , Ui.width Ui.fill
             , Ui.id (Dom.idToString searchInputId)
+            , Ui.htmlAttribute
+                (Html.Events.preventDefaultOn "keydown" (arrowKeyDecoder model items columns))
             ]
             { onChange = TypedSearchText
             , text = model.searchText
@@ -441,6 +469,122 @@ setSearch text model =
     { model | searchText = text, emojiHovered = Nothing }
 
 
+arrowKeyDecoder : Model -> Array EmojiOrSticker -> Int -> Json.Decode.Decoder ( Msg, Bool )
+arrowKeyDecoder model items columns =
+    Json.Decode.field "key" Json.Decode.string
+        |> Json.Decode.andThen
+            (\key ->
+                let
+                    count : Int
+                    count =
+                        Array.length items
+
+                    currentIndex : Maybe Int
+                    currentIndex =
+                        case model.emojiHovered of
+                            Just hovered ->
+                                findIndex hovered items
+
+                            Nothing ->
+                                Nothing
+
+                    moveTo : Int -> Json.Decode.Decoder ( Msg, Bool )
+                    moveTo delta =
+                        if count == 0 then
+                            Json.Decode.fail ""
+
+                        else
+                            let
+                                newIndex : Int
+                                newIndex =
+                                    case currentIndex of
+                                        Just idx ->
+                                            clamp 0 (count - 1) (idx + delta)
+
+                                        Nothing ->
+                                            if delta < 0 then
+                                                count - 1
+
+                                            else
+                                                0
+                            in
+                            case Array.get newIndex items of
+                                Just item ->
+                                    Json.Decode.succeed ( KeyboardMovedHover item newIndex, True )
+
+                                Nothing ->
+                                    Json.Decode.fail ""
+                in
+                case key of
+                    "ArrowLeft" ->
+                        case currentIndex of
+                            Just _ ->
+                                moveTo -1
+
+                            Nothing ->
+                                Json.Decode.succeed ( NoOp, False )
+
+                    "ArrowRight" ->
+                        case currentIndex of
+                            Just _ ->
+                                moveTo 1
+
+                            Nothing ->
+                                Json.Decode.succeed ( NoOp, False )
+
+                    "ArrowUp" ->
+                        case currentIndex of
+                            Just idx ->
+                                if idx < columns then
+                                    Json.Decode.succeed ( ClearEmojiHover, True )
+
+                                else
+                                    moveTo -columns
+
+                            Nothing ->
+                                Json.Decode.succeed ( NoOp, False )
+
+                    "ArrowDown" ->
+                        moveTo columns
+
+                    "Enter" ->
+                        case model.emojiHovered of
+                            Just hovered ->
+                                Json.Decode.succeed ( PressedSelectEmoji hovered, True )
+
+                            Nothing ->
+                                case Array.get 0 items of
+                                    Just first ->
+                                        Json.Decode.succeed ( PressedSelectEmoji first, True )
+
+                                    Nothing ->
+                                        Json.Decode.succeed ( NoOp, False )
+
+                    _ ->
+                        Json.Decode.succeed ( NoOp, False )
+            )
+
+
+findIndex : a -> Array a -> Maybe Int
+findIndex target array =
+    Array.foldl
+        (\item ( index, result ) ->
+            case result of
+                Just _ ->
+                    ( index + 1, result )
+
+                Nothing ->
+                    if item == target then
+                        ( index + 1, Just index )
+
+                    else
+                        ( index + 1, Nothing )
+        )
+        ( 0, Nothing )
+        array
+        |> Tuple.second
+
+
 type EmojiOrSticker
     = EmojiOrSticker_Emoji Emoji
     | EmojiOrSticker_Sticker (Id StickerId)
@@ -464,7 +608,15 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                 isSearching =
                     model.searchText /= ""
 
-                emojis : List EmojiOrSticker
+                selectorWidth : Int
+                selectorWidth =
+                    min 620 width
+
+                columns : Int
+                columns =
+                    max 1 (selectorWidth // emojiWidth)
+
+                emojis : Array EmojiOrSticker
                 emojis =
                     if isSearching then
                         let
@@ -484,6 +636,7 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                             emojiData2.shortNames
                             |> SeqSet.toList
                             |> List.map EmojiOrSticker_Emoji
+                            |> Array.fromList
 
                     else
                         case userData.category of
@@ -491,12 +644,15 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                                 SeqDict.get emojiCategory emojiData2.categories
                                     |> Maybe.withDefault []
                                     |> List.map EmojiOrSticker_Emoji
+                                    |> Array.fromList
 
                             StickerCategory ->
-                                SeqSet.toList availableStickers |> List.map EmojiOrSticker_Sticker
+                                SeqSet.toList availableStickers
+                                    |> List.map EmojiOrSticker_Sticker
+                                    |> Array.fromList
             in
             Ui.column
-                [ Ui.width (Ui.px (min 620 width))
+                [ Ui.width (Ui.px selectorWidth)
                 , Ui.height (Ui.px selectorHeight)
                 , Ui.background MyUi.background2
                 , Ui.border 1
@@ -509,7 +665,7 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                 ]
                 [ Ui.row
                     [ MyUi.noShrinking ]
-                    (searchInput searchHasFocus model
+                    (searchInput searchHasFocus model emojis columns
                         :: (if isSearching then
                                 -- This is here just so the header height doesn't change
                                 [ Ui.el [ Ui.opacity 0 ] (Ui.text "🔎") ]
@@ -549,19 +705,25 @@ selector searchHasFocus isMobile width model userData emojiData availableSticker
                                             Sticker.view "2lh" stickerId stickersData Sticker.LoopForever |> Ui.html
                             in
                             MyUi.elButton
-                                (Dom.id ("guild_emojiSelector_" ++ String.fromInt index))
+                                (emojiButtonId index)
                                 (PressedSelectEmoji item)
                                 [ Ui.Events.onMouseEnter (MouseEnteredEmoji item)
                                 , Ui.attrIf
                                     (model.emojiHovered == Just item)
                                     (Ui.background MyUi.hoverHighlight)
-                                , Ui.width Ui.shrink
+                                , Ui.width (Ui.px emojiWidth)
+                                , Ui.contentCenterX
                                 ]
                                 text
                         )
-                        emojis
+                        (Array.toList emojis)
                     )
-                    |> Ui.el [ Ui.background MyUi.background3, Ui.scrollable, Ui.heightMin 0 ]
+                    |> Ui.el
+                        [ Ui.background MyUi.background3
+                        , Ui.scrollable
+                        , Ui.heightMin 0
+                        , Ui.id (Dom.idToString scrollContainerId)
+                        ]
                 , Ui.row
                     [ Ui.height (Ui.px emojiHeight)
                     , Ui.contentCenterY
