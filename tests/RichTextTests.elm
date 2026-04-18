@@ -367,6 +367,25 @@ test =
                 , Strikethrough (Nonempty (NormalText ' ' "test") [])
                 ]
             )
+        , fromNonemptyStringTest "\n> asdf"
+            (Nonempty (BlockQuote (Nonempty (NormalText 'a' "sdf") [])) [])
+        , fromNonemptyStringTest "\n> asdf\n>asdf"
+            (Nonempty (BlockQuote (Nonempty (NormalText 'a' "sdf\nasdf") [])) [])
+        , fromNonemptyStringTest "\n> asdf\n> more"
+            (Nonempty (BlockQuote (Nonempty (NormalText 'a' "sdf\nmore") [])) [])
+        , fromNonemptyStringTest "> hello"
+            (Nonempty (BlockQuote (Nonempty (NormalText 'h' "ello") [])) [])
+        , fromNonemptyStringTest "foo\n> bar"
+            (Nonempty (NormalText 'f' "oo") [ BlockQuote (Nonempty (NormalText 'b' "ar") []) ])
+        , fromNonemptyStringTest "\n> *bold*"
+            (Nonempty (BlockQuote (Nonempty (Bold (Nonempty (NormalText 'b' "old") [])) [])) [])
+        , fromNonemptyStringTest "\n> quote\nafter"
+            (Nonempty
+                (BlockQuote (Nonempty (NormalText 'q' "uote") []))
+                [ NormalText '\n' "after" ]
+            )
+        , fromNonemptyStringTest "\n>no space"
+            (Nonempty (NormalText '\n' ">no space") [])
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"

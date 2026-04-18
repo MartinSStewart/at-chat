@@ -68,6 +68,7 @@ type RichText userId
     | Underline (Nonempty (RichText userId))
     | Strikethrough (Nonempty (RichText userId))
     | Spoiler (Nonempty (RichText userId))
+    | BlockQuote (Nonempty (RichText userId))
     | Hyperlink Url
     | MarkdownLink NonemptyString Url
     | InlineCode Char String
@@ -166,6 +167,9 @@ spoilerAttachedFile fileId nonempty =
                 Spoiler nonempty2 ->
                     spoilerAttachedFile fileId nonempty2 |> Spoiler
 
+                BlockQuote nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> BlockQuote
+
                 Hyperlink _ ->
                     richText
 
@@ -248,6 +252,9 @@ unspoilerAttachedFile fileId nonempty =
                             -- This shouldn't be reachable since spoilers can't be nested
                             Nonempty ( False, richText ) []
 
+                        BlockQuote nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond BlockQuote) []
+
                         Hyperlink _ ->
                             Nonempty ( False, richText ) []
 
@@ -307,6 +314,9 @@ unspoilerAttachedFile fileId nonempty =
                     else
                         Nonempty richText []
 
+                BlockQuote nonempty2 ->
+                    Nonempty (BlockQuote (unspoilerAttachedFile fileId nonempty2)) []
+
                 Hyperlink _ ->
                     Nonempty richText []
 
@@ -356,6 +366,9 @@ removeAttachedFile shouldRemove list =
 
                 Spoiler nonempty ->
                     removeAttachedFile shouldRemove nonempty |> Maybe.map Spoiler
+
+                BlockQuote nonempty ->
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map BlockQuote
 
                 Hyperlink _ ->
                     Just richText
@@ -418,6 +431,9 @@ hyperlinks nonempty =
                 Spoiler nonempty2 ->
                     hyperlinks nonempty2
 
+                BlockQuote nonempty2 ->
+                    hyperlinks nonempty2
+
                 InlineCode _ _ ->
                     []
 
@@ -473,6 +489,9 @@ attachmentsHelper isSpoilered nonempty =
                 Spoiler nonempty2 ->
                     attachmentsHelper True nonempty2
 
+                BlockQuote nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
                 InlineCode _ _ ->
                     []
 
@@ -521,6 +540,9 @@ stickers nonempty =
                     stickers nonempty2
 
                 Spoiler nonempty2 ->
+                    stickers nonempty2
+
+                BlockQuote nonempty2 ->
                     stickers nonempty2
 
                 InlineCode _ _ ->
@@ -572,6 +594,9 @@ toStringWithGetter userToString users nonempty =
                 Spoiler a ->
                     "||" ++ toStringWithGetter userToString users a ++ "||"
 
+                BlockQuote a ->
+                    blockQuoteToString (toStringWithGetter userToString users a)
+
                 Hyperlink data ->
                     Url.toString data
 
@@ -607,6 +632,15 @@ toStringWithGetter userToString users nonempty =
         |> String.concat
 
 
+blockQuoteToString : String -> String
+blockQuoteToString inner =
+    "\n"
+        ++ (String.split "\n" inner
+                |> List.map (\line -> "> " ++ line)
+                |> String.join "\n"
+           )
+
+
 toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
 toString emojisForStickersAndAttachments users nonempty =
     List.Nonempty.map
@@ -637,6 +671,9 @@ toString emojisForStickersAndAttachments users nonempty =
 
                 Spoiler a ->
                     "||" ++ toString emojisForStickersAndAttachments users a ++ "||"
+
+                BlockQuote a ->
+                    blockQuoteToString (toString emojisForStickersAndAttachments users a)
 
                 Hyperlink data ->
                     Url.toString data
@@ -687,9 +724,16 @@ fromNonemptyString users string =
         source =
             String.Nonempty.toString string
 
-        result : { nodes : List (RichText userId), nextIndex : Int }
+        ( startIndex, startRevNodes ) =
+            case extractBlockQuote source 0 of
+                Just ( content, endIndex ) ->
+                    ( endIndex, [ BlockQuote (parseBlockQuoteContent users content) ] )
+
+                Nothing ->
+                    ( 0, [] )
+
         result =
-            parseLoop source 0 users [] "" [] |> Debug.log "123"
+            parseLoop source startIndex users [] "" startRevNodes
     in
     case List.Nonempty.fromList result.nodes of
         Just nonempty ->
@@ -697,6 +741,91 @@ fromNonemptyString users string =
 
         Nothing ->
             Nonempty (normalTextFromNonempty string) []
+
+
+parseBlockQuoteContent : SeqDict userId { a | name : PersonName } -> String -> Nonempty (RichText userId)
+parseBlockQuoteContent users content =
+    let
+        result =
+            parseLoop content 0 users [] "" []
+    in
+    case List.Nonempty.fromList result.nodes of
+        Just nonempty ->
+            normalize nonempty
+
+        Nothing ->
+            Nonempty (NormalText ' ' "") []
+
+
+extractBlockQuote : String -> Int -> Maybe ( String, Int )
+extractBlockQuote source index =
+    let
+        sourceLength =
+            String.length source
+    in
+    if
+        (index + 1 < sourceLength)
+            && (stringAt index source == Just ">")
+            && (stringAt (index + 1) source == Just " ")
+    then
+        let
+            ( endIndex, content ) =
+                collectBlockQuoteLines source (index + 2) sourceLength
+        in
+        Just ( content, endIndex )
+
+    else
+        Nothing
+
+
+collectBlockQuoteLines : String -> Int -> Int -> ( Int, String )
+collectBlockQuoteLines source index sourceLength =
+    let
+        lineEnd =
+            findLineEnd source index sourceLength
+
+        line =
+            String.slice index lineEnd source
+    in
+    if
+        lineEnd
+            + 1
+            < sourceLength
+            && stringAt lineEnd source
+            == Just "\n"
+            && stringAt (lineEnd + 1) source
+            == Just ">"
+    then
+        let
+            afterGt =
+                lineEnd + 2
+
+            afterMarker =
+                if stringAt afterGt source == Just " " then
+                    afterGt + 1
+
+                else
+                    afterGt
+
+            ( nextEnd, nextContent ) =
+                collectBlockQuoteLines source afterMarker sourceLength
+        in
+        ( nextEnd, line ++ "\n" ++ nextContent )
+
+    else
+        ( lineEnd, line )
+
+
+findLineEnd : String -> Int -> Int -> Int
+findLineEnd source index sourceLength =
+    if index >= sourceLength then
+        index
+
+    else if stringAt index source == Just "\n" then
+        index
+
+    else
+        findLineEnd source (index + 1) sourceLength
 
 
 normalize : Nonempty (RichText userId) -> Nonempty (RichText userId)
@@ -731,6 +860,9 @@ normalize nonempty =
 
                 Spoiler a ->
                     List.Nonempty.cons (Spoiler (normalize a)) nonempty2
+
+                BlockQuote a ->
+                    List.Nonempty.cons (BlockQuote (normalize a)) nonempty2
 
                 Hyperlink data ->
                     List.Nonempty.cons (Hyperlink data) nonempty2
@@ -775,6 +907,9 @@ normalize nonempty =
 
                 Spoiler a ->
                     Spoiler (normalize a)
+
+                BlockQuote a ->
+                    BlockQuote (normalize a)
 
                 Hyperlink data ->
                     Hyperlink data
@@ -1030,12 +1165,23 @@ parseLoop source index users modifiers accText revNodes =
         case String.slice index (index + 1) source of
             "\n" ->
                 if List.isEmpty modifiers then
-                    case parseStickerId (index + 1) source of
-                        ( index2, Just stickerId ) ->
-                            parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                    case extractBlockQuote source (index + 1) of
+                        Just ( content, endIndex ) ->
+                            parseLoop
+                                source
+                                endIndex
+                                users
+                                modifiers
+                                ""
+                                (BlockQuote (parseBlockQuoteContent users content) :: flushText accText revNodes)
 
-                        ( _, Nothing ) ->
-                            parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
+                        Nothing ->
+                            case parseStickerId (index + 1) source of
+                                ( index2, Just stickerId ) ->
+                                    parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                                ( _, Nothing ) ->
+                                    parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -1640,6 +1786,9 @@ mentionsUserHelper set nonempty =
                 Spoiler nonempty2 ->
                     mentionsUserHelper set2 nonempty2
 
+                BlockQuote nonempty2 ->
+                    mentionsUserHelper set2 nonempty2
+
                 Hyperlink _ ->
                     set2
 
@@ -1899,6 +2048,33 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                                    )
                                        )
                                 )
+                                list
+                           ]
+                    )
+
+                BlockQuote nonempty2 ->
+                    let
+                        ( spoilerIndex3, embedIndex3, list ) =
+                            viewHelper
+                                showLargeContent
+                                maybePressedSpoiler
+                                onPressLink
+                                spoilerIndex2
+                                state
+                                config
+                                embeds
+                                embedIndex2
+                                nonempty2
+                    in
+                    ( spoilerIndex3
+                    , embedIndex3
+                    , currentList
+                        ++ [ Html.div
+                                [ Html.Attributes.style "border-left" "4px solid rgb(80,120,200)"
+                                , Html.Attributes.style "padding" "2px 8px"
+                                , Html.Attributes.style "margin" "2px 0"
+                                , Html.Attributes.style "white-space" "pre-wrap"
+                                ]
                                 list
                            ]
                     )
@@ -2670,6 +2846,21 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                     in
                     ( index3 + 2, Array.push (formatText "||") output3 )
 
+                BlockQuote nonempty2 ->
+                    let
+                        ( index3, output3 ) =
+                            textInputViewHelper
+                                state
+                                allUsers
+                                attachedFiles
+                                stickers2
+                                (index2 + 3)
+                                selection
+                                nonempty2
+                                (Array.push (formatText "\n> ") output2)
+                    in
+                    ( index3, output3 )
+
                 Hyperlink data ->
                     let
                         text =
@@ -3009,8 +3200,19 @@ fromDiscord text attachments2 embeds stickers2 =
         Just nonempty ->
             NonemptyExtra.appendList
                 (let
+                    source =
+                        String.Nonempty.toString nonempty
+
+                    ( startIndex, startRevNodes ) =
+                        case extractBlockQuote source 0 of
+                            Just ( content, endIndex ) ->
+                                ( endIndex, [ BlockQuote (parseDiscordBlockQuoteContent content) ] )
+
+                            Nothing ->
+                                ( 0, [] )
+
                     result =
-                        discordParseLoop (String.Nonempty.toString nonempty) 0 [] "" []
+                        discordParseLoop source startIndex [] "" startRevNodes
                  in
                  case List.Nonempty.fromList result.nodes of
                     Just nonempty2 ->
@@ -3089,12 +3291,44 @@ discordParseLoop source index modifiers accText revNodes =
         case String.slice index (index + 1) source of
             "\n" ->
                 if List.isEmpty modifiers then
-                    discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
+                    case extractBlockQuote source (index + 1) of
+                        Just ( content, endIndex ) ->
+                            discordParseLoop
+                                source
+                                endIndex
+                                modifiers
+                                ""
+                                (BlockQuote (parseDiscordBlockQuoteContent content) :: flushText accText revNodes)
+
+                        Nothing ->
+                            case parseStickerId (index + 1) source of
+                                ( index2, Just stickerId ) ->
+                                    discordParseLoop source index2 modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                                ( _, Nothing ) ->
+                                    discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
                     finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
+            --case
+            --    if List.isEmpty modifiers then
+            --        extractBlockQuote source (index + 1)
+            --
+            --    else
+            --        Nothing
+            --of
+            --    Just ( content, endIndex ) ->
+            --        discordParseLoop
+            --            source
+            --            endIndex
+            --            modifiers
+            --            ""
+            --            (BlockQuote (parseDiscordBlockQuoteContent content) :: flushText accText revNodes)
+            --
+            --    Nothing ->
+            --        discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
             "\\" ->
                 let
                     afterBackslash =
@@ -3447,6 +3681,9 @@ toDiscord content =
                 Spoiler nonempty ->
                     Discord.Markdown.spoiler (toDiscord nonempty)
 
+                BlockQuote nonempty ->
+                    Discord.Markdown.Quote (toDiscord nonempty)
+
                 Hyperlink data ->
                     Discord.Markdown.text (Url.toString data)
 
@@ -3486,6 +3723,49 @@ discordParseInner :
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
 discordParseInner source index modifiers =
     discordParseLoop source index modifiers "" []
+
+
+parseDiscordBlockQuoteContent : String -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordBlockQuoteContent content =
+    let
+        result =
+            discordParseLoop content 0 [] "" []
+    in
+    case List.Nonempty.fromList result.nodes of
+        Just nonempty ->
+            normalize nonempty
+
+        Nothing ->
+            Nonempty (NormalText ' ' "") []
+
+
+discordFinalizeResult :
+    String
+    -> List (RichText (Discord.Id Discord.UserId))
+    -> List DiscordModifiers
+    -> Int
+    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
+discordFinalizeResult accText revNodes modifiers index =
+    let
+        flushed =
+            flushText accText revNodes
+
+        finalNodes =
+            List.reverse flushed
+    in
+    { nodes =
+        case modifiers of
+            head :: _ ->
+                let
+                    (NonemptyString char rest) =
+                        discordModifierToSymbol head
+                in
+                NormalText char rest :: finalNodes
+
+            [] ->
+                finalNodes
+    , nextIndex = index
+    }
 
 
 tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )
