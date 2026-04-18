@@ -3142,8 +3142,41 @@ fromDiscord :
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
     -> List (Id StickerId)
+    -> Discord.OptionalData (List Discord.MessageSnapshot)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
-fromDiscord text attachments2 embeds stickers2 =
+fromDiscord text attachments2 embeds stickers2 messageSnapshots =
+    let
+        messageSnapshots3 : List (RichText (Discord.Id Discord.UserId))
+        messageSnapshots3 =
+            case messageSnapshots of
+                Discord.Included messageSnapshots2 ->
+                    List.map
+                        (\snapshot ->
+                            fromDiscordHelper
+                                snapshot.content
+                                snapshot.attachments
+                                (Discord.Included snapshot.embeds)
+                                snapshot.stickerItems
+                                |> List.Nonempty.toList
+                                |> BlockQuote NoLeadingLineBreak
+                        )
+                        messageSnapshots2
+
+                Discord.Missing ->
+                    []
+    in
+    NonemptyExtra.appendList
+        (fromDiscordHelper text attachments2 embeds stickers2)
+        messageSnapshots3
+
+
+fromDiscordHelper :
+    String
+    -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
+    -> Discord.OptionalData (List Discord.Embed)
+    -> List (Id StickerId)
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+fromDiscordHelper text attachments2 embeds stickers2 =
     let
         ( urlEmbeds, richTextEmbeds ) =
             List.foldl
