@@ -775,26 +775,19 @@ collectBlockQuoteLines : String -> Int -> ( Int, String )
 collectBlockQuoteLines source index =
     let
         lineEnd =
-            findLineEnd source index (String.length source)
+            findLineEnd source index
 
         line =
             String.slice index lineEnd source
     in
-    case stringAtRange lineEnd 2 source of
-        Just "\n>" ->
+    case stringAtRange lineEnd 3 source of
+        Just "\n> " ->
             let
                 afterGt =
-                    lineEnd + 2
-
-                afterMarker =
-                    if stringAt afterGt source == Just " " then
-                        afterGt + 1
-
-                    else
-                        afterGt
+                    lineEnd + 3
 
                 ( nextEnd, nextContent ) =
-                    collectBlockQuoteLines source afterMarker
+                    collectBlockQuoteLines source afterGt
             in
             ( nextEnd, line ++ "\n" ++ nextContent )
 
@@ -802,16 +795,16 @@ collectBlockQuoteLines source index =
             ( lineEnd, line )
 
 
-findLineEnd : String -> Int -> Int -> Int
-findLineEnd source index sourceLength =
-    if index >= sourceLength then
+findLineEnd : String -> Int -> Int
+findLineEnd source index =
+    if index >= String.length source then
         index
 
     else if stringAt index source == Just "\n" then
         index
 
     else
-        findLineEnd source (index + 1) sourceLength
+        findLineEnd source (index + 1)
 
 
 normalize : Nonempty (RichText userId) -> Nonempty (RichText userId)
@@ -2058,11 +2051,23 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
 
                 BlockQuote _ list ->
                     let
+                        sidePadding =
+                            8
+
+                        borderLeft =
+                            4
+
                         ( spoilerIndex3, embedIndex3, list2 ) =
                             case List.Nonempty.fromList list of
                                 Just nonempty2 ->
                                     viewHelper
-                                        showLargeContent
+                                        (case showLargeContent of
+                                            ShowLargeContent a ->
+                                                ShowLargeContent (a - sidePadding - borderLeft)
+
+                                            NoLargeContent ->
+                                                NoLargeContent
+                                        )
                                         maybePressedSpoiler
                                         onPressLink
                                         spoilerIndex2
@@ -2079,10 +2084,8 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     , embedIndex3
                     , currentList
                         ++ [ Html.div
-                                [ Html.Attributes.style "border-left" "4px solid rgb(80,120,200)"
-                                , Html.Attributes.style "padding" "2px 8px"
-                                , Html.Attributes.style "margin" "2px 0"
-                                , Html.Attributes.style "white-space" "pre-wrap"
+                                [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid rgb(80,120,200)")
+                                , Html.Attributes.style "padding" ("2px " ++ String.fromInt sidePadding ++ "px")
                                 ]
                                 list2
                            ]
@@ -2712,6 +2715,7 @@ textInputView users attachedFiles stickers2 selection nonempty =
         0
         selection
         (List.Nonempty.toList nonempty)
+        False
         Array.empty
         |> Tuple.second
         |> Array.toList
@@ -2738,9 +2742,10 @@ textInputViewHelper :
     -> Int
     -> Maybe Range
     -> List (RichText userId)
+    -> Bool
     -> Array (Html msg)
     -> ( Int, Array (Html msg) )
-textInputViewHelper state allUsers attachedFiles stickers2 index selection list output =
+textInputViewHelper state allUsers attachedFiles stickers2 index selection list inBlockQuote output =
     List.foldl
         (\item ( index2, output2 ) ->
             case item of
@@ -2767,17 +2772,30 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                             ( index2 + 1, output2 )
 
                 NormalText char text ->
-                    ( index2 + String.length text + 1
-                    , Array.push
-                        (Html.span
-                            [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                            , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                            , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                            , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-                            ]
-                            [ Html.text (String.cons char text) ]
-                        )
+                    let
+                        text2 =
+                            String.cons char text
+
+                        helper text4 =
+                            Html.span
+                                [ htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+                                , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                                ]
+                                [ Html.text text4 ]
+                    in
+                    ( index2 + String.length text2
+                    , Array.append
                         output2
+                        (if inBlockQuote then
+                            List.map helper (String.split "\n" text2)
+                                |> List.intersperse (formatText "\n> ")
+                                |> Array.fromList
+
+                         else
+                            Array.fromList [ Html.text text2 ]
+                        )
                     )
 
                 Italic nonempty2 ->
@@ -2791,6 +2809,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 (index2 + 1)
                                 selection
                                 (List.Nonempty.toList nonempty2)
+                                inBlockQuote
                                 (Array.push (formatText "_") output2)
                     in
                     ( index3 + 1, Array.push (formatText "_") output3 )
@@ -2806,6 +2825,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 (index2 + 2)
                                 selection
                                 (List.Nonempty.toList nonempty2)
+                                inBlockQuote
                                 (Array.push (formatText "__") output2)
                     in
                     ( index3 + 2, Array.push (formatText "__") output3 )
@@ -2821,6 +2841,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 (index2 + 1)
                                 selection
                                 (List.Nonempty.toList nonempty2)
+                                inBlockQuote
                                 (Array.push (formatText "*") output2)
                     in
                     ( index3 + 1, Array.push (formatText "*") output3 )
@@ -2836,6 +2857,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 (index2 + 2)
                                 selection
                                 (List.Nonempty.toList nonempty2)
+                                inBlockQuote
                                 (Array.push (formatText "~~") output2)
                     in
                     ( index3 + 2, Array.push (formatText "~~") output3 )
@@ -2851,6 +2873,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 (index2 + 2)
                                 selection
                                 (List.Nonempty.toList nonempty2)
+                                inBlockQuote
                                 (Array.push (formatText "||") output2)
                     in
                     ( index3 + 2, Array.push (formatText "||") output3 )
@@ -2866,6 +2889,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 (index2 + 3)
                                 selection
                                 nonempty2
+                                True
                                 (Array.push
                                     (formatText
                                         (case hasLeadingLineBreak of
@@ -3028,7 +3052,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
 
 formatText : String -> Html msg
 formatText text =
-    Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
+    Html.span [ Html.Attributes.style "color" "rgb(140,140,140)" ] [ Html.text text ]
 
 
 

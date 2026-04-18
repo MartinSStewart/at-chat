@@ -111,15 +111,23 @@ basicFormattingTests =
         , fromNonemptyStringTest "_a\na_" (Nonempty (NormalText '_' "a\na_") [])
         , fromNonemptyStringTest "~~a\na~~" (Nonempty (NormalText '~' "~a\na~~") [])
         , fromNonemptyStringTest "_~~a\na~~_" (Nonempty (NormalText '_' "~~a\na~~_") [])
-        , fromNonemptyStringTest "_~~a\na~~_a_" (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])
-        , fromNonemptyStringTest "\n> asdf"
-            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [])
-        , fromNonemptyStringTest "\n> asdf\n>asdf"
-            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf\nasdf" ]) [])
-        , fromNonemptyStringTest "> quoted"
-            (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText 'q' "uoted" ]) [])
-        , fromNonemptyStringTest "foo\n> bar"
+        , fromNonemptyStringTest
+            "_~~a\na~~_a_"
+            (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])
+        , fromNonemptyStringTest "\n> asdf" (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [])
+        , fromNonemptyStringTest
+            "\n> asdf\n>asdf"
+            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [ NormalText '\n' ">asdf" ])
+        , fromNonemptyStringTest "> quoted" (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText 'q' "uoted" ]) [])
+        , fromNonemptyStringTest
+            "foo\n> bar"
             (Nonempty (NormalText 'f' "oo") [ BlockQuote HasLeadingLineBreak [ NormalText 'b' "ar" ] ])
+        , fromNonemptyStringTest
+            "> test\n> asdf\n> \n> 123\n\n> 23"
+            (Nonempty
+                (BlockQuote NoLeadingLineBreak [ NormalText 't' "est\nasdf\n\n123" ])
+                [ NormalText '\n' "", BlockQuote HasLeadingLineBreak [ NormalText '2' "3" ] ]
+            )
         ]
 
 

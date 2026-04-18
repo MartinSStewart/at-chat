@@ -163,10 +163,19 @@ toStringHelper : Markdown a -> String
 toStringHelper markdown =
     case markdown of
         CodeBlock language text_ ->
-            "```" ++ Maybe.withDefault "" language ++ "\n" ++ text_ ++ "```"
+            "```"
+                ++ (case language of
+                        Just language2 ->
+                            language2 ++ "\n"
+
+                        Nothing ->
+                            ""
+                   )
+                ++ text_
+                ++ "```"
 
         Quote content ->
-            "\n> " ++ (List.map toStringHelper content |> String.concat) ++ "\n"
+            "\n> " ++ (List.map toStringHelper content |> String.concat |> String.replace "\n" "\n> ")
 
         Code text2 ->
             "`" ++ String.replace "`" "``" text2 ++ "`"

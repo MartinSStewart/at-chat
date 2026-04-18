@@ -64,6 +64,7 @@ stringFuzzer =
         , "[link](https://abc.com)"
         , ">"
         , "> "
+        , "\n>"
         , "\n> "
         ]
 
@@ -373,7 +374,7 @@ test =
         , fromNonemptyStringTest "\n> asdf"
             (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [])
         , fromNonemptyStringTest "\n> asdf\n>asdf"
-            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf\nasdf" ]) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [ NormalText '\n' ">asdf" ])
         , fromNonemptyStringTest "\n> asdf\n> more"
             (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf\nmore" ]) [])
         , fromNonemptyStringTest "> hello"
@@ -393,6 +394,25 @@ test =
         , fromNonemptyStringTest "> \n> " (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText '\n' "" ]) [])
         , toStringTest (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText '\n' "" ]) []) "> \n> "
         , fromNonemptyStringTest "> \n>" (Nonempty (BlockQuote NoLeadingLineBreak []) [ NormalText '\n' ">" ])
+        , fromNonemptyStringTest
+            "> test\n> asdf\n> \n> 123\n\n> 23"
+            (Nonempty
+                (BlockQuote NoLeadingLineBreak [ NormalText 't' "est\nasdf\n\n123" ])
+                [ NormalText '\n' "", BlockQuote HasLeadingLineBreak [ NormalText '2' "3" ] ]
+            )
+
+        --, fromNonemptyStringTest "> asdf\n> f"
+        , Test.test
+            "Round trip2"
+            (\_ ->
+                let
+                    text =
+                        NonemptyString '>' " asdf\n> f"
+                in
+                RichText.fromNonemptyString users text
+                    |> RichText.toString False users
+                    |> Expect.equal (String.Nonempty.toString text)
+            )
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"
