@@ -458,8 +458,8 @@ richTextToMessage previousText previousList nonempty =
                     richTextToMessage (currentText ++ "||") list nonempty2
                         |> Tuple.mapFirst (\b -> b ++ "||")
 
-                RichText.BlockQuote _ list2 ->
-                    case List.Nonempty.fromList list2 of
+                RichText.BlockQuote _ b ->
+                    case List.Nonempty.fromList b of
                         Just nonempty2 ->
                             richTextToMessage (currentText ++ "\n> ") list nonempty2
 
