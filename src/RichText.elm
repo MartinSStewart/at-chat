@@ -466,7 +466,7 @@ hyperlinks nonempty =
                 Spoiler nonempty2 ->
                     hyperlinks nonempty2
 
-                BlockQuote a list ->
+                BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map hyperlinks |> Maybe.withDefault []
 
                 InlineCode _ _ ->
@@ -524,7 +524,7 @@ attachmentsHelper isSpoilered nonempty =
                 Spoiler nonempty2 ->
                     attachmentsHelper True nonempty2
 
-                BlockQuote a list ->
+                BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map (attachmentsHelper isSpoilered) |> Maybe.withDefault []
 
                 InlineCode _ _ ->
@@ -577,7 +577,7 @@ stickers nonempty =
                 Spoiler nonempty2 ->
                     stickers nonempty2
 
-                BlockQuote a list ->
+                BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map stickers |> Maybe.withDefault []
 
                 InlineCode _ _ ->
@@ -2879,31 +2879,27 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                     ( index3 + 2, Array.push (formatText "||") output3 )
 
                 BlockQuote hasLeadingLineBreak nonempty2 ->
-                    let
-                        ( index3, output3 ) =
-                            textInputViewHelper
-                                state
-                                allUsers
-                                attachedFiles
-                                stickers2
-                                (index2 + 3)
-                                selection
-                                nonempty2
-                                True
-                                (Array.push
-                                    (formatText
-                                        (case hasLeadingLineBreak of
-                                            HasLeadingLineBreak ->
-                                                "\n> "
+                    textInputViewHelper
+                        state
+                        allUsers
+                        attachedFiles
+                        stickers2
+                        (index2 + 3)
+                        selection
+                        nonempty2
+                        True
+                        (Array.push
+                            (formatText
+                                (case hasLeadingLineBreak of
+                                    HasLeadingLineBreak ->
+                                        "\n> "
 
-                                            NoLeadingLineBreak ->
-                                                "> "
-                                        )
-                                    )
-                                    output2
+                                    NoLeadingLineBreak ->
+                                        "> "
                                 )
-                    in
-                    ( index3, output3 )
+                            )
+                            output2
+                        )
 
                 Hyperlink data ->
                     let
