@@ -860,8 +860,14 @@ flushText text revNodes =
             revNodes
 
 
-finalizeResult : String -> List (RichText userId) -> List Modifiers -> Int -> { nodes : List (RichText userId), nextIndex : Int }
-finalizeResult accText revNodes modifiers index =
+finalizeResult :
+    (modifier -> NonemptyString)
+    -> String
+    -> List (RichText userId)
+    -> List modifier
+    -> Int
+    -> { nodes : List (RichText userId), nextIndex : Int }
+finalizeResult modifierToString accText revNodes modifiers index =
     let
         flushed =
             flushText accText revNodes
@@ -874,7 +880,7 @@ finalizeResult accText revNodes modifiers index =
             head :: _ ->
                 let
                     (NonemptyString char rest) =
-                        modifierToSymbol head
+                        modifierToString head
                 in
                 NormalText char rest :: finalNodes
 
@@ -1018,7 +1024,7 @@ parseLoop source index users modifiers accText revNodes =
             _ =
                 Debug.log "asdf" ( modifiers, accText, revNodes )
         in
-        finalizeResult accText revNodes modifiers index
+        finalizeResult modifierToSymbol accText revNodes modifiers index
 
     else
         case String.slice index (index + 1) source of
@@ -1033,7 +1039,7 @@ parseLoop source index users modifiers accText revNodes =
 
                 else
                     -- Line breaks should terminate any open modifiers
-                    finalizeResult accText revNodes modifiers index
+                    finalizeResult modifierToSymbol accText revNodes modifiers index
 
             "\\" ->
                 let
@@ -1076,7 +1082,7 @@ parseLoop source index users modifiers accText revNodes =
                     closeModifier afterSymbol accText revNodes Bold (modifierToSymbol IsBold)
 
                 else if List.member IsBold modifiers then
-                    finalizeResult accText revNodes modifiers index
+                    finalizeResult modifierToSymbol accText revNodes modifiers index
 
                 else
                     let
@@ -1112,7 +1118,7 @@ parseLoop source index users modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Underline (modifierToSymbol IsUnderlined)
 
                     else if List.member IsUnderlined modifiers then
-                        finalizeResult accText revNodes modifiers index
+                        finalizeResult modifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -1136,7 +1142,7 @@ parseLoop source index users modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Italic (modifierToSymbol IsItalic)
 
                     else if List.member IsItalic modifiers then
-                        finalizeResult accText revNodes modifiers index
+                        finalizeResult modifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -1164,7 +1170,7 @@ parseLoop source index users modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Strikethrough (modifierToSymbol IsStrikethrough)
 
                     else if List.member IsStrikethrough modifiers then
-                        finalizeResult accText revNodes modifiers index
+                        finalizeResult modifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -1195,7 +1201,7 @@ parseLoop source index users modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Spoiler (modifierToSymbol IsSpoilered)
 
                     else if List.member IsSpoilered modifiers then
-                        finalizeResult accText revNodes modifiers index
+                        finalizeResult modifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3077,7 +3083,7 @@ discordParseLoop :
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
 discordParseLoop source index modifiers accText revNodes =
     if index >= String.length source then
-        discordFinalizeResult accText revNodes modifiers index
+        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
     else
         case String.slice index (index + 1) source of
@@ -3087,7 +3093,7 @@ discordParseLoop source index modifiers accText revNodes =
 
                 else
                     -- Line breaks should terminate any open modifiers
-                    discordFinalizeResult accText revNodes modifiers index
+                    finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
             "\\" ->
                 let
@@ -3152,7 +3158,7 @@ discordParseLoop source index modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Bold (discordModifierToSymbol DiscordIsBold)
 
                     else if List.member DiscordIsBold modifiers then
-                        discordFinalizeResult accText revNodes modifiers index
+                        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3176,7 +3182,7 @@ discordParseLoop source index modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Italic (discordModifierToSymbol DiscordIsItalic)
 
                     else if List.member DiscordIsItalic modifiers then
-                        discordFinalizeResult accText revNodes modifiers index
+                        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3209,7 +3215,7 @@ discordParseLoop source index modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Underline (discordModifierToSymbol DiscordIsUnderlined)
 
                     else if List.member DiscordIsUnderlined modifiers then
-                        discordFinalizeResult accText revNodes modifiers index
+                        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3233,7 +3239,7 @@ discordParseLoop source index modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Italic (discordModifierToSymbol DiscordIsItalic2)
 
                     else if List.member DiscordIsItalic2 modifiers then
-                        discordFinalizeResult accText revNodes modifiers index
+                        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3261,7 +3267,7 @@ discordParseLoop source index modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Strikethrough (discordModifierToSymbol DiscordIsStrikethrough)
 
                     else if List.member DiscordIsStrikethrough modifiers then
-                        discordFinalizeResult accText revNodes modifiers index
+                        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3292,7 +3298,7 @@ discordParseLoop source index modifiers accText revNodes =
                         closeModifier afterSymbol accText revNodes Spoiler (discordModifierToSymbol DiscordIsSpoilered)
 
                     else if List.member DiscordIsSpoilered modifiers then
-                        discordFinalizeResult accText revNodes modifiers index
+                        finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
                     else
                         let
@@ -3480,35 +3486,6 @@ discordParseInner :
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
 discordParseInner source index modifiers =
     discordParseLoop source index modifiers "" []
-
-
-discordFinalizeResult :
-    String
-    -> List (RichText (Discord.Id Discord.UserId))
-    -> List DiscordModifiers
-    -> Int
-    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordFinalizeResult accText revNodes modifiers index =
-    let
-        flushed =
-            flushText accText revNodes
-
-        finalNodes =
-            List.reverse flushed
-    in
-    { nodes =
-        case modifiers of
-            head :: _ ->
-                let
-                    (NonemptyString char rest) =
-                        discordModifierToSymbol head
-                in
-                NormalText char rest :: finalNodes
-
-            [] ->
-                finalNodes
-    , nextIndex = index
-    }
 
 
 tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )
