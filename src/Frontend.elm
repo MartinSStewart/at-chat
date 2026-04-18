@@ -1219,6 +1219,19 @@ updateLoaded msg model =
                         )
                         model
 
+                Emoji.ClearEmojiHover ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
+                            ( { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Nothing } }
+                            , Command.none
+                            )
+                        )
+                        model
+
                 Emoji.TypedSearchText text ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->

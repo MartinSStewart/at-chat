@@ -291,6 +291,7 @@ type Msg
     | PressedSelectEmoji EmojiOrSticker
     | PressedSkinTone (Maybe SkinTone)
     | MouseEnteredEmoji EmojiOrSticker
+    | ClearEmojiHover
     | TypedSearchText String
     | PressedClearSearch
 
@@ -311,6 +312,9 @@ isPressed msg =
             True
 
         MouseEnteredEmoji _ ->
+            False
+
+        ClearEmojiHover ->
             False
 
         TypedSearchText _ ->
@@ -493,13 +497,32 @@ arrowKeyDecoder model items columns =
                 in
                 case key of
                     "ArrowLeft" ->
-                        moveTo -1
+                        case currentIndex of
+                            Just _ ->
+                                moveTo -1
+
+                            Nothing ->
+                                Json.Decode.fail ""
 
                     "ArrowRight" ->
-                        moveTo 1
+                        case currentIndex of
+                            Just _ ->
+                                moveTo 1
+
+                            Nothing ->
+                                Json.Decode.fail ""
 
                     "ArrowUp" ->
-                        moveTo -columns
+                        case currentIndex of
+                            Just idx ->
+                                if idx < columns then
+                                    Json.Decode.succeed ( ClearEmojiHover, True )
+
+                                else
+                                    moveTo -columns
+
+                            Nothing ->
+                                Json.Decode.fail ""
 
                     "ArrowDown" ->
                         moveTo columns
