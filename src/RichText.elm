@@ -1,6 +1,7 @@
 module RichText exposing
     ( Domain(..)
     , EscapedChar(..)
+    , HasLeadingLineBreak(..)
     , Language(..)
     , Modifiers(..)
     , RichText(..)
@@ -68,7 +69,7 @@ type RichText userId
     | Underline (Nonempty (RichText userId))
     | Strikethrough (Nonempty (RichText userId))
     | Spoiler (Nonempty (RichText userId))
-    | BlockQuote (Nonempty (RichText userId))
+    | BlockQuote HasLeadingLineBreak (Nonempty (RichText userId))
     | Hyperlink Url
     | MarkdownLink NonemptyString Url
     | InlineCode Char String
@@ -76,6 +77,11 @@ type RichText userId
     | AttachedFile (Id FileId)
     | EscapedChar EscapedChar
     | Sticker (Id StickerId)
+
+
+type HasLeadingLineBreak
+    = HasLeadingLineBreak
+    | NoLeadingLineBreak
 
 
 type EscapedChar
@@ -167,8 +173,8 @@ spoilerAttachedFile fileId nonempty =
                 Spoiler nonempty2 ->
                     spoilerAttachedFile fileId nonempty2 |> Spoiler
 
-                BlockQuote nonempty2 ->
-                    spoilerAttachedFile fileId nonempty2 |> BlockQuote
+                BlockQuote a nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> BlockQuote a
 
                 Hyperlink _ ->
                     richText
@@ -252,8 +258,8 @@ unspoilerAttachedFile fileId nonempty =
                             -- This shouldn't be reachable since spoilers can't be nested
                             Nonempty ( False, richText ) []
 
-                        BlockQuote nonempty3 ->
-                            Nonempty (helper nonempty3 |> Tuple.mapSecond BlockQuote) []
+                        BlockQuote hasLeadingLineBreak nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond (BlockQuote hasLeadingLineBreak)) []
 
                         Hyperlink _ ->
                             Nonempty ( False, richText ) []
@@ -314,8 +320,8 @@ unspoilerAttachedFile fileId nonempty =
                     else
                         Nonempty richText []
 
-                BlockQuote nonempty2 ->
-                    Nonempty (BlockQuote (unspoilerAttachedFile fileId nonempty2)) []
+                BlockQuote a nonempty2 ->
+                    Nonempty (BlockQuote a (unspoilerAttachedFile fileId nonempty2)) []
 
                 Hyperlink _ ->
                     Nonempty richText []
@@ -367,8 +373,8 @@ removeAttachedFile shouldRemove list =
                 Spoiler nonempty ->
                     removeAttachedFile shouldRemove nonempty |> Maybe.map Spoiler
 
-                BlockQuote nonempty ->
-                    removeAttachedFile shouldRemove nonempty |> Maybe.map BlockQuote
+                BlockQuote a nonempty ->
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map (BlockQuote a)
 
                 Hyperlink _ ->
                     Just richText
@@ -431,7 +437,7 @@ hyperlinks nonempty =
                 Spoiler nonempty2 ->
                     hyperlinks nonempty2
 
-                BlockQuote nonempty2 ->
+                BlockQuote a nonempty2 ->
                     hyperlinks nonempty2
 
                 InlineCode _ _ ->
@@ -489,7 +495,7 @@ attachmentsHelper isSpoilered nonempty =
                 Spoiler nonempty2 ->
                     attachmentsHelper True nonempty2
 
-                BlockQuote nonempty2 ->
+                BlockQuote a nonempty2 ->
                     attachmentsHelper isSpoilered nonempty2
 
                 InlineCode _ _ ->
@@ -542,7 +548,7 @@ stickers nonempty =
                 Spoiler nonempty2 ->
                     stickers nonempty2
 
-                BlockQuote nonempty2 ->
+                BlockQuote a nonempty2 ->
                     stickers nonempty2
 
                 InlineCode _ _ ->
@@ -563,8 +569,40 @@ stickers nonempty =
         (List.Nonempty.toList nonempty)
 
 
-toStringWithGetter : (a -> String) -> SeqDict userId a -> Nonempty (RichText userId) -> String
-toStringWithGetter userToString users nonempty =
+toStringWithGetter : (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
+toStringWithGetter userToString emojisForStickersAndAttachments users nonempty =
+    toStringHelper userToString emojisForStickersAndAttachments users nonempty
+
+
+blockQuoteToString : HasLeadingLineBreak -> String -> String
+blockQuoteToString hasLeadingLineBreak inner =
+    (case hasLeadingLineBreak of
+        NoLeadingLineBreak ->
+            ""
+
+        HasLeadingLineBreak ->
+            "\n"
+    )
+        ++ (String.split "\n" inner
+                |> List.map
+                    (\line ->
+                        if String.isEmpty line then
+                            "> "
+
+                        else
+                            "> " ++ line
+                    )
+                |> String.join "\n"
+           )
+
+
+toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
+toString emojisForStickersAndAttachments users nonempty =
+    toStringHelper (\user -> PersonName.toString user.name) emojisForStickersAndAttachments users nonempty
+
+
+toStringHelper : (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
+toStringHelper userToString emojisForStickersAndAttachments users nonempty =
     List.Nonempty.map
         (\richText ->
             case richText of
@@ -580,100 +618,24 @@ toStringWithGetter userToString users nonempty =
                             "@<missing>"
 
                 Bold a ->
-                    "*" ++ toStringWithGetter userToString users a ++ "*"
+                    "*" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "*"
 
                 Italic a ->
-                    "_" ++ toStringWithGetter userToString users a ++ "_"
+                    "_" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "_"
 
                 Underline a ->
-                    "__" ++ toStringWithGetter userToString users a ++ "__"
+                    "__" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "__"
 
                 Strikethrough a ->
-                    "~~" ++ toStringWithGetter userToString users a ++ "~~"
+                    "~~" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "~~"
 
                 Spoiler a ->
-                    "||" ++ toStringWithGetter userToString users a ++ "||"
+                    "||" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "||"
 
-                BlockQuote a ->
-                    blockQuoteToString (toStringWithGetter userToString users a)
-
-                Hyperlink data ->
-                    Url.toString data
-
-                MarkdownLink alias url ->
-                    "[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")"
-
-                InlineCode char rest ->
-                    "`" ++ String.cons char rest ++ "`"
-
-                CodeBlock language string ->
-                    "```"
-                        ++ (case language of
-                                Language unknown ->
-                                    String.Nonempty.toString unknown ++ "\n"
-
-                                NoLanguage ->
-                                    ""
-                           )
-                        ++ string
-                        ++ "```"
-
-                AttachedFile fileId ->
-                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
-
-                EscapedChar char ->
-                    "\\" ++ escapedCharToString char
-
-                Sticker id ->
-                    Sticker.idToString id
-        )
-        nonempty
-        |> List.Nonempty.toList
-        |> String.concat
-
-
-blockQuoteToString : String -> String
-blockQuoteToString inner =
-    "\n"
-        ++ (String.split "\n" inner
-                |> List.map (\line -> "> " ++ line)
-                |> String.join "\n"
-           )
-
-
-toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
-toString emojisForStickersAndAttachments users nonempty =
-    List.Nonempty.map
-        (\richText ->
-            case richText of
-                NormalText char rest ->
-                    String.cons char rest
-
-                UserMention userId ->
-                    case SeqDict.get userId users of
-                        Just user ->
-                            "@" ++ PersonName.toString user.name
-
-                        Nothing ->
-                            "@<missing>"
-
-                Bold a ->
-                    "*" ++ toString emojisForStickersAndAttachments users a ++ "*"
-
-                Italic a ->
-                    "_" ++ toString emojisForStickersAndAttachments users a ++ "_"
-
-                Underline a ->
-                    "__" ++ toString emojisForStickersAndAttachments users a ++ "__"
-
-                Strikethrough a ->
-                    "~~" ++ toString emojisForStickersAndAttachments users a ++ "~~"
-
-                Spoiler a ->
-                    "||" ++ toString emojisForStickersAndAttachments users a ++ "||"
-
-                BlockQuote a ->
-                    blockQuoteToString (toString emojisForStickersAndAttachments users a)
+                BlockQuote hasLeadingLineBreak a ->
+                    blockQuoteToString
+                        hasLeadingLineBreak
+                        (toStringHelper userToString emojisForStickersAndAttachments users a)
 
                 Hyperlink data ->
                     Url.toString data
@@ -727,7 +689,7 @@ fromNonemptyString users string =
         ( startIndex, startRevNodes ) =
             case extractBlockQuote source 0 of
                 Just ( content, endIndex ) ->
-                    ( endIndex, [ BlockQuote (parseBlockQuoteContent users content) ] )
+                    ( endIndex, [ BlockQuote NoLeadingLineBreak (parseBlockQuoteContent users content) ] )
 
                 Nothing ->
                     ( 0, [] )
@@ -743,77 +705,64 @@ fromNonemptyString users string =
             Nonempty (normalTextFromNonempty string) []
 
 
-parseBlockQuoteContent : SeqDict userId { a | name : PersonName } -> String -> Nonempty (RichText userId)
+parseBlockQuoteContent : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
 parseBlockQuoteContent users content =
-    let
-        result =
-            parseLoop content 0 users [] "" []
-    in
-    case List.Nonempty.fromList result.nodes of
+    case parseLoop (String.Nonempty.toString content) 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty
 
         Nothing ->
-            Nonempty (NormalText ' ' "") []
+            Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
 
 
-extractBlockQuote : String -> Int -> Maybe ( String, Int )
+extractBlockQuote : String -> Int -> Maybe ( NonemptyString, Int )
 extractBlockQuote source index =
-    let
-        sourceLength =
-            String.length source
-    in
-    if
-        (index + 1 < sourceLength)
-            && (stringAt index source == Just ">")
-            && (stringAt (index + 1) source == Just " ")
-    then
-        let
-            ( endIndex, content ) =
-                collectBlockQuoteLines source (index + 2) sourceLength
-        in
-        Just ( content, endIndex )
+    case stringAtRange index 2 source of
+        Just "> " ->
+            let
+                ( endIndex, content ) =
+                    collectBlockQuoteLines source (index + 2)
+            in
+            case String.Nonempty.fromString content of
+                Just nonempty ->
+                    Just ( nonempty, endIndex )
 
-    else
-        Nothing
+                Nothing ->
+                    Nothing
+
+        _ ->
+            Nothing
 
 
-collectBlockQuoteLines : String -> Int -> Int -> ( Int, String )
-collectBlockQuoteLines source index sourceLength =
+collectBlockQuoteLines : String -> Int -> ( Int, String )
+collectBlockQuoteLines source index =
     let
         lineEnd =
-            findLineEnd source index sourceLength
+            findLineEnd source index (String.length source)
 
         line =
             String.slice index lineEnd source
     in
-    if
-        lineEnd
-            + 1
-            < sourceLength
-            && stringAt lineEnd source
-            == Just "\n"
-            && stringAt (lineEnd + 1) source
-            == Just ">"
-    then
-        let
-            afterGt =
-                lineEnd + 2
+    case stringAtRange lineEnd 2 source of
+        Just "\n>" ->
+            let
+                afterGt =
+                    lineEnd + 2
 
-            afterMarker =
-                if stringAt afterGt source == Just " " then
-                    afterGt + 1
+                afterMarker =
+                    if stringAt afterGt source == Just " " then
+                        afterGt + 1
 
-                else
-                    afterGt
+                    else
+                        afterGt
 
-            ( nextEnd, nextContent ) =
-                collectBlockQuoteLines source afterMarker sourceLength
-        in
-        ( nextEnd, line ++ "\n" ++ nextContent )
+                ( nextEnd, nextContent ) =
+                    collectBlockQuoteLines source afterMarker
+            in
+            ( nextEnd, line ++ "\n" ++ nextContent )
 
-    else
-        ( lineEnd, line )
+        _ ->
+            ( lineEnd, line )
 
 
 findLineEnd : String -> Int -> Int -> Int
@@ -861,8 +810,8 @@ normalize nonempty =
                 Spoiler a ->
                     List.Nonempty.cons (Spoiler (normalize a)) nonempty2
 
-                BlockQuote a ->
-                    List.Nonempty.cons (BlockQuote (normalize a)) nonempty2
+                BlockQuote hasLeadingLineBreak a ->
+                    List.Nonempty.cons (BlockQuote hasLeadingLineBreak (normalize a)) nonempty2
 
                 Hyperlink data ->
                     List.Nonempty.cons (Hyperlink data) nonempty2
@@ -908,8 +857,8 @@ normalize nonempty =
                 Spoiler a ->
                     Spoiler (normalize a)
 
-                BlockQuote a ->
-                    BlockQuote (normalize a)
+                BlockQuote hasLeadingLineBreak a ->
+                    BlockQuote hasLeadingLineBreak (normalize a)
 
                 Hyperlink data ->
                     Hyperlink data
@@ -1155,10 +1104,6 @@ parseLoop :
     -> { nodes : List (RichText userId), nextIndex : Int }
 parseLoop source index users modifiers accText revNodes =
     if index >= String.length source then
-        let
-            _ =
-                Debug.log "asdf" ( modifiers, accText, revNodes )
-        in
         finalizeResult modifierToSymbol accText revNodes modifiers index
 
     else
@@ -1173,7 +1118,11 @@ parseLoop source index users modifiers accText revNodes =
                                 users
                                 modifiers
                                 ""
-                                (BlockQuote (parseBlockQuoteContent users content) :: flushText accText revNodes)
+                                (BlockQuote
+                                    HasLeadingLineBreak
+                                    (parseBlockQuoteContent users content)
+                                    :: flushText accText revNodes
+                                )
 
                         Nothing ->
                             case parseStickerId (index + 1) source of
@@ -1644,7 +1593,7 @@ parseMarkdownLink source index =
         len =
             String.length source
     in
-    case findChar source index len ']' |> Debug.log "a" of
+    case findChar source index len ']' of
         Just closeBracket ->
             let
                 alias =
@@ -1786,7 +1735,7 @@ mentionsUserHelper set nonempty =
                 Spoiler nonempty2 ->
                     mentionsUserHelper set2 nonempty2
 
-                BlockQuote nonempty2 ->
+                BlockQuote _ nonempty2 ->
                     mentionsUserHelper set2 nonempty2
 
                 Hyperlink _ ->
@@ -2052,7 +2001,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                            ]
                     )
 
-                BlockQuote nonempty2 ->
+                BlockQuote _ nonempty2 ->
                     let
                         ( spoilerIndex3, embedIndex3, list ) =
                             viewHelper
@@ -2846,7 +2795,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                     in
                     ( index3 + 2, Array.push (formatText "||") output3 )
 
-                BlockQuote nonempty2 ->
+                BlockQuote hasLeadingLineBreak nonempty2 ->
                     let
                         ( index3, output3 ) =
                             textInputViewHelper
@@ -2857,7 +2806,18 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                                 (index2 + 3)
                                 selection
                                 nonempty2
-                                (Array.push (formatText "\n> ") output2)
+                                (Array.push
+                                    (formatText
+                                        (case hasLeadingLineBreak of
+                                            HasLeadingLineBreak ->
+                                                "\n> "
+
+                                            NoLeadingLineBreak ->
+                                                "> "
+                                        )
+                                    )
+                                    output2
+                                )
                     in
                     ( index3, output3 )
 
@@ -3195,8 +3155,15 @@ fromDiscord text attachments2 embeds stickers2 =
                         AttachedFile fileId
                 )
                 (SeqDict.toList attachments2)
+
+        text2 =
+            if String.isEmpty text then
+                String.join "\n" richTextEmbeds |> String.trim
+
+            else
+                text ++ "\n" ++ String.join "\n" richTextEmbeds |> String.trimRight
     in
-    case String.Nonempty.fromString (text ++ "\n" ++ String.join "\n" richTextEmbeds |> String.trim) of
+    case String.Nonempty.fromString text2 of
         Just nonempty ->
             NonemptyExtra.appendList
                 (let
@@ -3206,7 +3173,7 @@ fromDiscord text attachments2 embeds stickers2 =
                     ( startIndex, startRevNodes ) =
                         case extractBlockQuote source 0 of
                             Just ( content, endIndex ) ->
-                                ( endIndex, [ BlockQuote (parseDiscordBlockQuoteContent content) ] )
+                                ( endIndex, [ BlockQuote NoLeadingLineBreak (parseDiscordBlockQuoteContent content) ] )
 
                             Nothing ->
                                 ( 0, [] )
@@ -3298,7 +3265,7 @@ discordParseLoop source index modifiers accText revNodes =
                                 endIndex
                                 modifiers
                                 ""
-                                (BlockQuote (parseDiscordBlockQuoteContent content) :: flushText accText revNodes)
+                                (BlockQuote HasLeadingLineBreak (parseDiscordBlockQuoteContent content) :: flushText accText revNodes)
 
                         Nothing ->
                             case parseStickerId (index + 1) source of
@@ -3638,7 +3605,7 @@ discordParseLoop source index modifiers accText revNodes =
                             revNodes
 
             "[" ->
-                case parseMarkdownLink source (index + 1) |> Debug.log "b" of
+                case parseMarkdownLink source (index + 1) of
                     Just ( alias, url, nextIndex ) ->
                         discordParseLoop source nextIndex modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
@@ -3681,7 +3648,7 @@ toDiscord content =
                 Spoiler nonempty ->
                     Discord.Markdown.spoiler (toDiscord nonempty)
 
-                BlockQuote nonempty ->
+                BlockQuote _ nonempty ->
                     Discord.Markdown.Quote (toDiscord nonempty)
 
                 Hyperlink data ->
@@ -3725,47 +3692,14 @@ discordParseInner source index modifiers =
     discordParseLoop source index modifiers "" []
 
 
-parseDiscordBlockQuoteContent : String -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordBlockQuoteContent : NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
 parseDiscordBlockQuoteContent content =
-    let
-        result =
-            discordParseLoop content 0 [] "" []
-    in
-    case List.Nonempty.fromList result.nodes of
+    case discordParseLoop (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty
 
         Nothing ->
-            Nonempty (NormalText ' ' "") []
-
-
-discordFinalizeResult :
-    String
-    -> List (RichText (Discord.Id Discord.UserId))
-    -> List DiscordModifiers
-    -> Int
-    -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordFinalizeResult accText revNodes modifiers index =
-    let
-        flushed =
-            flushText accText revNodes
-
-        finalNodes =
-            List.reverse flushed
-    in
-    { nodes =
-        case modifiers of
-            head :: _ ->
-                let
-                    (NonemptyString char rest) =
-                        discordModifierToSymbol head
-                in
-                NormalText char rest :: finalNodes
-
-            [] ->
-                finalNodes
-    , nextIndex = index
-    }
+            Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
 
 
 tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )

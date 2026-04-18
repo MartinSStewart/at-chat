@@ -5,7 +5,7 @@ import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
-import RichText exposing (EscapedChar(..), Language(..), RichText(..))
+import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), Language(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -62,6 +62,9 @@ stringFuzzer =
         , ")"
         , "[link](https://abc.com/)"
         , "[link](https://abc.com)"
+        , ">"
+        , "> "
+        , "\n> "
         ]
 
 
@@ -368,24 +371,28 @@ test =
                 ]
             )
         , fromNonemptyStringTest "\n> asdf"
-            (Nonempty (BlockQuote (Nonempty (NormalText 'a' "sdf") [])) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'a' "sdf") [])) [])
         , fromNonemptyStringTest "\n> asdf\n>asdf"
-            (Nonempty (BlockQuote (Nonempty (NormalText 'a' "sdf\nasdf") [])) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'a' "sdf\nasdf") [])) [])
         , fromNonemptyStringTest "\n> asdf\n> more"
-            (Nonempty (BlockQuote (Nonempty (NormalText 'a' "sdf\nmore") [])) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'a' "sdf\nmore") [])) [])
         , fromNonemptyStringTest "> hello"
-            (Nonempty (BlockQuote (Nonempty (NormalText 'h' "ello") [])) [])
+            (Nonempty (BlockQuote NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
+        , fromNonemptyStringTest "> " (Nonempty (NormalText '>' " ") [])
+        , toStringTest (Nonempty (BlockQuote NoLeadingLineBreak (Nonempty (NormalText ' ' "") [])) []) ">  "
         , fromNonemptyStringTest "foo\n> bar"
-            (Nonempty (NormalText 'f' "oo") [ BlockQuote (Nonempty (NormalText 'b' "ar") []) ])
+            (Nonempty (NormalText 'f' "oo") [ BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'b' "ar") []) ])
         , fromNonemptyStringTest "\n> *bold*"
-            (Nonempty (BlockQuote (Nonempty (Bold (Nonempty (NormalText 'b' "old") [])) [])) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak (Nonempty (Bold (Nonempty (NormalText 'b' "old") [])) [])) [])
         , fromNonemptyStringTest "\n> quote\nafter"
             (Nonempty
-                (BlockQuote (Nonempty (NormalText 'q' "uote") []))
+                (BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'q' "uote") []))
                 [ NormalText '\n' "after" ]
             )
-        , fromNonemptyStringTest "\n>no space"
-            (Nonempty (NormalText '\n' ">no space") [])
+        , fromNonemptyStringTest "\n>no space" (Nonempty (NormalText '\n' ">no space") [])
+        , fromNonemptyStringTest "> \n> " (Nonempty (BlockQuote NoLeadingLineBreak (Nonempty (NormalText '\n' "") [])) [])
+        , toStringTest (Nonempty (BlockQuote NoLeadingLineBreak (Nonempty (NormalText '\n' "") [])) []) "> \n> "
+        , fromNonemptyStringTest "> \n>" (Nonempty (BlockQuote NoLeadingLineBreak (Nonempty (NormalText '\n' "") [])) [])
 
         --, fromNonemptyStringTest
         --    "\n\u{200B}\u{200C}\n\n"

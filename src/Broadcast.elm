@@ -522,7 +522,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         discordUser.linkedTo
                                         (PersonName.toString user2.name)
                                         user2.icon
-                                        (RichText.toStringWithGetter DiscordUserData.username model.discordUsers content)
+                                        (RichText.toStringWithGetter DiscordUserData.username True model.discordUsers content)
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
                                             , guildId = guildId

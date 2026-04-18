@@ -1777,7 +1777,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                 Just message ->
                     case message of
                         UserTextMessage a ->
-                            RichText.toStringWithGetter DiscordUserData.username model.discordUsers a.content
+                            RichText.toStringWithGetter DiscordUserData.username True model.discordUsers a.content
 
                         UserJoinedMessage _ userId _ ->
                             case SeqDict.get userId model.discordUsers of
