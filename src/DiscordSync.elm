@@ -228,6 +228,7 @@ handleDiscordDmEditMessage edit attachments model =
                                             (\sticker -> OneToOne.second sticker.id model.discordStickers)
                                             stickers
                                 )
+                                edit.messageSnapshots
                     in
                     case
                         LocalState.editMessageHelperNoThread
@@ -359,6 +360,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                     Included stickers ->
                         List.filterMap (\sticker -> OneToOne.second sticker.id model.discordStickers) stickers
                 )
+                edit.messageSnapshots
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
@@ -706,6 +708,7 @@ messagesAndLinks messages discordStickers discordAttachments =
                         Included stickers ->
                             List.filterMap (\sticker -> OneToOne.second sticker.id discordStickers) stickers
                     )
+                    message.messageSnapshots
                 )
                 (case message.referencedMessage of
                     Discord.Referenced referenced ->
@@ -822,6 +825,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                 (\sticker -> OneToOne.second sticker.id model.discordStickers)
                                                 stickers
                                     )
+                                    discordMessage.messageSnapshots
 
                             replyTo : Maybe (Id ChannelMessageId)
                             replyTo =
@@ -1096,6 +1100,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         (\sticker -> OneToOne.second sticker.id model.discordStickers)
                                                         stickers
                                             )
+                                            discordMessage.messageSnapshots
 
                                     threadOrChannelId : Discord.Id Discord.ChannelId
                                     threadOrChannelId =

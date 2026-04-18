@@ -3166,7 +3166,7 @@ type alias Message =
 type alias MessageSnapshot =
     { content : String
     , timestamp : Time.Posix
-    , editedTimestamp : Time.Posix
+    , editedTimestamp : Maybe Time.Posix
     , attachments : List Attachment
     , embeds : List Embed
     , type_ : MessageType
@@ -3177,15 +3177,18 @@ type alias MessageSnapshot =
 
 decodeMessageSnapshot : JD.Decoder MessageSnapshot
 decodeMessageSnapshot =
-    JD.succeed MessageSnapshot
-        |> JD.andMap (JD.field "content" JD.string)
-        |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
-        |> JD.andMap (JD.field "editedTimestamp" Iso8601.decoder)
-        |> JD.andMap (JD.field "attachments" (JD.list decodeAttachment))
-        |> JD.andMap (JD.field "embeds" (JD.list decodeEmbed))
-        |> JD.andMap (JD.field "type_" decodeMessageType)
-        |> JD.andMap (JD.field "flags" decodeMessageFlags)
-        |> JD.andMap (decodeOptionalData "stickerItems" (JD.list decodeStickerItem))
+    JD.field
+        "message"
+        (JD.succeed MessageSnapshot
+            |> JD.andMap (JD.field "content" JD.string)
+            |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
+            |> JD.andMap (JD.field "edited_timestamp" (JD.nullable Iso8601.decoder))
+            |> JD.andMap (JD.field "attachments" (JD.list decodeAttachment))
+            |> JD.andMap (JD.field "embeds" (JD.list decodeEmbed))
+            |> JD.andMap (JD.field "type" decodeMessageType)
+            |> JD.andMap (JD.field "flags" decodeMessageFlags)
+            |> JD.andMap (decodeOptionalData "stickerItems" (JD.list decodeStickerItem))
+        )
 
 
 type alias StickerItem =
@@ -5193,6 +5196,7 @@ type alias UserMessageUpdate =
     , flags : MessageFlags
     , stickerItems : OptionalData (List StickerItem)
     , stickers : OptionalData (List Sticker)
+    , messageSnapshots : OptionalData (List MessageSnapshot)
     }
 
 
@@ -5294,6 +5298,7 @@ decodeUserMessageUpdate =
         |> JD.andMap (JD.field "flags" decodeMessageFlags)
         |> JD.andMap (decodeOptionalData "sticker_items" (JD.list decodeStickerItem))
         |> JD.andMap (decodeOptionalData "stickers" (JD.list decodeSticker))
+        |> JD.andMap (decodeOptionalData "message_snapshots" (JD.list decodeMessageSnapshot))
 
 
 decodeGatewayEvent : (String -> JD.Decoder event) -> JD.Decoder (GatewayEvent event)

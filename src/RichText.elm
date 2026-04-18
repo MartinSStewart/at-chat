@@ -2078,7 +2078,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         nonempty2
 
                                 Nothing ->
-                                    ( spoilerIndex2, embedIndex2, [] )
+                                    ( spoilerIndex2, embedIndex2, [ Html.text " " ] )
                     in
                     ( spoilerIndex3
                     , embedIndex3
@@ -3154,10 +3154,11 @@ fromDiscord text attachments2 embeds stickers2 messageSnapshots =
                         (\snapshot ->
                             fromDiscordHelper
                                 snapshot.content
-                                snapshot.attachments
+                                -- TODO: Handle attachments for message snapshots
+                                SeqDict.empty
                                 (Discord.Included snapshot.embeds)
-                                snapshot.stickerItems
-                                |> List.Nonempty.toList
+                                -- TODO: Handle stickers for message snapshots
+                                []
                                 |> BlockQuote NoLeadingLineBreak
                         )
                         messageSnapshots2
@@ -3165,9 +3166,9 @@ fromDiscord text attachments2 embeds stickers2 messageSnapshots =
                 Discord.Missing ->
                     []
     in
-    NonemptyExtra.appendList
-        (fromDiscordHelper text attachments2 embeds stickers2)
-        messageSnapshots3
+    (fromDiscordHelper text attachments2 embeds stickers2 ++ messageSnapshots3)
+        |> List.Nonempty.fromList
+        |> Maybe.withDefault emptyPlaceholder
 
 
 fromDiscordHelper :
@@ -3175,7 +3176,7 @@ fromDiscordHelper :
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
     -> List (Id StickerId)
-    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text attachments2 embeds stickers2 =
     let
         ( urlEmbeds, richTextEmbeds ) =
@@ -3248,14 +3249,9 @@ fromDiscordHelper text attachments2 embeds stickers2 =
             else
                 richText
 
-        applyStickers : List (RichText userId) -> Nonempty (RichText userId)
+        applyStickers : List (RichText userId) -> List (RichText userId)
         applyStickers richText =
-            case richText ++ List.map Sticker stickers2 |> List.Nonempty.fromList of
-                Just nonempty ->
-                    nonempty
-
-                Nothing ->
-                    emptyPlaceholder
+            richText ++ List.map Sticker stickers2
 
         spoileredAttachments : List (RichText userId)
         spoileredAttachments =
