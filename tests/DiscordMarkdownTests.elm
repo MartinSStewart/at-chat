@@ -26,7 +26,7 @@ test =
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing [] |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty Discord.Missing [] Discord.Missing |> List.Nonempty.toList
 
 
 basicFormattingTests : Test
@@ -133,7 +133,7 @@ basicFormattingTests =
 
 fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId)) -> Test
 fromNonemptyStringTest input expected =
-    Test.test (Debug.toString input) (\_ -> RichText.fromDiscord input SeqDict.empty Discord.Missing [] |> Expect.equal expected)
+    Test.test (Debug.toString input) (\_ -> RichText.fromDiscord input SeqDict.empty Discord.Missing [] Discord.Missing |> Expect.equal expected)
 
 
 unsafeUrl : String -> Url
