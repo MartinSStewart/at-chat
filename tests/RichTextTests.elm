@@ -257,6 +257,7 @@ test =
         , fromNonemptyStringTest "a\nb\nc" (Nonempty (NormalText 'a' "\nb\nc") [])
         , fromNonemptyStringTest "*a\nb*" (Nonempty (NormalText '*' "a\nb*") [])
         , fromNonemptyStringTest "_a\na_" (Nonempty (NormalText '_' "a\na_") [])
+        , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
         , fromNonemptyStringTest "~~a\na~~" (Nonempty (NormalText '~' "~a\na~~") [])
         , fromNonemptyStringTest "_~~a\na~~_" (Nonempty (NormalText '_' "~~a\na~~_") [])
         , fromNonemptyStringTest "_~~a\na~~_a_" (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])

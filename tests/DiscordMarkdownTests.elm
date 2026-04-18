@@ -128,6 +128,7 @@ basicFormattingTests =
                 (BlockQuote NoLeadingLineBreak [ NormalText 't' "est\nasdf\n\n123" ])
                 [ NormalText '\n' "", BlockQuote HasLeadingLineBreak [ NormalText '2' "3" ] ]
             )
+        , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
         ]
 
 

@@ -1363,57 +1363,38 @@ parseLoop source index users modifiers accText revNodes =
                     parseLoop source (index + 1) users modifiers (accText ++ "|") revNodes
 
             "`" ->
-                if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) "```" of
-                        Just closeIndex ->
-                            let
-                                content =
-                                    String.slice (index + 3) closeIndex source
+                case ( stringAtRange index 3 source, findSubstring source (index + 3) "```" ) of
+                    ( Just "```", Just closeIndex ) ->
+                        let
+                            content =
+                                String.slice (index + 3) closeIndex source
 
-                                ( language, codeContent ) =
-                                    parseCodeBlockContent content
-                            in
-                            case String.Nonempty.fromString codeContent of
-                                Just _ ->
-                                    parseLoop source (closeIndex + 3) users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                            ( language, codeContent ) =
+                                parseCodeBlockContent content
+                        in
+                        case String.Nonempty.fromString codeContent of
+                            Just _ ->
+                                parseLoop source (closeIndex + 3) users modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
-                                Nothing ->
-                                    parseLoop source (closeIndex + 3) users modifiers (accText ++ "``````") revNodes
+                            Nothing ->
+                                parseLoop source (closeIndex + 3) users modifiers (accText ++ "``````") revNodes
 
-                        Nothing ->
-                            -- No closing ```, try inline code
-                            case findSingleBacktick source (index + 1) of
-                                Just closeIndex ->
-                                    let
-                                        content =
-                                            String.slice (index + 1) closeIndex source
-                                    in
-                                    case String.Nonempty.fromString content of
-                                        Just a ->
-                                            parseLoop source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                    _ ->
+                        case findSingleBacktick source (index + 1) of
+                            Just closeIndex ->
+                                let
+                                    content =
+                                        String.slice (index + 1) closeIndex source
+                                in
+                                case ( String.Nonempty.fromString content, String.contains "\n" content ) of
+                                    ( Just a, False ) ->
+                                        parseLoop source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
-                                        Nothing ->
-                                            parseLoop source (closeIndex + 1) users modifiers (accText ++ "``") revNodes
+                                    _ ->
+                                        parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
 
-                                Nothing ->
-                                    parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
-
-                else
-                    case findSingleBacktick source (index + 1) of
-                        Just closeIndex ->
-                            let
-                                content =
-                                    String.slice (index + 1) closeIndex source
-                            in
-                            case String.Nonempty.fromString content of
-                                Just a ->
-                                    parseLoop source (closeIndex + 1) users modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
-
-                                Nothing ->
-                                    parseLoop source (closeIndex + 1) users modifiers (accText ++ "``") revNodes
-
-                        Nothing ->
-                            parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
+                            Nothing ->
+                                parseLoop source (index + 1) users modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False modifierToSymbol modifiers index source of
@@ -3627,73 +3608,38 @@ discordParseLoop source index modifiers accText revNodes =
                     discordParseLoop source (index + 1) modifiers (accText ++ "|") revNodes
 
             "`" ->
-                if String.slice index (index + 3) source == "```" then
-                    case findSubstring source (index + 3) "```" of
-                        Just closeIndex ->
-                            let
-                                content =
-                                    String.slice (index + 3) closeIndex source
+                case ( stringAtRange index 3 source, findSubstring source (index + 3) "```" ) of
+                    ( Just "```", Just closeIndex ) ->
+                        let
+                            content =
+                                String.slice (index + 3) closeIndex source
 
-                                ( language, codeContent ) =
-                                    case String.split "\n" content of
-                                        [ single ] ->
-                                            ( NoLanguage, single )
+                            ( language, codeContent ) =
+                                parseCodeBlockContent content
+                        in
+                        case String.Nonempty.fromString codeContent of
+                            Just _ ->
+                                discordParseLoop source (closeIndex + 3) modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
 
-                                        head :: rest ->
-                                            if String.contains " " head then
-                                                ( NoLanguage, content )
+                            Nothing ->
+                                discordParseLoop source (closeIndex + 3) modifiers (accText ++ "``````") revNodes
 
-                                            else
-                                                case String.Nonempty.fromString head of
-                                                    Just nonempty2 ->
-                                                        ( Language nonempty2, String.join "\n" rest )
+                    _ ->
+                        case findSingleBacktick source (index + 1) of
+                            Just closeIndex ->
+                                let
+                                    content =
+                                        String.slice (index + 1) closeIndex source
+                                in
+                                case ( String.Nonempty.fromString content, String.contains "\n" content ) of
+                                    ( Just a, False ) ->
+                                        discordParseLoop source (closeIndex + 1) modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
-                                                    Nothing ->
-                                                        ( NoLanguage, content )
+                                    _ ->
+                                        discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
 
-                                        [] ->
-                                            ( NoLanguage, "" )
-                            in
-                            case String.Nonempty.fromString codeContent of
-                                Just _ ->
-                                    discordParseLoop source (closeIndex + 3) modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
-
-                                Nothing ->
-                                    discordParseLoop source (closeIndex + 3) modifiers (accText ++ "``````") revNodes
-
-                        Nothing ->
-                            case findSingleBacktick source (index + 1) of
-                                Just closeIndex ->
-                                    let
-                                        content =
-                                            String.slice (index + 1) closeIndex source
-                                    in
-                                    case String.Nonempty.fromString content of
-                                        Just a ->
-                                            discordParseLoop source (closeIndex + 1) modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
-
-                                        Nothing ->
-                                            discordParseLoop source (closeIndex + 1) modifiers (accText ++ "``") revNodes
-
-                                Nothing ->
-                                    discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
-
-                else
-                    case findSingleBacktick source (index + 1) of
-                        Just closeIndex ->
-                            let
-                                content =
-                                    String.slice (index + 1) closeIndex source
-                            in
-                            case String.Nonempty.fromString content of
-                                Just a ->
-                                    discordParseLoop source (closeIndex + 1) modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
-
-                                Nothing ->
-                                    discordParseLoop source (closeIndex + 1) modifiers (accText ++ "``") revNodes
-
-                        Nothing ->
-                            discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
+                            Nothing ->
+                                discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False discordModifierToSymbol modifiers index source of
