@@ -3130,7 +3130,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , content =
                                                                 case RichText.removeAttachedFile (\_ -> True) newContent of
                                                                     Just text2 ->
-                                                                        RichText.toDiscord text2 |> Discord.Markdown.toString
+                                                                        RichText.toDiscord (List.Nonempty.toList text2)
+                                                                            |> Discord.Markdown.toString
 
                                                                     Nothing ->
                                                                         ""
@@ -3203,7 +3204,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { channelId = Discord.idToUInt64 dmData.channelId |> Discord.idFromUInt64
                                                     , messageId = discordMessageId
                                                     , content =
-                                                        RichText.toDiscord newContent
+                                                        RichText.toDiscord (List.Nonempty.toList newContent)
                                                             |> Discord.Markdown.toString
                                                     }
                                                     |> DiscordSync.http

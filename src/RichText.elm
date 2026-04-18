@@ -69,7 +69,7 @@ type RichText userId
     | Underline (Nonempty (RichText userId))
     | Strikethrough (Nonempty (RichText userId))
     | Spoiler (Nonempty (RichText userId))
-    | BlockQuote HasLeadingLineBreak (Nonempty (RichText userId))
+    | BlockQuote HasLeadingLineBreak (List (RichText userId))
     | Hyperlink Url
     | MarkdownLink NonemptyString Url
     | InlineCode Char String
@@ -173,8 +173,13 @@ spoilerAttachedFile fileId nonempty =
                 Spoiler nonempty2 ->
                     spoilerAttachedFile fileId nonempty2 |> Spoiler
 
-                BlockQuote a nonempty2 ->
-                    spoilerAttachedFile fileId nonempty2 |> BlockQuote a
+                BlockQuote a list ->
+                    case List.Nonempty.fromList list of
+                        Just nonempty2 ->
+                            spoilerAttachedFile fileId nonempty2 |> List.Nonempty.toList |> BlockQuote a
+
+                        Nothing ->
+                            richText
 
                 Hyperlink _ ->
                     richText
@@ -258,8 +263,17 @@ unspoilerAttachedFile fileId nonempty =
                             -- This shouldn't be reachable since spoilers can't be nested
                             Nonempty ( False, richText ) []
 
-                        BlockQuote hasLeadingLineBreak nonempty3 ->
-                            Nonempty (helper nonempty3 |> Tuple.mapSecond (BlockQuote hasLeadingLineBreak)) []
+                        BlockQuote hasLeadingLineBreak list ->
+                            case List.Nonempty.fromList list of
+                                Just nonempty3 ->
+                                    Nonempty
+                                        (helper nonempty3
+                                            |> Tuple.mapSecond (\a -> BlockQuote hasLeadingLineBreak (List.Nonempty.toList a))
+                                        )
+                                        []
+
+                                Nothing ->
+                                    Nonempty ( False, richText ) []
 
                         Hyperlink _ ->
                             Nonempty ( False, richText ) []
@@ -320,8 +334,13 @@ unspoilerAttachedFile fileId nonempty =
                     else
                         Nonempty richText []
 
-                BlockQuote a nonempty2 ->
-                    Nonempty (BlockQuote a (unspoilerAttachedFile fileId nonempty2)) []
+                BlockQuote a list ->
+                    case List.Nonempty.fromList list of
+                        Just nonempty2 ->
+                            Nonempty (BlockQuote a (unspoilerAttachedFile fileId nonempty2 |> List.Nonempty.toList)) []
+
+                        Nothing ->
+                            Nonempty richText []
 
                 Hyperlink _ ->
                     Nonempty richText []
@@ -373,8 +392,18 @@ removeAttachedFile shouldRemove list =
                 Spoiler nonempty ->
                     removeAttachedFile shouldRemove nonempty |> Maybe.map Spoiler
 
-                BlockQuote a nonempty ->
-                    removeAttachedFile shouldRemove nonempty |> Maybe.map (BlockQuote a)
+                BlockQuote a list2 ->
+                    case List.Nonempty.fromList list2 of
+                        Just nonempty ->
+                            case removeAttachedFile shouldRemove nonempty of
+                                Just nonempty2 ->
+                                    BlockQuote a (List.Nonempty.toList nonempty2) |> Just
+
+                                Nothing ->
+                                    BlockQuote a [] |> Just
+
+                        Nothing ->
+                            Just richText
 
                 Hyperlink _ ->
                     Just richText
@@ -437,8 +466,8 @@ hyperlinks nonempty =
                 Spoiler nonempty2 ->
                     hyperlinks nonempty2
 
-                BlockQuote a nonempty2 ->
-                    hyperlinks nonempty2
+                BlockQuote a list ->
+                    List.Nonempty.fromList list |> Maybe.map hyperlinks |> Maybe.withDefault []
 
                 InlineCode _ _ ->
                     []
@@ -495,8 +524,8 @@ attachmentsHelper isSpoilered nonempty =
                 Spoiler nonempty2 ->
                     attachmentsHelper True nonempty2
 
-                BlockQuote a nonempty2 ->
-                    attachmentsHelper isSpoilered nonempty2
+                BlockQuote a list ->
+                    List.Nonempty.fromList list |> Maybe.map (attachmentsHelper isSpoilered) |> Maybe.withDefault []
 
                 InlineCode _ _ ->
                     []
@@ -548,8 +577,8 @@ stickers nonempty =
                 Spoiler nonempty2 ->
                     stickers nonempty2
 
-                BlockQuote a nonempty2 ->
-                    stickers nonempty2
+                BlockQuote a list ->
+                    List.Nonempty.fromList list |> Maybe.map stickers |> Maybe.withDefault []
 
                 InlineCode _ _ ->
                     []
@@ -571,7 +600,7 @@ stickers nonempty =
 
 toStringWithGetter : (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
 toStringWithGetter userToString emojisForStickersAndAttachments users nonempty =
-    toStringHelper userToString emojisForStickersAndAttachments users nonempty
+    toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList nonempty)
 
 
 blockQuoteToString : HasLeadingLineBreak -> String -> String
@@ -598,12 +627,16 @@ blockQuoteToString hasLeadingLineBreak inner =
 
 toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
 toString emojisForStickersAndAttachments users nonempty =
-    toStringHelper (\user -> PersonName.toString user.name) emojisForStickersAndAttachments users nonempty
+    toStringHelper
+        (\user -> PersonName.toString user.name)
+        emojisForStickersAndAttachments
+        users
+        (List.Nonempty.toList nonempty)
 
 
-toStringHelper : (a -> String) -> Bool -> SeqDict userId a -> Nonempty (RichText userId) -> String
-toStringHelper userToString emojisForStickersAndAttachments users nonempty =
-    List.Nonempty.map
+toStringHelper : (a -> String) -> Bool -> SeqDict userId a -> List (RichText userId) -> String
+toStringHelper userToString emojisForStickersAndAttachments users list =
+    List.map
         (\richText ->
             case richText of
                 NormalText char rest ->
@@ -618,19 +651,29 @@ toStringHelper userToString emojisForStickersAndAttachments users nonempty =
                             "@<missing>"
 
                 Bold a ->
-                    "*" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "*"
+                    "*"
+                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ "*"
 
                 Italic a ->
-                    "_" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "_"
+                    "_"
+                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ "_"
 
                 Underline a ->
-                    "__" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "__"
+                    "__"
+                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ "__"
 
                 Strikethrough a ->
-                    "~~" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "~~"
+                    "~~"
+                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ "~~"
 
                 Spoiler a ->
-                    "||" ++ toStringHelper userToString emojisForStickersAndAttachments users a ++ "||"
+                    "||"
+                        ++ toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a)
+                        ++ "||"
 
                 BlockQuote hasLeadingLineBreak a ->
                     blockQuoteToString
@@ -675,8 +718,7 @@ toStringHelper userToString emojisForStickersAndAttachments users nonempty =
                     else
                         Sticker.idToString id
         )
-        nonempty
-        |> List.Nonempty.toList
+        list
         |> String.concat
 
 
@@ -705,17 +747,17 @@ fromNonemptyString users string =
             Nonempty (normalTextFromNonempty string) []
 
 
-parseBlockQuoteContent : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
+parseBlockQuoteContent : SeqDict userId { a | name : PersonName } -> String -> List (RichText userId)
 parseBlockQuoteContent users content =
-    case parseLoop (String.Nonempty.toString content) 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
+    case parseLoop content 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
-            normalize nonempty
+            normalize nonempty |> List.Nonempty.toList
 
         Nothing ->
-            Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
+            []
 
 
-extractBlockQuote : String -> Int -> Maybe ( NonemptyString, Int )
+extractBlockQuote : String -> Int -> Maybe ( String, Int )
 extractBlockQuote source index =
     case stringAtRange index 2 source of
         Just "> " ->
@@ -723,12 +765,7 @@ extractBlockQuote source index =
                 ( endIndex, content ) =
                     collectBlockQuoteLines source (index + 2)
             in
-            case String.Nonempty.fromString content of
-                Just nonempty ->
-                    Just ( nonempty, endIndex )
-
-                Nothing ->
-                    Nothing
+            Just ( content, endIndex )
 
         _ ->
             Nothing
@@ -810,8 +847,18 @@ normalize nonempty =
                 Spoiler a ->
                     List.Nonempty.cons (Spoiler (normalize a)) nonempty2
 
-                BlockQuote hasLeadingLineBreak a ->
-                    List.Nonempty.cons (BlockQuote hasLeadingLineBreak (normalize a)) nonempty2
+                BlockQuote hasLeadingLineBreak list ->
+                    List.Nonempty.cons
+                        (BlockQuote hasLeadingLineBreak
+                            (case List.Nonempty.fromList list of
+                                Just a ->
+                                    normalize a |> List.Nonempty.toList
+
+                                Nothing ->
+                                    list
+                            )
+                        )
+                        nonempty2
 
                 Hyperlink data ->
                     List.Nonempty.cons (Hyperlink data) nonempty2
@@ -857,8 +904,16 @@ normalize nonempty =
                 Spoiler a ->
                     Spoiler (normalize a)
 
-                BlockQuote hasLeadingLineBreak a ->
-                    BlockQuote hasLeadingLineBreak (normalize a)
+                BlockQuote hasLeadingLineBreak list ->
+                    BlockQuote
+                        hasLeadingLineBreak
+                        (case List.Nonempty.fromList list of
+                            Just a ->
+                                normalize a |> List.Nonempty.toList
+
+                            Nothing ->
+                                list
+                        )
 
                 Hyperlink data ->
                     Hyperlink data
@@ -1735,8 +1790,8 @@ mentionsUserHelper set nonempty =
                 Spoiler nonempty2 ->
                     mentionsUserHelper set2 nonempty2
 
-                BlockQuote _ nonempty2 ->
-                    mentionsUserHelper set2 nonempty2
+                BlockQuote _ list ->
+                    List.Nonempty.fromList list |> Maybe.map (mentionsUserHelper set2) |> Maybe.withDefault set2
 
                 Hyperlink _ ->
                     set2
@@ -2001,19 +2056,24 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                            ]
                     )
 
-                BlockQuote _ nonempty2 ->
+                BlockQuote _ list ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
-                            viewHelper
-                                showLargeContent
-                                maybePressedSpoiler
-                                onPressLink
-                                spoilerIndex2
-                                state
-                                config
-                                embeds
-                                embedIndex2
-                                nonempty2
+                        ( spoilerIndex3, embedIndex3, list2 ) =
+                            case List.Nonempty.fromList list of
+                                Just nonempty2 ->
+                                    viewHelper
+                                        showLargeContent
+                                        maybePressedSpoiler
+                                        onPressLink
+                                        spoilerIndex2
+                                        state
+                                        config
+                                        embeds
+                                        embedIndex2
+                                        nonempty2
+
+                                Nothing ->
+                                    ( spoilerIndex2, embedIndex2, [] )
                     in
                     ( spoilerIndex3
                     , embedIndex3
@@ -2024,7 +2084,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 , Html.Attributes.style "margin" "2px 0"
                                 , Html.Attributes.style "white-space" "pre-wrap"
                                 ]
-                                list
+                                list2
                            ]
                     )
 
@@ -2651,7 +2711,7 @@ textInputView users attachedFiles stickers2 selection nonempty =
         stickers2
         0
         selection
-        nonempty
+        (List.Nonempty.toList nonempty)
         Array.empty
         |> Tuple.second
         |> Array.toList
@@ -2677,10 +2737,10 @@ textInputViewHelper :
     -> SeqDict (Id StickerId) StickerData
     -> Int
     -> Maybe Range
-    -> Nonempty (RichText userId)
+    -> List (RichText userId)
     -> Array (Html msg)
     -> ( Int, Array (Html msg) )
-textInputViewHelper state allUsers attachedFiles stickers2 index selection nonempty output =
+textInputViewHelper state allUsers attachedFiles stickers2 index selection list output =
     List.foldl
         (\item ( index2, output2 ) ->
             case item of
@@ -2730,7 +2790,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                                 stickers2
                                 (index2 + 1)
                                 selection
-                                nonempty2
+                                (List.Nonempty.toList nonempty2)
                                 (Array.push (formatText "_") output2)
                     in
                     ( index3 + 1, Array.push (formatText "_") output3 )
@@ -2745,7 +2805,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                                 stickers2
                                 (index2 + 2)
                                 selection
-                                nonempty2
+                                (List.Nonempty.toList nonempty2)
                                 (Array.push (formatText "__") output2)
                     in
                     ( index3 + 2, Array.push (formatText "__") output3 )
@@ -2760,7 +2820,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                                 stickers2
                                 (index2 + 1)
                                 selection
-                                nonempty2
+                                (List.Nonempty.toList nonempty2)
                                 (Array.push (formatText "*") output2)
                     in
                     ( index3 + 1, Array.push (formatText "*") output3 )
@@ -2775,7 +2835,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                                 stickers2
                                 (index2 + 2)
                                 selection
-                                nonempty2
+                                (List.Nonempty.toList nonempty2)
                                 (Array.push (formatText "~~") output2)
                     in
                     ( index3 + 2, Array.push (formatText "~~") output3 )
@@ -2790,7 +2850,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                                 stickers2
                                 (index2 + 2)
                                 selection
-                                nonempty2
+                                (List.Nonempty.toList nonempty2)
                                 (Array.push (formatText "||") output2)
                     in
                     ( index3 + 2, Array.push (formatText "||") output3 )
@@ -2963,7 +3023,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection nonem
                     )
         )
         ( index, output )
-        (List.Nonempty.toList nonempty)
+        list
 
 
 formatText : String -> Html msg
@@ -3620,9 +3680,7 @@ discordParseLoop source index modifiers accText revNodes =
                 discordParseLoop source nextIndex modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
-toDiscord :
-    Nonempty (RichText (Discord.Id Discord.UserId))
-    -> List (Discord.Markdown.Markdown a)
+toDiscord : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
 toDiscord content =
     List.map
         (\item ->
@@ -3634,19 +3692,19 @@ toDiscord content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord nonempty)
+                    Discord.Markdown.boldMarkdown (toDiscord (List.Nonempty.toList nonempty))
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord nonempty)
+                    Discord.Markdown.italicMarkdown (toDiscord (List.Nonempty.toList nonempty))
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord nonempty)
+                    Discord.Markdown.underlineMarkdown (toDiscord (List.Nonempty.toList nonempty))
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord nonempty)
+                    Discord.Markdown.strikethroughMarkdown (toDiscord (List.Nonempty.toList nonempty))
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord nonempty)
+                    Discord.Markdown.spoiler (toDiscord (List.Nonempty.toList nonempty))
 
                 BlockQuote _ nonempty ->
                     Discord.Markdown.Quote (toDiscord nonempty)
@@ -3680,7 +3738,7 @@ toDiscord content =
                 Sticker _ ->
                     Discord.Markdown.text ""
         )
-        (List.Nonempty.toList content)
+        content
 
 
 discordParseInner :
@@ -3692,14 +3750,14 @@ discordParseInner source index modifiers =
     discordParseLoop source index modifiers "" []
 
 
-parseDiscordBlockQuoteContent : NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordBlockQuoteContent : String -> List (RichText (Discord.Id Discord.UserId))
 parseDiscordBlockQuoteContent content =
-    case discordParseLoop (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
+    case discordParseLoop content 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
-            normalize nonempty
+            normalize nonempty |> List.Nonempty.toList
 
         Nothing ->
-            Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
+            []
 
 
 tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )

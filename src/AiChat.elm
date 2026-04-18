@@ -458,8 +458,13 @@ richTextToMessage previousText previousList nonempty =
                     richTextToMessage (currentText ++ "||") list nonempty2
                         |> Tuple.mapFirst (\b -> b ++ "||")
 
-                RichText.BlockQuote _ nonempty2 ->
-                    richTextToMessage (currentText ++ "\n> ") list nonempty2
+                RichText.BlockQuote _ list2 ->
+                    case List.Nonempty.fromList list2 of
+                        Just nonempty2 ->
+                            richTextToMessage (currentText ++ "\n> ") list nonempty2
+
+                        Nothing ->
+                            ( currentText, list )
 
                 RichText.Hyperlink url ->
                     ( "", ImageUrlMessage (Url.toString url) :: TextMessage currentText :: list )

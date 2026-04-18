@@ -113,13 +113,13 @@ basicFormattingTests =
         , fromNonemptyStringTest "_~~a\na~~_" (Nonempty (NormalText '_' "~~a\na~~_") [])
         , fromNonemptyStringTest "_~~a\na~~_a_" (Nonempty (NormalText '_' "~~a\na~~") [ Italic (Nonempty (NormalText 'a' "") []) ])
         , fromNonemptyStringTest "\n> asdf"
-            (Nonempty (BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'a' "sdf") [])) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf" ]) [])
         , fromNonemptyStringTest "\n> asdf\n>asdf"
-            (Nonempty (BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'a' "sdf\nasdf") [])) [])
+            (Nonempty (BlockQuote HasLeadingLineBreak [ NormalText 'a' "sdf\nasdf" ]) [])
         , fromNonemptyStringTest "> quoted"
-            (Nonempty (BlockQuote NoLeadingLineBreak (Nonempty (NormalText 'q' "uoted") [])) [])
+            (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText 'q' "uoted" ]) [])
         , fromNonemptyStringTest "foo\n> bar"
-            (Nonempty (NormalText 'f' "oo") [ BlockQuote HasLeadingLineBreak (Nonempty (NormalText 'b' "ar") []) ])
+            (Nonempty (NormalText 'f' "oo") [ BlockQuote HasLeadingLineBreak [ NormalText 'b' "ar" ] ])
         ]
 
 

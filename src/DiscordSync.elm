@@ -2994,7 +2994,8 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                                             , content =
                                                 case RichText.removeAttachedFile (\_ -> True) text of
                                                     Just text2 ->
-                                                        RichText.toDiscord text2 |> Discord.Markdown.toString
+                                                        RichText.toDiscord (List.Nonempty.toList text2)
+                                                            |> Discord.Markdown.toString
 
                                                     Nothing ->
                                                         ""
