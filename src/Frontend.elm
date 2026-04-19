@@ -5306,6 +5306,11 @@ updateLoadedFromBackend msg model =
                                 Server_DiscordAddReactionDmEmoji _ _ _ _ ->
                                     ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
 
+                                Server_VoiceChatChange voiceChatChange ->
+                                    ( loggedIn2
+                                    , VoiceChat.changeCmd voiceChatChange local.localUser.session.userId local
+                                    )
+
                                 _ ->
                                     ( loggedIn2, Command.none )
 
