@@ -62,7 +62,14 @@ exports.init = async function init(app) {
             }
         };
 
-        const conn = { pc: pc, localStream: localStream, remoteAudio: remoteAudio };
+        const conn = {
+            pc: pc,
+            localStream: localStream,
+            remoteAudio: remoteAudio,
+            remoteDescriptionSet: false,
+            queuedIceCandidates: [],
+            signalChain: Promise.resolve()
+        };
         connections[peerUserId] = conn;
 
         const pending = pendingSignals[peerUserId] || [];
@@ -101,11 +108,25 @@ exports.init = async function init(app) {
         delete connections[peerUserId];
     }
 
+    async function drainQueuedIceCandidates(conn, peerUserId) {
+        const queued = conn.queuedIceCandidates;
+        conn.queuedIceCandidates = [];
+        for (let i = 0; i < queued.length; i++) {
+            try {
+                await conn.pc.addIceCandidate(queued[i]);
+            } catch (e) {
+                console.error("Voice chat: failed to add queued ICE candidate", peerUserId, e);
+            }
+        }
+    }
+
     async function handleSignalInternal(conn, peerUserId, signalStr) {
         try {
             const signal = JSON.parse(signalStr);
             if (signal.type === "offer") {
                 await conn.pc.setRemoteDescription(signal.sdp);
+                conn.remoteDescriptionSet = true;
+                await drainQueuedIceCandidates(conn, peerUserId);
                 const answer = await conn.pc.createAnswer();
                 await conn.pc.setLocalDescription(answer);
                 app.ports.voice_chat_from_js.send({
@@ -114,22 +135,31 @@ exports.init = async function init(app) {
                 });
             } else if (signal.type === "answer") {
                 await conn.pc.setRemoteDescription(signal.sdp);
+                conn.remoteDescriptionSet = true;
+                await drainQueuedIceCandidates(conn, peerUserId);
             } else if (signal.type === "ice") {
-                await conn.pc.addIceCandidate(signal.candidate);
+                if (conn.remoteDescriptionSet) {
+                    await conn.pc.addIceCandidate(signal.candidate);
+                } else {
+                    conn.queuedIceCandidates.push(signal.candidate);
+                }
             }
         } catch (e) {
             console.error("Voice chat: failed to handle signal", e);
         }
     }
 
-    async function handleSignal(peerUserId, signalStr) {
+    function handleSignal(peerUserId, signalStr) {
         const conn = connections[peerUserId];
         if (!conn) {
             if (!pendingSignals[peerUserId]) pendingSignals[peerUserId] = [];
             pendingSignals[peerUserId].push(signalStr);
             return;
         }
-        await handleSignalInternal(conn, peerUserId, signalStr);
+        // Serialize signal processing per peer so offer/answer/ice never race.
+        conn.signalChain = conn.signalChain.then(function () {
+            return handleSignalInternal(conn, peerUserId, signalStr);
+        });
     }
 
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
