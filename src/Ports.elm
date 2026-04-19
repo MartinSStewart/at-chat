@@ -559,19 +559,19 @@ voiceChatDeliverSignal peerId signal =
         )
 
 
-voiceChatFromJs : (( Id UserId, String ) -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs : (Id UserId -> String -> msg) -> Subscription FrontendOnly msg
 voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
         (\json ->
             Json.Decode.decodeValue
-                (Json.Decode.map2 (\peerUserId signal -> msg ( Id.fromInt peerUserId, signal ))
+                (Json.Decode.map2 (\peerUserId signal -> msg (Id.fromInt peerUserId) signal)
                     (Json.Decode.field "peerUserId" Json.Decode.int)
                     (Json.Decode.field "signal" Json.Decode.string)
                 )
                 json
-                |> Result.withDefault (msg ( Id.fromInt -1, "" ))
+                |> Result.withDefault (msg (Id.fromInt -1) "")
         )
 
 

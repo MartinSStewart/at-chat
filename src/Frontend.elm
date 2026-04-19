@@ -155,6 +155,7 @@ subscriptions model =
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
+        , Ports.voiceChatFromJs GotVoiceChatSignalFromJs
         , case model of
             Loading _ ->
                 Subscription.none
