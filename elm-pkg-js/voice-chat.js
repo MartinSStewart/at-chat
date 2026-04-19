@@ -21,11 +21,36 @@ exports.init = async function init(app) {
             pc.addTrack(track, localStream);
         });
 
-        const remoteAudio = new Audio();
+        const remoteAudio = document.createElement("audio");
         remoteAudio.autoplay = true;
+        remoteAudio.playsInline = true;
+        remoteAudio.setAttribute("data-voice-chat-peer", String(peerUserId));
+        remoteAudio.style.display = "none";
+        document.body.appendChild(remoteAudio);
 
         pc.ontrack = function (event) {
-            remoteAudio.srcObject = event.streams[0];
+            console.log("Voice chat: ontrack", peerUserId, event.streams);
+            if (event.streams && event.streams[0]) {
+                remoteAudio.srcObject = event.streams[0];
+            } else {
+                // Fallback: build a stream from the single track.
+                const stream = new MediaStream();
+                stream.addTrack(event.track);
+                remoteAudio.srcObject = stream;
+            }
+            const playPromise = remoteAudio.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+                playPromise.catch(function (err) {
+                    console.error("Voice chat: audio play() rejected", err);
+                });
+            }
+        };
+
+        pc.oniceconnectionstatechange = function () {
+            console.log("Voice chat: ICE state", peerUserId, pc.iceConnectionState);
+        };
+        pc.onconnectionstatechange = function () {
+            console.log("Voice chat: PC state", peerUserId, pc.connectionState);
         };
 
         pc.onicecandidate = function (event) {
@@ -67,7 +92,12 @@ exports.init = async function init(app) {
             conn.localStream.getTracks().forEach(function (track) { track.stop(); });
         }
         if (conn.pc) conn.pc.close();
-        if (conn.remoteAudio) conn.remoteAudio.srcObject = null;
+        if (conn.remoteAudio) {
+            conn.remoteAudio.srcObject = null;
+            if (conn.remoteAudio.parentNode) {
+                conn.remoteAudio.parentNode.removeChild(conn.remoteAudio);
+            }
+        }
         delete connections[peerUserId];
     }
 
