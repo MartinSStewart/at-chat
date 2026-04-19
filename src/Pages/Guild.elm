@@ -63,7 +63,20 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types
+    exposing
+        ( Drag(..)
+        , EditMessage
+        , EmojiSelector(..)
+        , FrontendMsg(..)
+        , GuildChannelNameHover(..)
+        , LoadedFrontend
+        , LoggedIn2
+        , MessageHover(..)
+        , NewChannelForm
+        , NewGuildForm
+        , ScrollPosition(..)
+        )
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -76,6 +89,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
+import VoiceChat exposing (VoiceChatState)
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -3040,8 +3054,8 @@ privateChatWithYourself =
     ]
 
 
-privateChatWith : String -> List (Element FrontendMsg)
-privateChatWith name =
+privateChatWith : Id UserId -> Maybe VoiceChatState -> String -> List (Element FrontendMsg)
+privateChatWith otherUserId voiceChatState name =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -3050,8 +3064,64 @@ privateChatWith name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
-    , showFilesButton
+    , voiceChatButton otherUserId voiceChatState
     ]
+
+
+discordPrivateChatWith : String -> List (Element FrontendMsg)
+discordPrivateChatWith name =
+    [ Ui.el
+        [ Ui.Font.color MyUi.font3
+        , Ui.width Ui.shrink
+        , MyUi.prewrap
+        , Ui.clipWithEllipsis
+        ]
+        (Ui.text "Private chat with ")
+    , Ui.text name
+    ]
+
+
+voiceChatButton : Id UserId -> Maybe VoiceChatState -> Element FrontendMsg
+voiceChatButton otherUserId maybeState =
+    let
+        state : VoiceChatState
+        state =
+            Maybe.withDefault { iJoined = False, peerJoined = False } maybeState
+    in
+    MyUi.elButton
+        (Dom.id "guild_voiceChat")
+        (PressedVoiceChatButton otherUserId)
+        [ Ui.alignRight
+        , Ui.width (Ui.px 44)
+        , Ui.paddingXY 4 0
+        , Ui.height Ui.fill
+        ]
+        (Ui.row
+            [ Ui.spacing 2, Ui.centerY ]
+            [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+            , case ( state.iJoined, state.peerJoined ) of
+                ( True, True ) ->
+                    Ui.el
+                        [ Ui.width (Ui.px 8)
+                        , Ui.height (Ui.px 8)
+                        , Ui.background (Ui.rgb 40 190 80)
+                        , Ui.rounded 4
+                        ]
+                        Ui.none
+
+                ( False, True ) ->
+                    Ui.el
+                        [ Ui.width (Ui.px 8)
+                        , Ui.height (Ui.px 8)
+                        , Ui.background (Ui.rgb 200 60 60)
+                        , Ui.rounded 4
+                        ]
+                        Ui.none
+
+                ( _, False ) ->
+                    Ui.none
+            ]
+        )
 
 
 emojiSelector : Bool -> SeqSet (Id StickerId) -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
@@ -3218,7 +3288,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                             privateChatWithYourself
 
                          else
-                            privateChatWith name
+                            privateChatWith otherUserId (SeqDict.get otherUserId local.voiceChats) name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3438,7 +3508,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             privateChatWithYourself
 
                          else
-                            privateChatWith name
+                            discordPrivateChatWith name
                         )
 
                 DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3726,7 +3796,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                             privateChatWithYourself
 
                          else
-                            privateChatWith name
+                            privateChatWith otherUserId (SeqDict.get otherUserId local.voiceChats) name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3940,7 +4010,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                             privateChatWithYourself
 
                          else
-                            privateChatWith name
+                            discordPrivateChatWith name
                         )
 
                 DiscordGuildOrDmId_Guild _ _ _ ->

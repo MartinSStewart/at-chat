@@ -57,13 +57,41 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqSet
 import Sticker
 import String.Nonempty
 import TextEditor
 import Thread
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types
+    exposing
+        ( AdminStatusLoginData(..)
+        , ChannelSidebarMode(..)
+        , Drag(..)
+        , EmojiSelector(..)
+        , FrontendModel(..)
+        , FrontendMsg(..)
+        , GuildChannelNameHover(..)
+        , InitialLoadRequest(..)
+        , LoadStatus(..)
+        , LoadedFrontend
+        , LoadingFrontend
+        , LocalChange(..)
+        , LocalMsg(..)
+        , LoggedIn2
+        , LoginData
+        , LoginResult(..)
+        , LoginStatus(..)
+        , MessageHover(..)
+        , MessageHoverMobileMode(..)
+        , RevealedSpoilers
+        , ScrollPosition(..)
+        , ServerChange(..)
+        , ToBackend(..)
+        , ToFrontend(..)
+        , UserOptionsModel
+        )
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -75,6 +103,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import VoiceChat exposing (LocalChange(..), VoiceChatState)
 
 
 app :
@@ -441,6 +470,13 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
+    , voiceChats =
+        SeqSet.foldl
+            (\peerId acc ->
+                SeqDict.insert peerId { iJoined = False, peerJoined = True } acc
+            )
+            SeqDict.empty
+            loginData.voiceChatPeers
     }
 
 
@@ -3422,6 +3458,20 @@ updateLoaded msg model =
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
 
+        PressedVoiceChatButton otherUserId ->
+            pressedVoiceChatButton otherUserId model
+
+        GotVoiceChatSignalFromJs peerId signal ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (VoiceChat_Signal peerId signal |> Local_VoiceChatChange |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -3973,6 +4023,49 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
               }
             , Command.none
             )
+
+
+pressedVoiceChatButton : Id UserId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedVoiceChatButton otherUserId model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
+                currentUserId : Id UserId
+                currentUserId =
+                    local.localUser.session.userId
+
+                current : VoiceChatState
+                current =
+                    SeqDict.get otherUserId local.voiceChats
+                        |> Maybe.withDefault { iJoined = False, peerJoined = False }
+            in
+            if currentUserId == otherUserId then
+                ( loggedIn, Command.none )
+
+            else if current.iJoined then
+                FrontendExtra.handleLocalChange
+                    model.time
+                    (VoiceChat_Leave otherUserId |> Local_VoiceChatChange |> Just)
+                    loggedIn
+                    (Ports.voiceChatStop otherUserId)
+
+            else
+                FrontendExtra.handleLocalChange
+                    model.time
+                    (VoiceChat_Join otherUserId |> Local_VoiceChatChange |> Just)
+                    loggedIn
+                    (if current.peerJoined then
+                        Ports.voiceChatStart otherUserId (Id.toInt currentUserId < Id.toInt otherUserId)
+
+                     else
+                        Command.none
+                    )
+        )
+        model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

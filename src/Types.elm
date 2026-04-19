@@ -92,6 +92,7 @@ import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Sticker exposing (StickerData)
@@ -106,6 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
+import VoiceChat
 
 
 type FrontendModel
@@ -325,6 +327,7 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    , voiceChatParticipants : SeqDict DmChannelId (SeqSet (Id UserId))
     }
 
 
@@ -477,6 +480,8 @@ type FrontendMsg
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
+    | PressedVoiceChatButton (Id UserId)
+    | GotVoiceChatSignalFromJs (Id UserId) String
 
 
 type ScrollPosition
@@ -677,6 +682,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
+    , voiceChatPeers : SeqSet (Id UserId)
     }
 
 
@@ -761,6 +767,7 @@ type ServerChange
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
+    | Server_VoiceChatChange VoiceChat.ServerChange
 
 
 type LocalChange
@@ -799,3 +806,4 @@ type LocalChange
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiCategory Emoji.Category
     | Local_SetEmojiSkinTone (Maybe SkinTone)
+    | Local_VoiceChatChange VoiceChat.LocalChange
