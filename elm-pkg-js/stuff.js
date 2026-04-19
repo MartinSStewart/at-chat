@@ -235,44 +235,48 @@ exports.init = async function init(app)
     });
 
     app.ports.close_notifications_to_js.subscribe(() => {
-        // Original code found here https://stackoverflow.com/a/64686549
-        navigator.serviceWorker.ready.then(reg => {
-          reg.getNotifications().then(notifications => {
-            for (let i = 0; i < notifications.length; i += 1) {
-              notifications[i].close();
-            }
-          });
-        });
+        if (navigator.serviceWorker) {
+            // Original code found here https://stackoverflow.com/a/64686549
+            navigator.serviceWorker.ready.then(reg => {
+              reg.getNotifications().then(notifications => {
+                for (let i = 0; i < notifications.length; i += 1) {
+                  notifications[i].close();
+                }
+              });
+            });
 
-        activeNotifications.forEach((notification) => { try { notification.close(); } catch(error) {} });
-        activeNotifications = [];
+            activeNotifications.forEach((notification) => { try { notification.close(); } catch(error) {} });
+            activeNotifications = [];
+        }
     });
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
-        navigator.serviceWorker.ready
-        .then(function(registration) {
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.ready
+            .then(function(registration) {
 
-            // Use the PushManager to get the user's subscription to the push service.
-            return registration.pushManager.getSubscription()
-            .then(async function(subscription)
-            {
-                // If a subscription was found, return it.
-                if (subscription) {
-                    return subscription;
-                }
+                // Use the PushManager to get the user's subscription to the push service.
+                return registration.pushManager.getSubscription()
+                .then(async function(subscription)
+                {
+                    // If a subscription was found, return it.
+                    if (subscription) {
+                        return subscription;
+                    }
 
 
-                // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
-                // send notifications that don't have a visible effect for the user).
-                return registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: publicKey
+                    // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
+                    // send notifications that don't have a visible effect for the user).
+                    return registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: publicKey
+                    });
                 });
+            }).then(function(subscription) {
+              // Send the subscription details to the server using the Fetch API.
+              app.ports.register_push_subscription_from_js.send(subscription.toJSON());
             });
-        }).then(function(subscription) {
-          // Send the subscription details to the server using the Fetch API.
-          app.ports.register_push_subscription_from_js.send(subscription.toJSON());
-        });
+        }
     });
 
     app.ports.scrollbar_width_to_js.subscribe((a) => {

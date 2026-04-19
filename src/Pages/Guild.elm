@@ -3118,7 +3118,16 @@ voiceChatButton otherUserId maybeState =
                         ]
                         Ui.none
 
-                ( _, False ) ->
+                ( True, False ) ->
+                    Ui.el
+                        [ Ui.width (Ui.px 8)
+                        , Ui.height (Ui.px 8)
+                        , Ui.background (Ui.rgb 200 160 60)
+                        , Ui.rounded 4
+                        ]
+                        Ui.none
+
+                ( False, False ) ->
                     Ui.none
             ]
         )
