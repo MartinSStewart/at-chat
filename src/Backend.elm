@@ -4321,7 +4321,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_VoiceChatChange voiceChatLocalChange ->
-                    handleVoiceChatToBackend sessionId voiceChatLocalChange model
+                    handleVoiceChatToBackend changeId clientId sessionId voiceChatLocalChange model
 
         TwoFactorToBackend toBackend2 ->
             asUser
@@ -4423,64 +4423,59 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
 
 handleVoiceChatToBackend :
-    SessionId
+    ChangeId
+    -> ClientId
+    -> SessionId
     -> VoiceChat.LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleVoiceChatToBackend sessionId voiceMsg model =
-    case SeqDict.get sessionId model.sessions of
-        Nothing ->
-            ( model, Command.none )
-
-        Just session ->
-            let
-                userId : Id UserId
-                userId =
-                    session.userId
-            in
-            case voiceMsg of
-                VoiceChat_Join otherUserId ->
-                    if userId == otherUserId then
+handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
+    case voiceMsg of
+        VoiceChat_Join otherUserId ->
+            asDmUser
+                model
+                sessionId
+                { otherUserId = otherUserId }
+                (\session user dmChannelId _ ->
+                    if session.userId == otherUserId then
                         ( model, Command.none )
 
                     else
                         let
-                            dmChannelId : DmChannelId
-                            dmChannelId =
-                                DmChannel.channelIdFromUserIds userId otherUserId
-
                             updatedParticipants : SeqSet (Id UserId)
                             updatedParticipants =
                                 SeqDict.get dmChannelId model.voiceChatParticipants
                                     |> Maybe.withDefault SeqSet.empty
-                                    |> SeqSet.insert userId
+                                    |> SeqSet.insert session.userId
                         in
                         ( { model
                             | voiceChatParticipants =
                                 SeqDict.insert dmChannelId updatedParticipants model.voiceChatParticipants
                           }
                         , Command.batch
-                            [ 
-                             , Broadcast.toUser
+                            [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                            , Broadcast.toUser
                                 Nothing
                                 Nothing
                                 otherUserId
-                                (VoiceChat_PeerLeft userId |> Server_VoiceChatChange |> ServerChange)
+                                (VoiceChat_PeerJoined session.userId |> Server_VoiceChatChange |> ServerChange)
                                 model
                             ]
                         )
+                )
 
-                VoiceChat_Leave otherUserId ->
+        VoiceChat_Leave otherUserId ->
+            asDmUser
+                model
+                sessionId
+                { otherUserId = otherUserId }
+                (\session user dmChannelId _ ->
                     let
-                        dmChannelId : DmChannelId
-                        dmChannelId =
-                            DmChannel.channelIdFromUserIds userId otherUserId
-
                         updatedParticipants : SeqSet (Id UserId)
                         updatedParticipants =
                             SeqDict.get dmChannelId model.voiceChatParticipants
                                 |> Maybe.withDefault SeqSet.empty
-                                |> SeqSet.remove userId
+                                |> SeqSet.remove session.userId
                     in
                     ( { model
                         | voiceChatParticipants =
@@ -4490,23 +4485,36 @@ handleVoiceChatToBackend sessionId voiceMsg model =
                             else
                                 SeqDict.insert dmChannelId updatedParticipants model.voiceChatParticipants
                       }
-                    , Broadcast.toUser
-                        Nothing
-                        Nothing
-                        otherUserId
-                        (VoiceChat_PeerLeft userId |> Server_VoiceChatChange |> ServerChange)
-                        model
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                        , Broadcast.toUser
+                            Nothing
+                            Nothing
+                            otherUserId
+                            (VoiceChat_PeerLeft session.userId |> Server_VoiceChatChange |> ServerChange)
+                            model
+                        ]
                     )
+                )
 
-                VoiceChat_Signal otherUserId signal ->
+        VoiceChat_Signal otherUserId signal ->
+            asDmUser
+                model
+                sessionId
+                { otherUserId = otherUserId }
+                (\session user dmChannelId _ ->
                     ( model
-                    , Broadcast.toUser
-                        Nothing
-                        Nothing
-                        otherUserId
-                        (VoiceChat_SignalReceived userId signal |> Server_VoiceChatChange |> ServerChange)
-                        model
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                        , Broadcast.toUser
+                            Nothing
+                            Nothing
+                            otherUserId
+                            (VoiceChat_SignalReceived session.userId signal |> Server_VoiceChatChange |> ServerChange)
+                            model
+                        ]
                     )
+                )
 
 
 threadRouteToDiscordMessageId :
