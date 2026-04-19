@@ -36,6 +36,10 @@ port module Ports exposing
     , textInputSelectAll
     , userAgentSub
     , visualViewportResized
+    , voiceChatDeliverSignal
+    , voiceChatFromJs
+    , voiceChatStart
+    , voiceChatStop
     )
 
 import Codec exposing (Codec)
@@ -43,6 +47,7 @@ import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)
@@ -508,6 +513,66 @@ port martinsstewart_crop_image_to_js : Json.Encode.Value -> Cmd msg
 
 
 port martinsstewart_crop_image_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port voice_chat_to_js : Json.Encode.Value -> Cmd msg
+
+
+port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+voiceChatStart : Id UserId -> Bool -> Command FrontendOnly toBackend msg
+voiceChatStart peerId shouldOffer =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "start" )
+            , ( "peerUserId", Json.Encode.int (Id.toInt peerId) )
+            , ( "shouldOffer", Json.Encode.bool shouldOffer )
+            ]
+        )
+
+
+voiceChatStop : Id UserId -> Command FrontendOnly toBackend msg
+voiceChatStop peerId =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "stop" )
+            , ( "peerUserId", Json.Encode.int (Id.toInt peerId) )
+            ]
+        )
+
+
+voiceChatDeliverSignal : Id UserId -> String -> Command FrontendOnly toBackend msg
+voiceChatDeliverSignal peerId signal =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "signal" )
+            , ( "peerUserId", Json.Encode.int (Id.toInt peerId) )
+            , ( "signal", Json.Encode.string signal )
+            ]
+        )
+
+
+voiceChatFromJs : (( Id UserId, String ) -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs msg =
+    Subscription.fromJs
+        "voice_chat_from_js"
+        voice_chat_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map2 (\peerUserId signal -> msg ( Id.fromInt peerUserId, signal ))
+                    (Json.Decode.field "peerUserId" Json.Decode.int)
+                    (Json.Decode.field "signal" Json.Decode.string)
+                )
+                json
+                |> Result.withDefault (msg ( Id.fromInt -1, "" ))
+        )
 
 
 cropImageToJsName : String

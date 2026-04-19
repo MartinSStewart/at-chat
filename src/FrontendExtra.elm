@@ -61,6 +61,7 @@ import Url exposing (Url)
 import User exposing (FrontendCurrentUser, FrontendUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import VoiceChat
 
 
 pendingChangesText : LocalChange -> String
@@ -181,6 +182,17 @@ pendingChangesText localChange =
 
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
+
+        Local_VoiceChatChange voiceChatChange ->
+            case voiceChatChange of
+                VoiceChat.VoiceChat_Join id ->
+                    "Joined voice chat"
+
+                VoiceChat.VoiceChat_Leave id ->
+                    "Left voice chat"
+
+                VoiceChat.VoiceChat_Signal id string ->
+                    "Voice chat state change"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -1398,6 +1410,12 @@ isPressMsg msg =
         EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             True
 
+        PressedVoiceChatButton id ->
+            True
+
+        GotVoiceChatSignalFromJs id string ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
@@ -2177,6 +2195,9 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
+
+                Local_VoiceChatChange voiceChatChange ->
+                    VoiceChat.localChangeUpdate voiceChatChange local
 
         ServerChange serverChange ->
             case serverChange of
@@ -3161,6 +3182,9 @@ changeUpdate localMsg local =
                                 , user = User.addNewStickers newStickers localUser.user
                             }
                     }
+
+                Server_VoiceChatChange voiceChatFrontendMsg ->
+                    VoiceChat.changeUpdate voiceChatFrontendMsg local
 
 
 guildSendMessage :

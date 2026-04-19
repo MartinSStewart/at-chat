@@ -536,6 +536,22 @@ getLoginData sessionId session user requestMessagesFor model =
     , publicVapidKey = model.publicVapidKey
     , textEditor = model.textEditor
     , stickers = model.stickers
+    , voiceChatPeers =
+        SeqDict.foldl
+            (\dmChannelId participants set ->
+                case DmChannel.otherUserId session.userId dmChannelId of
+                    Just otherUser ->
+                        if SeqSet.member otherUser participants then
+                            SeqSet.insert otherUser set
+
+                        else
+                            set
+
+                    Nothing ->
+                        set
+            )
+            SeqSet.empty
+            model.voiceChatParticipants
     }
 
 
@@ -1180,6 +1196,9 @@ toBackendLog toBackend =
 
                 Local_SetEmojiSkinTone _ ->
                     ToBackendLog_Local_SetEmojiSkinTone
+
+                Local_VoiceChatChange _ ->
+                    ToBackendLog_Local_VoiceChatChange
 
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend

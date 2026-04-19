@@ -147,6 +147,7 @@ import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUs
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
+import VoiceChat exposing (VoiceChatState)
 
 
 type alias LocalState =
@@ -160,6 +161,7 @@ type alias LocalState =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
+    , voiceChats : SeqDict (Id UserId) VoiceChatState
     }
 
 

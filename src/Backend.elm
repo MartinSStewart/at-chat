@@ -53,7 +53,7 @@ import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import TOTP.Key
@@ -67,6 +67,7 @@ import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import VoiceChat exposing (LocalChange(..), ServerChange(..))
 import WireHelper
 
 
@@ -220,6 +221,7 @@ init =
       , toBackendLogs = Array.empty
       , stickers = SeqDict.empty
       , discordStickers = OneToOne.empty
+      , voiceChatParticipants = SeqDict.empty
       }
     , Command.none
     )
@@ -4318,6 +4320,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_VoiceChatChange voiceChatLocalChange ->
+                    handleVoiceChatToBackend sessionId voiceChatLocalChange model
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model
@@ -4415,6 +4420,93 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         |> Lamdera.sendToFrontend clientId
                     )
                 )
+
+
+handleVoiceChatToBackend :
+    SessionId
+    -> VoiceChat.LocalChange
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleVoiceChatToBackend sessionId voiceMsg model =
+    case SeqDict.get sessionId model.sessions of
+        Nothing ->
+            ( model, Command.none )
+
+        Just session ->
+            let
+                userId : Id UserId
+                userId =
+                    session.userId
+            in
+            case voiceMsg of
+                VoiceChat_Join otherUserId ->
+                    if userId == otherUserId then
+                        ( model, Command.none )
+
+                    else
+                        let
+                            dmChannelId : DmChannelId
+                            dmChannelId =
+                                DmChannel.channelIdFromUserIds userId otherUserId
+
+                            updatedParticipants : SeqSet (Id UserId)
+                            updatedParticipants =
+                                SeqDict.get dmChannelId model.voiceChatParticipants
+                                    |> Maybe.withDefault SeqSet.empty
+                                    |> SeqSet.insert userId
+                        in
+                        ( { model
+                            | voiceChatParticipants =
+                                SeqDict.insert dmChannelId updatedParticipants model.voiceChatParticipants
+                          }
+                        , Command.batch
+                            [ 
+                             , Broadcast.toUser
+                                Nothing
+                                Nothing
+                                otherUserId
+                                (VoiceChat_PeerLeft userId |> Server_VoiceChatChange |> ServerChange)
+                                model
+                            ]
+                        )
+
+                VoiceChat_Leave otherUserId ->
+                    let
+                        dmChannelId : DmChannelId
+                        dmChannelId =
+                            DmChannel.channelIdFromUserIds userId otherUserId
+
+                        updatedParticipants : SeqSet (Id UserId)
+                        updatedParticipants =
+                            SeqDict.get dmChannelId model.voiceChatParticipants
+                                |> Maybe.withDefault SeqSet.empty
+                                |> SeqSet.remove userId
+                    in
+                    ( { model
+                        | voiceChatParticipants =
+                            if SeqSet.isEmpty updatedParticipants then
+                                SeqDict.remove dmChannelId model.voiceChatParticipants
+
+                            else
+                                SeqDict.insert dmChannelId updatedParticipants model.voiceChatParticipants
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        otherUserId
+                        (VoiceChat_PeerLeft userId |> Server_VoiceChatChange |> ServerChange)
+                        model
+                    )
+
+                VoiceChat_Signal otherUserId signal ->
+                    ( model
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        otherUserId
+                        (VoiceChat_SignalReceived userId signal |> Server_VoiceChatChange |> ServerChange)
+                        model
+                    )
 
 
 threadRouteToDiscordMessageId :
