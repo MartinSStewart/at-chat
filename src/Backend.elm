@@ -45,6 +45,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
+import NonemptySet exposing (NonemptySet)
 import OneToOne
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
@@ -4441,16 +4442,18 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                         ( model, Command.none )
 
                     else
-                        let
-                            updatedParticipants : SeqSet (Id UserId)
-                            updatedParticipants =
-                                SeqDict.get dmChannelId model.voiceChatParticipants
-                                    |> Maybe.withDefault SeqSet.empty
-                                    |> SeqSet.insert session.userId
-                        in
                         ( { model
                             | voiceChatParticipants =
-                                SeqDict.insert dmChannelId updatedParticipants model.voiceChatParticipants
+                                SeqDict.insert
+                                    dmChannelId
+                                    (case SeqDict.get dmChannelId model.voiceChatParticipants of
+                                        Just voiceChatParticipants ->
+                                            NonemptySet.insert session.userId voiceChatParticipants
+
+                                        Nothing ->
+                                            NonemptySet.singleton session.userId
+                                    )
+                                    model.voiceChatParticipants
                           }
                         , Command.batch
                             [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
@@ -4470,31 +4473,45 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                 sessionId
                 { otherUserId = otherUserId }
                 (\session user dmChannelId _ ->
-                    let
-                        updatedParticipants : SeqSet (Id UserId)
-                        updatedParticipants =
-                            SeqDict.get dmChannelId model.voiceChatParticipants
-                                |> Maybe.withDefault SeqSet.empty
-                                |> SeqSet.remove session.userId
-                    in
-                    ( { model
-                        | voiceChatParticipants =
-                            if SeqSet.isEmpty updatedParticipants then
-                                SeqDict.remove dmChannelId model.voiceChatParticipants
+                    case SeqDict.get dmChannelId model.voiceChatParticipants of
+                        Just voiceChatParticipants ->
+                            if NonemptySet.member session.userId voiceChatParticipants then
+                                ( { model
+                                    | voiceChatParticipants =
+                                        SeqDict.update
+                                            dmChannelId
+                                            (\_ ->
+                                                NonemptySet.remove session.userId voiceChatParticipants
+                                                    |> NonemptySet.fromSeqSet
+                                            )
+                                            model.voiceChatParticipants
+                                  }
+                                , Command.batch
+                                    [ Lamdera.sendToFrontend
+                                        clientId
+                                        (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                    , Broadcast.toUser
+                                        Nothing
+                                        Nothing
+                                        otherUserId
+                                        (VoiceChat_PeerLeft session.userId |> Server_VoiceChatChange |> ServerChange)
+                                        model
+                                    ]
+                                )
 
                             else
-                                SeqDict.insert dmChannelId updatedParticipants model.voiceChatParticipants
-                      }
-                    , Command.batch
-                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
-                        , Broadcast.toUser
-                            Nothing
-                            Nothing
-                            otherUserId
-                            (VoiceChat_PeerLeft session.userId |> Server_VoiceChatChange |> ServerChange)
-                            model
-                        ]
-                    )
+                                ( model
+                                , Lamdera.sendToFrontend
+                                    clientId
+                                    (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                )
+
+                        Nothing ->
+                            ( model
+                            , Lamdera.sendToFrontend
+                                clientId
+                                (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                            )
                 )
 
         VoiceChat_Signal otherUserId signal ->

@@ -53,6 +53,7 @@ import LoginForm
 import MembersAndOwner
 import Message
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
 import PersonName
@@ -541,7 +542,7 @@ getLoginData sessionId session user requestMessagesFor model =
             (\dmChannelId participants set ->
                 case DmChannel.otherUserId session.userId dmChannelId of
                     Just otherUser ->
-                        if SeqSet.member otherUser participants then
+                        if NonemptySet.member otherUser participants then
                             SeqSet.insert otherUser set
 
                         else

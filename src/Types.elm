@@ -327,7 +327,7 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
-    , voiceChatParticipants : SeqDict DmChannelId (SeqSet (Id UserId))
+    , voiceChatParticipants : SeqDict DmChannelId (NonemptySet (Id UserId))
     }
 
 
