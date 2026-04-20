@@ -3264,6 +3264,12 @@ updateLoaded msg model =
                                                                             DeletedMessage_NoReply _ ->
                                                                                 Nothing
 
+                                                                            CallStarted_NoReply posix userId seqDict ->
+                                                                                Nothing
+
+                                                                            CallEnded_NoReply posix seqDict ->
+                                                                                Nothing
+
                                                                     MessageUnloaded_NoReply ->
                                                                         Nothing
                                                             )
@@ -3348,6 +3354,12 @@ updateLoaded msg model =
                                                                                 Nothing
 
                                                                             DeletedMessage_NoReply _ ->
+                                                                                Nothing
+
+                                                                            CallStarted_NoReply posix userId seqDict ->
+                                                                                Nothing
+
+                                                                            CallEnded_NoReply posix seqDict ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->
@@ -3467,7 +3479,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (VoiceChat_Signal peerId signal |> Local_VoiceChatChange |> Just)
+                        (Local_Signal peerId signal |> Local_VoiceChatChange |> Just)
                         loggedIn
                         Command.none
                 )
@@ -4050,14 +4062,14 @@ pressedVoiceChatButton otherUserId model =
             else if current.iJoined then
                 FrontendExtra.handleLocalChange
                     model.time
-                    (VoiceChat_Leave otherUserId |> Local_VoiceChatChange |> Just)
+                    (Local_Leave otherUserId |> Local_VoiceChatChange |> Just)
                     loggedIn
                     (Ports.voiceChatStop otherUserId)
 
             else
                 FrontendExtra.handleLocalChange
                     model.time
-                    (VoiceChat_Join otherUserId |> Local_VoiceChatChange |> Just)
+                    (Local_Join otherUserId |> Local_VoiceChatChange |> Just)
                     loggedIn
                     (if current.peerJoined then
                         Ports.voiceChatStart otherUserId (Id.toInt currentUserId < Id.toInt otherUserId)

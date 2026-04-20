@@ -185,13 +185,13 @@ pendingChangesText localChange =
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
-                VoiceChat.VoiceChat_Join _ ->
+                VoiceChat.Local_Join _ ->
                     "Joined voice chat"
 
-                VoiceChat.VoiceChat_Leave _ ->
+                VoiceChat.Local_Leave _ ->
                     "Left voice chat"
 
-                VoiceChat.VoiceChat_Signal _ _ ->
+                VoiceChat.Local_Signal _ _ ->
                     "Voice chat state change"
 
 

@@ -68,7 +68,7 @@ import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat exposing (LocalChange(..), ServerChange(..))
+import VoiceChat exposing (LocalChange, ServerChange(..))
 import WireHelper
 
 
@@ -979,6 +979,12 @@ update msg model =
 
                                                                 DeletedMessage _ ->
                                                                     members
+
+                                                                CallStarted posix userId seqDict ->
+                                                                    members
+
+                                                                CallEnded posix seqDict ->
+                                                                    members
                                                         )
                                                         channel.members
                                                         messages2
@@ -1798,6 +1804,12 @@ discordStartThread discordUser channel channelId threadId messageId model =
 
                         DeletedMessage _ ->
                             "Message deleted"
+
+                        CallStarted posix userId seqDict ->
+                            "Call started"
+
+                        CallEnded posix seqDict ->
+                            "Call ended"
 
                 Nothing ->
                     "Thread"
@@ -4427,12 +4439,12 @@ handleVoiceChatToBackend :
     ChangeId
     -> ClientId
     -> SessionId
-    -> LocalChange
+    -> VoiceChat.LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
     case voiceMsg of
-        VoiceChat_Join otherUserId ->
+        VoiceChat.Local_Join otherUserId ->
             asDmUser
                 model
                 sessionId
@@ -4461,13 +4473,13 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                                 Nothing
                                 Nothing
                                 otherUserId
-                                (VoiceChat_PeerJoined session.userId |> Server_VoiceChatChange |> ServerChange)
+                                (Server_PeerJoined session.userId |> Server_VoiceChatChange |> ServerChange)
                                 model
                             ]
                         )
                 )
 
-        VoiceChat_Leave otherUserId ->
+        VoiceChat.Local_Leave otherUserId ->
             asDmUser
                 model
                 sessionId
@@ -4494,7 +4506,7 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                                         Nothing
                                         Nothing
                                         otherUserId
-                                        (VoiceChat_PeerLeft session.userId |> Server_VoiceChatChange |> ServerChange)
+                                        (Server_PeerLeft session.userId |> Server_VoiceChatChange |> ServerChange)
                                         model
                                     ]
                                 )
@@ -4514,7 +4526,7 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                             )
                 )
 
-        VoiceChat_Signal otherUserId signal ->
+        VoiceChat.Local_Signal otherUserId signal ->
             asDmUser
                 model
                 sessionId
@@ -4527,7 +4539,7 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                             Nothing
                             Nothing
                             otherUserId
-                            (VoiceChat_SignalReceived session.userId signal |> Server_VoiceChatChange |> ServerChange)
+                            (Server_SignalReceived session.userId signal |> Server_VoiceChatChange |> ServerChange)
                             model
                         ]
                     )

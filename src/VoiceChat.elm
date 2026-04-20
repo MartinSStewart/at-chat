@@ -14,15 +14,15 @@ import SeqDict
 
 
 type LocalChange
-    = VoiceChat_Join (Id UserId)
-    | VoiceChat_Leave (Id UserId)
-    | VoiceChat_Signal (Id UserId) String
+    = Local_Join (Id UserId)
+    | Local_Leave (Id UserId)
+    | Local_Signal (Id UserId) String
 
 
 type ServerChange
-    = VoiceChat_PeerJoined (Id UserId)
-    | VoiceChat_PeerLeft (Id UserId)
-    | VoiceChat_SignalReceived (Id UserId) String
+    = Server_PeerJoined (Id UserId)
+    | Server_PeerLeft (Id UserId)
+    | Server_SignalReceived (Id UserId) String
 
 
 type alias VoiceChatState =
@@ -38,7 +38,7 @@ changeCmd :
     -> Command FrontendOnly toBackend msg
 changeCmd change currentUserId local =
     case change of
-        VoiceChat_PeerJoined peerId ->
+        Server_PeerJoined peerId ->
             let
                 current : VoiceChatState
                 current =
@@ -51,10 +51,10 @@ changeCmd change currentUserId local =
             else
                 Command.none
 
-        VoiceChat_PeerLeft peerId ->
+        Server_PeerLeft peerId ->
             Ports.voiceChatStop peerId
 
-        VoiceChat_SignalReceived peerId signal ->
+        Server_SignalReceived peerId signal ->
             Ports.voiceChatDeliverSignal peerId signal
 
 
@@ -64,7 +64,7 @@ localChangeUpdate :
     -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
 localChangeUpdate change local =
     case change of
-        VoiceChat_Join peerId ->
+        Local_Join peerId ->
             let
                 current : VoiceChatState
                 current =
@@ -72,7 +72,7 @@ localChangeUpdate change local =
             in
             { local | voiceChats = SeqDict.insert peerId { current | iJoined = True } local.voiceChats }
 
-        VoiceChat_Leave peerId ->
+        Local_Leave peerId ->
             let
                 current : VoiceChatState
                 current =
@@ -80,7 +80,7 @@ localChangeUpdate change local =
             in
             { local | voiceChats = SeqDict.insert peerId { current | iJoined = False } local.voiceChats }
 
-        VoiceChat_Signal _ _ ->
+        Local_Signal _ _ ->
             local
 
 
@@ -90,7 +90,7 @@ changeUpdate :
     -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
 changeUpdate change local =
     case change of
-        VoiceChat_PeerJoined peerId ->
+        Server_PeerJoined peerId ->
             let
                 current : VoiceChatState
                 current =
@@ -99,7 +99,7 @@ changeUpdate change local =
             in
             { local | voiceChats = SeqDict.insert peerId { current | peerJoined = True } local.voiceChats }
 
-        VoiceChat_PeerLeft peerId ->
+        Server_PeerLeft peerId ->
             let
                 current : VoiceChatState
                 current =
@@ -108,5 +108,5 @@ changeUpdate change local =
             in
             { local | voiceChats = SeqDict.insert peerId { current | peerJoined = False } local.voiceChats }
 
-        VoiceChat_SignalReceived _ _ ->
+        Server_SignalReceived _ _ ->
             local

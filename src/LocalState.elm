@@ -400,6 +400,12 @@ messageToString allUsers3 message =
         DeletedMessage _ ->
             messageDeleted
 
+        CallStarted posix userId seqDict ->
+            "Call started"
+
+        CallEnded posix seqDict ->
+            "Call ended"
+
 
 messageDeleted : String
 messageDeleted =
@@ -812,6 +818,12 @@ createMessageBackend message channel =
 
                 DeletedMessage _ ->
                     channel.lastTypedAt
+
+                CallStarted posix userId seqDict ->
+                    channel.lastTypedAt
+
+                CallEnded posix seqDict ->
+                    channel.lastTypedAt
       }
     )
 
@@ -876,6 +888,12 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 DeletedMessage _ ->
                     Ok ( messageId2, channel2 )
 
+                CallStarted posix userId seqDict ->
+                    Ok ( messageId2, channel2 )
+
+                CallEnded posix seqDict ->
+                    Ok ( messageId2, channel2 )
+
         Err error ->
             Err error
 
@@ -916,6 +934,12 @@ createDiscordMessageBackend messageId message channel =
                         channel.lastTypedAt
 
                     DeletedMessage _ ->
+                        channel.lastTypedAt
+
+                    CallStarted posix userId seqDict ->
+                        channel.lastTypedAt
+
+                    CallEnded posix seqDict ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1000,6 +1024,12 @@ createMessageFrontend message channel =
                     channel.lastTypedAt
 
                 DeletedMessage _ ->
+                    channel.lastTypedAt
+
+                CallStarted posix userId seqDict ->
+                    channel.lastTypedAt
+
+                CallEnded posix seqDict ->
                     channel.lastTypedAt
     }
 
@@ -2154,6 +2184,12 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (DeletedMessage _) ->
                                     []
 
+                                Just (CallStarted time startedBy _) ->
+                                    [ startedBy ]
+
+                                Just (CallEnded _ _) ->
+                                    []
+
                                 Nothing ->
                                     []
                            )
@@ -2206,6 +2242,12 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 DeletedMessage _ ->
                                     []
 
+                                CallStarted posix startedBy seqDict ->
+                                    [ startedBy ]
+
+                                CallEnded posix seqDict ->
+                                    []
+
                         _ ->
                             []
                    )
@@ -2232,6 +2274,12 @@ repliedToUserId maybeRepliedTo channel =
                         DeletedMessage _ ->
                             Nothing
 
+                        CallStarted posix startedBy seqDict ->
+                            Just startedBy
+
+                        CallEnded posix seqDict ->
+                            Nothing
+
                 Nothing ->
                     Nothing
 
@@ -2253,6 +2301,12 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                             Just joinedUser
 
                         DeletedMessage _ ->
+                            Nothing
+
+                        CallStarted posix startedBy seqDict ->
+                            Just startedBy
+
+                        CallEnded posix seqDict ->
                             Nothing
 
                 _ ->
@@ -2555,6 +2609,12 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
                                             DeletedMessage time ->
                                                 DeletedMessage_NoReply time
+
+                                            CallStarted time startedBy reactions ->
+                                                CallStarted_NoReply time startedBy reactions
+
+                                            CallEnded time reactions ->
+                                                CallEnded_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
 
@@ -2584,6 +2644,12 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
                                         DeletedMessage time ->
                                             DeletedMessage_NoReply time
+
+                                        CallStarted time startedBy reactions ->
+                                            CallStarted_NoReply time startedBy reactions
+
+                                        CallEnded time reactions ->
+                                            CallEnded_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
 
@@ -2636,6 +2702,12 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
 
                                 DeletedMessage time ->
                                     DeletedMessage_NoReply time
+
+                                CallStarted time startedBy reactions ->
+                                    CallStarted_NoReply time startedBy reactions
+
+                                CallEnded time reactions ->
+                                    CallEnded_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply
 
