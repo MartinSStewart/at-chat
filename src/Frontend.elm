@@ -4051,7 +4051,7 @@ pressedVoiceChatButton voiceChatId model =
                     model.time
                     (Local_Leave voiceChatId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (Ports.voiceChatStop voiceChatId)
+                    (VoiceChat.leaveVoiceChatCmds voiceChatId local.localUser.session.sessionIdHash local.calls)
 
             else
                 FrontendExtra.handleLocalChange

@@ -8,6 +8,7 @@ module VoiceChat exposing
     , changeCmd
     , changeUpdate
     , hasJoined
+    , leaveVoiceChatCmds
     , localChangeUpdate
     , peerHasJoined
     )
@@ -62,6 +63,18 @@ hasJoined otherUserId local =
 
         Nothing ->
             False
+
+
+leaveVoiceChatCmds : VoiceChatId -> SessionIdHash -> Model -> Command FrontendOnly toMsg msg
+leaveVoiceChatCmds voiceChatId sessionIdHash model =
+    case SeqDict.get voiceChatId model.voiceChats of
+        Just voiceChat ->
+            NonemptySet.toList voiceChat
+                |> List.map Ports.voiceChatStop
+                |> Command.batch
+
+        Nothing ->
+            Command.none
 
 
 peerHasJoined :
