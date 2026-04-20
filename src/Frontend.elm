@@ -45,7 +45,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet
+import NonemptySet exposing (NonemptySet)
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
@@ -57,7 +57,8 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
+import SessionIdHash exposing (SessionIdHash)
 import Sticker
 import String.Nonempty
 import TextEditor
@@ -103,7 +104,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (LocalChange(..), VoiceChatState)
+import VoiceChat exposing (LocalChange(..), VoiceChatId, VoiceChatState)
 
 
 app :
@@ -471,13 +472,7 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , voiceChats =
-        SeqSet.foldl
-            (\peerId acc ->
-                SeqDict.insert peerId { iJoined = False, peerJoined = True } acc
-            )
-            SeqDict.empty
-            loginData.voiceChatPeers
+    , voiceChats = loginData.voiceChatPeers
     }
 
 
@@ -4038,8 +4033,8 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             )
 
 
-pressedVoiceChatButton : Id UserId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-pressedVoiceChatButton otherUserId model =
+pressedVoiceChatButton : VoiceChatId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedVoiceChatButton voiceChatId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             let
@@ -4050,29 +4045,21 @@ pressedVoiceChatButton otherUserId model =
                 currentUserId : Id UserId
                 currentUserId =
                     local.localUser.session.userId
-
-                current : VoiceChatState
-                current =
-                    SeqDict.get otherUserId local.voiceChats
-                        |> Maybe.withDefault { iJoined = False, peerJoined = False }
             in
-            if currentUserId == otherUserId then
-                ( loggedIn, Command.none )
-
-            else if current.iJoined then
+            if VoiceChat.hasJoined voiceChatId local then
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_Leave otherUserId |> Local_VoiceChatChange |> Just)
+                    (Local_Leave voiceChatId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (Ports.voiceChatStop otherUserId)
+                    (Ports.voiceChatStop voiceChatId)
 
             else
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_Join otherUserId |> Local_VoiceChatChange |> Just)
+                    (Local_Join voiceChatId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (if current.peerJoined then
-                        Ports.voiceChatStart otherUserId (Id.toInt currentUserId < Id.toInt otherUserId)
+                    (if VoiceChat.peerHasJoined voiceChatId local then
+                        Ports.voiceChatStart voiceChatId (Id.toInt currentUserId < Id.toInt voiceChatId)
 
                      else
                         Command.none

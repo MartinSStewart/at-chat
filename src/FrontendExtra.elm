@@ -2197,7 +2197,7 @@ changeUpdate localMsg local =
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
 
                 Local_VoiceChatChange voiceChatChange ->
-                    VoiceChat.localChangeUpdate voiceChatChange local
+                    VoiceChat.localChangeUpdate voiceChatChange local.localUser.session.sessionIdHash local
 
         ServerChange serverChange ->
             case serverChange of
@@ -3184,7 +3184,7 @@ changeUpdate localMsg local =
                     }
 
                 Server_VoiceChatChange voiceChatFrontendMsg ->
-                    VoiceChat.changeUpdate voiceChatFrontendMsg local
+                    VoiceChat.changeUpdate voiceChatFrontendMsg local.localUser.session.sessionIdHash local
 
 
 guildSendMessage :

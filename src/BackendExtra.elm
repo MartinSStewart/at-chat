@@ -64,7 +64,7 @@ import RichText exposing (RichText)
 import SecretId
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash
+import SessionIdHash exposing (SessionIdHash)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
@@ -539,19 +539,34 @@ getLoginData sessionId session user requestMessagesFor model =
     , stickers = model.stickers
     , voiceChatPeers =
         SeqDict.foldl
-            (\dmChannelId participants set ->
-                case DmChannel.otherUserId session.userId dmChannelId of
-                    Just otherUser ->
-                        if NonemptySet.member otherUser participants then
-                            SeqSet.insert otherUser set
+            (\dmChannelId participants dict ->
+                let
+                    participatingSessions : SeqSet SessionIdHash
+                    participatingSessions =
+                        NonemptySet.foldl
+                            (\participant set ->
+                                case SeqDict.get participant model.sessions of
+                                    Just session2 ->
+                                        SeqSet.insert session2.sessionIdHash set
 
-                        else
-                            set
+                                    Nothing ->
+                                        set
+                            )
+                            SeqSet.empty
+                            participants
+                in
+                case
+                    ( NonemptySet.fromSeqSet participatingSessions
+                    , DmChannel.otherUserId session.userId dmChannelId
+                    )
+                of
+                    ( Just participatingSessions2, Just otherUserId ) ->
+                        SeqDict.insert otherUserId participatingSessions2 dict
 
-                    Nothing ->
-                        set
+                    _ ->
+                        dict
             )
-            SeqSet.empty
+            SeqDict.empty
             model.voiceChatParticipants
     }
 

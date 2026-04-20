@@ -107,7 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat
+import VoiceChat exposing (VoiceChatId)
 
 
 type FrontendModel
@@ -327,7 +327,7 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
-    , voiceChatParticipants : SeqDict DmChannelId (NonemptySet (Id UserId))
+    , voiceChatParticipants : SeqDict DmChannelId (NonemptySet SessionId)
     }
 
 
@@ -480,8 +480,8 @@ type FrontendMsg
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
-    | PressedVoiceChatButton (Id UserId)
-    | GotVoiceChatSignalFromJs (Id UserId) String
+    | PressedVoiceChatButton VoiceChatId
+    | GotVoiceChatSignalFromJs SessionIdHash String
 
 
 type ScrollPosition
@@ -682,7 +682,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
-    , voiceChatPeers : SeqSet (Id UserId)
+    , voiceChatPeers : SeqDict (Id UserId) (NonemptySet SessionIdHash)
     }
 
 

@@ -1,28 +1,44 @@
 module VoiceChat exposing
     ( LocalChange(..)
+    , Model
     , ServerChange(..)
+    , VoiceChatId(..)
     , VoiceChatState
+    , addSessionIdHash
     , changeCmd
     , changeUpdate
+    , hasJoined
     , localChangeUpdate
+    , peerHasJoined
     )
 
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Id exposing (Id, UserId)
+import NonemptySet exposing (NonemptySet)
 import Ports
-import SeqDict
+import SeqDict exposing (SeqDict)
+import SeqSet
+import SessionIdHash exposing (SessionIdHash)
 
 
 type LocalChange
-    = Local_Join (Id UserId)
-    | Local_Leave (Id UserId)
-    | Local_Signal (Id UserId) String
+    = Local_Join VoiceChatId
+    | Local_Leave VoiceChatId
+    | Local_Signal VoiceChatId String
 
 
 type ServerChange
-    = Server_PeerJoined (Id UserId)
-    | Server_PeerLeft (Id UserId)
-    | Server_SignalReceived (Id UserId) String
+    = Server_Joined VoiceChatId SessionIdHash
+    | Server_Left VoiceChatId SessionIdHash
+    | Server_SignalReceived VoiceChatId SessionIdHash String
+
+
+type alias Model =
+    { voiceChats : SeqDict VoiceChatId (NonemptySet SessionIdHash) }
+
+
+type VoiceChatId
+    = DmVoiceChat (Id UserId)
 
 
 type alias VoiceChatState =
@@ -31,14 +47,57 @@ type alias VoiceChatState =
     }
 
 
+hasJoined :
+    VoiceChatId
+    ->
+        { b
+            | calls : Model
+            , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
+        }
+    -> Bool
+hasJoined otherUserId local =
+    case SeqDict.get otherUserId local.calls.voiceChats of
+        Just voiceChat ->
+            NonemptySet.member local.localUser.session.sessionIdHash voiceChat
+
+        Nothing ->
+            False
+
+
+peerHasJoined :
+    VoiceChatId
+    ->
+        { b
+            | calls : Model
+            , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
+            , otherSessions : SeqDict SessionIdHash f
+        }
+    -> Bool
+peerHasJoined otherUserId local =
+    case SeqDict.get otherUserId local.calls.voiceChats of
+        Just voiceChat ->
+            SeqDict.foldl
+                (\sessionId _ set ->
+                    SeqSet.remove sessionId set
+                )
+                (NonemptySet.remove local.localUser.session.sessionIdHash voiceChat)
+                local.otherSessions
+                |> SeqSet.isEmpty
+                |> not
+
+        Nothing ->
+            False
+
+
 changeCmd :
     ServerChange
     -> Id UserId
-    -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
+    -> SessionIdHash
+    -> { a | voiceChats : SeqDict VoiceChatId VoiceChatState }
     -> Command FrontendOnly toBackend msg
-changeCmd change currentUserId local =
+changeCmd change currentUserId sessionIdHash local =
     case change of
-        Server_PeerJoined peerId ->
+        Server_Joined peerId peerSessionIdHash ->
             let
                 current : VoiceChatState
                 current =
@@ -46,67 +105,87 @@ changeCmd change currentUserId local =
                         |> Maybe.withDefault { iJoined = False, peerJoined = False }
             in
             if current.iJoined then
-                Ports.voiceChatStart peerId (Id.toInt currentUserId < Id.toInt peerId)
+                Ports.voiceChatStart
+                    peerSessionIdHash
+                    (SessionIdHash.toString sessionIdHash < SessionIdHash.toString peerSessionIdHash)
 
             else
                 Command.none
 
-        Server_PeerLeft peerId ->
-            Ports.voiceChatStop peerId
+        Server_Left peerId peerSessionIdHash ->
+            Ports.voiceChatStop peerSessionIdHash
 
-        Server_SignalReceived peerId signal ->
-            Ports.voiceChatDeliverSignal peerId signal
+        Server_SignalReceived peerId peerSessionIdHash signal ->
+            Ports.voiceChatDeliverSignal peerSessionIdHash signal
 
 
-localChangeUpdate :
-    LocalChange
-    -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
-    -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
-localChangeUpdate change local =
+addSessionIdHash :
+    dmChannelId
+    -> sessionId
+    -> SeqDict dmChannelId (NonemptySet sessionId)
+    -> SeqDict dmChannelId (NonemptySet sessionId)
+addSessionIdHash otherUserId sessionIdHash dmVoiceChats =
+    SeqDict.update
+        otherUserId
+        (\maybe ->
+            case maybe of
+                Just nonemptySet ->
+                    NonemptySet.insert sessionIdHash nonemptySet |> Just
+
+                Nothing ->
+                    NonemptySet.singleton sessionIdHash |> Just
+        )
+        dmVoiceChats
+
+
+removeSessionIdHash : VoiceChatId -> SessionIdHash -> Model -> Model
+removeSessionIdHash peerId peerSessionIdHash model =
+    case SeqDict.get peerId model.voiceChats of
+        Just dmVoiceChat ->
+            let
+                voiceChatParticipants2 =
+                    NonemptySet.remove peerSessionIdHash dmVoiceChat
+                        |> NonemptySet.fromSeqSet
+            in
+            { model
+                | voiceChats = SeqDict.update peerId (\_ -> voiceChatParticipants2) model.voiceChats
+            }
+
+        Nothing ->
+            model
+
+
+localChangeUpdate : LocalChange -> SessionIdHash -> { a | calls : Model } -> { a | calls : Model }
+localChangeUpdate change sessionIdHash local =
     case change of
         Local_Join peerId ->
             let
-                current : VoiceChatState
-                current =
-                    SeqDict.get peerId local.voiceChats |> Maybe.withDefault { iJoined = False, peerJoined = False }
+                calls : Model
+                calls =
+                    local.calls
             in
-            { local | voiceChats = SeqDict.insert peerId { current | iJoined = True } local.voiceChats }
+            { local | calls = { calls | voiceChats = addSessionIdHash peerId sessionIdHash calls.voiceChats } }
 
         Local_Leave peerId ->
-            let
-                current : VoiceChatState
-                current =
-                    SeqDict.get peerId local.voiceChats |> Maybe.withDefault { iJoined = False, peerJoined = False }
-            in
-            { local | voiceChats = SeqDict.insert peerId { current | iJoined = False } local.voiceChats }
+            { local | calls = removeSessionIdHash peerId sessionIdHash local.calls }
 
         Local_Signal _ _ ->
             local
 
 
-changeUpdate :
-    ServerChange
-    -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
-    -> { a | voiceChats : SeqDict.SeqDict (Id UserId) VoiceChatState }
-changeUpdate change local =
+changeUpdate : ServerChange -> SessionIdHash -> { a | calls : Model } -> { a | calls : Model }
+changeUpdate change sessionIdHash local =
     case change of
-        Server_PeerJoined peerId ->
+        Server_Joined peerId peerSessionIdHash ->
             let
-                current : VoiceChatState
-                current =
-                    SeqDict.get peerId local.voiceChats
-                        |> Maybe.withDefault { iJoined = False, peerJoined = False }
+                calls : Model
+                calls =
+                    local.calls
             in
-            { local | voiceChats = SeqDict.insert peerId { current | peerJoined = True } local.voiceChats }
+            { local | calls = { calls | voiceChats = addSessionIdHash peerId peerSessionIdHash calls.voiceChats } }
 
-        Server_PeerLeft peerId ->
-            let
-                current : VoiceChatState
-                current =
-                    SeqDict.get peerId local.voiceChats
-                        |> Maybe.withDefault { iJoined = False, peerJoined = False }
-            in
-            { local | voiceChats = SeqDict.insert peerId { current | peerJoined = False } local.voiceChats }
+        Server_Left peerId peerSessionIdHash ->
+            { local | calls = removeSessionIdHash peerId peerSessionIdHash local.calls }
 
-        Server_SignalReceived _ _ ->
+        Server_SignalReceived _ peerSessionIdHash _ ->
             local

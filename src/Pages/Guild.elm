@@ -89,7 +89,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (VoiceChatState)
+import VoiceChat exposing (VoiceChatId(..), VoiceChatState)
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -2970,8 +2970,8 @@ privateChatWithYourself =
     ]
 
 
-privateChatWith : Id UserId -> Maybe VoiceChatState -> String -> List (Element FrontendMsg)
-privateChatWith otherUserId voiceChatState name =
+privateChatWith : Id UserId -> LocalState -> String -> List (Element FrontendMsg)
+privateChatWith otherUserId local name =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -2980,7 +2980,7 @@ privateChatWith otherUserId voiceChatState name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
-    , voiceChatButton otherUserId voiceChatState
+    , voiceChatButton (DmVoiceChat otherUserId) local
     ]
 
 
@@ -2997,16 +2997,18 @@ discordPrivateChatWith name =
     ]
 
 
-voiceChatButton : Id UserId -> Maybe VoiceChatState -> Element FrontendMsg
-voiceChatButton otherUserId maybeState =
+voiceChatButton : VoiceChatId -> LocalState -> Element FrontendMsg
+voiceChatButton voiceChatId local =
     let
-        state : VoiceChatState
-        state =
-            Maybe.withDefault { iJoined = False, peerJoined = False } maybeState
+        hasJoined =
+            VoiceChat.hasJoined voiceChatId local
+
+        peerHasJoined =
+            VoiceChat.peerHasJoined voiceChatId local
     in
     MyUi.elButton
         (Dom.id "guild_voiceChat")
-        (PressedVoiceChatButton otherUserId)
+        (PressedVoiceChatButton voiceChatId)
         [ Ui.alignRight
         , Ui.width (Ui.px 44)
         , Ui.paddingXY 4 0
@@ -3014,8 +3016,14 @@ voiceChatButton otherUserId maybeState =
         ]
         (Ui.row
             [ Ui.spacing 2, Ui.centerY ]
-            [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-            , case ( state.iJoined, state.peerJoined ) of
+            [ case SeqDict.get voiceChatId local.calls.voiceChats of
+                Just voiceChat ->
+                    String.fromInt (NonemptySet.size voiceChat) ++ " sessions in voice chat" |> Ui.text
+
+                Nothing ->
+                    Ui.none
+            , Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+            , case ( hasJoined, peerHasJoined ) of
                 ( True, True ) ->
                     Ui.el
                         [ Ui.width (Ui.px 8)
@@ -3213,7 +3221,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                             privateChatWithYourself
 
                          else
-                            privateChatWith otherUserId (SeqDict.get otherUserId local.voiceChats) name
+                            privateChatWith otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3733,7 +3741,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                             privateChatWithYourself
 
                          else
-                            privateChatWith otherUserId (SeqDict.get otherUserId local.voiceChats) name
+                            privateChatWith otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
