@@ -80,7 +80,7 @@ localChangeUpdate change local =
             in
             { local | voiceChats = SeqDict.insert peerId { current | iJoined = False } local.voiceChats }
 
-        VoiceChat_Signal peerId signal ->
+        VoiceChat_Signal _ _ ->
             local
 
 
@@ -108,5 +108,5 @@ changeUpdate change local =
             in
             { local | voiceChats = SeqDict.insert peerId { current | peerJoined = False } local.voiceChats }
 
-        VoiceChat_SignalReceived peerId signal ->
+        VoiceChat_SignalReceived _ _ ->
             local

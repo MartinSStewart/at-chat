@@ -59,7 +59,6 @@ type ToBackendLog
     | ToBackendLog_Local_SetDomainWhitelist
     | ToBackendLog_Local_SetEmojiCategory
     | ToBackendLog_Local_SetEmojiSkinTone
-    | ToBackendLog_VoiceChatToBackend
     | ToBackendLog_Local_VoiceChatChange
 
 
@@ -215,9 +214,6 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetEmojiSkinTone ->
             "Local_SetEmojiSkinTone"
-
-        ToBackendLog_VoiceChatToBackend ->
-            "VoiceChatToBackend"
 
         ToBackendLog_Local_VoiceChatChange ->
             "Local_VoiceChatChange"

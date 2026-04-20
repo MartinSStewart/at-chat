@@ -45,7 +45,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import OneToOne
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
@@ -54,7 +54,7 @@ import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
+import SeqSet
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import TOTP.Key
@@ -4427,7 +4427,7 @@ handleVoiceChatToBackend :
     ChangeId
     -> ClientId
     -> SessionId
-    -> VoiceChat.LocalChange
+    -> LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
@@ -4437,7 +4437,7 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                 model
                 sessionId
                 { otherUserId = otherUserId }
-                (\session user dmChannelId _ ->
+                (\session _ dmChannelId _ ->
                     if session.userId == otherUserId then
                         ( model, Command.none )
 
@@ -4472,7 +4472,7 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                 model
                 sessionId
                 { otherUserId = otherUserId }
-                (\session user dmChannelId _ ->
+                (\session _ dmChannelId _ ->
                     case SeqDict.get dmChannelId model.voiceChatParticipants of
                         Just voiceChatParticipants ->
                             if NonemptySet.member session.userId voiceChatParticipants then
@@ -4519,7 +4519,7 @@ handleVoiceChatToBackend changeId clientId sessionId voiceMsg model =
                 model
                 sessionId
                 { otherUserId = otherUserId }
-                (\session user dmChannelId _ ->
+                (\session _ _ _ ->
                     ( model
                     , Command.batch
                         [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))

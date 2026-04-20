@@ -185,13 +185,13 @@ pendingChangesText localChange =
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
-                VoiceChat.VoiceChat_Join id ->
+                VoiceChat.VoiceChat_Join _ ->
                     "Joined voice chat"
 
-                VoiceChat.VoiceChat_Leave id ->
+                VoiceChat.VoiceChat_Leave _ ->
                     "Left voice chat"
 
-                VoiceChat.VoiceChat_Signal id string ->
+                VoiceChat.VoiceChat_Signal _ _ ->
                     "Voice chat state change"
 
 
@@ -1410,10 +1410,10 @@ isPressMsg msg =
         EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             True
 
-        PressedVoiceChatButton id ->
+        PressedVoiceChatButton _ ->
             True
 
-        GotVoiceChatSignalFromJs id string ->
+        GotVoiceChatSignalFromJs _ _ ->
             False
 
 
