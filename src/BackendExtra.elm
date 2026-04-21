@@ -73,7 +73,7 @@ import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUs
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
 import VisibleMessages
-import VoiceChat exposing (VoiceChatId(..))
+import VoiceChat exposing (RoomId(..))
 
 
 addLogWithCmd :
@@ -562,7 +562,7 @@ getLoginData sessionId session user requestMessagesFor model =
                     )
                 of
                     ( Just participatingSessions2, Just otherUserId ) ->
-                        SeqDict.insert (DmVoiceChat otherUserId) participatingSessions2 dict
+                        SeqDict.insert (DmRoomId otherUserId) participatingSessions2 dict
 
                     _ ->
                         dict

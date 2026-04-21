@@ -89,7 +89,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (VoiceChatId(..), VoiceChatState)
+import VoiceChat exposing (RoomId(..), VoiceChatState)
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -2980,7 +2980,7 @@ privateChatWith otherUserId local name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
-    , voiceChatButton (DmVoiceChat otherUserId) local
+    , voiceChatButton (DmRoomId otherUserId) local
     ]
 
 
@@ -2997,7 +2997,7 @@ discordPrivateChatWith name =
     ]
 
 
-voiceChatButton : VoiceChatId -> LocalState -> Element FrontendMsg
+voiceChatButton : RoomId -> LocalState -> Element FrontendMsg
 voiceChatButton voiceChatId local =
     let
         hasJoined =

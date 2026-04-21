@@ -1,45 +1,56 @@
-module VoiceChat exposing
-    ( LocalChange(..)
+port module VoiceChat exposing
+    ( ConnectionId
+    , LocalChange(..)
     , Model
+    , RoomId(..)
     , ServerChange(..)
-    , VoiceChatId(..)
     , VoiceChatState
     , addSessionIdHash
-    , changeCmd
     , changeUpdate
     , hasJoined
     , leaveVoiceChatCmds
     , localChangeUpdate
     , peerHasJoined
+    , serverChangeCmd
+    , voiceChatDeliverSignal
+    , voiceChatFromJs
+    , voiceChatStop
     )
 
+import Codec
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Subscription as Subscription exposing (Subscription)
 import Id exposing (Id, UserId)
+import Json.Decode
+import Json.Encode
 import NonemptySet exposing (NonemptySet)
-import Ports
 import SeqDict exposing (SeqDict)
 import SeqSet
 import SessionIdHash exposing (SessionIdHash)
 
 
 type LocalChange
-    = Local_Join VoiceChatId
-    | Local_Leave VoiceChatId
-    | Local_Signal VoiceChatId String
+    = Local_Join RoomId
+    | Local_Leave RoomId
+    | Local_Signal ConnectionId String
 
 
 type ServerChange
-    = Server_Joined VoiceChatId SessionIdHash
-    | Server_Left VoiceChatId SessionIdHash
-    | Server_SignalReceived VoiceChatId SessionIdHash String
+    = Server_Joined ConnectionId
+    | Server_Left ConnectionId
+    | Server_SignalReceived ConnectionId String
 
 
 type alias Model =
-    { voiceChats : SeqDict VoiceChatId (NonemptySet SessionIdHash) }
+    { voiceChats : SeqDict RoomId (NonemptySet SessionIdHash) }
 
 
-type VoiceChatId
-    = DmVoiceChat (Id UserId)
+type alias ConnectionId =
+    { roomId : RoomId, otherSession : SessionIdHash }
+
+
+type RoomId
+    = DmRoomId (Id UserId)
 
 
 type alias VoiceChatState =
@@ -49,7 +60,7 @@ type alias VoiceChatState =
 
 
 hasJoined :
-    VoiceChatId
+    RoomId
     ->
         { b
             | calls : Model
@@ -65,12 +76,13 @@ hasJoined otherUserId local =
             False
 
 
-leaveVoiceChatCmds : VoiceChatId -> SessionIdHash -> Model -> Command FrontendOnly toMsg msg
+leaveVoiceChatCmds : RoomId -> SessionIdHash -> Model -> Command FrontendOnly toMsg msg
 leaveVoiceChatCmds voiceChatId sessionIdHash model =
     case SeqDict.get voiceChatId model.voiceChats of
         Just voiceChat ->
-            NonemptySet.toList voiceChat
-                |> List.map Ports.voiceChatStop
+            NonemptySet.remove sessionIdHash voiceChat
+                |> SeqSet.toList
+                |> List.map (\sessionIdHash2 -> voiceChatStop { roomId = voiceChatId, otherSession = sessionIdHash2 })
                 |> Command.batch
 
         Nothing ->
@@ -78,7 +90,7 @@ leaveVoiceChatCmds voiceChatId sessionIdHash model =
 
 
 peerHasJoined :
-    VoiceChatId
+    RoomId
     ->
         { b
             | calls : Model
@@ -102,34 +114,24 @@ peerHasJoined otherUserId local =
             False
 
 
-changeCmd :
+serverChangeCmd :
     ServerChange
     -> Id UserId
     -> SessionIdHash
-    -> { a | voiceChats : SeqDict VoiceChatId VoiceChatState }
+    -> { a | voiceChats : SeqDict RoomId VoiceChatState }
     -> Command FrontendOnly toBackend msg
-changeCmd change currentUserId sessionIdHash local =
+serverChangeCmd change currentUserId sessionIdHash local =
     case change of
-        Server_Joined peerId peerSessionIdHash ->
-            let
-                current : VoiceChatState
-                current =
-                    SeqDict.get peerId local.voiceChats
-                        |> Maybe.withDefault { iJoined = False, peerJoined = False }
-            in
-            if current.iJoined then
-                Ports.voiceChatStart
-                    peerSessionIdHash
-                    (SessionIdHash.toString sessionIdHash < SessionIdHash.toString peerSessionIdHash)
+        Server_Joined connectionId ->
+            voiceChatStart
+                connectionId
+                (SessionIdHash.toString sessionIdHash < SessionIdHash.toString connectionId.otherSession)
 
-            else
-                Command.none
+        Server_Left connectionId ->
+            voiceChatStop connectionId
 
-        Server_Left peerId peerSessionIdHash ->
-            Ports.voiceChatStop peerSessionIdHash
-
-        Server_SignalReceived peerId peerSessionIdHash signal ->
-            Ports.voiceChatDeliverSignal peerSessionIdHash signal
+        Server_SignalReceived connectionId signal ->
+            voiceChatDeliverSignal connectionId signal
 
 
 addSessionIdHash :
@@ -151,17 +153,17 @@ addSessionIdHash otherUserId sessionIdHash dmVoiceChats =
         dmVoiceChats
 
 
-removeSessionIdHash : VoiceChatId -> SessionIdHash -> Model -> Model
-removeSessionIdHash peerId peerSessionIdHash model =
-    case SeqDict.get peerId model.voiceChats of
+removeSessionIdHash : RoomId -> SessionIdHash -> Model -> Model
+removeSessionIdHash roomId sessionIdHash model =
+    case SeqDict.get roomId model.voiceChats of
         Just dmVoiceChat ->
             let
                 voiceChatParticipants2 =
-                    NonemptySet.remove peerSessionIdHash dmVoiceChat
+                    NonemptySet.remove sessionIdHash dmVoiceChat
                         |> NonemptySet.fromSeqSet
             in
             { model
-                | voiceChats = SeqDict.update peerId (\_ -> voiceChatParticipants2) model.voiceChats
+                | voiceChats = SeqDict.update roomId (\_ -> voiceChatParticipants2) model.voiceChats
             }
 
         Nothing ->
@@ -171,16 +173,16 @@ removeSessionIdHash peerId peerSessionIdHash model =
 localChangeUpdate : LocalChange -> SessionIdHash -> { a | calls : Model } -> { a | calls : Model }
 localChangeUpdate change sessionIdHash local =
     case change of
-        Local_Join peerId ->
+        Local_Join roomId ->
             let
                 calls : Model
                 calls =
                     local.calls
             in
-            { local | calls = { calls | voiceChats = addSessionIdHash peerId sessionIdHash calls.voiceChats } }
+            { local | calls = { calls | voiceChats = addSessionIdHash roomId sessionIdHash calls.voiceChats } }
 
-        Local_Leave peerId ->
-            { local | calls = removeSessionIdHash peerId sessionIdHash local.calls }
+        Local_Leave roomId ->
+            { local | calls = removeSessionIdHash roomId sessionIdHash local.calls }
 
         Local_Signal _ _ ->
             local
@@ -189,16 +191,106 @@ localChangeUpdate change sessionIdHash local =
 changeUpdate : ServerChange -> SessionIdHash -> { a | calls : Model } -> { a | calls : Model }
 changeUpdate change sessionIdHash local =
     case change of
-        Server_Joined peerId peerSessionIdHash ->
+        Server_Joined connectionId ->
             let
                 calls : Model
                 calls =
                     local.calls
             in
-            { local | calls = { calls | voiceChats = addSessionIdHash peerId peerSessionIdHash calls.voiceChats } }
+            { local
+                | calls =
+                    { calls
+                        | voiceChats =
+                            addSessionIdHash connectionId.roomId connectionId.otherSession calls.voiceChats
+                    }
+            }
 
-        Server_Left peerId peerSessionIdHash ->
-            { local | calls = removeSessionIdHash peerId peerSessionIdHash local.calls }
+        Server_Left connectionId ->
+            { local | calls = removeSessionIdHash connectionId.roomId connectionId.otherSession local.calls }
 
-        Server_SignalReceived _ peerSessionIdHash _ ->
+        Server_SignalReceived _ _ ->
             local
+
+
+port voice_chat_to_js : Json.Encode.Value -> Cmd msg
+
+
+port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+voiceChatStart : ConnectionId -> Bool -> Command FrontendOnly toBackend msg
+voiceChatStart connectionId shouldOffer =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "start" )
+            , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
+            , ( "shouldOffer", Json.Encode.bool shouldOffer )
+            ]
+        )
+
+
+voiceChatStop : ConnectionId -> Command FrontendOnly toBackend msg
+voiceChatStop connectionId =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "stop" )
+            , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
+            ]
+        )
+
+
+voiceChatDeliverSignal : ConnectionId -> String -> Command FrontendOnly toBackend msg
+voiceChatDeliverSignal connectionId signal =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "signal" )
+            , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
+            , ( "signal", Json.Encode.string signal )
+            ]
+        )
+
+
+voiceChatFromJs : (ConnectionId -> String -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs msg =
+    Subscription.fromJs
+        "voice_chat_from_js"
+        voice_chat_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map2 (\peerUserId signal -> msg peerUserId signal)
+                    (Json.Decode.field "peerUserId" (Codec.decoder connectionIdCodec))
+                    (Json.Decode.field "signal" Json.Decode.string)
+                )
+                json
+                |> Result.withDefault
+                    (msg
+                        { roomId = DmRoomId (Id.fromInt 0)
+                        , otherSession = SessionIdHash.fromString ""
+                        }
+                        ""
+                    )
+        )
+
+
+connectionIdCodec =
+    Codec.map
+        (\text ->
+            case String.split " " text of
+                [ first, second ] ->
+                    case String.toInt first of
+                        Just int ->
+                            Codec.succeed ( DmRoomId (Id.fromInt int), SessionIdHash.fromString second )
+
+                        Nothing ->
+                            Codec.fail ("Invalid connectionId: " ++ text)
+
+                _ ->
+                    Codec.fail ("Invalid connectionId: " ++ text)
+        )
+        Codec.string

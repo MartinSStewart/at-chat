@@ -516,66 +516,6 @@ port martinsstewart_crop_image_to_js : Json.Encode.Value -> Cmd msg
 port martinsstewart_crop_image_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
-port voice_chat_to_js : Json.Encode.Value -> Cmd msg
-
-
-port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
-
-
-voiceChatStart : SessionIdHash -> Bool -> Command FrontendOnly toBackend msg
-voiceChatStart peerId shouldOffer =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "start" )
-            , ( "peerUserId", Codec.encoder SessionIdHash.codec peerId )
-            , ( "shouldOffer", Json.Encode.bool shouldOffer )
-            ]
-        )
-
-
-voiceChatStop : SessionIdHash -> Command FrontendOnly toBackend msg
-voiceChatStop peerId =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "stop" )
-            , ( "peerUserId", Codec.encoder SessionIdHash.codec peerId )
-            ]
-        )
-
-
-voiceChatDeliverSignal : SessionIdHash -> String -> Command FrontendOnly toBackend msg
-voiceChatDeliverSignal peerId signal =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "signal" )
-            , ( "peerUserId", Codec.encoder SessionIdHash.codec peerId )
-            , ( "signal", Json.Encode.string signal )
-            ]
-        )
-
-
-voiceChatFromJs : (SessionIdHash -> String -> msg) -> Subscription FrontendOnly msg
-voiceChatFromJs msg =
-    Subscription.fromJs
-        "voice_chat_from_js"
-        voice_chat_from_js
-        (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.map2 (\peerUserId signal -> msg peerUserId signal)
-                    (Json.Decode.field "peerUserId" (Codec.decoder SessionIdHash.codec))
-                    (Json.Decode.field "signal" Json.Decode.string)
-                )
-                json
-                |> Result.withDefault (msg (SessionIdHash.fromString "") "")
-        )
-
-
 cropImageToJsName : String
 cropImageToJsName =
     "martinsstewart_crop_image_to_js"

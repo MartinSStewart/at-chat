@@ -68,7 +68,7 @@ import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat exposing (LocalChange, ServerChange(..), VoiceChatId(..))
+import VoiceChat exposing (LocalChange, RoomId(..), ServerChange(..))
 import WireHelper
 
 
@@ -4447,7 +4447,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
         VoiceChat.Local_Join voiceChatId ->
             case voiceChatId of
-                DmVoiceChat otherUserId ->
+                DmRoomId otherUserId ->
                     asDmUser
                         model
                         sessionId
@@ -4475,7 +4475,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     session.userId
                                     otherUserId
                                     (\otherUserId2 ->
-                                        Server_Joined (DmVoiceChat otherUserId2) session.sessionIdHash |> Server_VoiceChatChange
+                                        Server_Joined (DmRoomId otherUserId2) session.sessionIdHash |> Server_VoiceChatChange
                                     )
                                     model
                                 ]
@@ -4484,7 +4484,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
 
         VoiceChat.Local_Leave voiceChatId ->
             case voiceChatId of
-                DmVoiceChat otherUserId ->
+                DmRoomId otherUserId ->
                     asDmUser
                         model
                         sessionId
@@ -4528,7 +4528,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                                 session.userId
                                                 otherUserId
                                                 (\otherUserId2 ->
-                                                    Server_Left (DmVoiceChat otherUserId2) session.sessionIdHash
+                                                    Server_Left (DmRoomId otherUserId2) session.sessionIdHash
                                                         |> Server_VoiceChatChange
                                                 )
                                                 model
@@ -4552,7 +4552,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
 
         VoiceChat.Local_Signal voiceChatId signal ->
             case voiceChatId of
-                DmVoiceChat otherUserId ->
+                DmRoomId otherUserId ->
                     asDmUser
                         model
                         sessionId
@@ -4565,7 +4565,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     Nothing
                                     Nothing
                                     otherUserId
-                                    (Server_SignalReceived (DmVoiceChat session.userId) session.sessionIdHash signal
+                                    (Server_SignalReceived (DmRoomId session.userId) session.sessionIdHash signal
                                         |> Server_VoiceChatChange
                                         |> ServerChange
                                     )

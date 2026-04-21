@@ -104,7 +104,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (LocalChange(..), VoiceChatId, VoiceChatState)
+import VoiceChat exposing (LocalChange(..), RoomId, VoiceChatState)
 
 
 app :
@@ -4033,7 +4033,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
             )
 
 
-pressedVoiceChatButton : VoiceChatId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedVoiceChatButton : RoomId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedVoiceChatButton voiceChatId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
@@ -5307,7 +5307,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
-                                    , VoiceChat.changeCmd voiceChatChange local.localUser.session.userId local
+                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.userId local
                                     )
 
                                 _ ->

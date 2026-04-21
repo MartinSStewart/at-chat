@@ -107,7 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (VoiceChatId)
+import VoiceChat exposing (RoomId)
 
 
 type FrontendModel
@@ -480,7 +480,7 @@ type FrontendMsg
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
-    | PressedVoiceChatButton VoiceChatId
+    | PressedVoiceChatButton RoomId
     | GotVoiceChatSignalFromJs SessionIdHash String
 
 
@@ -682,7 +682,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
-    , voiceChatPeers : SeqDict VoiceChatId (NonemptySet SessionIdHash)
+    , voiceChatPeers : SeqDict RoomId (NonemptySet SessionIdHash)
     }
 
 
