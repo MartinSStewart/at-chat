@@ -2064,11 +2064,20 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     ( spoilerIndex3
                     , embedIndex3
                     , currentList
-                        ++ [ Html.div
-                                [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid rgb(80,120,200)")
-                                , Html.Attributes.style "padding" ("2px " ++ String.fromInt sidePadding ++ "px")
-                                ]
-                                list2
+                        ++ [ case showLargeContent of
+                                ShowLargeContent _ ->
+                                    Html.div
+                                        [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid rgb(80,120,200)")
+                                        , Html.Attributes.style "padding" ("2px " ++ String.fromInt sidePadding ++ "px")
+                                        ]
+                                        list2
+
+                                NoLargeContent ->
+                                    Html.span
+                                        [ Html.Attributes.style "border-left" (String.fromInt borderLeft ++ "px solid rgb(80,120,200)")
+                                        , Html.Attributes.style "padding" ("0px " ++ String.fromInt sidePadding ++ "px")
+                                        ]
+                                        list2
                            ]
                     )
 
