@@ -103,10 +103,10 @@ addLog time log model =
         ( Just text, False ) ->
             ( { model2 | lastErrorLogEmail = time }
             , Command.batch
-                [ case adminEmailAddress model of
+                [ case adminEmailAddress model2 of
                     Just emailAddress ->
                         Postmark.sendEmailTask
-                            model.postmarkApiKey
+                            model2.postmarkApiKey
                             { from = { name = "", email = Env.noReplyEmailAddress }
                             , to = Nonempty { name = "", email = emailAddress } []
                             , subject = NonemptyString 'A' "n error was logged that needs attention"

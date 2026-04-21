@@ -2041,7 +2041,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
                                             model3.users
                                   }
-                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model.postmarkApiKey
+                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model3.postmarkApiKey
                                 )
 
                         ( Nothing, Ok loginCode ) ->
@@ -2059,7 +2059,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                             model3.pendingLogins
                                   }
-                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model.postmarkApiKey
+                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model3.postmarkApiKey
                                 )
 
                             else

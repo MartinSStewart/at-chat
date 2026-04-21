@@ -1791,7 +1791,7 @@ apiKeysSection local user adminData2 model =
             "Postmark API key"
             (\text ->
                 case String.Nonempty.fromString text of
-                    Just nonempty ->
+                    Just _ ->
                         Postmark.apiKey text |> Ok
 
                     Nothing ->

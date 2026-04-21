@@ -37,7 +37,6 @@ import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (Emoji)
-import Env
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -1423,7 +1422,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     case ( message.guildId, message.flags ) of
                                         ( Included guildId, Included flags ) ->
                                             if flags.hasThread then
-                                                joinThread model.serverSecret userData.auth guildId message.id
+                                                joinThread model2.serverSecret userData.auth guildId message.id
 
                                             else
                                                 Command.none
@@ -1534,7 +1533,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 joinThreadCmd =
                                     case ( edit.guildId, edit.flags.hasThread ) of
                                         ( Included guildId, True ) ->
-                                            joinThread model.serverSecret userData.auth guildId edit.id
+                                            joinThread model2.serverSecret userData.auth guildId edit.id
 
                                         _ ->
                                             Command.none
@@ -2181,7 +2180,7 @@ handleChannelCreated channel model =
                             channelId
                             (Server_DiscordDmChannelCreated channelId members |> ServerChange)
                             model2
-                        , getUserAvatars model.serverSecret existingUsers (head :: rest)
+                        , getUserAvatars model2.serverSecret existingUsers (head :: rest)
                         ]
                     )
 
