@@ -1,7 +1,6 @@
 module Env exposing (..)
 
 import EmailAddress exposing (EmailAddress)
-import Postmark
 import Unsafe
 
 
