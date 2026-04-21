@@ -682,7 +682,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
-    , voiceChatPeers : SeqDict (Id UserId) (NonemptySet SessionIdHash)
+    , voiceChatPeers : SeqDict VoiceChatId (NonemptySet SessionIdHash)
     }
 
 

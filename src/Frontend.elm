@@ -472,7 +472,7 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , voiceChats = loginData.voiceChatPeers
+    , calls = { voiceChats = loginData.voiceChatPeers }
     }
 
 
