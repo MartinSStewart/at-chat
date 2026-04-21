@@ -4,12 +4,14 @@ module MessageInput exposing
     , NameSoFar(..)
     , NameSoFarData
     , TextInputFocus
+    , counterThreshold
     , disabledView
     , discordUserDropdownList
     , dropdownView
     , editView
     , emojiDropdownList
     , isPress
+    , maxLength
     , pressedArrowInDropdown
     , pressedDropdownItem
     , userDropdownList
@@ -83,6 +85,16 @@ type Msg
     | OnPasteFiles (Nonempty File)
 
 
+maxLength : number
+maxLength =
+    2000
+
+
+counterThreshold : number
+counterThreshold =
+    1000
+
+
 isPress : Msg -> Bool
 isPress msg =
     case msg of
@@ -141,7 +153,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                             if key == "ArrowUp" && text == "" then
                                 Json.Decode.succeed ( PressedArrowUpInEmptyInput, True )
 
-                            else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
+                            else if key == "Enter" && not shiftHeld && not isMobileKeyboard && String.length text <= maxLength then
                                 Json.Decode.succeed ( PressedSendMessage, True )
 
                             else
@@ -351,6 +363,10 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
+
+        overLimit : Bool
+        overLimit =
+            String.length text > maxLength
     in
     textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
@@ -377,6 +393,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
+            , Ui.inFront (characterCounter text)
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
@@ -386,7 +403,13 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     , Ui.rounded 4
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
-                    , Ui.background MyUi.buttonBackground
+                    , Ui.background
+                        (if overLimit then
+                            MyUi.disabledButtonBackground
+
+                         else
+                            MyUi.buttonBackground
+                        )
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -417,6 +440,10 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
+
+        overLimit : Bool
+        overLimit =
+            String.length text > maxLength
     in
     textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
@@ -442,6 +469,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
+            , Ui.inFront (characterCounter text)
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
@@ -451,7 +479,13 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     , Ui.rounded 4
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
-                    , Ui.background MyUi.buttonBackground
+                    , Ui.background
+                        (if overLimit then
+                            MyUi.disabledButtonBackground
+
+                         else
+                            MyUi.buttonBackground
+                        )
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
@@ -468,6 +502,35 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     (Ui.html Icons.sendMessage)
                 )
             ]
+
+
+characterCounter : String -> Element msg
+characterCounter text =
+    let
+        length : Int
+        length =
+            String.length text
+    in
+    if length >= counterThreshold then
+        Ui.el
+            [ Ui.alignBottom
+            , Ui.alignLeft
+            , Ui.width Ui.shrink
+            , Ui.paddingXY 6 2
+            , Ui.Font.size 12
+            , Ui.Font.color
+                (if length > maxLength then
+                    MyUi.errorColor
+
+                 else
+                    MyUi.font3
+                )
+            , Ui.move { x = 2, y = -2, z = 0 }
+            ]
+            (Ui.text (String.fromInt length ++ "/" ++ String.fromInt maxLength))
+
+    else
+        Ui.none
 
 
 attachmentButton : String -> Element Msg
