@@ -55,6 +55,7 @@ import OneToOne exposing (OneToOne)
 import PersonName
 import Quantity
 import RichText exposing (RichText(..))
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -765,9 +766,9 @@ referencedMessageToMessageId message channel =
             Nothing
 
 
-backendSessionIdHash : SessionIdHash
-backendSessionIdHash =
-    SessionIdHash.fromString Env.secretKey
+backendSessionIdHash : SecretId ServerSecret -> SessionIdHash
+backendSessionIdHash secretKey =
+    SessionIdHash.fromString (SecretId.toString secretKey)
 
 
 taskResult : Task restriction a value -> Task restriction x (Result a value)
@@ -780,10 +781,15 @@ nonemptyTaskSequence nonempty =
     Task.map2 Nonempty (List.Nonempty.head nonempty) (Task.sequence (List.Nonempty.tail nonempty))
 
 
-joinThread : Discord.UserAuth -> Discord.Id Discord.GuildId -> Discord.Id Discord.MessageId -> Command BackendOnly toMsg BackendMsg
-joinThread authentication guildId threadId =
+joinThread :
+    SecretId ServerSecret
+    -> Discord.UserAuth
+    -> Discord.Id Discord.GuildId
+    -> Discord.Id Discord.MessageId
+    -> Command BackendOnly toMsg BackendMsg
+joinThread secretKey authentication guildId threadId =
     Discord.joinThreadPayload (Discord.userToken authentication) threadId
-        |> http
+        |> http secretKey
         |> taskResult
         |> Task.andThen (\result -> Task.map (JoinedDiscordThread guildId result) Time.now)
         |> Task.perform identity
@@ -836,7 +842,8 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                 SeqDict.map (\_ attachment -> attachment.fileData) attachments
 
                             ( message, embedCmds, stickersToFrontend ) =
-                                Message.userTextMessage
+                                Message.userTextMessageBackend
+                                    model.serverSecret
                                     discordMessage.timestamp
                                     discordMessage.author.id
                                     richText
@@ -1029,7 +1036,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                         let
                                             userAvatars : Command BackendOnly ToFrontend BackendMsg
                                             userAvatars =
-                                                getUserAvatars model.discordUsers [ discordMessage.author ]
+                                                getUserAvatars model.serverSecret model.discordUsers [ discordMessage.author ]
 
                                             model2 : BackendModel
                                             model2 =
@@ -1143,7 +1150,8 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                             ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                                                 let
                                                     ( message2, embedCmds, stickers ) =
-                                                        Message.userTextMessage
+                                                        Message.userTextMessageBackend
+                                                            model.serverSecret
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
@@ -1168,7 +1176,8 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                             NoThreadWithMaybeMessage maybeReplyTo ->
                                                 let
                                                     ( message, embedCmds, stickers ) =
-                                                        Message.userTextMessage
+                                                        Message.userTextMessageBackend
+                                                            model.serverSecret
                                                             discordMessage.timestamp
                                                             discordMessage.author.id
                                                             richText
@@ -1293,7 +1302,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             |> ServerChange
                                                         )
                                                         model2
-                                            , getUserAvatars model2.discordUsers [ discordMessage.author ]
+                                            , getUserAvatars model2.serverSecret model2.discordUsers [ discordMessage.author ]
                                             , Broadcast.discordGuildMessageNotification
                                                 usersMentioned
                                                 discordMessage.timestamp
@@ -1414,7 +1423,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     case ( message.guildId, message.flags ) of
                                         ( Included guildId, Included flags ) ->
                                             if flags.hasThread then
-                                                joinThread userData.auth guildId message.id
+                                                joinThread model.serverSecret userData.auth guildId message.id
 
                                             else
                                                 Command.none
@@ -1428,6 +1437,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             let
                                                 stickerData =
                                                     handleStickers
+                                                        model2.serverSecret
                                                         (List.map
                                                             (\sticker ->
                                                                 { id = sticker.id
@@ -1479,7 +1489,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         :: stickerCmds
                                         :: Task.perform
                                             (DiscordMessageCreate_AttachmentsUploaded message)
-                                            (nonemptyTaskSequence (List.Nonempty.map loadMessageAttachment nonempty))
+                                            (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model3.serverSecret) nonempty))
                                         :: cmds
                                     )
 
@@ -1524,7 +1534,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 joinThreadCmd =
                                     case ( edit.guildId, edit.flags.hasThread ) of
                                         ( Included guildId, True ) ->
-                                            joinThread userData.auth guildId edit.id
+                                            joinThread model.serverSecret userData.auth guildId edit.id
 
                                         _ ->
                                             Command.none
@@ -1534,7 +1544,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     ( model2
                                     , Task.perform
                                         (DiscordMessageUpdate_AttachmentsUploaded edit)
-                                        (nonemptyTaskSequence (List.Nonempty.map loadMessageAttachment nonempty))
+                                        (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model2.serverSecret) nonempty))
                                         :: joinThreadCmd
                                         :: cmds
                                     )
@@ -1703,7 +1713,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                         , discordGuilds =
                                                             SeqDict.insert guildId guild3 model2.discordGuilds
                                                       }
-                                                    , getUserAvatars model2.discordUsers users2
+                                                    , getUserAvatars model2.serverSecret model2.discordUsers users2
                                                     )
 
                                                 Nothing ->
@@ -1729,7 +1739,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                         embeddedActivityUpdateV2.participants
                                             in
                                             ( { model2 | discordUsers = discordUsers }
-                                            , getUserAvatars model2.discordUsers users2
+                                            , getUserAvatars model2.serverSecret model2.discordUsers users2
                                             )
                             in
                             ( model3, cmd2 :: cmds )
@@ -1816,7 +1826,7 @@ handleJoinOrCreateGuild :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleJoinOrCreateGuild discordUserId gatewayGuild model =
     ( { model | discordGuilds = addDiscordGuild model.discordStickers [] gatewayGuild model.discordGuilds }
-    , getDiscordGuildData gatewayGuild
+    , getDiscordGuildData model.serverSecret gatewayGuild
         |> Task.map (\( _, guildData ) -> Ok guildData)
         |> Task.onError (\error -> Err error |> Task.succeed)
         |> Task.andThen (\result -> Task.map (Tuple.pair result) Time.now)
@@ -1913,7 +1923,7 @@ handleGuildMemberUpdate guildId guildMember model2 =
                         }
                         model2.discordGuilds
               }
-            , getUserAvatars model2.discordUsers [ guildMember.user ]
+            , getUserAvatars model2.serverSecret model2.discordUsers [ guildMember.user ]
             )
 
         Nothing ->
@@ -2052,10 +2062,11 @@ handleEditMessage edit attachments model2 =
 
 
 loadMessageAttachment :
-    Discord.Attachment
+    SecretId ServerSecret
+    -> Discord.Attachment
     -> Task restriction x (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse ))
-loadMessageAttachment attachment =
-    FileStatus.uploadUrl { sessionId = backendSessionIdHash, url = attachment.url }
+loadMessageAttachment secretKey attachment =
+    FileStatus.uploadUrl { sessionId = backendSessionIdHash secretKey, url = attachment.url }
         |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
         |> Task.onError (\error -> Task.succeed (Err error))
 
@@ -2170,7 +2181,7 @@ handleChannelCreated channel model =
                             channelId
                             (Server_DiscordDmChannelCreated channelId members |> ServerChange)
                             model2
-                        , getUserAvatars existingUsers (head :: rest)
+                        , getUserAvatars model.serverSecret existingUsers (head :: rest)
                         ]
                     )
 
@@ -2283,13 +2294,15 @@ handleReadySupplementalData data model =
 
 
 handleStickers :
-    List
-        { a
-            | id : Discord.Id Discord.StickerId
-            , stickerType : Discord.StickerType
-            , formatType : Discord.StickerFormatType
-            , name : String
-        }
+    SecretId ServerSecret
+    ->
+        List
+            { a
+                | id : Discord.Id Discord.StickerId
+                , stickerType : Discord.StickerType
+                , formatType : Discord.StickerFormatType
+                , name : String
+            }
     ->
         { tasks : List (Task BackendOnly x ( Id StickerId, Result Http.Error FileStatus.UploadResponse ))
         , stickers : SeqDict (Id StickerId) StickerData
@@ -2300,7 +2313,7 @@ handleStickers :
         , stickers : SeqDict (Id StickerId) StickerData
         , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
         }
-handleStickers stickersToCheck state =
+handleStickers secretKey stickersToCheck state =
     List.foldl
         (\sticker { stickers, tasks, discordStickers } ->
             case OneToOne.second sticker.id discordStickers of
@@ -2323,7 +2336,7 @@ handleStickers stickersToCheck state =
                             in
                             { tasks =
                                 (FileStatus.uploadUrl
-                                    { sessionId = backendSessionIdHash
+                                    { sessionId = backendSessionIdHash secretKey
                                     , url = Discord.stickerUrl sticker.stickerType sticker.formatType sticker.id
                                     }
                                     |> taskResult
@@ -2370,7 +2383,7 @@ handleReadyData userId readyData model =
             }
         stickerData =
             List.foldl
-                (\guild state -> handleStickers guild.stickers state)
+                (\guild state -> handleStickers model.serverSecret guild.stickers state)
                 { tasks = [], stickers = model.stickers, discordStickers = model.discordStickers }
                 readyData.guilds
     in
@@ -2400,7 +2413,7 @@ handleReadyData userId readyData model =
         , stickers = stickerData.stickers
       }
     , Command.batch
-        [ getUserAvatars model.discordUsers discordUsers
+        [ getUserAvatars model.serverSecret model.discordUsers discordUsers
         , Task.sequence stickerData.tasks
             |> Task.andThen (\stickers -> Task.map (GotDiscordReadyDataStickers userId stickers) Time.now)
             |> Task.perform identity
@@ -2410,7 +2423,7 @@ handleReadyData userId readyData model =
                     Nothing
 
                 else
-                    getDiscordGuildData guild |> Just
+                    getDiscordGuildData model.serverSecret guild |> Just
             )
             readyData.guilds
             |> Task.sequence
@@ -2504,7 +2517,7 @@ uploadAttachmentsForMessages model messages =
         |> SeqDict.toList
         |> List.map
             (\( _, attachment ) ->
-                FileStatus.uploadUrl { sessionId = backendSessionIdHash, url = attachment.url }
+                FileStatus.uploadUrl { sessionId = backendSessionIdHash model.serverSecret, url = attachment.url }
                     |> Task.map (\uploadResponse -> Ok ( DiscordAttachmentId.fromUrl attachment.url, uploadResponse ))
                     |> Task.onError (\error -> Task.succeed (Err error))
             )
@@ -2512,7 +2525,8 @@ uploadAttachmentsForMessages model messages =
 
 
 getDiscordGuildData :
-    Discord.GatewayGuild
+    SecretId ServerSecret
+    -> Discord.GatewayGuild
     ->
         Task
             BackendOnly
@@ -2520,7 +2534,7 @@ getDiscordGuildData :
             ( Discord.Id Discord.GuildId
             , { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
             )
-getDiscordGuildData gatewayGuild =
+getDiscordGuildData secretKey gatewayGuild =
     Task.map
         (\maybeIcon ->
             ( gatewayGuild.properties.id
@@ -2533,6 +2547,7 @@ getDiscordGuildData gatewayGuild =
         (case gatewayGuild.properties.icon of
             Just icon ->
                 loadImage
+                    secretKey
                     (Discord.guildIconUrl
                         { size = Discord.DefaultImageSize
                         , imageType = Discord.Choice1 Discord.Png
@@ -2608,28 +2623,36 @@ getDiscordGuildData gatewayGuild =
 --        )
 
 
-getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id Discord.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)
-getManyMessages authentication { channelId, limit } =
+getManyMessages :
+    SecretId ServerSecret
+    -> Discord.Authentication
+    -> { a | channelId : Discord.Id Discord.ChannelId, limit : Int }
+    -> Task BackendOnly Discord.HttpError (List Discord.Message)
+getManyMessages secretKey authentication { channelId, limit } =
     Discord.getMessagesPayload authentication { channelId = channelId, limit = min limit 100, relativeTo = Discord.MostRecent }
-        |> http
-        |> Task.andThen (\messages -> getManyMessagesHelper authentication channelId (limit - 100) Array.empty (Array.fromList messages))
+        |> http secretKey
+        |> Task.andThen
+            (\messages ->
+                getManyMessagesHelper secretKey authentication channelId (limit - 100) Array.empty (Array.fromList messages)
+            )
 
 
 getManyMessagesHelper :
-    Discord.Authentication
+    SecretId ServerSecret
+    -> Discord.Authentication
     -> Discord.Id Discord.ChannelId
     -> Int
     -> Array Discord.Message
     -> Array Discord.Message
     -> Task BackendOnly Discord.HttpError (List Discord.Message)
-getManyMessagesHelper authentication channelId limit restOfMessages messages =
+getManyMessagesHelper secretKey authentication channelId limit restOfMessages messages =
     case Array.Extra.last messages of
         Just last ->
             if Array.length messages >= 100 && limit > 0 then
                 Discord.getMessagesPayload
                     authentication
                     { channelId = channelId, limit = min limit 100, relativeTo = Discord.Before last.id }
-                    |> http
+                    |> http secretKey
                     |> Task.onError
                         (\error ->
                             case error of
@@ -2643,7 +2666,7 @@ getManyMessagesHelper authentication channelId limit restOfMessages messages =
                                                     , limit = min limit 100
                                                     , relativeTo = Discord.Before last.id
                                                     }
-                                                    |> http
+                                                    |> http secretKey
                                             )
 
                                 _ ->
@@ -2652,6 +2675,7 @@ getManyMessagesHelper authentication channelId limit restOfMessages messages =
                     |> Task.andThen
                         (\newMessages ->
                             getManyMessagesHelper
+                                secretKey
                                 authentication
                                 channelId
                                 (limit - 100)
@@ -2746,7 +2770,7 @@ handleListGuildMembersResponse chunkData model =
                 )
                 model.discordGuilds
       }
-    , List.map .user chunkData.members |> getUserAvatars model.discordUsers
+    , List.map .user chunkData.members |> getUserAvatars model.serverSecret model.discordUsers
     )
 
 
@@ -2764,10 +2788,11 @@ userAvatar user =
 
 
 getUserAvatars :
-    SeqDict (Discord.Id Discord.UserId) DiscordUserData
+    SecretId ServerSecret
+    -> SeqDict (Discord.Id Discord.UserId) DiscordUserData
     -> List { a | id : Discord.Id Discord.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
     -> Command restriction toMsg BackendMsg
-getUserAvatars existingUsers users =
+getUserAvatars secretKey existingUsers users =
     Task.map2
         GotDiscordUserAvatars
         (List.filterMap
@@ -2788,6 +2813,7 @@ getUserAvatars existingUsers users =
                         (case user.avatar of
                             Just avatar ->
                                 loadImage
+                                    secretKey
                                     (Discord.userAvatarUrl
                                         { size = Discord.DefaultImageSize
                                         , imageType = Discord.Choice1 Discord.Png
@@ -2812,8 +2838,8 @@ getUserAvatars existingUsers users =
         |> Task.perform identity
 
 
-loadImage : String -> Task restriction x (Maybe FileStatus.UploadResponse)
-loadImage url =
+loadImage : SecretId ServerSecret -> String -> Task restriction x (Maybe FileStatus.UploadResponse)
+loadImage secretKey url =
     Http.task
         { method = "GET"
         , headers = []
@@ -2835,7 +2861,7 @@ loadImage url =
             (\maybeBytes ->
                 case maybeBytes of
                     Just bytes ->
-                        FileStatus.uploadBytes backendSessionIdHash bytes
+                        FileStatus.uploadBytes (backendSessionIdHash secretKey) bytes
                             |> Task.map Just
                             |> Task.onError (\_ -> Task.succeed Nothing)
 
@@ -2844,11 +2870,11 @@ loadImage url =
             )
 
 
-http : Discord.HttpRequest value -> Task BackendOnly Discord.HttpError value
-http request =
+http : SecretId ServerSecret -> Discord.HttpRequest value -> Task BackendOnly Discord.HttpError value
+http secretKey request =
     Http.task
         { method = "POST"
-        , headers = [ Env.secretKeyHeader ]
+        , headers = [ FileStatus.secretKeyHeader secretKey ]
         , url = FileStatus.domain ++ "/file/internal/custom-request"
         , body =
             Json.Encode.object
@@ -2905,14 +2931,15 @@ http request =
 
 
 sendMessage :
-    DiscordFullUserData
+    SecretId ServerSecret
+    -> DiscordFullUserData
     -> Discord.Id Discord.ChannelId
     -> Maybe (Discord.Id Discord.MessageId)
     -> SeqDict (Id FileId) FileData
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
-sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers text =
+sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordStickers text =
     List.map
         (\( attachmentId, attachment ) ->
             Http.task
@@ -2968,7 +2995,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                             )
                             attachments2
                         )
-                        |> http
+                        |> http secretKey
                 )
                     |> Task.andThen
                         (\uploadAttachmentsResponse ->
@@ -3029,7 +3056,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles discordStickers tex
                                                     -- Discord will reject the message if it has more than 3 stickers
                                                     |> List.take 3
                                             }
-                                            |> http
+                                            |> http secretKey
                                     )
                         )
             )

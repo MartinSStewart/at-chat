@@ -90,7 +90,7 @@ import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (Domain, RichText)
 import Route exposing (Route)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
@@ -325,6 +325,8 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    , postmarkApiKey : Postmark.ApiKey
+    , serverSecret : SecretId ServerSecret
     }
 
 

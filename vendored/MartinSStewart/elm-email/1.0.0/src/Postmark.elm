@@ -6,6 +6,7 @@ module Postmark exposing
     , SendEmailError(..)
     , SendEmailsError(..)
     , apiKey
+    , apiKeyToString
     , sendEmail
     , sendEmailTask
     , sendEmails
@@ -40,6 +41,11 @@ type ApiKey
 apiKey : String -> ApiKey
 apiKey apiKey_ =
     ApiKey apiKey_
+
+
+apiKeyToString : ApiKey -> String
+apiKeyToString (ApiKey apiKey_) =
+    apiKey_
 
 
 type PostmarkEmailBody

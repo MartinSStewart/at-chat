@@ -12,7 +12,7 @@ module Message exposing
     , editUserTextMessage
     , reactionEmojis
     , removeReactionEmoji
-    , userTextMessage
+    , userTextMessageBackend
     , userTextMessageFrontend
     , userTextMessageNoEmbeds
     )
@@ -27,6 +27,7 @@ import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Sticker exposing (StickerData)
@@ -65,15 +66,16 @@ userTextMessageNoEmbeds createdAt2 createdBy content repliedTo attachedFiles =
         |> UserTextMessage
 
 
-userTextMessage :
-    Time.Posix
+userTextMessageBackend :
+    SecretId ServerSecret
+    -> Time.Posix
     -> userId
     -> Nonempty (RichText userId)
     -> Maybe (Id messageId)
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     -> ( Message messageId userId, Command BackendOnly toMsg ( Url, Result Http.Error EmbedData ), SeqDict (Id StickerId) StickerData )
-userTextMessage createdAt2 createdBy content repliedTo attachedFiles allStickers =
+userTextMessageBackend secretKey createdAt2 createdBy content repliedTo attachedFiles allStickers =
     let
         hyperlinks : List Url
         hyperlinks =
@@ -89,7 +91,7 @@ userTextMessage createdAt2 createdBy content repliedTo attachedFiles allStickers
       , embeds = Array.initialize (List.length hyperlinks) (\_ -> EmbedLoading)
       }
         |> UserTextMessage
-    , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map Embed.request |> Command.batch
+    , SeqSet.fromList hyperlinks |> SeqSet.toList |> List.map (Embed.request secretKey) |> Command.batch
     , List.foldl
         (\stickerId dict ->
             SeqDict.update

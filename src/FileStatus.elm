@@ -28,6 +28,7 @@ module FileStatus exposing
     , onlyUploadedFiles
     , pngContent
     , progressToString
+    , secretKeyHeader
     , sizeToString
     , thumbnailUrl
     , unknownContentType
@@ -61,6 +62,7 @@ import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..),
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import StringExtra
@@ -372,6 +374,13 @@ type alias ExposureTime =
     { numerator : Int, denominator : Int }
 
 
+{-| Header name needs to stay in sync with Rust code
+-}
+secretKeyHeader : SecretId ServerSecret -> Http.Header
+secretKeyHeader secretKey =
+    Http.header "x-secret-key" (SecretId.toString secretKey)
+
+
 uploadUrl : UploadUrlRequest -> Task restriction Http.Error UploadResponse
 uploadUrl request =
     Http.task
@@ -498,11 +507,11 @@ uploadBytes sessionId bytes =
         }
 
 
-uploadBackup : String -> Bytes -> Task BackendOnly Http.Error ()
-uploadBackup name bytes =
+uploadBackup : SecretId ServerSecret -> String -> Bytes -> Task BackendOnly Http.Error ()
+uploadBackup secretKey name bytes =
     Http.task
         { method = "POST"
-        , headers = [ Env.secretKeyHeader ]
+        , headers = [ secretKeyHeader secretKey ]
         , url = domain ++ "/file/internal/upload-backup/" ++ name
         , body = Http.bytesBody "application/octet-stream" bytes
         , resolver =

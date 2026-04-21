@@ -60,7 +60,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (RichText)
-import SecretId
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash
@@ -106,7 +106,7 @@ addLog time log model =
                 [ case EmailAddress.fromString Env.adminEmail of
                     Just emailAddress ->
                         Postmark.sendEmailTask
-                            Env.postmarkServerToken
+                            model.postmarkApiKey
                             { from = { name = "", email = Env.noReplyEmailAddress }
                             , to = Nonempty { name = "", email = emailAddress } []
                             , subject = NonemptyString 'A' "n error was logged that needs attention"
@@ -150,8 +150,9 @@ sendLoginEmail :
     (Result Postmark.SendEmailError () -> backendMsg)
     -> EmailAddress
     -> Int
+    -> Postmark.ApiKey
     -> Command BackendOnly toFrontend backendMsg
-sendLoginEmail msg emailAddress loginCode =
+sendLoginEmail msg emailAddress loginCode postmarkServerToken =
     let
         _ =
             Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
@@ -165,7 +166,7 @@ sendLoginEmail msg emailAddress loginCode =
             ("Here is your code " ++ String.fromInt loginCode ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
     , messageStream = "outbound"
     }
-        |> Postmark.sendEmail msg Env.postmarkServerToken
+        |> Postmark.sendEmail msg postmarkServerToken
 
 
 loginEmailContent : Int -> Email.Html.Html
@@ -669,6 +670,7 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
+    , postmarkApiKey = model.postmarkApiKey
     , discordDmChannels =
         SeqDict.map
             (\_ channel ->
@@ -813,7 +815,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             let
                                 ( message2, cmds, stickers2 ) =
-                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles model.stickers
+                                    Message.userTextMessageBackend model.serverSecret time session.userId text maybeReplyTo attachedFiles model.stickers
 
                                 ( messageId, channel3 ) =
                                     LocalState.createThreadMessageBackend threadId message2 channel
@@ -829,7 +831,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         NoThreadWithMaybeMessage maybeReplyTo ->
                             let
                                 ( message2, cmds, stickers2 ) =
-                                    Message.userTextMessage time session.userId text maybeReplyTo attachedFiles model.stickers
+                                    Message.userTextMessageBackend model.serverSecret time session.userId text maybeReplyTo attachedFiles model.stickers
 
                                 ( messageId, channel3 ) =
                                     LocalState.createChannelMessageBackend message2 channel
@@ -977,7 +979,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
         ( ViewThreadWithMaybeMessage threadId repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds, stickers ) =
-                    Message.userTextMessage time session.userId text repliedTo attachedFiles model.stickers
+                    Message.userTextMessageBackend model.serverSecret time session.userId text repliedTo attachedFiles model.stickers
 
                 ( messageId, dmChannel2 ) =
                     LocalState.createThreadMessageBackend threadId message dmChannel
@@ -1016,7 +1018,7 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
         ( NoThreadWithMaybeMessage repliedTo, Ok sendMessageRateLimits ) ->
             let
                 ( message, embedCmds, stickers ) =
-                    Message.userTextMessage time session.userId text repliedTo attachedFiles model.stickers
+                    Message.userTextMessageBackend model.serverSecret time session.userId text repliedTo attachedFiles model.stickers
 
                 ( messageId, dmChannel2 ) =
                     LocalState.createChannelMessageBackend message dmChannel

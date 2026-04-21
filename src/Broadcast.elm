@@ -750,7 +750,7 @@ pushNotification :
 pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
     Http.request
         { method = "POST"
-        , headers = [ Env.secretKeyHeader ]
+        , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
         , url = FileStatus.domain ++ "/file/internal/push-notification"
         , body =
             Codec.encodeToValue

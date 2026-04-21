@@ -3267,6 +3267,7 @@ initAdminData adminData =
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
+    , postmarkKey = adminData.postmarkApiKey
     , discordDmChannels = adminData.discordDmChannels
     , discordUsers = adminData.discordUsers
     , discordGuilds = adminData.discordGuilds

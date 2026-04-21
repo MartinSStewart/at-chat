@@ -48,6 +48,7 @@ import NonemptyDict
 import OneToOne
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
+import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (RichText)
@@ -220,6 +221,8 @@ init =
       , toBackendLogs = Array.empty
       , stickers = SeqDict.empty
       , discordStickers = OneToOne.empty
+      , postmarkApiKey = Postmark.apiKey ""
+      , serverSecret = SecretId.fromString Env.secretKey
       }
     , Command.none
     )
@@ -1297,7 +1300,7 @@ update msg model =
                     ( { model | scheduledExportState = progressState }
                     , case progress of
                         Pages.Admin.ExportingFinalStep bytes ->
-                            FileStatus.uploadBackup ("backend-export-" ++ timestamp ++ ".bin") bytes
+                            FileStatus.uploadBackup model.serverSecret ("backend-export-" ++ timestamp ++ ".bin") bytes
                                 |> Task.attempt (ScheduledExportUploadResult time)
 
                         _ ->
@@ -1476,7 +1479,9 @@ update msg model =
                             Nothing ->
                                 Just time
                 }
-            , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
+            , Discord.getStickerPacksPayload
+                |> DiscordSync.http model.serverSecret
+                |> Task.attempt (GotDiscordStandardStickerPacks time)
             )
 
         GotDiscordStandardStickerPacks time result ->
@@ -1765,7 +1770,7 @@ discordStartThread :
     -> Discord.Id Discord.ChannelId
     -> Id ChannelMessageId
     -> Discord.Id Discord.MessageId
-    -> { d | discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData }
+    -> BackendModel
     -> Task BackendOnly Discord.HttpError Discord.Channel
 discordStartThread discordUser channel channelId threadId messageId model =
     Discord.startThreadFromMessagePayload
@@ -1801,7 +1806,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
         , autoArchiveDuration = Missing
         , rateLimitPerUser = Missing
         }
-        |> DiscordSync.http
+        |> DiscordSync.http model.serverSecret
 
 
 updateFromFrontendWithTime :
@@ -1835,14 +1840,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 , Command.batch
                     [ Http.request
                         { method = "GET"
-                        , headers = [ Env.secretKeyHeader ]
+                        , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
                         , url = FileStatus.domain ++ "/file/internal/vapid"
                         , body = Http.emptyBody
                         , expect = Http.expectString GotVapidKeys
                         , timeout = Nothing
                         , tracker = Nothing
                         }
-                    , Discord.getStickerPacksPayload |> DiscordSync.http |> Task.attempt (GotDiscordStandardStickerPacks time)
+                    , Discord.getStickerPacksPayload
+                        |> DiscordSync.http model.serverSecret
+                        |> Task.attempt (GotDiscordStandardStickerPacks time)
                     , cmd
                     ]
                 )
@@ -2038,7 +2045,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
                                             model3.users
                                   }
-                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode
+                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model.postmarkApiKey
                                 )
 
                         ( Nothing, Ok loginCode ) ->
@@ -2056,7 +2063,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                             model3.pendingLogins
                                   }
-                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode
+                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model.postmarkApiKey
                                 )
 
                             else
@@ -2169,6 +2176,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , sendMessageRateLimits = sendMessageRateLimits
                                                       }
                                                     , DiscordSync.sendMessage
+                                                        model.serverSecret
                                                         discordUser
                                                         channelId
                                                         (case maybeReplyTo of
@@ -2232,6 +2240,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 |> Task.andThen
                                                                     (\() ->
                                                                         DiscordSync.sendMessage
+                                                                            model.serverSecret
                                                                             discordUser
                                                                             (Discord.idToUInt64 messageId |> Discord.idFromUInt64)
                                                                             (case maybeReplyTo of
@@ -2291,6 +2300,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , sendMessageRateLimits = sendMessageRateLimits
                                               }
                                             , DiscordSync.sendMessage
+                                                model.serverSecret
                                                 discordUser
                                                 (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
                                                 (case maybeReplyTo of
@@ -2587,7 +2597,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         Discord.triggerTypingIndicatorPayload
                                                             (Discord.userToken userData.auth)
                                                             discordChannelId2
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt (\_ -> DiscordTypingIndicatorSent)
 
                                                     Nothing ->
@@ -2626,7 +2636,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Discord.triggerTypingIndicatorPayload
                                             (Discord.userToken userData.auth)
                                             (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
-                                            |> DiscordSync.http
+                                            |> DiscordSync.http model.serverSecret
                                             |> Task.attempt (\_ -> DiscordTypingIndicatorSent)
                                         ]
                                     )
@@ -2728,7 +2738,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , messageId = discordMessageId
                                                             , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
                                                             }
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
                                                                 (DiscordAddedReactionToGuildMessage
                                                                     time
@@ -2787,7 +2797,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , messageId = discordMessageId
                                                             , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
                                                             }
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
                                                                 (DiscordAddedReactionToDmMessage
                                                                     time
@@ -2917,7 +2927,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , messageId = discordMessageId
                                                             , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
                                                             }
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
                                                                 (DiscordRemovedReactionToGuildMessage
                                                                     time
@@ -2975,7 +2985,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , messageId = discordMessageId
                                                             , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
                                                             }
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
                                                                 (DiscordRemovedReactionToDmMessage
                                                                     time
@@ -3136,7 +3146,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     Nothing ->
                                                                         ""
                                                             }
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
                                                                 (EditedDiscordGuildMessage
                                                                     time
@@ -3207,7 +3217,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         RichText.toDiscord (List.Nonempty.toList newContent)
                                                             |> Discord.Markdown.toString
                                                     }
-                                                    |> DiscordSync.http
+                                                    |> DiscordSync.http model.serverSecret
                                                     |> Task.attempt
                                                         (EditedDiscordDmMessage time dmData.channelId messageId discordMessageId)
 
@@ -3517,7 +3527,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             }
-                                                            |> DiscordSync.http
+                                                            |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
                                                                 (DeletedDiscordGuildMessage
                                                                     time
@@ -3574,7 +3584,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                             |> Discord.idFromUInt64
                                                                     , messageId = discordMessageId
                                                                     }
-                                                                    |> DiscordSync.http
+                                                                    |> DiscordSync.http model.serverSecret
                                                                     |> Task.attempt
                                                                         (DeletedDiscordDmMessage
                                                                             time
@@ -4248,7 +4258,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         (Server_StartReloadingDiscordUser time discordUserId |> ServerChange)
                                         model
                                     , Discord.getCurrentUserPayload (Discord.userToken discordUser.auth)
-                                        |> DiscordSync.http
+                                        |> DiscordSync.http model.serverSecret
                                         |> Task.attempt (ReloadDiscordUserStep1 time clientId session.userId discordUserId)
                                     ]
                                 )
@@ -4374,7 +4384,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\session _ ->
                     ( model
                     , Discord.getCurrentUserPayload (Discord.userToken data)
-                        |> DiscordSync.http
+                        |> DiscordSync.http model.serverSecret
                         |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId data)
                     )
                 )
@@ -4879,6 +4889,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.SetPostmarkKey postmarkKey ->
+            ( { model | postmarkApiKey = postmarkKey }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
         Pages.Admin.DeleteDiscordDmChannel channelId ->
             let
                 model2 : BackendModel
@@ -4943,7 +4958,10 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
-                        , DiscordSync.getManyMessages auth { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
+                        , DiscordSync.getManyMessages
+                            model.serverSecret
+                            auth
+                            { channelId = channelId, limit = DiscordSync.reloadChannelMaxMessages }
                             |> Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId)
 
                         --(DiscordSync.getChannelThreads auth guildId channelId model)
@@ -4984,6 +5002,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
                         , DiscordSync.getManyMessages
+                            model.serverSecret
                             (Discord.userToken discordUser.auth)
                             { channelId = Discord.idToUInt64 channelId |> Discord.idFromUInt64
                             , limit = DiscordSync.reloadChannelMaxMessages

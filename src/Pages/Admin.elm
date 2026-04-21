@@ -61,6 +61,7 @@ import NonemptyDict exposing (NonemptyDict)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
+import Postmark
 import Quantity
 import Route
 import SeqDict exposing (SeqDict)
@@ -69,6 +70,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Sticker
+import String.Nonempty
 import Table
 import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
@@ -115,6 +117,7 @@ type Msg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | PressedReloadDiscordDmChannel (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
@@ -164,6 +167,7 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
@@ -202,6 +206,7 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , postmarkApiKey : Postmark.ApiKey
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
@@ -232,6 +237,7 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
+    | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
     | DeleteGuild (Id GuildId)
@@ -279,6 +285,7 @@ initForUser =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
@@ -301,6 +308,7 @@ initForAdmin { highlightLog } =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
@@ -380,6 +388,9 @@ updateAdmin changedBy change adminData local =
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
+
+        SetPostmarkKey postmarkKey ->
+            { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
 
         DeleteDiscordDmChannel channelId ->
             { local | adminData = IsAdmin { adminData | discordDmChannels = SeqDict.remove channelId adminData.discordDmChannels } }
@@ -987,6 +998,14 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetOpenRouterKey value |> AdminChange )
 
+        PostmarkKeyEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | postmarkKey = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetPostmarkKey value |> AdminChange )
+
         PressedHomepageLink ->
             ( model, Command.none, GoToHomepage )
 
@@ -1264,6 +1283,9 @@ pendingChangesText change =
 
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
+
+        SetPostmarkKey _ ->
+            "Set Postmark key"
 
         DeleteDiscordDmChannel _ ->
             "Deleted Discord DM channel"
@@ -1763,6 +1785,21 @@ apiKeysSection local user adminData2 model =
                     ""
             )
             model.openRouterKey
+        , Editable.view
+            (Dom.id "userOptions_postmarkKey")
+            True
+            "Postmark API key"
+            (\text ->
+                case String.Nonempty.fromString text of
+                    Just nonempty ->
+                        Postmark.apiKey text |> Ok
+
+                    Nothing ->
+                        Err "String can't be empty"
+            )
+            PostmarkKeyEditableMsg
+            (Postmark.apiKeyToString adminData2.postmarkKey)
+            model.postmarkKey
         ]
 
 

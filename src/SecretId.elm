@@ -1,4 +1,11 @@
-module SecretId exposing (SecretId(..), fromString, getShortUniqueId, getUniqueId, toString)
+module SecretId exposing
+    ( SecretId(..)
+    , ServerSecret(..)
+    , fromString
+    , getShortUniqueId
+    , getUniqueId
+    , toString
+    )
 
 import Effect.Time as Time
 import Env
@@ -9,6 +16,10 @@ import Sha256
 -}
 type SecretId a
     = SecretId String
+
+
+type ServerSecret
+    = ServerSecret Never
 
 
 getUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, SecretId b )
