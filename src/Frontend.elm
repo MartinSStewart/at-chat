@@ -3469,12 +3469,12 @@ updateLoaded msg model =
         PressedVoiceChatButton otherUserId ->
             pressedVoiceChatButton otherUserId model
 
-        GotVoiceChatSignalFromJs peerId signal ->
+        GotVoiceChatSignalFromJs connectionId signal ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Local_Signal peerId signal |> Local_VoiceChatChange |> Just)
+                        (Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
                         loggedIn
                         Command.none
                 )
@@ -4059,7 +4059,7 @@ pressedVoiceChatButton voiceChatId model =
                     (Local_Join voiceChatId |> Local_VoiceChatChange |> Just)
                     loggedIn
                     (if VoiceChat.peerHasJoined voiceChatId local then
-                        Ports.voiceChatStart voiceChatId (Id.toInt currentUserId < Id.toInt voiceChatId)
+                        VoiceChat.voiceChatStart voiceChatId (Id.toInt currentUserId < Id.toInt voiceChatId)
 
                      else
                         Command.none

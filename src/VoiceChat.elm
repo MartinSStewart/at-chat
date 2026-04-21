@@ -14,6 +14,7 @@ port module VoiceChat exposing
     , serverChangeCmd
     , voiceChatDeliverSignal
     , voiceChatFromJs
+    , voiceChatStart
     , voiceChatStop
     )
 
