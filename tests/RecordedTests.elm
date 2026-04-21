@@ -1398,6 +1398,53 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , startTest
+        "Message length limit and counter"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin _ ->
+                let
+                    shortText : String
+                    shortText =
+                        String.repeat 100 "a"
+
+                    atThreshold : String
+                    atThreshold =
+                        String.repeat 1000 "b"
+
+                    atLimit : String
+                    atLimit =
+                        String.repeat 2000 "c"
+
+                    overLimit : String
+                    overLimit =
+                        String.repeat 2001 "d"
+                in
+                [ focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+
+                -- Below the counter threshold: no counter is rendered.
+                , admin.input 100 (Dom.id "channel_textinput") shortText
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "/2000" ])
+
+                -- Hitting the threshold shows the counter.
+                , admin.input 100 (Dom.id "channel_textinput") atThreshold
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1000/2000" ])
+
+                -- Going over the limit still shows the counter, and Enter refuses to send.
+                , admin.input 100 (Dom.id "channel_textinput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Exactly 2000 chars is allowed and Enter sends.
+                , admin.input 100 (Dom.id "channel_textinput") atLimit
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_message_1" ])
+                ]
+            )
+        ]
     , T.testGroup "Discord" (discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental)
     , startTest
         "Connect multiple devices"
