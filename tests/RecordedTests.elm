@@ -1436,6 +1436,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 100 (Dom.id "channel_textinput") overLimit
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_1" ])
 
                 -- Exactly 2000 chars is allowed and Enter sends.

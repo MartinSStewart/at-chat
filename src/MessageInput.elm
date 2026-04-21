@@ -153,7 +153,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                             if key == "ArrowUp" && text == "" then
                                 Json.Decode.succeed ( PressedArrowUpInEmptyInput, True )
 
-                            else if key == "Enter" && not shiftHeld && not isMobileKeyboard && String.length text <= maxLength then
+                            else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
                                 Json.Decode.succeed ( PressedSendMessage, True )
 
                             else
