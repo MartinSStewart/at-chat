@@ -1,6 +1,7 @@
 module Env exposing (..)
 
 import EmailAddress exposing (EmailAddress)
+import Postmark
 import Unsafe
 
 
@@ -28,6 +29,11 @@ isProduction =
 secretKey : String
 secretKey =
     "123"
+
+
+postmarkServerToken_ : String
+postmarkServerToken_ =
+    ""
 
 
 noReplyEmailAddress : EmailAddress

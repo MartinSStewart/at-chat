@@ -1,5 +1,5 @@
 module Postmark exposing
-    ( ApiKey
+    ( ApiKey(..)
     , PostmarkEmailBody(..)
     , PostmarkSend
     , PostmarkSendResponse
@@ -30,7 +30,7 @@ endpoint =
     "https://api.postmarkapp.com"
 
 
-{-| A SendGrid API key. In order to send an email you must have one of these (see the readme for how to get one).
+{-| OpaqueVariants. A SendGrid API key. In order to send an email you must have one of these (see the readme for how to get one).
 -}
 type ApiKey
     = ApiKey String
