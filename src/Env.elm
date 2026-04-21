@@ -1,13 +1,16 @@
 module Env exposing (..)
 
-import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Unsafe
 
 
 domain : String
 domain =
-    "http://localhost:8000"
+    if isProduction then
+        "https://at-chat.app"
+
+    else
+        "http://localhost:8000"
 
 
 isProduction_ : String
@@ -32,9 +35,9 @@ noReplyEmailAddress =
     Unsafe.emailAddress "no-reply@at-chat.app"
 
 
-adminEmail : String
+adminEmail : EmailAddress
 adminEmail =
-    "a@a.se"
+    Unsafe.emailAddress "a@a.se"
 
 
 slackClientId : String

@@ -185,14 +185,14 @@ decodePostmark =
         (Json.Decode.field "TextBody" Json.Decode.string)
 
 
-isLogErrorEmail : String -> HttpRequest -> Maybe String
+isLogErrorEmail : EmailAddress -> HttpRequest -> Maybe String
 isLogErrorEmail emailAddress httpRequest =
     if httpRequest.url == "https://api.postmarkapp.com/email" then
         case httpRequest.body of
             T.JsonBody value ->
                 case Json.Decode.decodeValue decodePostmark value of
                     Ok ( subject, to, body ) ->
-                        case ( emailAddress == EmailAddress.toString to, subject, String.split ":" body ) of
+                        case ( emailAddress == to, subject, String.split ":" body ) of
                             ( True, "An error was logged that needs attention", [ _, log ] ) ->
                                 String.split "." log |> List.head |> Maybe.map String.trim
 
@@ -294,7 +294,7 @@ startTime =
 
 adminEmail : EmailAddress
 adminEmail =
-    Unsafe.emailAddress Env.adminEmail
+    Env.adminEmail
 
 
 userEmail : EmailAddress

@@ -97,11 +97,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init
-        (Time.millisToPosix 0)
-        (Unsafe.personName "AT")
-        (Unsafe.emailAddress Env.adminEmail)
-        True
+    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") Env.adminEmail True
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

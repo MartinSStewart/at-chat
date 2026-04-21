@@ -60,7 +60,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (RichText)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash
@@ -103,14 +103,18 @@ addLog time log model =
         ( Just text, False ) ->
             ( { model2 | lastErrorLogEmail = time }
             , Command.batch
-                [ case EmailAddress.fromString Env.adminEmail of
+                [ case adminEmailAddress model of
                     Just emailAddress ->
                         Postmark.sendEmailTask
                             model.postmarkApiKey
                             { from = { name = "", email = Env.noReplyEmailAddress }
                             , to = Nonempty { name = "", email = emailAddress } []
                             , subject = NonemptyString 'A' "n error was logged that needs attention"
-                            , body = "The following error was logged: " ++ text ++ ". Note that any additional errors logged for the next 30 minutes will be ignored to avoid spamming emails." |> Postmark.BodyText
+                            , body =
+                                "The following error was logged: "
+                                    ++ text
+                                    ++ ". Note that any additional errors logged for the next 30 minutes will be ignored to avoid spamming emails."
+                                    |> Postmark.BodyText
                             , messageStream = "outbound"
                             }
                             |> Task.attempt (SentLogErrorEmail time emailAddress)
@@ -125,7 +129,23 @@ addLog time log model =
             ( model2, Broadcast.toAdmins model2 (Server_NewLog time log |> ServerChange) )
 
 
-getLoginCode : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Result () Int )
+adminEmailAddress : BackendModel -> Maybe EmailAddress
+adminEmailAddress model =
+    List.Extra.findMap
+        (\( _, user ) ->
+            if user.isAdmin then
+                Just user.email
+
+            else
+                Nothing
+        )
+        (NonemptyDict.toList model.users)
+
+
+getLoginCode :
+    Time.Posix
+    -> { a | secretCounter : Int, serverSecret : SecretId ServerSecret }
+    -> ( { a | secretCounter : Int, serverSecret : SecretId ServerSecret }, Result () Int )
 getLoginCode time model =
     let
         ( model2, id ) =
