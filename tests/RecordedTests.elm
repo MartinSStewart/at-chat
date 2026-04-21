@@ -2991,6 +2991,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetEmojiSkinTone _ ->
                     False
 
+                Local_VoiceChatChange _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -3161,6 +3164,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_LinkedDiscordUserStickersLoaded _ ->
+                            True
+
+                        Types.Server_VoiceChatChange _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->

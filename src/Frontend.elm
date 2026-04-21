@@ -156,7 +156,7 @@ subscriptions model =
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
-        , Ports.voiceChatFromJs GotVoiceChatSignalFromJs
+        , VoiceChat.voiceChatFromJs GotVoiceChatSignalFromJs
         , case model of
             Loading _ ->
                 Subscription.none
@@ -4034,7 +4034,7 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
 
 
 pressedVoiceChatButton : RoomId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-pressedVoiceChatButton voiceChatId model =
+pressedVoiceChatButton roomId model =
     FrontendExtra.updateLoggedIn
         (\loggedIn ->
             let
@@ -4042,27 +4042,35 @@ pressedVoiceChatButton voiceChatId model =
                 local =
                     Local.model loggedIn.localState
 
-                currentUserId : Id UserId
-                currentUserId =
-                    local.localUser.session.userId
+                currentSession : SessionIdHash
+                currentSession =
+                    local.localUser.session.sessionIdHash
             in
-            if VoiceChat.hasJoined voiceChatId local then
+            if VoiceChat.hasJoined roomId local then
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_Leave voiceChatId |> Local_VoiceChatChange |> Just)
+                    (Local_Leave roomId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (VoiceChat.leaveVoiceChatCmds voiceChatId local.localUser.session.sessionIdHash local.calls)
+                    (VoiceChat.leaveVoiceChatCmds roomId currentSession local.calls)
 
             else
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_Join voiceChatId |> Local_VoiceChatChange |> Just)
+                    (Local_Join roomId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (if VoiceChat.peerHasJoined voiceChatId local then
-                        VoiceChat.voiceChatStart voiceChatId (Id.toInt currentUserId < Id.toInt voiceChatId)
+                    (case SeqDict.get roomId local.calls.voiceChats of
+                        Just nonempty ->
+                            List.map
+                                (\otherSession ->
+                                    VoiceChat.voiceChatStart
+                                        { roomId = roomId, otherSession = otherSession }
+                                        (SessionIdHash.toString currentSession < SessionIdHash.toString otherSession)
+                                )
+                                (NonemptySet.toList nonempty)
+                                |> Command.batch
 
-                     else
-                        Command.none
+                        Nothing ->
+                            Command.none
                     )
         )
         model
@@ -5307,7 +5315,10 @@ updateLoadedFromBackend msg model =
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
-                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.userId local
+                                    , VoiceChat.serverChangeCmd
+                                        voiceChatChange
+                                        local.localUser.session.userId
+                                        local.localUser.session.sessionIdHash
                                     )
 
                                 _ ->

@@ -119,9 +119,8 @@ serverChangeCmd :
     ServerChange
     -> Id UserId
     -> SessionIdHash
-    -> { a | voiceChats : SeqDict RoomId VoiceChatState }
     -> Command FrontendOnly toBackend msg
-serverChangeCmd change currentUserId sessionIdHash local =
+serverChangeCmd change currentUserId sessionIdHash =
     case change of
         Server_Joined connectionId ->
             voiceChatStart
