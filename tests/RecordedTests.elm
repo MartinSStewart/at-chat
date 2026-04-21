@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
-import Emoji
+import Emoji exposing (Category(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -55,7 +55,7 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
-import Url exposing (Url)
+import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
@@ -3268,6 +3268,17 @@ attackerLocalChanges =
             { currentUserId = discordUserId
             , channelId = discordPrivateChannelId
             }
+
+        brokenDomain : Domain
+        brokenDomain =
+            RichText.urlToDomain
+                { protocol = Https
+                , host = ""
+                , port_ = Nothing
+                , path = ""
+                , query = Nothing
+                , fragment = Nothing
+                }
     in
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
@@ -3317,6 +3328,13 @@ attackerLocalChanges =
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset
     , Local_UnlinkDiscordUser discordUserId
+    , Local_StartReloadingDiscordUser messageTime discordUserId
+    , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_SetDomainWhitelist False brokenDomain
+    , Local_SetDomainWhitelist True brokenDomain
+    , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
+    , Local_SetEmojiSkinTone Nothing
+    , Local_SetEmojiSkinTone (Just SkinTone5)
     ]
 
 
