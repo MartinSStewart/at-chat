@@ -4475,7 +4475,11 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     session.userId
                                     otherUserId
                                     (\otherUserId2 ->
-                                        Server_Joined (DmRoomId otherUserId2) session.sessionIdHash |> Server_VoiceChatChange
+                                        Server_Joined
+                                            { roomId = DmRoomId otherUserId2
+                                            , otherSession = session.sessionIdHash
+                                            }
+                                            |> Server_VoiceChatChange
                                     )
                                     model
                                 ]
@@ -4528,7 +4532,10 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                                 session.userId
                                                 otherUserId
                                                 (\otherUserId2 ->
-                                                    Server_Left (DmRoomId otherUserId2) session.sessionIdHash
+                                                    Server_Left
+                                                        { roomId = DmRoomId otherUserId2
+                                                        , otherSession = session.sessionIdHash
+                                                        }
                                                         |> Server_VoiceChatChange
                                                 )
                                                 model
@@ -4550,8 +4557,8 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     )
                         )
 
-        VoiceChat.Local_Signal voiceChatId signal ->
-            case voiceChatId of
+        VoiceChat.Local_Signal connectionId signal ->
+            case connectionId.roomId of
                 DmRoomId otherUserId ->
                     asDmUser
                         model
@@ -4565,7 +4572,9 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     Nothing
                                     Nothing
                                     otherUserId
-                                    (Server_SignalReceived (DmRoomId session.userId) session.sessionIdHash signal
+                                    (Server_SignalReceived
+                                        { roomId = DmRoomId session.userId, otherSession = session.sessionIdHash }
+                                        signal
                                         |> Server_VoiceChatChange
                                         |> ServerChange
                                     )

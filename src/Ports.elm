@@ -36,10 +36,6 @@ port module Ports exposing
     , textInputSelectAll
     , userAgentSub
     , visualViewportResized
-    , voiceChatDeliverSignal
-    , voiceChatFromJs
-    , voiceChatStart
-    , voiceChatStop
     )
 
 import Codec exposing (Codec)
@@ -47,13 +43,11 @@ import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
-import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection(..))
-import SessionIdHash exposing (SessionIdHash)
 import Url
 import UserAgent exposing (UserAgent)
 import UserSession exposing (SubscribeData)

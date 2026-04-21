@@ -17,7 +17,7 @@ port module VoiceChat exposing
     , voiceChatStop
     )
 
-import Codec
+import Codec exposing (Codec)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Id exposing (Id, UserId)
@@ -278,19 +278,31 @@ voiceChatFromJs msg =
         )
 
 
+connectionIdCodec : Codec ConnectionId
 connectionIdCodec =
-    Codec.map
+    Codec.andThen
         (\text ->
             case String.split " " text of
                 [ first, second ] ->
                     case String.toInt first of
                         Just int ->
-                            Codec.succeed ( DmRoomId (Id.fromInt int), SessionIdHash.fromString second )
+                            Codec.succeed
+                                { roomId = DmRoomId (Id.fromInt int)
+                                , otherSession = SessionIdHash.fromString second
+                                }
 
                         Nothing ->
                             Codec.fail ("Invalid connectionId: " ++ text)
 
                 _ ->
                     Codec.fail ("Invalid connectionId: " ++ text)
+        )
+        (\{ roomId, otherSession } ->
+            (case roomId of
+                DmRoomId otherUserId ->
+                    Id.toString otherUserId
+            )
+                ++ " "
+                ++ SessionIdHash.toString otherSession
         )
         Codec.string
