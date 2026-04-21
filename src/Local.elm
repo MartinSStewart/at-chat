@@ -100,7 +100,6 @@ networkError msgToString currentTime (Local localModel_) =
         Ui.column
             [ Ui.background (Ui.rgb 77 42 42)
             , Ui.centerX
-            , Ui.alignBottom
             , Ui.paddingXY 16 8
             , Ui.rounded 8
             , Ui.border 1
