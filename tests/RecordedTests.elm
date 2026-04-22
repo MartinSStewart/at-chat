@@ -1443,6 +1443,29 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 100 (Dom.id "channel_textinput") atLimit
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Editing the message over the limit is blocked too.
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_1")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 200 (Dom.id "editMessageTextInput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+
+                -- Enter with over-limit text leaves the edit dialog open (counter still shown).
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
+
+                -- A valid edit within the limit still works.
+                , admin.input 200 (Dom.id "editMessageTextInput") "Short edit"
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
                 ]
             )
         ]

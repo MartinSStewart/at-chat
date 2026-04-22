@@ -87,7 +87,7 @@ type Msg
 
 maxLength : number
 maxLength =
-    2000
+    RichText.maxLength
 
 
 counterThreshold : number
