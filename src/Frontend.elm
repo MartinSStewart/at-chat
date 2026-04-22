@@ -5322,7 +5322,6 @@ updateLoadedFromBackend msg model =
                                     ( loggedIn2
                                     , VoiceChat.serverChangeCmd
                                         voiceChatChange
-                                        local.localUser.session.userId
                                         local.localUser.session.sessionIdHash
                                     )
 

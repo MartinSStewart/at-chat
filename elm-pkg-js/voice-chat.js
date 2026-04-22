@@ -21,10 +21,9 @@ exports.init = async function init(app) {
             pc.addTrack(track, localStream);
         });
 
-        const remoteAudio = document.createElement("audio");
+        const remoteAudio = document.getElementById(peerUserId);
         remoteAudio.autoplay = true;
         remoteAudio.playsInline = true;
-        remoteAudio.setAttribute("data-voice-chat-peer", String(peerUserId));
         remoteAudio.style.display = "none";
         document.body.appendChild(remoteAudio);
 

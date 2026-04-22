@@ -3293,7 +3293,7 @@ changeUpdate localMsg local =
                     }
 
                 Server_VoiceChatChange voiceChatFrontendMsg ->
-                    VoiceChat.changeUpdate voiceChatFrontendMsg local.localUser.session.sessionIdHash local
+                    VoiceChat.changeUpdate voiceChatFrontendMsg local
 
 
 guildSendMessage :

@@ -5,6 +5,7 @@ port module VoiceChat exposing
     , RoomId(..)
     , ServerChange(..)
     , addSessionIdHash
+    , audioNodes
     , changeUpdate
     , hasJoined
     , leaveVoiceChatCmds
@@ -18,6 +19,8 @@ port module VoiceChat exposing
 import Codec exposing (Codec)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Html exposing (Html)
+import Html.Attributes
 import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Encode
@@ -51,6 +54,34 @@ type RoomId
     = DmRoomId (Id UserId)
 
 
+audioNodes :
+    { b
+        | calls : Model
+        , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
+    }
+    -> Html msg
+audioNodes local =
+    SeqDict.toList local.calls.voiceChats
+        |> List.concatMap
+            (\( roomId, sessions ) ->
+                if hasJoined roomId local then
+                    NonemptySet.toList sessions
+                        |> List.map
+                            (\session ->
+                                Html.audio
+                                    [ connectionIdToString { roomId = roomId, otherSession = session } |> Html.Attributes.id
+                                    , Html.Attributes.autoplay True
+                                    , Html.Attributes.style "display" "none"
+                                    ]
+                                    []
+                            )
+
+                else
+                    []
+            )
+        |> Html.div []
+
+
 hasJoined :
     RoomId
     ->
@@ -59,8 +90,8 @@ hasJoined :
             , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
         }
     -> Bool
-hasJoined otherUserId local =
-    case SeqDict.get otherUserId local.calls.voiceChats of
+hasJoined roomId local =
+    case SeqDict.get roomId local.calls.voiceChats of
         Just voiceChat ->
             NonemptySet.member local.localUser.session.sessionIdHash voiceChat
 
@@ -108,10 +139,9 @@ peerHasJoined otherUserId local =
 
 serverChangeCmd :
     ServerChange
-    -> Id UserId
     -> SessionIdHash
     -> Command FrontendOnly toBackend msg
-serverChangeCmd change currentUserId sessionIdHash =
+serverChangeCmd change sessionIdHash =
     case change of
         Server_Joined connectionId ->
             voiceChatStart
@@ -179,8 +209,8 @@ localChangeUpdate change sessionIdHash local =
             local
 
 
-changeUpdate : ServerChange -> SessionIdHash -> { a | calls : Model } -> { a | calls : Model }
-changeUpdate change sessionIdHash local =
+changeUpdate : ServerChange -> { a | calls : Model } -> { a | calls : Model }
+changeUpdate change local =
     case change of
         Server_Joined connectionId ->
             let
@@ -269,6 +299,16 @@ voiceChatFromJs msg =
         )
 
 
+connectionIdToString : ConnectionId -> String
+connectionIdToString { roomId, otherSession } =
+    (case roomId of
+        DmRoomId otherUserId ->
+            Id.toString otherUserId
+    )
+        ++ " "
+        ++ SessionIdHash.toString otherSession
+
+
 connectionIdCodec : Codec ConnectionId
 connectionIdCodec =
     Codec.andThen
@@ -288,12 +328,5 @@ connectionIdCodec =
                 _ ->
                     Codec.fail ("Invalid connectionId: " ++ text)
         )
-        (\{ roomId, otherSession } ->
-            (case roomId of
-                DmRoomId otherUserId ->
-                    Id.toString otherUserId
-            )
-                ++ " "
-                ++ SessionIdHash.toString otherSession
-        )
+        connectionIdToString
         Codec.string
