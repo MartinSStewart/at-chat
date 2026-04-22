@@ -3690,8 +3690,18 @@ discordParseLoop source index modifiers accText revNodes =
                 discordParseLoop source nextIndex modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
-toDiscord : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
+toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> String
 toDiscord content =
+    case removeAttachedFile (\_ -> True) content of
+        Just text2 ->
+            toDiscordHelper (List.Nonempty.toList text2) |> Discord.Markdown.toString
+
+        Nothing ->
+            ""
+
+
+toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
+toDiscordHelper content =
     List.map
         (\item ->
             case item of
@@ -3702,22 +3712,22 @@ toDiscord content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.boldMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.italicMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.underlineMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.strikethroughMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.spoiler (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 BlockQuote _ nonempty ->
-                    Discord.Markdown.Quote (toDiscord nonempty)
+                    Discord.Markdown.Quote (toDiscordHelper nonempty)
 
                 Hyperlink data ->
                     Discord.Markdown.text (Url.toString data)

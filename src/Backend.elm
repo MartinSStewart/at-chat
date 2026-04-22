@@ -2173,13 +2173,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 discordText : String
                                                 discordText =
-                                                    case RichText.removeAttachedFile (\_ -> True) richText of
-                                                        Just text2 ->
-                                                            RichText.toDiscord (List.Nonempty.toList text2)
-                                                                |> Discord.Markdown.toString
-
-                                                        Nothing ->
-                                                            ""
+                                                    RichText.toDiscord richText
                                             in
                                             if String.length discordText > RichText.maxLength then
                                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -2323,13 +2317,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 discordText : String
                                                 discordText =
-                                                    case RichText.removeAttachedFile (\_ -> True) richText of
-                                                        Just text2 ->
-                                                            RichText.toDiscord (List.Nonempty.toList text2)
-                                                                |> Discord.Markdown.toString
-
-                                                        Nothing ->
-                                                            ""
+                                                    RichText.toDiscord richText
                                             in
                                             if String.length discordText > RichText.maxLength then
                                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -3161,13 +3149,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         discordText : String
                                         discordText =
-                                            case RichText.removeAttachedFile (\_ -> True) richText of
-                                                Just text2 ->
-                                                    RichText.toDiscord (List.Nonempty.toList text2)
-                                                        |> Discord.Markdown.toString
-
-                                                Nothing ->
-                                                    ""
+                                            RichText.toDiscord richText
                                     in
                                     if String.length discordText > RichText.maxLength then
                                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -3263,8 +3245,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 discordText : String
                                 discordText =
-                                    RichText.toDiscord (List.Nonempty.toList richText)
-                                        |> Discord.Markdown.toString
+                                    RichText.toDiscord richText
                             in
                             if String.length discordText > RichText.maxLength then
                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
