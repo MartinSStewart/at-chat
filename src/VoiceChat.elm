@@ -4,7 +4,6 @@ port module VoiceChat exposing
     , Model
     , RoomId(..)
     , ServerChange(..)
-    , VoiceChatState
     , addSessionIdHash
     , changeUpdate
     , hasJoined
@@ -12,10 +11,8 @@ port module VoiceChat exposing
     , localChangeUpdate
     , peerHasJoined
     , serverChangeCmd
-    , voiceChatDeliverSignal
     , voiceChatFromJs
     , voiceChatStart
-    , voiceChatStop
     )
 
 import Codec exposing (Codec)
@@ -52,12 +49,6 @@ type alias ConnectionId =
 
 type RoomId
     = DmRoomId (Id UserId)
-
-
-type alias VoiceChatState =
-    { iJoined : Bool
-    , peerJoined : Bool
-    }
 
 
 hasJoined :

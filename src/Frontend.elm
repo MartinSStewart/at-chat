@@ -45,7 +45,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
@@ -57,7 +57,6 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker
 import String.Nonempty
@@ -104,7 +103,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (LocalChange(..), RoomId, VoiceChatState)
+import VoiceChat exposing (LocalChange(..), RoomId)
 
 
 app :
@@ -3265,10 +3264,10 @@ updateLoaded msg model =
                                                                             DeletedMessage_NoReply _ ->
                                                                                 Nothing
 
-                                                                            CallStarted_NoReply posix userId seqDict ->
+                                                                            CallStarted_NoReply _ _ _ ->
                                                                                 Nothing
 
-                                                                            CallEnded_NoReply posix seqDict ->
+                                                                            CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->
@@ -3357,10 +3356,10 @@ updateLoaded msg model =
                                                                             DeletedMessage_NoReply _ ->
                                                                                 Nothing
 
-                                                                            CallStarted_NoReply posix userId seqDict ->
+                                                                            CallStarted_NoReply _ _ _ ->
                                                                                 Nothing
 
-                                                                            CallEnded_NoReply posix seqDict ->
+                                                                            CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->

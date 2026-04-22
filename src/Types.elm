@@ -92,7 +92,6 @@ import RichText exposing (Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Sticker exposing (StickerData)

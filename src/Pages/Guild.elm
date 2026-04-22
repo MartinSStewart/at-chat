@@ -89,7 +89,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (RoomId(..), VoiceChatState)
+import VoiceChat exposing (RoomId(..))
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -2054,10 +2054,10 @@ maybeRepliedTo message channel =
         DeletedMessage _ ->
             Nothing
 
-        CallStarted posix userId seqDict ->
+        CallStarted _ _ _ ->
             Nothing
 
-        CallEnded posix seqDict ->
+        CallEnded _ _ ->
             Nothing
 
 
@@ -3387,10 +3387,10 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 DeletedMessage _ ->
                                     Ui.none
 
-                                CallStarted posix userId seqDict ->
+                                CallStarted _ userId _ ->
                                     replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just userId) allUsers
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) Nothing allUsers
 
                         _ ->
@@ -3611,10 +3611,10 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                 DeletedMessage _ ->
                                     Ui.none
 
-                                CallStarted posix userId seqDict ->
+                                CallStarted _ userId _ ->
                                     replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
 
                         _ ->
@@ -3926,10 +3926,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                 DeletedMessage _ ->
                                     Ui.none
 
-                                CallStarted posix userId seqDict ->
+                                CallStarted _ userId _ ->
                                     replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
 
                         _ ->
@@ -4137,10 +4137,10 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                 DeletedMessage _ ->
                                     Ui.none
 
-                                CallStarted posix userId seqDict ->
+                                CallStarted _ userId _ ->
                                     replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
 
                         _ ->
@@ -4638,10 +4638,10 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted posix userId seqDict ->
+        CallStarted _ _ _ ->
             Ui.none
 
-        CallEnded posix seqDict ->
+        CallEnded _ _ ->
             Ui.none
 
 
@@ -4762,10 +4762,10 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         DeletedMessage _ ->
             Ui.none
 
-        CallStarted posix userId seqDict ->
+        CallStarted _ _ _ ->
             Ui.none
 
-        CallEnded posix seqDict ->
+        CallEnded _ _ ->
             Ui.none
 
 
@@ -5497,12 +5497,8 @@ userJoinedContent : userId -> SeqDict userId { a | name : PersonName } -> Elemen
 userJoinedContent userId allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
-        [ User.toString userId allUsers
-            |> Ui.text
-            |> Ui.el [ Ui.Font.bold ]
-        , Ui.el
-            []
-            (Ui.text " joined!")
+        [ User.toString userId allUsers |> Ui.text |> Ui.el [ Ui.Font.bold ]
+        , Ui.el [] (Ui.text " joined!")
         ]
 
 
@@ -5836,7 +5832,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                     [ Html.text LocalState.messageDeleted ]
                                 ]
 
-                            CallStarted posix userId seqDict ->
+                            CallStarted _ userId _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -5844,7 +5840,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                     ]
                                 ]
 
-                            CallEnded posix seqDict ->
+                            CallEnded _ _ ->
                                 [ Html.text "Call ended" ]
 
                     _ ->
@@ -6927,10 +6923,10 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted posix userId seqDict ->
+                                CallStarted _ _ _ ->
                                     "Call started"
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     "Call ended"
 
                         MessageUnloaded ->
@@ -7045,10 +7041,10 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
-                                CallStarted posix userId seqDict ->
+                                CallStarted _ _ _ ->
                                     "Call started"
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     "Call ended"
 
                         MessageUnloaded ->

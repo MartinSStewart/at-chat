@@ -148,7 +148,7 @@ import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUs
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (VoiceChatState)
+import VoiceChat
 
 
 type alias LocalState =
@@ -401,10 +401,10 @@ messageToString allUsers3 message =
         DeletedMessage _ ->
             messageDeleted
 
-        CallStarted posix userId seqDict ->
+        CallStarted _ _ _ ->
             "Call started"
 
-        CallEnded posix seqDict ->
+        CallEnded _ _ ->
             "Call ended"
 
 
@@ -821,10 +821,10 @@ createMessageBackend message channel =
                 DeletedMessage _ ->
                     channel.lastTypedAt
 
-                CallStarted posix userId seqDict ->
+                CallStarted _ _ _ ->
                     channel.lastTypedAt
 
-                CallEnded posix seqDict ->
+                CallEnded _ _ ->
                     channel.lastTypedAt
       }
     )
@@ -890,10 +890,10 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 DeletedMessage _ ->
                     Ok ( messageId2, channel2 )
 
-                CallStarted posix userId seqDict ->
+                CallStarted _ _ _ ->
                     Ok ( messageId2, channel2 )
 
-                CallEnded posix seqDict ->
+                CallEnded _ _ ->
                     Ok ( messageId2, channel2 )
 
         Err error ->
@@ -938,10 +938,10 @@ createDiscordMessageBackend messageId message channel =
                     DeletedMessage _ ->
                         channel.lastTypedAt
 
-                    CallStarted posix userId seqDict ->
+                    CallStarted _ _ _ ->
                         channel.lastTypedAt
 
-                    CallEnded posix seqDict ->
+                    CallEnded _ _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1028,10 +1028,10 @@ createMessageFrontend message channel =
                 DeletedMessage _ ->
                     channel.lastTypedAt
 
-                CallStarted posix userId seqDict ->
+                CallStarted _ _ _ ->
                     channel.lastTypedAt
 
-                CallEnded posix seqDict ->
+                CallEnded _ _ ->
                     channel.lastTypedAt
     }
 
@@ -2186,7 +2186,7 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (DeletedMessage _) ->
                                     []
 
-                                Just (CallStarted time startedBy _) ->
+                                Just (CallStarted _ startedBy _) ->
                                     [ startedBy ]
 
                                 Just (CallEnded _ _) ->
@@ -2244,10 +2244,10 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 DeletedMessage _ ->
                                     []
 
-                                CallStarted posix startedBy seqDict ->
+                                CallStarted _ startedBy _ ->
                                     [ startedBy ]
 
-                                CallEnded posix seqDict ->
+                                CallEnded _ _ ->
                                     []
 
                         _ ->
@@ -2276,10 +2276,10 @@ repliedToUserId maybeRepliedTo channel =
                         DeletedMessage _ ->
                             Nothing
 
-                        CallStarted posix startedBy seqDict ->
+                        CallStarted _ startedBy _ ->
                             Just startedBy
 
-                        CallEnded posix seqDict ->
+                        CallEnded _ _ ->
                             Nothing
 
                 Nothing ->
@@ -2305,10 +2305,10 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                         DeletedMessage _ ->
                             Nothing
 
-                        CallStarted posix startedBy seqDict ->
+                        CallStarted _ startedBy _ ->
                             Just startedBy
 
-                        CallEnded posix seqDict ->
+                        CallEnded _ _ ->
                             Nothing
 
                 _ ->

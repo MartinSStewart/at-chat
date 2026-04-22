@@ -980,10 +980,10 @@ update msg model =
                                                                 DeletedMessage _ ->
                                                                     members
 
-                                                                CallStarted posix userId seqDict ->
+                                                                CallStarted _ _ _ ->
                                                                     members
 
-                                                                CallEnded posix seqDict ->
+                                                                CallEnded _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -1807,10 +1807,10 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         DeletedMessage _ ->
                             "Message deleted"
 
-                        CallStarted posix userId seqDict ->
+                        CallStarted _ _ _ ->
                             "Call started"
 
-                        CallEnded posix seqDict ->
+                        CallEnded _ _ ->
                             "Call ended"
 
                 Nothing ->

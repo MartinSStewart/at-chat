@@ -23,7 +23,7 @@ import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (Id, StickerId, UserId)
+import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
@@ -225,10 +225,10 @@ addEmbed ( url, result ) message =
         DeletedMessage _ ->
             message
 
-        CallStarted posix id _ ->
+        CallStarted _ _ _ ->
             message
 
-        CallEnded posix _ ->
+        CallEnded _ _ ->
             message
 
 
@@ -284,10 +284,10 @@ createdAt message =
         DeletedMessage time ->
             time
 
-        CallStarted time userId seqDict ->
+        CallStarted time _ _ ->
             time
 
-        CallEnded time seqDict ->
+        CallEnded time _ ->
             time
 
 
@@ -375,8 +375,8 @@ reactionEmojis message =
         DeletedMessage _ ->
             SeqDict.empty
 
-        CallStarted posix userId reactions ->
+        CallStarted _ _ reactions ->
             reactions
 
-        CallEnded posix reactions ->
+        CallEnded _ reactions ->
             reactions
