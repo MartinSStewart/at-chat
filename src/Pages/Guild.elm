@@ -3020,8 +3020,8 @@ showFilesButton =
         (Ui.html Icons.document)
 
 
-privateChatWithYourself : List (Element FrontendMsg)
-privateChatWithYourself =
+privateChatWithYourself : LocalState -> List (Element FrontendMsg)
+privateChatWithYourself local =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -3029,7 +3029,7 @@ privateChatWithYourself =
         , Ui.clipWithEllipsis
         ]
         (Ui.text "Private chat with yourself")
-    , showFilesButton
+    , voiceChatButton (DmRoomId local.localUser.session.userId) local
     ]
 
 
@@ -3069,55 +3069,57 @@ voiceChatButton voiceChatId local =
         peerHasJoined =
             VoiceChat.peerHasJoined voiceChatId local
     in
-    MyUi.elButton
-        (Dom.id "guild_voiceChat")
-        (PressedVoiceChatButton voiceChatId)
-        [ Ui.alignRight
-        , Ui.width (Ui.px 44)
-        , Ui.paddingXY 4 0
-        , Ui.height Ui.fill
-        ]
-        (Ui.row
-            [ Ui.spacing 2, Ui.centerY ]
-            [ case SeqDict.get voiceChatId local.calls.voiceChats of
-                Just voiceChat ->
-                    String.fromInt (NonemptySet.size voiceChat) ++ " sessions in voice chat" |> Ui.text
+    Ui.row
+        [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
+        [ case SeqDict.get voiceChatId local.calls.voiceChats of
+            Just voiceChat ->
+                String.fromInt (NonemptySet.size voiceChat) ++ " sessions in voice chat" |> Ui.text
 
-                Nothing ->
-                    Ui.none
-            , Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-            , case ( hasJoined, peerHasJoined ) of
-                ( True, True ) ->
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 40 190 80)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                ( False, True ) ->
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 200 60 60)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                ( True, False ) ->
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 200 160 60)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                ( False, False ) ->
-                    Ui.none
+            Nothing ->
+                Ui.none
+        , MyUi.elButton
+            (Dom.id "guild_voiceChat")
+            (PressedVoiceChatButton voiceChatId)
+            [ Ui.width (Ui.px 44)
+            , Ui.paddingXY 4 0
+            , Ui.height Ui.fill
             ]
-        )
+            (Ui.row
+                [ Ui.spacing 2, Ui.centerY ]
+                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+                , case ( hasJoined, peerHasJoined ) of
+                    ( True, True ) ->
+                        Ui.el
+                            [ Ui.width (Ui.px 8)
+                            , Ui.height (Ui.px 8)
+                            , Ui.background (Ui.rgb 40 190 80)
+                            , Ui.rounded 4
+                            ]
+                            Ui.none
+
+                    ( False, True ) ->
+                        Ui.el
+                            [ Ui.width (Ui.px 8)
+                            , Ui.height (Ui.px 8)
+                            , Ui.background (Ui.rgb 200 60 60)
+                            , Ui.rounded 4
+                            ]
+                            Ui.none
+
+                    ( True, False ) ->
+                        Ui.el
+                            [ Ui.width (Ui.px 8)
+                            , Ui.height (Ui.px 8)
+                            , Ui.background (Ui.rgb 200 160 60)
+                            , Ui.rounded 4
+                            ]
+                            Ui.none
+
+                    ( False, False ) ->
+                        Ui.none
+                ]
+            )
+        ]
 
 
 emojiSelector : Bool -> SeqSet (Id StickerId) -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
@@ -3281,7 +3283,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
                             privateChatWith otherUserId local name
@@ -3509,7 +3511,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if chattingWithYourself data local then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
                             discordPrivateChatWith name
@@ -3805,7 +3807,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
                             privateChatWith otherUserId local name
@@ -4027,7 +4029,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if chattingWithYourself data local then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
                             discordPrivateChatWith name
@@ -5513,7 +5515,7 @@ callStarted userId allUsers =
             |> Ui.el [ Ui.Font.bold ]
         , Ui.el
             []
-            (Ui.text " start a call")
+            (Ui.text " started a call")
         ]
 
 
