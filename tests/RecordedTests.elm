@@ -27,7 +27,6 @@ import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
-import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
 import MessageInput
@@ -39,7 +38,7 @@ import Parser exposing ((|.), (|=))
 import PersonName
 import Range exposing (Range)
 import RateLimit
-import RichText exposing (Domain(..), RichText(..))
+import RichText exposing (Domain(..))
 import Route
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
@@ -47,6 +46,7 @@ import SeqDict
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import Sticker
+import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
@@ -2488,7 +2488,7 @@ sendMessageRateLimitTest config =
                                 (Local_SendMessage
                                     (Time.millisToPosix 0)
                                     (GuildOrDmId_Guild guildId channelId)
-                                    (Nonempty (NormalText 'm' ("sg " ++ String.fromInt changeIndex)) [])
+                                    (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)
                                     SeqDict.empty
                                 )
@@ -3295,7 +3295,7 @@ attackerLocalChanges =
             Time.millisToPosix 99999
 
         normalText =
-            Nonempty (NormalText 'h' "acked") []
+            NonemptyString 'h' "acked"
 
         discordUserId =
             Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035")
@@ -3362,10 +3362,10 @@ attackerLocalChanges =
     , Local_Discord_LoadThreadMessages discordGuildOrDmId_guild (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_LoadChannelMessages discordGuildOrDmId_dm (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_LoadThreadMessages discordGuildOrDmId_dm (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
-    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) normalText
+    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked")
     , Local_Invalid
     , Local_LinkDiscordAcknowledgementIsChecked True

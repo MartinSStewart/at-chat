@@ -4,7 +4,6 @@ module MessageInput exposing
     , NameSoFar(..)
     , NameSoFarData
     , TextInputFocus
-    , counterThreshold
     , disabledView
     , discordUserDropdownList
     , dropdownView

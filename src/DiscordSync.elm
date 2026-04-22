@@ -24,7 +24,6 @@ import Bytes exposing (Bytes)
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
-import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
 import DmChannel

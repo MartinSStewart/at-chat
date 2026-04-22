@@ -1435,7 +1435,7 @@ startOpeningChannelSidebar loggedIn =
 
 
 textToRichText :
-    String.Nonempty.NonemptyString
+    NonemptyString
     -> List (Id UserId)
     -> LocalState
     -> Nonempty (RichText (Id UserId))
@@ -1462,7 +1462,7 @@ textToRichText text memberIds local =
 
 
 textToDiscordRichText :
-    String.Nonempty.NonemptyString
+    NonemptyString
     -> List (Discord.Id Discord.UserId)
     -> LocalState
     -> Nonempty (RichText (Discord.Id Discord.UserId))
