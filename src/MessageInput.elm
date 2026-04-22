@@ -11,7 +11,6 @@ module MessageInput exposing
     , editView
     , emojiDropdownList
     , isPress
-    , maxLength
     , pressedArrowInDropdown
     , pressedDropdownItem
     , userDropdownList
@@ -83,11 +82,6 @@ type Msg
     | PressedUploadFile
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
-
-
-maxLength : number
-maxLength =
-    RichText.maxLength
 
 
 counterThreshold : number
@@ -366,7 +360,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
 
         overLimit : Bool
         overLimit =
-            String.length text > maxLength
+            String.length text > RichText.maxLength
     in
     textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
@@ -443,7 +437,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
 
         overLimit : Bool
         overLimit =
-            String.length text > maxLength
+            String.length text > RichText.maxLength
     in
     textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
         |> Ui.html
@@ -519,7 +513,7 @@ characterCounter text =
             , Ui.paddingXY 6 2
             , Ui.Font.size 12
             , Ui.Font.color
-                (if length > maxLength then
+                (if length > RichText.maxLength then
                     MyUi.errorColor
 
                  else
@@ -527,7 +521,7 @@ characterCounter text =
                 )
             , Ui.move { x = 2, y = -2, z = 0 }
             ]
-            (Ui.text (String.fromInt length ++ "/" ++ String.fromInt maxLength))
+            (Ui.text (String.fromInt length ++ "/" ++ String.fromInt RichText.maxLength))
 
     else
         Ui.none

@@ -48,6 +48,7 @@ import NonemptyDict
 import OneToOne
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
+import PersonName
 import Postmark
 import Quantity
 import RateLimit
@@ -57,6 +58,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
+import String.Nonempty exposing (NonemptyString)
 import TOTP.Key
 import TextEditor
 import Thread exposing (DiscordBackendThread)
@@ -2107,7 +2109,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (adminChangeUpdate clientId changeId adminChange model time)
 
                 Local_SendMessage _ guildOrDmId text threadRoute attachedFiles ->
-                    if RichText.length text > RichText.maxLength then
+                    if String.Nonempty.length text > RichText.maxLength then
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                     else
@@ -2146,29 +2148,43 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                 Local_Discord_SendMessage _ guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles ->
-                    if RichText.length text > RichText.maxLength then
-                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                    case guildOrDmId of
+                        DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
+                            asDiscordGuildMember
+                                model
+                                sessionId
+                                guildId
+                                currentDiscordUserId
+                                (\_ discordUser _ guild ->
+                                    case
+                                        ( SeqDict.get channelId guild.channels
+                                        , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
+                                        )
+                                    of
+                                        ( Just channel, Ok sendMessageRateLimits ) ->
+                                            let
+                                                attachedFiles2 : SeqDict (Id FileId) FileData
+                                                attachedFiles2 =
+                                                    BackendExtra.validateAttachedFiles model.files attachedFiles
 
-                    else
-                        case guildOrDmId of
-                            DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
-                                asDiscordGuildMember
-                                    model
-                                    sessionId
-                                    guildId
-                                    currentDiscordUserId
-                                    (\_ discordUser _ guild ->
-                                        case
-                                            ( SeqDict.get channelId guild.channels
-                                            , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
-                                            )
-                                        of
-                                            ( Just channel, Ok sendMessageRateLimits ) ->
-                                                let
-                                                    attachedFiles2 : SeqDict (Id FileId) FileData
-                                                    attachedFiles2 =
-                                                        BackendExtra.validateAttachedFiles model.files attachedFiles
-                                                in
+                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                richText =
+                                                    textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) model
+
+                                                discordText : String
+                                                discordText =
+                                                    case RichText.removeAttachedFile (\_ -> True) richText of
+                                                        Just text2 ->
+                                                            RichText.toDiscord (List.Nonempty.toList text2)
+                                                                |> Discord.Markdown.toString
+
+                                                        Nothing ->
+                                                            ""
+                                            in
+                                            if String.length discordText > RichText.maxLength then
+                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                            else
                                                 case threadRouteWithMaybeReplyTo of
                                                     NoThreadWithMaybeMessage maybeReplyTo ->
                                                         ( { model
@@ -2192,7 +2208,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
                                                             attachedFiles2
                                                             model.discordStickers
-                                                            text
+                                                            discordText
+                                                            richText
                                                             |> Task.attempt
                                                                 (SentDiscordGuildMessage
                                                                     time
@@ -2256,7 +2273,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                                 )
                                                                                 attachedFiles2
                                                                                 model.discordStickers
-                                                                                text
+                                                                                discordText
+                                                                                richText
                                                                         )
                                                                     |> Task.attempt
                                                                         (SentDiscordGuildMessage
@@ -2274,27 +2292,49 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             _ ->
                                                                 ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-                                            _ ->
-                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
-                                    )
+                                        _ ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
-                            DiscordGuildOrDmId_Dm data ->
-                                asDiscordDmUser
-                                    model
-                                    sessionId
-                                    data
-                                    (\_ discordUser _ dmChannel ->
-                                        let
-                                            attachedFiles2 : SeqDict (Id FileId) FileData
-                                            attachedFiles2 =
-                                                BackendExtra.validateAttachedFiles model.files attachedFiles
-                                        in
-                                        case
-                                            ( threadRouteWithMaybeReplyTo
-                                            , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
-                                            )
-                                        of
-                                            ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->
+                        DiscordGuildOrDmId_Dm data ->
+                            asDiscordDmUser
+                                model
+                                sessionId
+                                data
+                                (\_ discordUser _ dmChannel ->
+                                    let
+                                        attachedFiles2 : SeqDict (Id FileId) FileData
+                                        attachedFiles2 =
+                                            BackendExtra.validateAttachedFiles model.files attachedFiles
+                                    in
+                                    case
+                                        ( threadRouteWithMaybeReplyTo
+                                        , RateLimit.checkAndUpdateRateLimit time discordUser.linkedTo model.sendMessageRateLimits
+                                        )
+                                    of
+                                        ( NoThreadWithMaybeMessage maybeReplyTo, Ok sendMessageRateLimits ) ->
+                                            let
+                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                richText =
+                                                    textToDiscordRichText
+                                                        text
+                                                        (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
+                                                        model
+
+                                                discordText : String
+                                                discordText =
+                                                    case RichText.removeAttachedFile (\_ -> True) richText of
+                                                        Just text2 ->
+                                                            RichText.toDiscord (List.Nonempty.toList text2)
+                                                                |> Discord.Markdown.toString
+
+                                                        Nothing ->
+                                                            ""
+                                            in
+                                            if String.length discordText > RichText.maxLength then
+                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                            else
                                                 ( { model
                                                     | pendingDiscordCreateDmMessages =
                                                         SeqDict.insert
@@ -2316,7 +2356,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     )
                                                     attachedFiles2
                                                     model.discordStickers
-                                                    text
+                                                    discordText
+                                                    richText
                                                     |> Task.attempt
                                                         (SentDiscordDmMessage
                                                             time
@@ -2328,9 +2369,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         )
                                                 )
 
-                                            _ ->
-                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
-                                    )
+                                        _ ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                )
 
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner
@@ -2512,7 +2553,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ dmChannelId _ ->
+                                (\{ userId } _ _ dmChannelId _ ->
                                     ( { model
                                         | dmChannels =
                                             SeqDict.updateIfExists
@@ -2677,7 +2718,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } user dmChannelId _ ->
+                                (\{ userId } user _ dmChannelId _ ->
                                     ( { model
                                         | dmChannels =
                                             SeqDict.updateIfExists
@@ -2863,7 +2904,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ dmChannelId _ ->
+                                (\{ userId } _ _ dmChannelId _ ->
                                     ( { model
                                         | dmChannels =
                                             SeqDict.updateIfExists
@@ -3009,7 +3050,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                 Local_SendEditMessage _ guildOrDmId threadRoute newContent attachedFiles ->
-                    if RichText.length newContent > RichText.maxLength then
+                    if String.Nonempty.length newContent > RichText.maxLength then
                         ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                     else
@@ -3044,12 +3085,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     model
                                     sessionId
                                     { otherUserId = otherUserId }
-                                    (\{ userId } _ dmChannelId dmChannel ->
+                                    (\session user otherUser dmChannelId dmChannel ->
+                                        let
+                                            richText : Nonempty (RichText (Id UserId))
+                                            richText =
+                                                RichText.fromNonemptyString
+                                                    (SeqDict.fromList
+                                                        [ ( session.userId, user )
+                                                        , ( otherUserId, otherUser )
+                                                        ]
+                                                    )
+                                                    newContent
+                                        in
                                         case
                                             LocalState.editMessageHelper
                                                 time
-                                                userId
-                                                newContent
+                                                session.userId
+                                                richText
                                                 (ChangeAttachments attachedFiles2)
                                                 threadRoute
                                                 dmChannel
@@ -3069,15 +3121,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         |> Lamdera.sendToFrontend clientId
                                                     , Broadcast.toDmChannelExcludingOne
                                                         clientId
-                                                        userId
+                                                        session.userId
                                                         otherUserId
                                                         (\otherUserId2 ->
                                                             Server_SendEditMessage
                                                                 time
-                                                                userId
+                                                                session.userId
                                                                 (GuildOrDmId_Dm otherUserId2)
                                                                 threadRoute
-                                                                newContent
+                                                                richText
                                                                 attachedFiles2
                                                         )
                                                         model
@@ -3091,23 +3143,41 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                 Local_Discord_SendEditGuildMessage _ currentUserId guildId channelId threadRoute newContent ->
-                    if RichText.length newContent > RichText.maxLength then
-                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                    asDiscordGuildMember
+                        model
+                        sessionId
+                        guildId
+                        currentUserId
+                        (\_ userData _ guild ->
+                            case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    let
+                                        richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                        richText =
+                                            textToDiscordRichText
+                                                newContent
+                                                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                model
 
-                    else
-                        asDiscordGuildMember
-                            model
-                            sessionId
-                            guildId
-                            currentUserId
-                            (\_ userData _ guild ->
-                                case SeqDict.get channelId guild.channels of
-                                    Just channel ->
+                                        discordText : String
+                                        discordText =
+                                            case RichText.removeAttachedFile (\_ -> True) richText of
+                                                Just text2 ->
+                                                    RichText.toDiscord (List.Nonempty.toList text2)
+                                                        |> Discord.Markdown.toString
+
+                                                Nothing ->
+                                                    ""
+                                    in
+                                    if String.length discordText > RichText.maxLength then
+                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                    else
                                         case
                                             LocalState.editMessageHelper
                                                 time
                                                 currentUserId
-                                                newContent
+                                                richText
                                                 DoNotChangeAttachments
                                                 threadRoute
                                                 channel
@@ -3139,7 +3209,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             guildId
                                                             channelId
                                                             threadRoute
-                                                            newContent
+                                                            richText
                                                             |> ServerChange
                                                         )
                                                         model
@@ -3149,14 +3219,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 (Discord.userToken userData.auth)
                                                                 { channelId = discordChannelId
                                                                 , messageId = discordMessageId
-                                                                , content =
-                                                                    case RichText.removeAttachedFile (\_ -> True) newContent of
-                                                                        Just text2 ->
-                                                                            RichText.toDiscord (List.Nonempty.toList text2)
-                                                                                |> Discord.Markdown.toString
-
-                                                                        Nothing ->
-                                                                            ""
+                                                                , content = discordText
                                                                 }
                                                                 |> DiscordSync.http model.serverSecret
                                                                 |> Task.attempt
@@ -3178,27 +3241,40 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , BackendExtra.invalidChangeResponse changeId clientId
                                                 )
 
-                                    Nothing ->
-                                        ( model
-                                        , BackendExtra.invalidChangeResponse changeId clientId
-                                        )
-                            )
+                                Nothing ->
+                                    ( model
+                                    , BackendExtra.invalidChangeResponse changeId clientId
+                                    )
+                        )
 
                 Local_Discord_SendEditDmMessage _ dmData messageId newContent ->
-                    if RichText.length newContent > RichText.maxLength then
-                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                    asDiscordDmUser
+                        model
+                        sessionId
+                        dmData
+                        (\_ userData _ channel ->
+                            let
+                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                richText =
+                                    textToDiscordRichText
+                                        newContent
+                                        (NonemptyDict.keys channel.members |> List.Nonempty.toList)
+                                        model
 
-                    else
-                        asDiscordDmUser
-                            model
-                            sessionId
-                            dmData
-                            (\_ userData _ channel ->
+                                discordText : String
+                                discordText =
+                                    RichText.toDiscord (List.Nonempty.toList richText)
+                                        |> Discord.Markdown.toString
+                            in
+                            if String.length discordText > RichText.maxLength then
+                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                            else
                                 case
                                     LocalState.editMessageHelperNoThread
                                         time
                                         dmData.currentUserId
-                                        newContent
+                                        richText
                                         DoNotChangeAttachments
                                         messageId
                                         channel
@@ -3219,7 +3295,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     time
                                                     dmData
                                                     messageId
-                                                    newContent
+                                                    richText
                                                     |> ServerChange
                                                 )
                                                 model
@@ -3229,9 +3305,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (Discord.userToken userData.auth)
                                                         { channelId = Discord.idToUInt64 dmData.channelId |> Discord.idFromUInt64
                                                         , messageId = discordMessageId
-                                                        , content =
-                                                            RichText.toDiscord (List.Nonempty.toList newContent)
-                                                                |> Discord.Markdown.toString
+                                                        , content = discordText
                                                         }
                                                         |> DiscordSync.http model.serverSecret
                                                         |> Task.attempt
@@ -3246,7 +3320,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ( model
                                         , BackendExtra.invalidChangeResponse changeId clientId
                                         )
-                            )
+                        )
 
                 Local_MemberEditTyping _ guildOrDmId threadRoute ->
                     case guildOrDmId of
@@ -3284,7 +3358,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ dmChannelId dmChannel ->
+                                (\{ userId } _ _ dmChannelId dmChannel ->
                                     case LocalState.memberIsEditTypingBackendHelper time userId threadRoute dmChannel of
                                         Ok dmChannel2 ->
                                             ( { model
@@ -3439,7 +3513,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\session user _ _ -> helper session user)
+                                (\session user _ _ _ -> helper session user)
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild userId guildId _) ->
                             asDiscordGuildMember_AllowUserThatNeedsAuthAgain
@@ -3490,7 +3564,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\{ userId } _ dmChannelId dmChannel ->
+                                (\{ userId } _ _ dmChannelId dmChannel ->
                                     case LocalState.deleteMessageBackendHelper userId threadRoute dmChannel of
                                         Ok dmChannel2 ->
                                             ( { model | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels }
@@ -3648,7 +3722,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\session user _ dmChannel ->
+                                (\session user _ _ dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
@@ -3673,7 +3747,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\session user _ dmChannel ->
+                                (\session user _ _ dmChannel ->
                                     ( { model
                                         | users =
                                             NonemptyDict.insert
@@ -3942,7 +4016,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\_ _ _ dmChannel ->
+                                (\_ _ _ _ dmChannel ->
                                     ( model
                                     , handleMessagesRequest oldestVisibleMessage dmChannel
                                         |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
@@ -3979,7 +4053,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 { otherUserId = otherUserId }
-                                (\_ _ _ dmChannel ->
+                                (\_ _ _ _ dmChannel ->
                                     ( model
                                     , SeqDict.get threadId dmChannel.threads
                                         |> Maybe.withDefault Thread.backendInit
@@ -4443,6 +4517,34 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
 
+textToDiscordRichText :
+    NonemptyString
+    -> List (Discord.Id Discord.UserId)
+    -> BackendModel
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+textToDiscordRichText text memberIds model =
+    RichText.fromNonemptyString
+        (List.foldl
+            (\memberId dict ->
+                case SeqDict.get memberId model.discordUsers of
+                    Just member ->
+                        SeqDict.insert
+                            memberId
+                            { name =
+                                DiscordUserData.username member
+                                    |> PersonName.fromStringLossy
+                            }
+                            dict
+
+                    Nothing ->
+                        dict
+            )
+            SeqDict.empty
+            memberIds
+        )
+        text
+
+
 threadRouteToDiscordMessageId :
     Discord.Id Discord.ChannelId
     -> DiscordBackendChannel
@@ -4519,7 +4621,7 @@ sendEditMessage :
     ClientId
     -> ChangeId
     -> Time.Posix
-    -> Nonempty (RichText (Id UserId))
+    -> NonemptyString
     -> SeqDict (Id FileId) FileData
     -> Id GuildId
     -> Id ChannelId
@@ -4531,11 +4633,29 @@ sendEditMessage :
 sendEditMessage clientId changeId time newContent attachedFiles2 guildId channelId threadRoute model2 userId guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
+            let
+                richText : Nonempty (RichText (Id UserId))
+                richText =
+                    RichText.fromNonemptyString
+                        (List.foldl
+                            (\memberId dict ->
+                                case NonemptyDict.get memberId model2.users of
+                                    Just member ->
+                                        SeqDict.insert memberId member dict
+
+                                    Nothing ->
+                                        dict
+                            )
+                            SeqDict.empty
+                            (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                        )
+                        newContent
+            in
             case
                 LocalState.editMessageHelper
                     time
                     userId
-                    newContent
+                    richText
                     (ChangeAttachments attachedFiles2)
                     threadRoute
                     channel
@@ -4565,7 +4685,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                 userId
                                 (GuildOrDmId_Guild guildId channelId)
                                 threadRoute
-                                newContent
+                                richText
                                 attachedFiles2
                                 |> ServerChange
                             )
@@ -5303,7 +5423,7 @@ asDmUser :
     BackendModel
     -> SessionId
     -> { otherUserId : Id UserId }
-    -> (UserSession -> BackendUser -> DmChannelId -> DmChannel.DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel.DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDmUser model sessionId { otherUserId } func =
     case SeqDict.get sessionId model.sessions of
@@ -5312,18 +5432,23 @@ asDmUser model sessionId { otherUserId } func =
                 dmChannelId =
                     DmChannel.channelIdFromUserIds session.userId otherUserId
             in
-            case ( NonemptyDict.get session.userId model.users, SeqDict.get dmChannelId model.dmChannels ) of
-                ( Just user, Just dmChannel ) ->
-                    func session user dmChannelId dmChannel
+            case
+                ( NonemptyDict.get session.userId model.users
+                , NonemptyDict.get otherUserId model.users
+                , SeqDict.get dmChannelId model.dmChannels
+                )
+            of
+                ( Just user, Just otherUser, Just dmChannel ) ->
+                    func session user otherUser dmChannelId dmChannel
 
-                ( Just user, Nothing ) ->
+                ( Just user, Just otherUser, Nothing ) ->
                     if usersHaveSharedGuilds session.userId otherUserId model then
-                        func session user dmChannelId DmChannel.backendInit
+                        func session user otherUser dmChannelId DmChannel.backendInit
 
                     else
                         ( model, Command.none )
 
-                ( Nothing, _ ) ->
+                _ ->
                     ( model, Command.none )
 
         Nothing ->

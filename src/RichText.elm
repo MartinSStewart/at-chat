@@ -15,7 +15,6 @@ module RichText exposing
     , fromDiscord
     , fromNonemptyString
     , hyperlinks
-    , length
     , maxLength
     , mentionsUser
     , preview
@@ -639,12 +638,6 @@ toString emojisForStickersAndAttachments users nonempty =
 maxLength : number
 maxLength =
     2000
-
-
-length : Nonempty (RichText userId) -> Int
-length nonempty =
-    toStringHelper (\_ -> "") True SeqDict.empty (List.Nonempty.toList nonempty)
-        |> String.length
 
 
 toStringHelper : (a -> String) -> Bool -> SeqDict userId a -> List (RichText userId) -> String

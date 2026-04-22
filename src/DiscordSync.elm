@@ -59,6 +59,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData, StickerUrl(..))
+import String.Nonempty exposing (NonemptyString(..))
 import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, LocalChange(..), LocalMsg(..), MessageFromGuildOrDm(..), ServerChange(..), ToFrontend(..))
 import User
@@ -905,7 +906,14 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                     (Local_Discord_SendMessage
                                                         discordMessage.timestamp
                                                         guildOrDmId
-                                                        richText
+                                                        (RichText.toStringWithGetter
+                                                            DiscordUserData.username
+                                                            False
+                                                            model.discordUsers
+                                                            richText
+                                                            |> String.Nonempty.fromString
+                                                            |> Maybe.withDefault (NonemptyString ' ' "")
+                                                        )
                                                         (NoThreadWithMaybeMessage replyTo)
                                                         attachments2
                                                     )
@@ -1268,7 +1276,14 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (Local_Discord_SendMessage
                                                                 discordMessage.timestamp
                                                                 guildOrDmId
-                                                                richText
+                                                                (RichText.toStringWithGetter
+                                                                    DiscordUserData.username
+                                                                    False
+                                                                    model.discordUsers
+                                                                    richText
+                                                                    |> String.Nonempty.fromString
+                                                                    |> Maybe.withDefault (NonemptyString ' ' "")
+                                                                )
                                                                 threadRoute
                                                                 (SeqDict.map (\_ attachment -> attachment.fileData) attachments)
                                                             )
@@ -2936,9 +2951,10 @@ sendMessage :
     -> Maybe (Discord.Id Discord.MessageId)
     -> SeqDict (Id FileId) FileData
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    -> String
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
-sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordStickers text =
+sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordStickers discordText text =
     List.map
         (\( attachmentId, attachment ) ->
             Http.task
@@ -3022,14 +3038,7 @@ sendMessage secretKey discordUser channelId maybeReplyTo attachedFiles discordSt
                                         Discord.createMessagePayload
                                             (Discord.userToken discordUser.auth)
                                             { channelId = channelId
-                                            , content =
-                                                case RichText.removeAttachedFile (\_ -> True) text of
-                                                    Just text2 ->
-                                                        RichText.toDiscord (List.Nonempty.toList text2)
-                                                            |> Discord.Markdown.toString
-
-                                                    Nothing ->
-                                                        ""
+                                            , content = discordText
                                             , replyTo = maybeReplyTo
                                             , attachments =
                                                 List.filterMap

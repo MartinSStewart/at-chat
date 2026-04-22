@@ -2771,7 +2771,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                                 Just edit ->
-                                    if String.length edit.text > MessageInput.maxLength then
+                                    if String.length edit.text > RichText.maxLength then
                                         ( loggedIn, Command.none )
 
                                     else
@@ -2814,7 +2814,7 @@ updateLoaded msg model =
                                                                         NoThread ->
                                                                             NoThreadWithMessage edit.messageIndex
                                                                     )
-                                                                    richText
+                                                                    nonempty
                                                                     (FileStatus.onlyUploadedFiles edit.attachedFiles)
                                                                     |> Just
 
@@ -2856,7 +2856,7 @@ updateLoaded msg model =
                                                                                 NoThread ->
                                                                                     NoThreadWithMessage edit.messageIndex
                                                                             )
-                                                                            richText
+                                                                            nonempty
                                                                             |> Just
 
                                                                     DiscordGuildOrDmId_Dm data ->
@@ -2864,7 +2864,7 @@ updateLoaded msg model =
                                                                             model.time
                                                                             data
                                                                             edit.messageIndex
-                                                                            richText
+                                                                            nonempty
                                                                             |> Just
 
                                                         _ ->
@@ -3057,7 +3057,7 @@ updateLoaded msg model =
 
                                         safeToSend : Bool
                                         safeToSend =
-                                            (String.Nonempty.length nonempty <= MessageInput.maxLength)
+                                            (String.Nonempty.length nonempty <= RichText.maxLength)
                                                 && (case guildOrDmId of
                                                         GuildOrDmId _ ->
                                                             True
@@ -3074,7 +3074,7 @@ updateLoaded msg model =
                                                     Local_SendMessage
                                                         model.time
                                                         guildOrDmId2
-                                                        (RichText.fromNonemptyString (LocalState.allUsers local.localUser) nonempty)
+                                                        nonempty
                                                         (case threadRoute of
                                                             ViewThread threadId ->
                                                                 ViewThreadWithMaybeMessage
@@ -3097,7 +3097,7 @@ updateLoaded msg model =
                                                     Local_Discord_SendMessage
                                                         model.time
                                                         guildOrDmId2
-                                                        (RichText.fromNonemptyString (LocalState.allDiscordUsers local.localUser) nonempty)
+                                                        nonempty
                                                         (case threadRoute of
                                                             ViewThread threadId ->
                                                                 ViewThreadWithMaybeMessage
