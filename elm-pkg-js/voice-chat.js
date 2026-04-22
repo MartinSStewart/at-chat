@@ -52,7 +52,7 @@ exports.init = async function init(app) {
             if (event.candidate) {
                 app.ports.voice_chat_from_js.send({
                     peerUserId: peerUserId,
-                    signal: JSON.stringify({ type: "ice", candidate: event.candidate })
+                    signal: { tag: "ice", args: [ event.candidate ] }
                 });
             }
         };
@@ -79,7 +79,7 @@ exports.init = async function init(app) {
                 await pc.setLocalDescription(offer);
                 app.ports.voice_chat_from_js.send({
                     peerUserId: peerUserId,
-                    signal: JSON.stringify({ type: "offer", sdp: offer })
+                    signal: { tag: "offer", args: [ offer ] }
                 });
             } catch (e) {
                 console.error("Voice chat: failed to create offer", e);
@@ -115,28 +115,27 @@ exports.init = async function init(app) {
         }
     }
 
-    async function handleSignalInternal(conn, peerUserId, signalStr) {
+    async function handleSignalInternal(conn, peerUserId, signal) {
         try {
-            const signal = JSON.parse(signalStr);
-            if (signal.type === "offer") {
-                await conn.pc.setRemoteDescription(signal.sdp);
+            if (signal.tag === "offer") {
+                await conn.pc.setRemoteDescription({ type: "offer", sdp: signal.args[0].sdp });
                 conn.remoteDescriptionSet = true;
                 await drainQueuedIceCandidates(conn, peerUserId);
                 const answer = await conn.pc.createAnswer();
                 await conn.pc.setLocalDescription(answer);
                 app.ports.voice_chat_from_js.send({
                     peerUserId: peerUserId,
-                    signal: JSON.stringify({ type: "answer", sdp: answer })
+                    signal: { tag: "answer", args: [ answer ] }
                 });
-            } else if (signal.type === "answer") {
-                await conn.pc.setRemoteDescription(signal.sdp);
+            } else if (signal.tag === "answer") {
+                await conn.pc.setRemoteDescription({ type: "answer", sdp: signal.args[0].sdp });
                 conn.remoteDescriptionSet = true;
                 await drainQueuedIceCandidates(conn, peerUserId);
-            } else if (signal.type === "ice") {
+            } else if (signal.tag === "ice") {
                 if (conn.remoteDescriptionSet) {
-                    await conn.pc.addIceCandidate(signal.candidate);
+                    await conn.pc.addIceCandidate(signal.args[0]);
                 } else {
-                    conn.queuedIceCandidates.push(signal.candidate);
+                    conn.queuedIceCandidates.push(signal.args[0]);
                 }
             }
         } catch (e) {

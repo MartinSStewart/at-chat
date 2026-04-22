@@ -4,6 +4,7 @@ port module VoiceChat exposing
     , Model
     , RoomId(..)
     , ServerChange(..)
+    , Signal
     , addSessionIdHash
     , audioNodes
     , changeUpdate
@@ -33,13 +34,13 @@ import SessionIdHash exposing (SessionIdHash)
 type LocalChange
     = Local_Join RoomId
     | Local_Leave RoomId
-    | Local_Signal ConnectionId String
+    | Local_Signal ConnectionId Signal
 
 
 type ServerChange
     = Server_Joined ConnectionId
     | Server_Left ConnectionId
-    | Server_SignalReceived ConnectionId String
+    | Server_SignalReceived ConnectionId Signal
 
 
 type alias Model =
@@ -52,6 +53,57 @@ type alias ConnectionId =
 
 type RoomId
     = DmRoomId (Id UserId)
+
+
+type Signal
+    = OfferSignal Sdp
+    | AnswerSignal Sdp
+    | IceSignal Ice
+
+
+type alias Sdp =
+    { sdp : String }
+
+
+type alias Ice =
+    { candidate : String, sdpMLineIndex : Int, sdpMid : String, usernameFragment : String }
+
+
+signalCodec : Codec Signal
+signalCodec =
+    Codec.custom
+        (\offerSignalEncoder answerSignalEncoder iceSignalEncoder value ->
+            case value of
+                OfferSignal a ->
+                    offerSignalEncoder a
+
+                AnswerSignal a ->
+                    answerSignalEncoder a
+
+                IceSignal a ->
+                    iceSignalEncoder a
+        )
+        |> Codec.variant1 "offer" OfferSignal sdpCodec
+        |> Codec.variant1 "answer" AnswerSignal sdpCodec
+        |> Codec.variant1 "ice" IceSignal iceCodec
+        |> Codec.buildCustom
+
+
+sdpCodec : Codec Sdp
+sdpCodec =
+    Codec.object Sdp
+        |> Codec.field "sdp" .sdp Codec.string
+        |> Codec.buildObject
+
+
+iceCodec : Codec Ice
+iceCodec =
+    Codec.object Ice
+        |> Codec.field "candidate" .candidate Codec.string
+        |> Codec.field "sdpMLineIndex" .sdpMLineIndex Codec.int
+        |> Codec.field "sdpMid" .sdpMid Codec.string
+        |> Codec.field "usernameFragment" .usernameFragment Codec.string
+        |> Codec.buildObject
 
 
 audioNodes :
@@ -265,7 +317,7 @@ voiceChatStop connectionId =
         )
 
 
-voiceChatDeliverSignal : ConnectionId -> String -> Command FrontendOnly toBackend msg
+voiceChatDeliverSignal : ConnectionId -> Signal -> Command FrontendOnly toBackend msg
 voiceChatDeliverSignal connectionId signal =
     Command.sendToJs
         "voice_chat_to_js"
@@ -273,21 +325,21 @@ voiceChatDeliverSignal connectionId signal =
         (Json.Encode.object
             [ ( "kind", Json.Encode.string "signal" )
             , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
-            , ( "signal", Json.Encode.string signal )
+            , ( "signal", Codec.encoder signalCodec signal )
             ]
         )
 
 
-voiceChatFromJs : (ConnectionId -> String -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs : (ConnectionId -> Signal -> msg) -> Subscription FrontendOnly msg
 voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
         (\json ->
             Json.Decode.decodeValue
-                (Json.Decode.map2 (\peerUserId signal -> msg peerUserId signal)
+                (Json.Decode.map2 (\peerUserId signal -> msg peerUserId (Debug.log "signal" signal))
                     (Json.Decode.field "peerUserId" (Codec.decoder connectionIdCodec))
-                    (Json.Decode.field "signal" Json.Decode.string)
+                    (Json.Decode.field "signal" (Codec.decoder signalCodec))
                 )
                 json
                 |> Result.withDefault
@@ -295,7 +347,7 @@ voiceChatFromJs msg =
                         { roomId = DmRoomId (Id.fromInt 0)
                         , otherSession = SessionIdHash.fromString ""
                         }
-                        ""
+                        (OfferSignal { sdp = "" })
                     )
         )
 

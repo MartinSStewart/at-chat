@@ -482,7 +482,7 @@ type FrontendMsg
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PressedVoiceChatButton RoomId
-    | GotVoiceChatSignalFromJs ConnectionId String
+    | GotVoiceChatSignalFromJs ConnectionId VoiceChat.Signal
 
 
 type ScrollPosition
