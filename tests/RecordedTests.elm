@@ -401,17 +401,19 @@ dropPrefix prefix text =
 
 
 connectTwoUsersAndJoinNewGuild :
-    (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-     -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-     -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-    )
+    { width : Int, height : Int }
+    ->
+        (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+        )
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-connectTwoUsersAndJoinNewGuild continueFunc =
+connectTwoUsersAndJoinNewGuild windowSize continueFunc =
     T.connectFrontend
         100
         sessionId0
         "/"
-        desktopWindow
+        windowSize
         (\admin ->
             [ handleLogin firefoxDesktop adminEmail admin
             , admin.click 100 (Dom.id "guild_createGuild")
@@ -439,7 +441,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
                                 100
                                 sessionId1
                                 (dropPrefix Env.domain text)
-                                desktopWindow
+                                windowSize
                                 (\user ->
                                     [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                                     , handleLoginFromLoginPage userEmail user
@@ -1198,6 +1200,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 let
                     checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -1267,6 +1270,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ admin.click 100 (Dom.id "guild_openDm_1")
                 , writeMessage admin 100 "Hello from admin"
@@ -1315,6 +1319,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin _ ->
                 let
                     checkHover :
@@ -1403,6 +1408,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 let
                     shortText : String
@@ -1484,6 +1490,79 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , startTest
+        "Message length limit and counter mobile"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            mobileWindow
+            (\admin user ->
+                let
+                    shortText : String
+                    shortText =
+                        String.repeat 100 "a"
+
+                    atThreshold : String
+                    atThreshold =
+                        String.repeat 1100 "b"
+
+                    atLimit : String
+                    atLimit =
+                        String.repeat 2000 "c"
+
+                    overLimit : String
+                    overLimit =
+                        String.repeat 2001 "d"
+                in
+                [ focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+
+                -- Below the counter threshold: no counter is rendered.
+                , admin.input 100 (Dom.id "channel_textinput") shortText
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "/2000" ])
+
+                -- Hitting the threshold shows the counter.
+                , admin.input 100 (Dom.id "channel_textinput") atThreshold
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "900/2000" ])
+
+                -- Going over the limit still shows the counter, and Enter refuses to send.
+                , admin.input 100 (Dom.id "channel_textinput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Exactly 2000 chars is allowed and Enter sends.
+                , admin.input 100 (Dom.id "channel_textinput") atLimit
+                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Editing the message over the limit is blocked too.
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_1")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 200 (Dom.id "editMessageTextInput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+                , admin.click 100 (Dom.id "messageMenu_editMobile_sendMessage")
+
+                -- Enter with over-limit text leaves the edit dialog open (counter still shown).
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+
+                -- A valid edit within the limit still works.
+                , admin.input 200 (Dom.id "editMessageTextInput") "Short edit"
+                , admin.click 100 (Dom.id "messageMenu_editMobile_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                ]
+            )
+        ]
     , T.testGroup "Discord" (discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental)
     , startTest
         "Connect multiple devices"
@@ -1542,6 +1621,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ writeMessage admin 100 "This message is ||very|| ||secret||"
                 , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
@@ -1636,6 +1716,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
@@ -1654,7 +1735,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     --    startTime
     --    normalConfig
     --    [ connectTwoUsersAndJoinNewGuild
-    --        (\admin user ->
+    --       desktopWindow (\admin user ->
     --            [ user.click 100 (Dom.id "guildIcon_showFriends")
     --            , writeMessage admin 100 "@Stevie Steve"
     --            , writeMessage admin 100 "@Stevie Steve"
@@ -1681,6 +1762,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , admin.click 100 (Dom.id "guild_newChannel")
@@ -1713,6 +1795,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , writeMessage admin 100 "See if notification appears next to guild icon"
@@ -1735,6 +1818,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\_ user ->
                 [ List.range 0 (VisibleMessages.pageSize * 2)
                     |> List.map (\index -> writeMessage user 1000 ("Message " ++ String.fromInt (index + 1)))
@@ -1797,6 +1881,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
                 , user.checkView
@@ -2236,6 +2321,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
@@ -2352,6 +2438,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
@@ -2481,6 +2568,7 @@ sendMessageRateLimitTest config =
         startTime
         config
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 let
                     guildId : Id GuildId
