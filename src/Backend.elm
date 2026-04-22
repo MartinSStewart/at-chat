@@ -2170,121 +2170,116 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 richText : Nonempty (RichText (Discord.Id Discord.UserId))
                                                 richText =
                                                     textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) model
-
-                                                discordText : String
-                                                discordText =
-                                                    RichText.toDiscord richText
                                             in
-                                            if String.length discordText > RichText.maxLength then
-                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                            case ( RichText.toDiscord richText, threadRouteWithMaybeReplyTo ) of
+                                                ( Ok discordText, NoThreadWithMaybeMessage maybeReplyTo ) ->
+                                                    ( { model
+                                                        | pendingDiscordCreateMessages =
+                                                            SeqDict.insert
+                                                                ( currentDiscordUserId, channelId )
+                                                                ( clientId, changeId )
+                                                                model.pendingDiscordCreateMessages
+                                                        , sendMessageRateLimits = sendMessageRateLimits
+                                                      }
+                                                    , DiscordSync.sendMessage
+                                                        model.serverSecret
+                                                        discordUser
+                                                        channelId
+                                                        (case maybeReplyTo of
+                                                            Just replyTo ->
+                                                                OneToOne.first replyTo channel.linkedMessageIds
 
-                                            else
-                                                case threadRouteWithMaybeReplyTo of
-                                                    NoThreadWithMaybeMessage maybeReplyTo ->
-                                                        ( { model
-                                                            | pendingDiscordCreateMessages =
-                                                                SeqDict.insert
-                                                                    ( currentDiscordUserId, channelId )
-                                                                    ( clientId, changeId )
-                                                                    model.pendingDiscordCreateMessages
-                                                            , sendMessageRateLimits = sendMessageRateLimits
-                                                          }
-                                                        , DiscordSync.sendMessage
-                                                            model.serverSecret
-                                                            discordUser
-                                                            channelId
-                                                            (case maybeReplyTo of
-                                                                Just replyTo ->
-                                                                    OneToOne.first replyTo channel.linkedMessageIds
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        attachedFiles2
+                                                        model.discordStickers
+                                                        discordText
+                                                        richText
+                                                        |> Task.attempt
+                                                            (SentDiscordGuildMessage
+                                                                time
+                                                                changeId
+                                                                sessionId
+                                                                clientId
+                                                                guildId
+                                                                channelId
+                                                                threadRouteWithMaybeReplyTo
+                                                                currentDiscordUserId
+                                                            )
+                                                    )
+
+                                                ( Ok discordText, ViewThreadWithMaybeMessage threadId maybeReplyTo ) ->
+                                                    case OneToOne.first threadId channel.linkedMessageIds of
+                                                        Just messageId ->
+                                                            let
+                                                                thread : DiscordBackendThread
+                                                                thread =
+                                                                    SeqDict.get threadId channel.threads
+                                                                        |> Maybe.withDefault Thread.discordBackendInit
+
+                                                                discordThreadId : Discord.Id Discord.ChannelId
+                                                                discordThreadId =
+                                                                    Discord.idToUInt64 messageId |> Discord.idFromUInt64
+                                                            in
+                                                            ( { model
+                                                                | pendingDiscordCreateMessages =
+                                                                    SeqDict.insert
+                                                                        ( currentDiscordUserId, discordThreadId )
+                                                                        ( clientId, changeId )
+                                                                        model.pendingDiscordCreateMessages
+                                                                , sendMessageRateLimits = sendMessageRateLimits
+                                                              }
+                                                            , (case SeqDict.get threadId channel.threads of
+                                                                Just _ ->
+                                                                    Task.succeed ()
 
                                                                 Nothing ->
-                                                                    Nothing
-                                                            )
-                                                            attachedFiles2
-                                                            model.discordStickers
-                                                            discordText
-                                                            richText
-                                                            |> Task.attempt
-                                                                (SentDiscordGuildMessage
-                                                                    time
-                                                                    changeId
-                                                                    sessionId
-                                                                    clientId
-                                                                    guildId
-                                                                    channelId
-                                                                    threadRouteWithMaybeReplyTo
-                                                                    currentDiscordUserId
-                                                                )
-                                                        )
-
-                                                    ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                        case OneToOne.first threadId channel.linkedMessageIds of
-                                                            Just messageId ->
-                                                                let
-                                                                    thread : DiscordBackendThread
-                                                                    thread =
-                                                                        SeqDict.get threadId channel.threads
-                                                                            |> Maybe.withDefault Thread.discordBackendInit
-
-                                                                    discordThreadId : Discord.Id Discord.ChannelId
-                                                                    discordThreadId =
-                                                                        Discord.idToUInt64 messageId |> Discord.idFromUInt64
-                                                                in
-                                                                ( { model
-                                                                    | pendingDiscordCreateMessages =
-                                                                        SeqDict.insert
-                                                                            ( currentDiscordUserId, discordThreadId )
-                                                                            ( clientId, changeId )
-                                                                            model.pendingDiscordCreateMessages
-                                                                    , sendMessageRateLimits = sendMessageRateLimits
-                                                                  }
-                                                                , (case SeqDict.get threadId channel.threads of
-                                                                    Just _ ->
-                                                                        Task.succeed ()
-
-                                                                    Nothing ->
-                                                                        discordStartThread
+                                                                    discordStartThread
+                                                                        discordUser
+                                                                        channel
+                                                                        channelId
+                                                                        threadId
+                                                                        messageId
+                                                                        model
+                                                                        |> Task.map (\_ -> ())
+                                                              )
+                                                                |> Task.andThen
+                                                                    (\() ->
+                                                                        DiscordSync.sendMessage
+                                                                            model.serverSecret
                                                                             discordUser
-                                                                            channel
-                                                                            channelId
-                                                                            threadId
-                                                                            messageId
-                                                                            model
-                                                                            |> Task.map (\_ -> ())
-                                                                  )
-                                                                    |> Task.andThen
-                                                                        (\() ->
-                                                                            DiscordSync.sendMessage
-                                                                                model.serverSecret
-                                                                                discordUser
-                                                                                (Discord.idToUInt64 messageId |> Discord.idFromUInt64)
-                                                                                (case maybeReplyTo of
-                                                                                    Just replyTo ->
-                                                                                        OneToOne.first replyTo thread.linkedMessageIds
+                                                                            (Discord.idToUInt64 messageId |> Discord.idFromUInt64)
+                                                                            (case maybeReplyTo of
+                                                                                Just replyTo ->
+                                                                                    OneToOne.first replyTo thread.linkedMessageIds
 
-                                                                                    Nothing ->
-                                                                                        Nothing
-                                                                                )
-                                                                                attachedFiles2
-                                                                                model.discordStickers
-                                                                                discordText
-                                                                                richText
-                                                                        )
-                                                                    |> Task.attempt
-                                                                        (SentDiscordGuildMessage
-                                                                            time
-                                                                            changeId
-                                                                            sessionId
-                                                                            clientId
-                                                                            guildId
-                                                                            channelId
-                                                                            threadRouteWithMaybeReplyTo
-                                                                            currentDiscordUserId
-                                                                        )
-                                                                )
+                                                                                Nothing ->
+                                                                                    Nothing
+                                                                            )
+                                                                            attachedFiles2
+                                                                            model.discordStickers
+                                                                            discordText
+                                                                            richText
+                                                                    )
+                                                                |> Task.attempt
+                                                                    (SentDiscordGuildMessage
+                                                                        time
+                                                                        changeId
+                                                                        sessionId
+                                                                        clientId
+                                                                        guildId
+                                                                        channelId
+                                                                        threadRouteWithMaybeReplyTo
+                                                                        currentDiscordUserId
+                                                                    )
+                                                            )
 
-                                                            _ ->
-                                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                                        _ ->
+                                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                                ( Err _, _ ) ->
+                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         _ ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -2314,48 +2309,45 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         text
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                         model
-
-                                                discordText : String
-                                                discordText =
-                                                    RichText.toDiscord richText
                                             in
-                                            if String.length discordText > RichText.maxLength then
-                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                            case RichText.toDiscord richText of
+                                                Ok discordText ->
+                                                    ( { model
+                                                        | pendingDiscordCreateDmMessages =
+                                                            SeqDict.insert
+                                                                data
+                                                                ( clientId, changeId )
+                                                                model.pendingDiscordCreateDmMessages
+                                                        , sendMessageRateLimits = sendMessageRateLimits
+                                                      }
+                                                    , DiscordSync.sendMessage
+                                                        model.serverSecret
+                                                        discordUser
+                                                        (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
+                                                        (case maybeReplyTo of
+                                                            Just replyTo ->
+                                                                OneToOne.first replyTo dmChannel.linkedMessageIds
 
-                                            else
-                                                ( { model
-                                                    | pendingDiscordCreateDmMessages =
-                                                        SeqDict.insert
-                                                            data
-                                                            ( clientId, changeId )
-                                                            model.pendingDiscordCreateDmMessages
-                                                    , sendMessageRateLimits = sendMessageRateLimits
-                                                  }
-                                                , DiscordSync.sendMessage
-                                                    model.serverSecret
-                                                    discordUser
-                                                    (Discord.idToUInt64 data.channelId |> Discord.idFromUInt64)
-                                                    (case maybeReplyTo of
-                                                        Just replyTo ->
-                                                            OneToOne.first replyTo dmChannel.linkedMessageIds
-
-                                                        Nothing ->
-                                                            Nothing
-                                                    )
-                                                    attachedFiles2
-                                                    model.discordStickers
-                                                    discordText
-                                                    richText
-                                                    |> Task.attempt
-                                                        (SentDiscordDmMessage
-                                                            time
-                                                            changeId
-                                                            sessionId
-                                                            clientId
-                                                            data.channelId
-                                                            data.currentUserId
+                                                            Nothing ->
+                                                                Nothing
                                                         )
-                                                )
+                                                        attachedFiles2
+                                                        model.discordStickers
+                                                        discordText
+                                                        richText
+                                                        |> Task.attempt
+                                                            (SentDiscordDmMessage
+                                                                time
+                                                                changeId
+                                                                sessionId
+                                                                clientId
+                                                                data.channelId
+                                                                data.currentUserId
+                                                            )
+                                                    )
+
+                                                Err _ ->
+                                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                                         _ ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -3146,82 +3138,76 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 newContent
                                                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
                                                 model
-
-                                        discordText : String
-                                        discordText =
-                                            RichText.toDiscord richText
                                     in
-                                    if String.length discordText > RichText.maxLength then
-                                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-                                    else
-                                        case
-                                            LocalState.editMessageHelper
-                                                time
-                                                currentUserId
-                                                richText
-                                                DoNotChangeAttachments
-                                                threadRoute
-                                                channel
-                                        of
-                                            Ok channel2 ->
-                                                ( { model
-                                                    | discordGuilds =
-                                                        SeqDict.updateIfExists
-                                                            guildId
-                                                            (LocalState.updateChannel (\_ -> channel2) channelId)
-                                                            model.discordGuilds
-                                                  }
-                                                , Command.batch
-                                                    [ Local_Discord_SendEditGuildMessage
+                                    case
+                                        ( RichText.toDiscord richText
+                                        , LocalState.editMessageHelper
+                                            time
+                                            currentUserId
+                                            richText
+                                            DoNotChangeAttachments
+                                            threadRoute
+                                            channel
+                                        )
+                                    of
+                                        ( Ok discordText, Ok channel2 ) ->
+                                            ( { model
+                                                | discordGuilds =
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (\_ -> channel2) channelId)
+                                                        model.discordGuilds
+                                              }
+                                            , Command.batch
+                                                [ Local_Discord_SendEditGuildMessage
+                                                    time
+                                                    currentUserId
+                                                    guildId
+                                                    channelId
+                                                    threadRoute
+                                                    newContent
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDiscordGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_DiscordSendEditGuildMessage
                                                         time
                                                         currentUserId
                                                         guildId
                                                         channelId
                                                         threadRoute
-                                                        newContent
-                                                        |> LocalChangeResponse changeId
-                                                        |> Lamdera.sendToFrontend clientId
-                                                    , Broadcast.toDiscordGuildExcludingOne
-                                                        clientId
-                                                        guildId
-                                                        (Server_DiscordSendEditGuildMessage
-                                                            time
-                                                            currentUserId
-                                                            guildId
-                                                            channelId
-                                                            threadRoute
-                                                            richText
-                                                            |> ServerChange
-                                                        )
-                                                        model
-                                                    , case threadRouteToDiscordMessageId channelId channel2 threadRoute of
-                                                        Just ( discordChannelId, discordMessageId ) ->
-                                                            Discord.editMessagePayload
-                                                                (Discord.userToken userData.auth)
-                                                                { channelId = discordChannelId
-                                                                , messageId = discordMessageId
-                                                                , content = discordText
-                                                                }
-                                                                |> DiscordSync.http model.serverSecret
-                                                                |> Task.attempt
-                                                                    (EditedDiscordGuildMessage
-                                                                        time
-                                                                        guildId
-                                                                        channelId
-                                                                        threadRoute
-                                                                        discordMessageId
-                                                                    )
+                                                        richText
+                                                        |> ServerChange
+                                                    )
+                                                    model
+                                                , case threadRouteToDiscordMessageId channelId channel2 threadRoute of
+                                                    Just ( discordChannelId, discordMessageId ) ->
+                                                        Discord.editMessagePayload
+                                                            (Discord.userToken userData.auth)
+                                                            { channelId = discordChannelId
+                                                            , messageId = discordMessageId
+                                                            , content = discordText
+                                                            }
+                                                            |> DiscordSync.http model.serverSecret
+                                                            |> Task.attempt
+                                                                (EditedDiscordGuildMessage
+                                                                    time
+                                                                    guildId
+                                                                    channelId
+                                                                    threadRoute
+                                                                    discordMessageId
+                                                                )
 
-                                                        Nothing ->
-                                                            Command.none
-                                                    ]
-                                                )
+                                                    Nothing ->
+                                                        Command.none
+                                                ]
+                                            )
 
-                                            Err () ->
-                                                ( model
-                                                , BackendExtra.invalidChangeResponse changeId clientId
-                                                )
+                                        _ ->
+                                            ( model
+                                            , BackendExtra.invalidChangeResponse changeId clientId
+                                            )
 
                                 Nothing ->
                                     ( model
@@ -3242,65 +3228,57 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         newContent
                                         (NonemptyDict.keys channel.members |> List.Nonempty.toList)
                                         model
-
-                                discordText : String
-                                discordText =
-                                    RichText.toDiscord richText
                             in
-                            if String.length discordText > RichText.maxLength then
-                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                            case
+                                ( RichText.toDiscord richText
+                                , LocalState.editMessageHelperNoThread
+                                    time
+                                    dmData.currentUserId
+                                    richText
+                                    DoNotChangeAttachments
+                                    messageId
+                                    channel
+                                )
+                            of
+                                ( Ok discordText, Ok channel2 ) ->
+                                    ( { model
+                                        | discordDmChannels =
+                                            SeqDict.insert dmData.channelId channel2 model.discordDmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_Discord_SendEditDmMessage time dmData messageId newContent
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDiscordDmChannelExcludingOne
+                                            clientId
+                                            dmData.channelId
+                                            (Server_DiscordSendEditDmMessage
+                                                time
+                                                dmData
+                                                messageId
+                                                richText
+                                                |> ServerChange
+                                            )
+                                            model
+                                        , case OneToOne.first messageId channel2.linkedMessageIds of
+                                            Just discordMessageId ->
+                                                Discord.editMessagePayload
+                                                    (Discord.userToken userData.auth)
+                                                    { channelId = Discord.idToUInt64 dmData.channelId |> Discord.idFromUInt64
+                                                    , messageId = discordMessageId
+                                                    , content = discordText
+                                                    }
+                                                    |> DiscordSync.http model.serverSecret
+                                                    |> Task.attempt
+                                                        (EditedDiscordDmMessage time dmData.channelId messageId discordMessageId)
 
-                            else
-                                case
-                                    LocalState.editMessageHelperNoThread
-                                        time
-                                        dmData.currentUserId
-                                        richText
-                                        DoNotChangeAttachments
-                                        messageId
-                                        channel
-                                of
-                                    Ok channel2 ->
-                                        ( { model
-                                            | discordDmChannels =
-                                                SeqDict.insert dmData.channelId channel2 model.discordDmChannels
-                                          }
-                                        , Command.batch
-                                            [ Local_Discord_SendEditDmMessage time dmData messageId newContent
-                                                |> LocalChangeResponse changeId
-                                                |> Lamdera.sendToFrontend clientId
-                                            , Broadcast.toDiscordDmChannelExcludingOne
-                                                clientId
-                                                dmData.channelId
-                                                (Server_DiscordSendEditDmMessage
-                                                    time
-                                                    dmData
-                                                    messageId
-                                                    richText
-                                                    |> ServerChange
-                                                )
-                                                model
-                                            , case OneToOne.first messageId channel2.linkedMessageIds of
-                                                Just discordMessageId ->
-                                                    Discord.editMessagePayload
-                                                        (Discord.userToken userData.auth)
-                                                        { channelId = Discord.idToUInt64 dmData.channelId |> Discord.idFromUInt64
-                                                        , messageId = discordMessageId
-                                                        , content = discordText
-                                                        }
-                                                        |> DiscordSync.http model.serverSecret
-                                                        |> Task.attempt
-                                                            (EditedDiscordDmMessage time dmData.channelId messageId discordMessageId)
+                                            Nothing ->
+                                                Command.none
+                                        ]
+                                    )
 
-                                                Nothing ->
-                                                    Command.none
-                                            ]
-                                        )
-
-                                    Err () ->
-                                        ( model
-                                        , BackendExtra.invalidChangeResponse changeId clientId
-                                        )
+                                _ ->
+                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
                 Local_MemberEditTyping _ guildOrDmId threadRoute ->

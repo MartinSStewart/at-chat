@@ -9,6 +9,7 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , attachments
+    , discordCharsLeft
     , domainToString
     , emptyPlaceholder
     , escapedCharToString
@@ -3690,14 +3691,37 @@ discordParseLoop source index modifiers accText revNodes =
                 discordParseLoop source nextIndex modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
-toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> String
+toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> Result Int String
 toDiscord content =
     case removeAttachedFile (\_ -> True) content of
         Just text2 ->
-            toDiscordHelper (List.Nonempty.toList text2) |> Discord.Markdown.toString
+            let
+                text3 =
+                    toDiscordHelper (List.Nonempty.toList text2) |> Discord.Markdown.toString
+            in
+            if String.length text3 > maxLength then
+                Err (maxLength - String.length text3)
+
+            else
+                Ok text3
 
         Nothing ->
-            ""
+            Ok ""
+
+
+discordCharsLeft : Maybe (Nonempty (RichText (Discord.Id Discord.UserId))) -> Int
+discordCharsLeft richText =
+    case richText of
+        Just richText2 ->
+            case toDiscord richText2 of
+                Ok text ->
+                    maxLength - String.length text
+
+                Err charsLeft ->
+                    charsLeft
+
+        Nothing ->
+            maxLength
 
 
 toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)

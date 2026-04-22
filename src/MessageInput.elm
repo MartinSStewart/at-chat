@@ -40,7 +40,7 @@ import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
 import Range exposing (Range, SelectionDirection)
-import RichText
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -85,7 +85,7 @@ type Msg
 
 counterThreshold : number
 counterThreshold =
-    1000
+    900
 
 
 isPress : Msg -> Bool
@@ -127,12 +127,13 @@ textarea :
     -> HtmlId
     -> String
     -> String
+    -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText text richText attachedFiles stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -246,14 +247,14 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                         [ Html.Attributes.style "color" "rgb(255,255,255)", Html.Attributes.style "white-space" "pre-wrap" ]
                    )
             )
-            (case String.Nonempty.fromString text of
-                Just nonempty ->
+            (case richText of
+                Just richText2 ->
                     RichText.textInputView
                         users
                         attachedFiles
                         stickers
                         (Maybe.map .selection textInputFocus)
-                        (RichText.fromNonemptyString users nonempty)
+                        richText2
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -345,23 +346,21 @@ editView :
     -> Bool
     -> HtmlId
     -> String
+    -> Int
     -> String
+    -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
-
-        overLimit : Bool
-        overLimit =
-            String.length text > RichText.maxLength
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText text richText attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -386,7 +385,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
-            , Ui.inFront (characterCounter text)
+            , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
@@ -397,7 +396,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background
-                        (if overLimit then
+                        (if charsLeft < 0 then
                             MyUi.disabledButtonBackground
 
                          else
@@ -422,23 +421,21 @@ view :
     -> Bool
     -> HtmlId
     -> String
+    -> Int
     -> String
+    -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
-
-        overLimit : Bool
-        overLimit =
-            String.length text > RichText.maxLength
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText text richText attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -462,7 +459,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
-            , Ui.inFront (characterCounter text)
+            , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
@@ -473,7 +470,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background
-                        (if overLimit then
+                        (if charsLeft < 0 then
                             MyUi.disabledButtonBackground
 
                          else
@@ -497,14 +494,9 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
             ]
 
 
-characterCounter : String -> Element msg
-characterCounter text =
-    let
-        length : Int
-        length =
-            String.length text
-    in
-    if length >= counterThreshold then
+characterCounter : Int -> Element msg
+characterCounter charsLeft =
+    if charsLeft <= counterThreshold then
         Ui.el
             [ Ui.alignBottom
             , Ui.alignLeft
@@ -512,7 +504,7 @@ characterCounter text =
             , Ui.paddingXY 6 2
             , Ui.Font.size 12
             , Ui.Font.color
-                (if length > RichText.maxLength then
+                (if charsLeft < 0 then
                     MyUi.errorColor
 
                  else
@@ -520,7 +512,7 @@ characterCounter text =
                 )
             , Ui.move { x = 2, y = -2, z = 0 }
             ]
-            (Ui.text (String.fromInt length ++ "/" ++ String.fromInt RichText.maxLength))
+            (Ui.text (String.fromInt charsLeft ++ "/" ++ String.fromInt RichText.maxLength))
 
     else
         Ui.none

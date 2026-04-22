@@ -1411,7 +1411,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                     atThreshold : String
                     atThreshold =
-                        String.repeat 1000 "b"
+                        String.repeat 1100 "b"
 
                     atLimit : String
                     atLimit =
@@ -1430,7 +1430,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Hitting the threshold shows the counter.
                 , admin.input 100 (Dom.id "channel_textinput") atThreshold
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "1000/2000" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "900/2000" ])
 
                 -- Going over the limit still shows the counter, and Enter refuses to send.
                 , admin.input 100 (Dom.id "channel_textinput") overLimit
