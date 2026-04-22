@@ -503,7 +503,6 @@ characterCounter charsLeft =
             , Ui.alignLeft
             , Ui.width Ui.shrink
             , Ui.paddingXY 6 2
-            , Ui.Font.size 12
             , Ui.Font.color
                 (if charsLeft < 0 then
                     MyUi.errorColor
