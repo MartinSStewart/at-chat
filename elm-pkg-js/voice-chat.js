@@ -22,10 +22,6 @@ exports.init = async function init(app) {
         });
 
         const remoteAudio = document.getElementById(peerUserId);
-        remoteAudio.autoplay = true;
-        remoteAudio.playsInline = true;
-        remoteAudio.style.display = "none";
-        document.body.appendChild(remoteAudio);
 
         pc.ontrack = function (event) {
             console.log("Voice chat: ontrack", peerUserId, event.streams);

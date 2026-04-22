@@ -5492,6 +5492,7 @@ view model =
 
                                       else
                                         Ui.noAttr
+                                    , VoiceChat.audioNodes local |> Ui.html |> Ui.behindContent
                                     ]
                                     (page loggedIn local)
 

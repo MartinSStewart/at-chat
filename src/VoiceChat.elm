@@ -65,7 +65,8 @@ audioNodes local =
         |> List.concatMap
             (\( roomId, sessions ) ->
                 if hasJoined roomId local then
-                    NonemptySet.toList sessions
+                    NonemptySet.remove local.localUser.session.sessionIdHash sessions
+                        |> SeqSet.toList
                         |> List.map
                             (\session ->
                                 Html.audio
