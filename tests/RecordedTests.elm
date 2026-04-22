@@ -1403,7 +1403,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
-            (\admin _ ->
+            (\admin user ->
                 let
                     shortText : String
                     shortText =
@@ -1466,6 +1466,21 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 200 (Dom.id "editMessageTextInput") "Short edit"
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                , user.sendToBackend
+                    100
+                    (LocalModelChangeRequest (ChangeId 1)
+                        (Local_SendMessage
+                            (Time.millisToPosix 0)
+                            (GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0))
+                            (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
+                            (NoThreadWithMaybeMessage Nothing)
+                            SeqDict.empty
+                        )
+                    )
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
                 ]
             )
         ]
