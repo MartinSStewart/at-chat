@@ -471,7 +471,7 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , calls = { voiceChats = loginData.voiceChatPeers }
+    , calls = VoiceChat.init loginData.voiceChatPeers
     }
 
 
@@ -4051,7 +4051,7 @@ pressedVoiceChatButton roomId model =
                 currentSession =
                     local.localUser.session.sessionIdHash
             in
-            if VoiceChat.hasJoined roomId local then
+            if VoiceChat.hasJoined roomId local.calls then
                 FrontendExtra.handleLocalChange
                     model.time
                     (Local_Leave roomId |> Local_VoiceChatChange |> Just)

@@ -9,6 +9,7 @@ port module VoiceChat exposing
     , audioNodes
     , changeUpdate
     , hasJoined
+    , init
     , leaveVoiceChatCmds
     , localChangeUpdate
     , peerHasJoined
@@ -44,7 +45,14 @@ type ServerChange
 
 
 type alias Model =
-    { voiceChats : SeqDict RoomId (NonemptySet SessionIdHash) }
+    { currentRoom : Maybe RoomId, voiceChats : SeqDict RoomId (NonemptySet SessionIdHash) }
+
+
+init : SeqDict RoomId (NonemptySet SessionIdHash) -> Model
+init voiceChats =
+    { currentRoom = Nothing
+    , voiceChats = voiceChats
+    }
 
 
 type alias ConnectionId =
@@ -116,7 +124,7 @@ audioNodes local =
     SeqDict.toList local.calls.voiceChats
         |> List.concatMap
             (\( roomId, sessions ) ->
-                if hasJoined roomId local then
+                if hasJoined roomId local.calls then
                     NonemptySet.remove local.localUser.session.sessionIdHash sessions
                         |> SeqSet.toList
                         |> List.map
@@ -135,21 +143,9 @@ audioNodes local =
         |> Html.div []
 
 
-hasJoined :
-    RoomId
-    ->
-        { b
-            | calls : Model
-            , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
-        }
-    -> Bool
-hasJoined roomId local =
-    case SeqDict.get roomId local.calls.voiceChats of
-        Just voiceChat ->
-            NonemptySet.member local.localUser.session.sessionIdHash voiceChat
-
-        Nothing ->
-            False
+hasJoined : RoomId -> Model -> Bool
+hasJoined roomId model =
+    model.currentRoom == Just roomId
 
 
 leaveVoiceChatCmds : RoomId -> SessionIdHash -> Model -> Command FrontendOnly toMsg msg
@@ -178,10 +174,8 @@ peerHasJoined otherUserId local =
     case SeqDict.get otherUserId local.calls.voiceChats of
         Just voiceChat ->
             SeqDict.foldl
-                (\sessionId _ set ->
-                    SeqSet.remove sessionId set
-                )
-                (NonemptySet.remove local.localUser.session.sessionIdHash voiceChat)
+                (\sessionId _ set -> SeqSet.remove sessionId set)
+                (NonemptySet.toSeqSet voiceChat)
                 local.otherSessions
                 |> SeqSet.isEmpty
                 |> not
@@ -244,22 +238,24 @@ removeSessionIdHash roomId sessionIdHash model =
             model
 
 
-localChangeUpdate : LocalChange -> SessionIdHash -> { a | calls : Model } -> { a | calls : Model }
-localChangeUpdate change sessionIdHash local =
+localChangeUpdate : LocalChange -> Model -> Model
+localChangeUpdate change model =
     case change of
         Local_Join roomId ->
-            let
-                calls : Model
-                calls =
-                    local.calls
-            in
-            { local | calls = { calls | voiceChats = addSessionIdHash roomId sessionIdHash calls.voiceChats } }
+            { model | currentRoom = Just roomId }
 
         Local_Leave roomId ->
-            { local | calls = removeSessionIdHash roomId sessionIdHash local.calls }
+            { model
+                | currentRoom =
+                    if Just roomId == model.currentRoom then
+                        Nothing
+
+                    else
+                        model.currentRoom
+            }
 
         Local_Signal _ _ ->
-            local
+            model
 
 
 changeUpdate : ServerChange -> { a | calls : Model } -> { a | calls : Model }

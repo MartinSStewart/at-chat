@@ -12,6 +12,7 @@ exports.init = async function init(app) {
             console.error("Voice chat: failed to get microphone", e);
             return;
         }
+        console.log(localStream);
 
         const pc = new RTCPeerConnection({
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]

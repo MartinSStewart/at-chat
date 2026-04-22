@@ -2266,7 +2266,7 @@ changeUpdate localMsg local =
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
 
                 Local_VoiceChatChange voiceChatChange ->
-                    VoiceChat.localChangeUpdate voiceChatChange local.localUser.session.sessionIdHash local
+                    { local | calls = VoiceChat.localChangeUpdate voiceChatChange local.calls }
 
         ServerChange serverChange ->
             case serverChange of

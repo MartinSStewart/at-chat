@@ -3064,7 +3064,7 @@ voiceChatButton : RoomId -> LocalState -> Element FrontendMsg
 voiceChatButton voiceChatId local =
     let
         hasJoined =
-            VoiceChat.hasJoined voiceChatId local
+            VoiceChat.hasJoined voiceChatId local.calls
 
         peerHasJoined =
             VoiceChat.peerHasJoined voiceChatId local
