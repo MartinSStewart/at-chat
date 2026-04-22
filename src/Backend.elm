@@ -4538,7 +4538,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                         model
                         sessionId
                         { otherUserId = otherUserId }
-                        (\session _ dmChannelId dmChannel ->
+                        (\session _ _ dmChannelId dmChannel ->
                             ( { model
                                 | voiceChatParticipants =
                                     VoiceChat.addSessionIdHash dmChannelId sessionId model.voiceChatParticipants
@@ -4579,7 +4579,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                         model
                         sessionId
                         { otherUserId = otherUserId }
-                        (\session _ dmChannelId dmChannel ->
+                        (\session _ _ dmChannelId dmChannel ->
                             case SeqDict.get dmChannelId model.voiceChatParticipants of
                                 Just voiceChatParticipants ->
                                     if NonemptySet.member sessionId voiceChatParticipants then
@@ -4650,7 +4650,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                         model
                         sessionId
                         { otherUserId = otherUserId }
-                        (\session _ _ _ ->
+                        (\session _ _ _ _ ->
                             ( model
                             , Command.batch
                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))

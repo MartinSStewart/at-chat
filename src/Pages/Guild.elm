@@ -4520,7 +4520,7 @@ messageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg
-messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
+messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4659,7 +4659,7 @@ threadMessageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg
-threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
+threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
