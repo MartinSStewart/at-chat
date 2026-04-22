@@ -908,7 +908,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                         (RichText.toStringWithGetter
                                                             DiscordUserData.username
                                                             False
-                                                            model.discordUsers
+                                                            model2.discordUsers
                                                             richText
                                                             |> String.Nonempty.fromString
                                                             |> Maybe.withDefault (NonemptyString ' ' "")
@@ -1278,7 +1278,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                                 (RichText.toStringWithGetter
                                                                     DiscordUserData.username
                                                                     False
-                                                                    model.discordUsers
+                                                                    model2.discordUsers
                                                                     richText
                                                                     |> String.Nonempty.fromString
                                                                     |> Maybe.withDefault (NonemptyString ' ' "")

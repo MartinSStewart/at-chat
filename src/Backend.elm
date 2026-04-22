@@ -14,7 +14,6 @@ import Bytes.Decode
 import Bytes.Encode
 import ChannelDescription
 import Discord exposing (OptionalData(..))
-import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
