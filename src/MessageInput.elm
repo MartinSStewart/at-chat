@@ -73,7 +73,7 @@ type alias NameSoFarData =
 type Msg
     = PressedTextInput
     | TypedMessage String
-    | PressedSendMessage
+    | PressedSendMessage { charsLeft : Int }
     | PressedArrowInDropdown Int
     | PressedArrowUpInEmptyInput
     | PressedDropdownItem Int
@@ -97,7 +97,7 @@ isPress msg =
         TypedMessage _ ->
             False
 
-        PressedSendMessage ->
+        PressedSendMessage _ ->
             True
 
         PressedArrowInDropdown _ ->
@@ -126,6 +126,7 @@ textarea :
     Bool
     -> HtmlId
     -> String
+    -> Int
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
@@ -133,7 +134,7 @@ textarea :
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText text richText attachedFiles stickers textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -148,7 +149,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText text richText attac
                                 Json.Decode.succeed ( PressedArrowUpInEmptyInput, True )
 
                             else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
-                                Json.Decode.succeed ( PressedSendMessage, True )
+                                Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True )
 
                             else
                                 Json.Decode.fail ""
@@ -360,7 +361,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text richText attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -389,7 +390,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
-                    PressedSendMessage
+                    (PressedSendMessage { charsLeft = charsLeft })
                     [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -407,7 +408,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     , Ui.centerY
                     , Html.Events.preventDefaultOn
                         "touchend"
-                        (Json.Decode.succeed ( PressedSendMessage, True ))
+                        (Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True ))
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.sendMessage)
@@ -435,7 +436,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text richText attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -463,7 +464,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
-                    PressedSendMessage
+                    (PressedSendMessage { charsLeft = charsLeft })
                     [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -482,7 +483,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     , Html.Events.custom
                         "touchstart"
                         (Json.Decode.succeed
-                            { message = PressedSendMessage
+                            { message = PressedSendMessage { charsLeft = charsLeft }
                             , stopPropagation = True
                             , preventDefault = True
                             }

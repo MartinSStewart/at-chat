@@ -2766,12 +2766,12 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedSendMessage ->
+                MessageInput.PressedSendMessage { charsLeft } ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                                 Just edit ->
-                                    if String.length edit.text > RichText.maxLength then
+                                    if charsLeft < 0 then
                                         ( loggedIn, Command.none )
 
                                     else
@@ -3040,7 +3040,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedSendMessage ->
+                MessageInput.PressedSendMessage { charsLeft } ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
@@ -3057,7 +3057,7 @@ updateLoaded msg model =
 
                                         safeToSend : Bool
                                         safeToSend =
-                                            (String.Nonempty.length nonempty <= RichText.maxLength)
+                                            (charsLeft >= 0)
                                                 && (case guildOrDmId of
                                                         GuildOrDmId _ ->
                                                             True
