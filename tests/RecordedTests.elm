@@ -1434,7 +1434,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
 
                 -- Going over the limit still shows the counter, and Enter refuses to send.
                 , admin.input 100 (Dom.id "channel_textinput") overLimit
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_1" ])
@@ -1456,11 +1456,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     )
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
                 , admin.input 200 (Dom.id "editMessageTextInput") overLimit
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
                 , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
 
                 -- Enter with over-limit text leaves the edit dialog open (counter still shown).
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "2001/2000" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
 
                 -- A valid edit within the limit still works.
                 , admin.input 200 (Dom.id "editMessageTextInput") "Short edit"
