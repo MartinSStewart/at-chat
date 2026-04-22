@@ -40,7 +40,7 @@ import NonemptyDict
 import PersonName exposing (PersonName)
 import Ports
 import Range exposing (Range, SelectionDirection)
-import RichText
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
@@ -73,7 +73,7 @@ type alias NameSoFarData =
 type Msg
     = PressedTextInput
     | TypedMessage String
-    | PressedSendMessage
+    | PressedSendMessage { charsLeft : Int }
     | PressedArrowInDropdown Int
     | PressedArrowUpInEmptyInput
     | PressedDropdownItem Int
@@ -81,6 +81,11 @@ type Msg
     | PressedUploadFile
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
+
+
+counterThreshold : number
+counterThreshold =
+    900
 
 
 isPress : Msg -> Bool
@@ -92,7 +97,7 @@ isPress msg =
         TypedMessage _ ->
             False
 
-        PressedSendMessage ->
+        PressedSendMessage _ ->
             True
 
         PressedArrowInDropdown _ ->
@@ -121,13 +126,15 @@ textarea :
     Bool
     -> HtmlId
     -> String
+    -> Int
     -> String
+    -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -142,7 +149,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                                 Json.Decode.succeed ( PressedArrowUpInEmptyInput, True )
 
                             else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
-                                Json.Decode.succeed ( PressedSendMessage, True )
+                                Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True )
 
                             else
                                 Json.Decode.fail ""
@@ -241,14 +248,14 @@ textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles 
                         [ Html.Attributes.style "color" "rgb(255,255,255)", Html.Attributes.style "white-space" "pre-wrap" ]
                    )
             )
-            (case String.Nonempty.fromString text of
-                Just nonempty ->
+            (case richText of
+                Just richText2 ->
                     RichText.textInputView
                         users
                         attachedFiles
                         stickers
                         (Maybe.map .selection textInputFocus)
-                        (RichText.fromNonemptyString users nonempty)
+                        richText2
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -340,19 +347,21 @@ editView :
     -> Bool
     -> HtmlId
     -> String
+    -> Int
     -> String
+    -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -377,22 +386,29 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 0, z = 0 }, Ui.spacing 4 ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
+            , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
-                    PressedSendMessage
+                    (PressedSendMessage { charsLeft = charsLeft })
                     [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
-                    , Ui.background MyUi.buttonBackground
+                    , Ui.background
+                        (if charsLeft < 0 then
+                            MyUi.disabledButtonBackground
+
+                         else
+                            MyUi.buttonBackground
+                        )
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
                     , Html.Events.preventDefaultOn
                         "touchend"
-                        (Json.Decode.succeed ( PressedSendMessage, True ))
+                        (Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True ))
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.sendMessage)
@@ -406,19 +422,21 @@ view :
     -> Bool
     -> HtmlId
     -> String
+    -> Int
     -> String
+    -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText text attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -442,23 +460,30 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     [ Ui.width Ui.shrink, Ui.move { x = 2, y = 2, z = 0 }, Ui.spacing 4 ]
                     [ attachmentButton htmlIdPrefix, showEmojiSelectorButton htmlIdPrefix ]
                 )
+            , Ui.inFront (characterCounter charsLeft)
             , Ui.inFront
                 (MyUi.elButton
                     (Dom.id (htmlIdPrefix ++ "_sendMessage"))
-                    PressedSendMessage
+                    (PressedSendMessage { charsLeft = charsLeft })
                     [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
-                    , Ui.background MyUi.buttonBackground
+                    , Ui.background
+                        (if charsLeft < 0 then
+                            MyUi.disabledButtonBackground
+
+                         else
+                            MyUi.buttonBackground
+                        )
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
                     , Html.Events.custom
                         "touchstart"
                         (Json.Decode.succeed
-                            { message = PressedSendMessage
+                            { message = PressedSendMessage { charsLeft = charsLeft }
                             , stopPropagation = True
                             , preventDefault = True
                             }
@@ -468,6 +493,29 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     (Ui.html Icons.sendMessage)
                 )
             ]
+
+
+characterCounter : Int -> Element msg
+characterCounter charsLeft =
+    if charsLeft <= counterThreshold then
+        Ui.el
+            [ Ui.alignBottom
+            , Ui.alignLeft
+            , Ui.width Ui.shrink
+            , Ui.paddingXY 6 2
+            , Ui.Font.color
+                (if charsLeft < 0 then
+                    MyUi.errorColor
+
+                 else
+                    MyUi.font3
+                )
+            , Ui.move { x = 2, y = -2, z = 0 }
+            ]
+            (Ui.text (String.fromInt charsLeft ++ "/" ++ String.fromInt RichText.maxLength))
+
+    else
+        Ui.none
 
 
 attachmentButton : String -> Element Msg

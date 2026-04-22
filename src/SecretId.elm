@@ -1,4 +1,11 @@
-module SecretId exposing (SecretId(..), fromString, getShortUniqueId, getUniqueId, toString)
+module SecretId exposing
+    ( SecretId(..)
+    , ServerSecret(..)
+    , fromString
+    , getShortUniqueId
+    , getUniqueId
+    , toString
+    )
 
 import Effect.Time as Time
 import Env
@@ -11,10 +18,17 @@ type SecretId a
     = SecretId String
 
 
-getUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, SecretId b )
+type ServerSecret
+    = ServerSecret Never
+
+
+getUniqueId :
+    Time.Posix
+    -> { a | secretCounter : Int, serverSecret : SecretId ServerSecret }
+    -> ( { a | secretCounter : Int, serverSecret : SecretId ServerSecret }, SecretId b )
 getUniqueId time model =
     ( { model | secretCounter = model.secretCounter + 1 }
-    , Env.secretKey
+    , toString model.serverSecret
         ++ ":"
         ++ String.fromInt model.secretCounter
         ++ ":"
@@ -29,10 +43,13 @@ getUniqueId time model =
     )
 
 
-getShortUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, SecretId b )
+getShortUniqueId :
+    Time.Posix
+    -> { a | secretCounter : Int, serverSecret : SecretId ServerSecret }
+    -> ( { a | secretCounter : Int, serverSecret : SecretId ServerSecret }, SecretId b )
 getShortUniqueId time model =
     ( { model | secretCounter = model.secretCounter + 1 }
-    , Env.secretKey
+    , toString model.serverSecret
         ++ ":"
         ++ String.fromInt model.secretCounter
         ++ ":"

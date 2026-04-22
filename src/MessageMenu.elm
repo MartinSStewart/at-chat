@@ -18,13 +18,16 @@ import Emoji
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
+import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
 import MyUi
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
+import String.Nonempty
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Anim
@@ -241,8 +244,12 @@ viewMobile offset extraOptions loggedIn local model =
             :: (case showEditViewed extraOptions loggedIn of
                     Just edit ->
                         let
-                            editView : SeqDict userId { b | name : PersonName } -> Element MessageInput.Msg
-                            editView =
+                            editView :
+                                Int
+                                -> Maybe (Nonempty (RichText userId))
+                                -> SeqDict userId { b | name : PersonName }
+                                -> Element MessageInput.Msg
+                            editView charsLeft richText allUsers =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
                                     (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
@@ -250,17 +257,46 @@ viewMobile offset extraOptions loggedIn local model =
                                     True
                                     editMessageTextInputId
                                     ""
+                                    charsLeft
                                     edit.text
+                                    richText
                                     edit.attachedFiles
                                     local.localUser.stickers
                                     loggedIn.textInputFocus
+                                    allUsers
                         in
                         [ (case extraOptions.guildOrDmId of
                             GuildOrDmId _ ->
-                                editView (LocalState.allUsers local.localUser)
+                                let
+                                    allUsers =
+                                        LocalState.allUsers local.localUser
+
+                                    richText : Maybe (Nonempty (RichText (Id UserId)))
+                                    richText =
+                                        case String.Nonempty.fromString edit.text of
+                                            Just nonempty ->
+                                                RichText.fromNonemptyString allUsers nonempty |> Just
+
+                                            Nothing ->
+                                                Nothing
+                                in
+                                editView (RichText.maxLength - String.length edit.text) richText allUsers
 
                             DiscordGuildOrDmId _ ->
-                                editView (LocalState.allDiscordUsers local.localUser)
+                                let
+                                    allUsers =
+                                        LocalState.allDiscordUsers local.localUser
+
+                                    richText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+                                    richText =
+                                        case String.Nonempty.fromString edit.text of
+                                            Just nonempty ->
+                                                RichText.fromNonemptyString allUsers nonempty |> Just
+
+                                            Nothing ->
+                                                Nothing
+                                in
+                                editView (RichText.discordCharsLeft richText) richText allUsers
                           )
                             |> Ui.map
                                 (EditMessage_MessageInputMsg

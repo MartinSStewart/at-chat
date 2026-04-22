@@ -90,7 +90,7 @@ import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (Domain, RichText)
 import Route exposing (Route)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -327,6 +327,8 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    , postmarkApiKey : Postmark.ApiKey
+    , serverSecret : SecretId ServerSecret
     , voiceChatParticipants : SeqDict DmChannelId (NonemptySet SessionId)
     }
 
@@ -773,8 +775,8 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -783,9 +785,9 @@ type LocalChange
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
-    | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
-    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
+    | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
+    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) NonemptyString
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage

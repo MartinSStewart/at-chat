@@ -2798,115 +2798,119 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedSendMessage ->
+                MessageInput.PressedSendMessage { charsLeft } ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                                 Just edit ->
-                                    let
-                                        local : LocalState
-                                        local =
-                                            Local.model loggedIn.localState
-                                    in
-                                    FrontendExtra.handleLocalChange
-                                        model.time
-                                        (case guildOrDmId of
-                                            GuildOrDmId guildOrDmId2 ->
-                                                case
-                                                    ( String.Nonempty.fromString edit.text
-                                                    , LocalState.guildOrDmIdToMessage
-                                                        guildOrDmId2
-                                                        (Id.threadRouteWithMessage edit.messageIndex threadRoute)
-                                                        local
-                                                    )
-                                                of
-                                                    ( Just nonempty, Just ( message, _ ) ) ->
-                                                        let
-                                                            richText : Nonempty (RichText (Id UserId))
-                                                            richText =
-                                                                RichText.fromNonemptyString
-                                                                    (LocalState.allUsers local.localUser)
+                                    if charsLeft < 0 then
+                                        ( loggedIn, Command.none )
+
+                                    else
+                                        let
+                                            local : LocalState
+                                            local =
+                                                Local.model loggedIn.localState
+                                        in
+                                        FrontendExtra.handleLocalChange
+                                            model.time
+                                            (case guildOrDmId of
+                                                GuildOrDmId guildOrDmId2 ->
+                                                    case
+                                                        ( String.Nonempty.fromString edit.text
+                                                        , LocalState.guildOrDmIdToMessage
+                                                            guildOrDmId2
+                                                            (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                            local
+                                                        )
+                                                    of
+                                                        ( Just nonempty, Just ( message, _ ) ) ->
+                                                            let
+                                                                richText : Nonempty (RichText (Id UserId))
+                                                                richText =
+                                                                    RichText.fromNonemptyString
+                                                                        (LocalState.allUsers local.localUser)
+                                                                        nonempty
+                                                            in
+                                                            if message.content == richText then
+                                                                Nothing
+
+                                                            else
+                                                                Local_SendEditMessage
+                                                                    model.time
+                                                                    guildOrDmId2
+                                                                    (case threadRoute of
+                                                                        ViewThread threadId ->
+                                                                            ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                                        NoThread ->
+                                                                            NoThreadWithMessage edit.messageIndex
+                                                                    )
                                                                     nonempty
-                                                        in
-                                                        if message.content == richText then
+                                                                    (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                                                    |> Just
+
+                                                        _ ->
                                                             Nothing
 
-                                                        else
-                                                            Local_SendEditMessage
-                                                                model.time
-                                                                guildOrDmId2
-                                                                (case threadRoute of
-                                                                    ViewThread threadId ->
-                                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+                                                DiscordGuildOrDmId guildOrDmId2 ->
+                                                    case
+                                                        ( String.Nonempty.fromString edit.text
+                                                        , LocalState.discordGuildOrDmIdToMessage
+                                                            guildOrDmId2
+                                                            (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                            local
+                                                        )
+                                                    of
+                                                        ( Just nonempty, Just ( message, _ ) ) ->
+                                                            let
+                                                                richText : Nonempty (RichText (Discord.Id Discord.UserId))
+                                                                richText =
+                                                                    RichText.fromNonemptyString
+                                                                        (LocalState.allDiscordUsers local.localUser)
+                                                                        nonempty
+                                                            in
+                                                            if message.content == richText then
+                                                                Nothing
 
-                                                                    NoThread ->
-                                                                        NoThreadWithMessage edit.messageIndex
-                                                                )
-                                                                richText
-                                                                (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                                                |> Just
+                                                            else
+                                                                case guildOrDmId2 of
+                                                                    DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
+                                                                        Local_Discord_SendEditGuildMessage
+                                                                            model.time
+                                                                            currentUserId
+                                                                            guildId
+                                                                            channelId
+                                                                            (case threadRoute of
+                                                                                ViewThread threadId ->
+                                                                                    ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
 
-                                                    _ ->
-                                                        Nothing
+                                                                                NoThread ->
+                                                                                    NoThreadWithMessage edit.messageIndex
+                                                                            )
+                                                                            nonempty
+                                                                            |> Just
 
-                                            DiscordGuildOrDmId guildOrDmId2 ->
-                                                case
-                                                    ( String.Nonempty.fromString edit.text
-                                                    , LocalState.discordGuildOrDmIdToMessage
-                                                        guildOrDmId2
-                                                        (Id.threadRouteWithMessage edit.messageIndex threadRoute)
-                                                        local
-                                                    )
-                                                of
-                                                    ( Just nonempty, Just ( message, _ ) ) ->
-                                                        let
-                                                            richText : Nonempty (RichText (Discord.Id Discord.UserId))
-                                                            richText =
-                                                                RichText.fromNonemptyString
-                                                                    (LocalState.allDiscordUsers local.localUser)
-                                                                    nonempty
-                                                        in
-                                                        if message.content == richText then
+                                                                    DiscordGuildOrDmId_Dm data ->
+                                                                        Local_Discord_SendEditDmMessage
+                                                                            model.time
+                                                                            data
+                                                                            edit.messageIndex
+                                                                            nonempty
+                                                                            |> Just
+
+                                                        _ ->
                                                             Nothing
+                                            )
+                                            (if MyUi.isMobile model then
+                                                MessageMenu.close model loggedIn
 
-                                                        else
-                                                            case guildOrDmId2 of
-                                                                DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
-                                                                    Local_Discord_SendEditGuildMessage
-                                                                        model.time
-                                                                        currentUserId
-                                                                        guildId
-                                                                        channelId
-                                                                        (case threadRoute of
-                                                                            ViewThread threadId ->
-                                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
-
-                                                                            NoThread ->
-                                                                                NoThreadWithMessage edit.messageIndex
-                                                                        )
-                                                                        richText
-                                                                        |> Just
-
-                                                                DiscordGuildOrDmId_Dm data ->
-                                                                    Local_Discord_SendEditDmMessage
-                                                                        model.time
-                                                                        data
-                                                                        edit.messageIndex
-                                                                        richText
-                                                                        |> Just
-
-                                                    _ ->
-                                                        Nothing
-                                        )
-                                        (if MyUi.isMobile model then
-                                            MessageMenu.close model loggedIn
-
-                                         else
-                                            { loggedIn
-                                                | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
-                                            }
-                                        )
-                                        (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
+                                             else
+                                                { loggedIn
+                                                    | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
+                                                }
+                                            )
+                                            (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
@@ -3068,7 +3072,7 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageInput.PressedSendMessage ->
+                MessageInput.PressedSendMessage { charsLeft } ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
@@ -3085,12 +3089,14 @@ updateLoaded msg model =
 
                                         safeToSend : Bool
                                         safeToSend =
-                                            case guildOrDmId of
-                                                GuildOrDmId _ ->
-                                                    True
+                                            (charsLeft >= 0)
+                                                && (case guildOrDmId of
+                                                        GuildOrDmId _ ->
+                                                            True
 
-                                                DiscordGuildOrDmId guildOrDmId2 ->
-                                                    LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
+                                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                                            LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
+                                                   )
                                     in
                                     if safeToSend then
                                         FrontendExtra.handleLocalChange
@@ -3100,7 +3106,7 @@ updateLoaded msg model =
                                                     Local_SendMessage
                                                         model.time
                                                         guildOrDmId2
-                                                        (RichText.fromNonemptyString (LocalState.allUsers local.localUser) nonempty)
+                                                        nonempty
                                                         (case threadRoute of
                                                             ViewThread threadId ->
                                                                 ViewThreadWithMaybeMessage
@@ -3123,7 +3129,7 @@ updateLoaded msg model =
                                                     Local_Discord_SendMessage
                                                         model.time
                                                         guildOrDmId2
-                                                        (RichText.fromNonemptyString (LocalState.allDiscordUsers local.localUser) nonempty)
+                                                        nonempty
                                                         (case threadRoute of
                                                             ViewThread threadId ->
                                                                 ViewThreadWithMaybeMessage

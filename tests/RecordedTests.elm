@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
-import Emoji
+import Emoji exposing (Category(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -27,7 +27,6 @@ import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
-import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
 import MessageInput
@@ -39,7 +38,7 @@ import Parser exposing ((|.), (|=))
 import PersonName
 import Range exposing (Range)
 import RateLimit
-import RichText exposing (Domain(..), RichText(..))
+import RichText exposing (Domain(..))
 import Route
 import SafeJson exposing (SafeJson(..))
 import SecretId exposing (SecretId(..))
@@ -47,6 +46,7 @@ import SeqDict
 import SessionIdHash exposing (SessionIdHash(..))
 import Slack
 import Sticker
+import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import TextEditor
@@ -55,7 +55,7 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
-import Url exposing (Url)
+import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
@@ -185,14 +185,14 @@ decodePostmark =
         (Json.Decode.field "TextBody" Json.Decode.string)
 
 
-isLogErrorEmail : String -> HttpRequest -> Maybe String
+isLogErrorEmail : EmailAddress -> HttpRequest -> Maybe String
 isLogErrorEmail emailAddress httpRequest =
     if httpRequest.url == "https://api.postmarkapp.com/email" then
         case httpRequest.body of
             T.JsonBody value ->
                 case Json.Decode.decodeValue decodePostmark value of
                     Ok ( subject, to, body ) ->
-                        case ( emailAddress == EmailAddress.toString to, subject, String.split ":" body ) of
+                        case ( emailAddress == to, subject, String.split ":" body ) of
                             ( True, "An error was logged that needs attention", [ _, log ] ) ->
                                 String.split "." log |> List.head |> Maybe.map String.trim
 
@@ -294,7 +294,7 @@ startTime =
 
 adminEmail : EmailAddress
 adminEmail =
-    Unsafe.emailAddress Env.adminEmail
+    Env.adminEmail
 
 
 userEmail : EmailAddress
@@ -401,17 +401,19 @@ dropPrefix prefix text =
 
 
 connectTwoUsersAndJoinNewGuild :
-    (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-     -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-     -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-    )
+    { width : Int, height : Int }
+    ->
+        (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+         -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+        )
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-connectTwoUsersAndJoinNewGuild continueFunc =
+connectTwoUsersAndJoinNewGuild windowSize continueFunc =
     T.connectFrontend
         100
         sessionId0
         "/"
-        desktopWindow
+        windowSize
         (\admin ->
             [ handleLogin firefoxDesktop adminEmail admin
             , admin.click 100 (Dom.id "guild_createGuild")
@@ -439,7 +441,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
                                 100
                                 sessionId1
                                 (dropPrefix Env.domain text)
-                                desktopWindow
+                                windowSize
                                 (\user ->
                                     [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                                     , handleLoginFromLoginPage userEmail user
@@ -1198,6 +1200,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 let
                     checkCards : Int -> Int -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -1267,6 +1270,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ admin.click 100 (Dom.id "guild_openDm_1")
                 , writeMessage admin 100 "Hello from admin"
@@ -1315,6 +1319,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin _ ->
                 let
                     checkHover :
@@ -1398,6 +1403,166 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , startTest
+        "Message length limit and counter"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin user ->
+                let
+                    shortText : String
+                    shortText =
+                        String.repeat 100 "a"
+
+                    atThreshold : String
+                    atThreshold =
+                        String.repeat 1100 "b"
+
+                    atLimit : String
+                    atLimit =
+                        String.repeat 2000 "c"
+
+                    overLimit : String
+                    overLimit =
+                        String.repeat 2001 "d"
+                in
+                [ focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+
+                -- Below the counter threshold: no counter is rendered.
+                , admin.input 100 (Dom.id "channel_textinput") shortText
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "/2000" ])
+
+                -- Hitting the threshold shows the counter.
+                , admin.input 100 (Dom.id "channel_textinput") atThreshold
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "900/2000" ])
+
+                -- Going over the limit still shows the counter, and Enter refuses to send.
+                , admin.input 100 (Dom.id "channel_textinput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Exactly 2000 chars is allowed and Enter sends.
+                , admin.input 100 (Dom.id "channel_textinput") atLimit
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Editing the message over the limit is blocked too.
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_1")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 200 (Dom.id "editMessageTextInput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+
+                -- Enter with over-limit text leaves the edit dialog open (counter still shown).
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+
+                -- A valid edit within the limit still works.
+                , admin.input 200 (Dom.id "editMessageTextInput") "Short edit"
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                , user.sendToBackend
+                    100
+                    (LocalModelChangeRequest (ChangeId 1)
+                        (Local_SendMessage
+                            (Time.millisToPosix 0)
+                            (GuildOrDmId_Guild (Id.fromInt 1) (Id.fromInt 0))
+                            (NonemptyString 'm' (String.repeat RichText.maxLength "m"))
+                            (NoThreadWithMaybeMessage Nothing)
+                            SeqDict.empty
+                        )
+                    )
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                ]
+            )
+        ]
+    , startTest
+        "Message length limit and counter mobile"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            mobileWindow
+            (\admin user ->
+                let
+                    shortText : String
+                    shortText =
+                        String.repeat 100 "a"
+
+                    atThreshold : String
+                    atThreshold =
+                        String.repeat 1100 "b"
+
+                    atLimit : String
+                    atLimit =
+                        String.repeat 2000 "c"
+
+                    overLimit : String
+                    overLimit =
+                        String.repeat 2001 "d"
+                in
+                [ focusEvent admin 100 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.click 100 (Dom.id "channel_textinput")
+
+                -- Below the counter threshold: no counter is rendered.
+                , admin.input 100 (Dom.id "channel_textinput") shortText
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "/2000" ])
+
+                -- Hitting the threshold shows the counter.
+                , admin.input 100 (Dom.id "channel_textinput") atThreshold
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "900/2000" ])
+
+                -- Going over the limit still shows the counter, and Enter refuses to send.
+                , admin.input 100 (Dom.id "channel_textinput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Exactly 2000 chars is allowed and Enter sends.
+                , admin.input 100 (Dom.id "channel_textinput") atLimit
+                , admin.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_message_1" ])
+
+                -- Editing the message over the limit is blocked too.
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_1")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 200 (Dom.id "editMessageTextInput") overLimit
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+                , admin.click 100 (Dom.id "messageMenu_editMobile_sendMessage")
+
+                -- Enter with over-limit text leaves the edit dialog open (counter still shown).
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "-1/2000" ])
+
+                -- A valid edit within the limit still works.
+                , admin.input 200 (Dom.id "editMessageTextInput") "Short edit"
+                , admin.click 100 (Dom.id "messageMenu_editMobile_sendMessage")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Short edit" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_message_2" ])
+                ]
+            )
+        ]
     , T.testGroup "Discord" (discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental)
     , startTest
         "Connect multiple devices"
@@ -1456,6 +1621,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ writeMessage admin 100 "This message is ||very|| ||secret||"
                 , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
@@ -1550,6 +1716,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
@@ -1568,7 +1735,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     --    startTime
     --    normalConfig
     --    [ connectTwoUsersAndJoinNewGuild
-    --        (\admin user ->
+    --       desktopWindow (\admin user ->
     --            [ user.click 100 (Dom.id "guildIcon_showFriends")
     --            , writeMessage admin 100 "@Stevie Steve"
     --            , writeMessage admin 100 "@Stevie Steve"
@@ -1595,6 +1762,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , admin.click 100 (Dom.id "guild_newChannel")
@@ -1627,6 +1795,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , writeMessage admin 100 "See if notification appears next to guild icon"
@@ -1649,6 +1818,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\_ user ->
                 [ List.range 0 (VisibleMessages.pageSize * 2)
                     |> List.map (\index -> writeMessage user 1000 ("Message " ++ String.fromInt (index + 1)))
@@ -1711,6 +1881,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
                 , user.checkView
@@ -2150,6 +2321,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
@@ -2266,6 +2438,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             domain
         )
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 [ writeMessage admin 100 "Hello export test!"
                 , user.click 100 (Dom.id "guild_openDm_0")
@@ -2395,6 +2568,7 @@ sendMessageRateLimitTest config =
         startTime
         config
         [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
             (\admin user ->
                 let
                     guildId : Id GuildId
@@ -2417,7 +2591,7 @@ sendMessageRateLimitTest config =
                                 (Local_SendMessage
                                     (Time.millisToPosix 0)
                                     (GuildOrDmId_Guild guildId channelId)
-                                    (Nonempty (NormalText 'm' ("sg " ++ String.fromInt changeIndex)) [])
+                                    (NonemptyString 'm' ("sg " ++ String.fromInt changeIndex))
                                     (NoThreadWithMaybeMessage Nothing)
                                     SeqDict.empty
                                 )
@@ -3230,7 +3404,7 @@ attackerLocalChanges =
             Time.millisToPosix 99999
 
         normalText =
-            Nonempty (NormalText 'h' "acked") []
+            NonemptyString 'h' "acked"
 
         discordUserId =
             Discord.idFromUInt64 (Unsafe.uint64 "184437096813953035")
@@ -3274,6 +3448,17 @@ attackerLocalChanges =
             { currentUserId = discordUserId
             , channelId = discordPrivateChannelId
             }
+
+        brokenDomain : Domain
+        brokenDomain =
+            RichText.urlToDomain
+                { protocol = Https
+                , host = ""
+                , port_ = Nothing
+                , path = ""
+                , query = Nothing
+                , fragment = Nothing
+                }
     in
     [ Local_AddReactionEmoji guildOrDmId_dm threadRouteWithMessage emoji
     , Local_AddReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
@@ -3286,10 +3471,10 @@ attackerLocalChanges =
     , Local_Discord_LoadThreadMessages discordGuildOrDmId_guild (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_LoadChannelMessages discordGuildOrDmId_dm (Id.fromInt 0) EmptyPlaceholder
     , Local_Discord_LoadThreadMessages discordGuildOrDmId_dm (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
-    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) (Nonempty (NormalText 'h' "acked") [])
-    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage (Nonempty (NormalText 'h' "acked") [])
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
-    , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm (Nonempty (NormalText 'h' "acked") []) threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendEditDmMessage messageTime discordDmData (Id.fromInt 0) normalText
+    , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
+    , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked")
     , Local_Invalid
     , Local_LinkDiscordAcknowledgementIsChecked True
@@ -3323,6 +3508,13 @@ attackerLocalChanges =
     , Local_StartReloadingDiscordUser messageTime discordUserId
     , Local_TextEditor TextEditor.Local_Reset
     , Local_UnlinkDiscordUser discordUserId
+    , Local_StartReloadingDiscordUser messageTime discordUserId
+    , Local_LinkDiscordAcknowledgementIsChecked True
+    , Local_SetDomainWhitelist False brokenDomain
+    , Local_SetDomainWhitelist True brokenDomain
+    , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
+    , Local_SetEmojiSkinTone Nothing
+    , Local_SetEmojiSkinTone (Just SkinTone5)
     ]
 
 

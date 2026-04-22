@@ -115,44 +115,7 @@ main =
                     |> Html.div []
                     |> Ui.html
                 ]
-            , Ui.column
-                [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
-                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Stickers")
-                , RichText.view
-                    (Dom.id "richText")
-                    800
-                    (\_ -> ())
-                    (\_ -> ())
-                    { domainWhitelist = SeqSet.empty
-                    , revealedSpoilers = SeqSet.empty
-                    , users = SeqDict.empty
-                    , attachedFiles = SeqDict.empty
-                    , stickers = stickers
-                    , animationMode = Sticker.LoopForever
-                    }
-                    Array.empty
-                    (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
-                    |> Html.div []
-                    |> Ui.html
-                , MessageInput.view
-                    (Dom.id "input")
-                    True
-                    False
-                    (Dom.id "channel")
-                    "Placeholder"
-                    (Nonempty
-                        (NormalText 'T' "est2")
-                        [ Sticker (Id.fromInt 123)
-                        , NormalText 'T' "est3333333333333333333333\n3333333333"
-                        ]
-                        |> RichText.toString True SeqDict.empty
-                    )
-                    SeqDict.empty
-                    stickers
-                    Nothing
-                    SeqDict.empty
-                    |> Ui.map (\_ -> ())
-                ]
+            , stickersSection
             , Ui.column
                 []
                 [ Ui.row
@@ -183,6 +146,52 @@ main =
                 ]
             ]
         )
+
+
+stickersSection : Ui.Element ()
+stickersSection =
+    let
+        richText =
+            Nonempty
+                (NormalText 'T' "est2")
+                [ Sticker (Id.fromInt 123)
+                , NormalText 'T' "est3333333333333333333333\n3333333333"
+                ]
+    in
+    Ui.column
+        [ Ui.background MyUi.background3, Ui.Font.family [ Ui.Font.sansSerif ] ]
+        [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Stickers")
+        , RichText.view
+            (Dom.id "richText")
+            800
+            (\_ -> ())
+            (\_ -> ())
+            { domainWhitelist = SeqSet.empty
+            , revealedSpoilers = SeqSet.empty
+            , users = SeqDict.empty
+            , attachedFiles = SeqDict.empty
+            , stickers = stickers
+            , animationMode = Sticker.LoopForever
+            }
+            Array.empty
+            (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
+            |> Html.div []
+            |> Ui.html
+        , MessageInput.view
+            (Dom.id "input")
+            True
+            False
+            (Dom.id "channel")
+            "Placeholder"
+            123
+            (richText |> RichText.toString False SeqDict.empty)
+            (Just richText)
+            SeqDict.empty
+            stickers
+            Nothing
+            SeqDict.empty
+            |> Ui.map (\_ -> ())
+        ]
 
 
 attachments : SeqDict (Id FileId) FileData

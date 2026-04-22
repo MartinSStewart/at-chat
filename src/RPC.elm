@@ -24,7 +24,7 @@ checkFileUpload _ model _ text =
             in
             case
                 T4
-                    (sessionId2 == DiscordSync.backendSessionIdHash || Broadcast.getSessionFromSessionIdHash sessionId2 model /= Nothing)
+                    (sessionId2 == DiscordSync.backendSessionIdHash model.serverSecret || Broadcast.getSessionFromSessionIdHash sessionId2 model /= Nothing)
                     (String.toInt fileSize)
                     (String.toInt width)
                     (String.toInt height)

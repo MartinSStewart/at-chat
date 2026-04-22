@@ -1,0 +1,75 @@
+module Evergreen.V206.Route exposing (..)
+
+import Evergreen.V206.Discord
+import Evergreen.V206.Id
+import Evergreen.V206.Pagination
+import Evergreen.V206.SecretId
+import Evergreen.V206.SessionIdHash
+import Evergreen.V206.Slack
+
+
+type ShowMembersTab
+    = ShowMembersTab
+    | HideMembersTab
+
+
+type ThreadRouteWithFriends
+    = NoThreadWithFriends (Maybe (Evergreen.V206.Id.Id Evergreen.V206.Id.ChannelMessageId)) ShowMembersTab
+    | ViewThreadWithFriends (Evergreen.V206.Id.Id Evergreen.V206.Id.ChannelMessageId) (Maybe (Evergreen.V206.Id.Id Evergreen.V206.Id.ThreadMessageId)) ShowMembersTab
+
+
+type ChannelRoute
+    = ChannelRoute (Evergreen.V206.Id.Id Evergreen.V206.Id.ChannelId) ThreadRouteWithFriends
+    | NewChannelRoute
+    | EditChannelRoute (Evergreen.V206.Id.Id Evergreen.V206.Id.ChannelId)
+    | GuildSettingsRoute
+    | JoinRoute (Evergreen.V206.SecretId.SecretId Evergreen.V206.Id.InviteLinkId)
+
+
+type DiscordChannelRoute
+    = DiscordChannel_ChannelRoute (Evergreen.V206.Discord.Id Evergreen.V206.Discord.ChannelId) ThreadRouteWithFriends
+    | DiscordChannel_NewChannelRoute
+    | DiscordChannel_EditChannelRoute (Evergreen.V206.Discord.Id Evergreen.V206.Discord.ChannelId)
+    | DiscordChannel_GuildSettingsRoute
+
+
+type alias DiscordGuildRouteData =
+    { currentDiscordUserId : Evergreen.V206.Discord.Id Evergreen.V206.Discord.UserId
+    , guildId : Evergreen.V206.Discord.Id Evergreen.V206.Discord.GuildId
+    , channelRoute : DiscordChannelRoute
+    }
+
+
+type alias DmRouteData =
+    { otherUserId : Evergreen.V206.Id.Id Evergreen.V206.Id.UserId
+    , threadRoute : ThreadRouteWithFriends
+    }
+
+
+type alias DiscordDmRouteData =
+    { currentDiscordUserId : Evergreen.V206.Discord.Id Evergreen.V206.Discord.UserId
+    , channelId : Evergreen.V206.Discord.Id Evergreen.V206.Discord.PrivateChannelId
+    , viewingMessage : Maybe (Evergreen.V206.Id.Id Evergreen.V206.Id.ChannelMessageId)
+    , showMembersTab : ShowMembersTab
+    }
+
+
+type LinkDiscordError
+    = LinkDiscordExpired
+    | LinkDiscordServerError
+    | LinkDiscordInvalidData
+
+
+type Route
+    = HomePageRoute
+    | AdminRoute
+        { highlightLog : Maybe (Evergreen.V206.Id.Id Evergreen.V206.Pagination.ItemId)
+        }
+    | GuildRoute (Evergreen.V206.Id.Id Evergreen.V206.Id.GuildId) ChannelRoute
+    | DiscordGuildRoute DiscordGuildRouteData
+    | DmRoute DmRouteData
+    | DiscordDmRoute DiscordDmRouteData
+    | AiChatRoute
+    | SlackOAuthRedirect (Result () ( Evergreen.V206.Slack.OAuthCode, Evergreen.V206.SessionIdHash.SessionIdHash ))
+    | TextEditorRoute
+    | LinkDiscord (Result LinkDiscordError Evergreen.V206.Discord.UserAuth)

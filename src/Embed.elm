@@ -6,10 +6,10 @@ import Duration
 import Effect.Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Time as Time
-import Env
 import FileStatus
 import Json.Decode
 import Json.Encode
+import SecretId exposing (SecretId, ServerSecret)
 import Url exposing (Url)
 
 
@@ -60,12 +60,12 @@ type EmbedImageFormat
     | Qoi
 
 
-request : Url -> Command BackendOnly toFrontend ( Url, Result Http.Error EmbedData )
-request url =
+request : SecretId ServerSecret -> Url -> Command BackendOnly toFrontend ( Url, Result Http.Error EmbedData )
+request secretKey url =
     Http.request
         { method = "POST"
         , url = FileStatus.domain ++ "/file/internal/embed"
-        , headers = [ Env.secretKeyHeader ]
+        , headers = [ FileStatus.secretKeyHeader secretKey ]
         , body = Json.Encode.object [ ( "url", Json.Encode.string (Url.toString url) ) ] |> Http.jsonBody
         , expect = Http.expectJson (Tuple.pair url) decodeEmbedData
         , timeout = Just (Duration.seconds 30)

@@ -1904,7 +1904,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                     , Just date
                     , ( String.fromInt index
                       , case isEditing of
-                            Just editing ->
+                            Just edit ->
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     messageView
@@ -1925,6 +1925,22 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                 else
+                                    let
+                                        allUsers =
+                                            LocalState.allUsers local.localUser
+
+                                        editRichText : Maybe (Nonempty (RichText (Id UserId)))
+                                        editRichText =
+                                            case String.Nonempty.fromString edit.text of
+                                                Just nonempty ->
+                                                    RichText.fromNonemptyString allUsers nonempty |> Just
+
+                                                Nothing ->
+                                                    Nothing
+
+                                        charsLeft =
+                                            RichText.maxLength - String.length edit.text
+                                    in
                                     messageEditingView
                                         isMobile
                                         guildOrDmId
@@ -1933,10 +1949,12 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
-                                        editing
+                                        charsLeft
+                                        edit
+                                        editRichText
                                         loggedIn.textInputFocus
                                         local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
+                                        allUsers
                                         local
 
                             Nothing ->
@@ -2168,7 +2186,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     , Just date
                     , ( String.fromInt index
                       , case isEditing of
-                            Just editing ->
+                            Just edit ->
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
                                     messageView
@@ -2189,6 +2207,19 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                 else
+                                    let
+                                        allUsers =
+                                            LocalState.allDiscordUsers local.localUser
+
+                                        editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+                                        editRichText =
+                                            case String.Nonempty.fromString edit.text of
+                                                Just nonempty ->
+                                                    RichText.fromNonemptyString allUsers nonempty |> Just
+
+                                                Nothing ->
+                                                    Nothing
+                                    in
                                     messageEditingView
                                         isMobile
                                         guildOrDmId
@@ -2197,10 +2228,12 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
-                                        editing
+                                        (RichText.discordCharsLeft editRichText)
+                                        edit
+                                        editRichText
                                         loggedIn.textInputFocus
                                         currentDiscordUserId
-                                        (LocalState.allDiscordUsers local.localUser)
+                                        allUsers
                                         local
 
                             Nothing ->
@@ -2339,7 +2372,7 @@ newMessageLine maybeLastDate date lastViewedIndex index messageId =
 
 threadConversationViewHelper :
     Id ThreadMessageId
-    -> AnyGuildOrDmId
+    -> GuildOrDmId
     -> Id ChannelMessageId
     -> Maybe (Id ThreadMessageId)
     -> FrontendThread
@@ -2351,7 +2384,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
-            ( guildOrDmIdNoThread, ViewThread threadId )
+            ( GuildOrDmId guildOrDmIdNoThread, ViewThread threadId )
 
         maybeEditing : Maybe EditMessage
         maybeEditing =
@@ -2410,7 +2443,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
                         messageHover2 : IsHovered
                         messageHover2 =
-                            messageHover guildOrDmIdNoThread threadRoute2 loggedIn
+                            messageHover (GuildOrDmId guildOrDmIdNoThread) threadRoute2 loggedIn
 
                         otherUserIsEditing : Bool
                         otherUserIsEditing =
@@ -2468,9 +2501,22 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         maybeRepliedTo2
                                         messageId
                                         message
-                                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
+                                        |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                 else
+                                    let
+                                        allUsers =
+                                            LocalState.allUsers local.localUser
+
+                                        editRichText : Maybe (Nonempty (RichText (Id UserId)))
+                                        editRichText =
+                                            case String.Nonempty.fromString editing.text of
+                                                Just text ->
+                                                    Just (RichText.fromNonemptyString allUsers text)
+
+                                                Nothing ->
+                                                    Nothing
+                                    in
                                     threadMessageEditingView
                                         isMobile
                                         guildOrDmId
@@ -2479,10 +2525,12 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         message
                                         maybeRepliedTo2
                                         revealedSpoilers
+                                        (RichText.maxLength - String.length editing.text)
                                         editing
+                                        editRichText
                                         loggedIn.textInputFocus
                                         local.localUser.session.userId
-                                        (LocalState.allUsers local.localUser)
+                                        allUsers
                                         local
 
                             Nothing ->
@@ -2501,7 +2549,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             maybeRepliedTo2
                                             messageId
                                             message
-                                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
+                                            |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Nothing ->
                                         Ui.Lazy.lazy5
@@ -2511,7 +2559,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             local.localUser
                                             index
                                             message
-                                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
+                                            |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
                       )
                         :: newMessageLine maybeLastDate date lastViewedIndex index messageId
                         ++ list
@@ -2660,6 +2708,19 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                 else
+                                    let
+                                        allUsers =
+                                            LocalState.allDiscordUsers local.localUser
+
+                                        editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+                                        editRichText =
+                                            case String.Nonempty.fromString editing.text of
+                                                Just text ->
+                                                    Just (RichText.fromNonemptyString allUsers text)
+
+                                                Nothing ->
+                                                    Nothing
+                                    in
                                     threadMessageEditingView
                                         isMobile
                                         guildOrDmId
@@ -2668,10 +2729,12 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         message
                                         maybeRepliedTo2
                                         revealedSpoilers
+                                        (RichText.discordCharsLeft editRichText)
                                         editing
+                                        editRichText
                                         loggedIn.textInputFocus
                                         currentDiscordUserId
-                                        (LocalState.allDiscordUsers local.localUser)
+                                        allUsers
                                         local
 
                             Nothing ->
@@ -3351,7 +3414,9 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                     name
                                )
                 )
+                (RichText.maxLength - String.length draft)
                 draft
+                draftRichText
                 (case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -3575,7 +3640,9 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                             name
                                        )
                         )
+                        (RichText.discordCharsLeft draftRichText)
                         draft
+                        draftRichText
                         (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                             Just attachedFiles ->
                                 NonemptyDict.toSeqDict attachedFiles
@@ -3817,7 +3884,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                  )
                     ++ threadConversationViewHelper
                         lastViewedIndex
-                        (GuildOrDmId guildOrDmIdNoThread)
+                        guildOrDmIdNoThread
                         threadId
                         maybeUrlMessageId
                         channel
@@ -3880,7 +3947,9 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     GuildOrDmId_Dm _ ->
                         "Write a message in this thread"
                 )
+                (RichText.maxLength - String.length draft)
                 draft
+                draftRichText
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -4089,7 +4158,9 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     DiscordGuildOrDmId_Dm _ ->
                         "Write a message in this thread"
                 )
+                (RichText.discordCharsLeft draftRichText)
                 draft
+                draftRichText
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -4145,8 +4216,25 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
     case DmChannel.getArray threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
-                Just editMessage ->
-                    if editMessage.messageIndex == threadMessageIndex then
+                Just edit ->
+                    if edit.messageIndex == threadMessageIndex then
+                        let
+                            allUsers : SeqDict (Id UserId) FrontendUser
+                            allUsers =
+                                LocalState.allUsers local.localUser
+
+                            editRichText : Maybe (Nonempty (RichText (Id UserId)))
+                            editRichText =
+                                case String.Nonempty.fromString edit.text of
+                                    Just nonempty ->
+                                        RichText.fromNonemptyString allUsers nonempty |> Just
+
+                                    Nothing ->
+                                        Nothing
+
+                            charsLeft =
+                                RichText.maxLength - String.length edit.text
+                        in
                         messageEditingView
                             isMobile
                             guildOrDmId
@@ -4155,10 +4243,12 @@ threadStarterMessage isMobile normalGuildOrDmIdNoThread threadMessageIndex chann
                             Nothing
                             Nothing
                             SeqDict.empty
-                            editMessage
+                            charsLeft
+                            edit
+                            editRichText
                             loggedIn.textInputFocus
                             local.localUser.session.userId
-                            (LocalState.allUsers local.localUser)
+                            allUsers
                             local
 
                     else
@@ -4249,8 +4339,21 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
     case DmChannel.getArray threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
             case SeqDict.get guildOrDmId loggedIn.editMessage of
-                Just editMessage ->
-                    if editMessage.messageIndex == threadMessageIndex then
+                Just edit ->
+                    if edit.messageIndex == threadMessageIndex then
+                        let
+                            allUsers =
+                                LocalState.allDiscordUsers local.localUser
+
+                            editRichText : Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+                            editRichText =
+                                case String.Nonempty.fromString edit.text of
+                                    Just nonempty ->
+                                        RichText.fromNonemptyString allUsers nonempty |> Just
+
+                                    Nothing ->
+                                        Nothing
+                        in
                         messageEditingView
                             isMobile
                             guildOrDmId
@@ -4259,10 +4362,12 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             Nothing
                             Nothing
                             SeqDict.empty
-                            editMessage
+                            (RichText.discordCharsLeft editRichText)
+                            edit
+                            editRichText
                             loggedIn.textInputFocus
                             currentUserId
-                            (LocalState.allDiscordUsers local.localUser)
+                            allUsers
                             local
 
                     else
@@ -4407,13 +4512,15 @@ messageEditingView :
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId )
     -> Maybe (FrontendGenericThread userId)
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> Int
     -> EditMessage
+    -> Maybe (Nonempty (RichText userId))
     -> Maybe TextInputFocus
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg
-messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers editing pingUser currentUserId allUsers local =
+messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4424,15 +4531,6 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
 
-                editRichText : Maybe (Nonempty (RichText userId))
-                editRichText =
-                    case String.Nonempty.fromString editing.text of
-                        Just text ->
-                            Just (RichText.fromNonemptyString allUsers text)
-
-                        Nothing ->
-                            Nothing
-
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
@@ -4440,10 +4538,13 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         False
                         MessageMenu.editMessageTextInputId
                         ""
+                        charsLeft
                         editing.text
+                        editingRichText
                         editing.attachedFiles
                         local.localUser.stickers
                         pingUser
+                        allUsers
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -4485,20 +4586,14 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
                                 (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
-                                editRichText
+                                editingRichText
                                 filesToUpload
                                 |> Ui.inFront
 
                         Nothing ->
                             Ui.noAttr
                     ]
-                    [ (case guildOrDmIdNoThread of
-                        GuildOrDmId _ ->
-                            messageInput (LocalState.allUsers local.localUser)
-
-                        DiscordGuildOrDmId _ ->
-                            messageInput (LocalState.allDiscordUsers local.localUser)
-                      )
+                    [ messageInput
                         |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread threadRoute)
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
@@ -4556,13 +4651,15 @@ threadMessageEditingView :
     -> Message ThreadMessageId userId
     -> Maybe ( Id ThreadMessageId, Message ThreadMessageId userId )
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
+    -> Int
     -> EditMessage
+    -> Maybe (Nonempty (RichText userId))
     -> Maybe TextInputFocus
     -> userId
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg
-threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers editing pingUser currentUserId allUsers local =
+threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4575,15 +4672,6 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 threadRouteWithMessage =
                     ViewThreadWithMessage threadId messageId
 
-                editRichText : Maybe (Nonempty (RichText userId))
-                editRichText =
-                    case String.Nonempty.fromString editing.text of
-                        Just text ->
-                            Just (RichText.fromNonemptyString allUsers text)
-
-                        Nothing ->
-                            Nothing
-
                 messageInput =
                     MessageInput.view
                         (Dom.id "messageMenu_editDesktop")
@@ -4591,10 +4679,13 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         False
                         MessageMenu.editMessageTextInputId
                         ""
+                        charsLeft
                         editing.text
+                        editingRichText
                         editing.attachedFiles
                         local.localUser.stickers
                         pingUser
+                        allUsers
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -4627,20 +4718,14 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
                                 (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
                                 (EditMessage_PressedToggleAttachedFileSpoiler guildOrDmId)
-                                editRichText
+                                editingRichText
                                 filesToUpload
                                 |> Ui.inFront
 
                         Nothing ->
                             Ui.noAttr
                     ]
-                    [ (case guildOrDmIdNoThread of
-                        GuildOrDmId _ ->
-                            messageInput (LocalState.allUsers local.localUser)
-
-                        DiscordGuildOrDmId _ ->
-                            messageInput (LocalState.allDiscordUsers local.localUser)
-                      )
+                    [ messageInput
                         |> Ui.map (EditMessage_MessageInputMsg guildOrDmIdNoThread (ViewThread threadId))
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row

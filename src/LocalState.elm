@@ -129,6 +129,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pagination exposing (Pagination)
 import PersonName exposing (PersonName)
+import Postmark
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
@@ -493,6 +494,7 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , postmarkKey : Postmark.ApiKey
     , discordDmChannels :
         SeqDict
             (Discord.Id Discord.PrivateChannelId)
