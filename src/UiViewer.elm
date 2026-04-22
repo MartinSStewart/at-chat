@@ -148,6 +148,7 @@ main =
         )
 
 
+stickersSection : Ui.Element ()
 stickersSection =
     let
         richText =
