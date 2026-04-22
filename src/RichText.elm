@@ -9,12 +9,14 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , attachments
+    , discordCharsLeft
     , domainToString
     , emptyPlaceholder
     , escapedCharToString
     , fromDiscord
     , fromNonemptyString
     , hyperlinks
+    , maxLength
     , mentionsUser
     , preview
     , removeAttachedFile
@@ -632,6 +634,11 @@ toString emojisForStickersAndAttachments users nonempty =
         emojisForStickersAndAttachments
         users
         (List.Nonempty.toList nonempty)
+
+
+maxLength : number
+maxLength =
+    2000
 
 
 toStringHelper : (a -> String) -> Bool -> SeqDict userId a -> List (RichText userId) -> String
@@ -3684,8 +3691,41 @@ discordParseLoop source index modifiers accText revNodes =
                 discordParseLoop source nextIndex modifiers (accText ++ String.slice index nextIndex source) revNodes
 
 
-toDiscord : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
+toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> Result Int String
 toDiscord content =
+    case removeAttachedFile (\_ -> True) content of
+        Just text2 ->
+            let
+                text3 =
+                    toDiscordHelper (List.Nonempty.toList text2) |> Discord.Markdown.toString
+            in
+            if String.length text3 > maxLength then
+                Err (maxLength - String.length text3)
+
+            else
+                Ok text3
+
+        Nothing ->
+            Ok ""
+
+
+discordCharsLeft : Maybe (Nonempty (RichText (Discord.Id Discord.UserId))) -> Int
+discordCharsLeft richText =
+    case richText of
+        Just richText2 ->
+            case toDiscord richText2 of
+                Ok text ->
+                    maxLength - String.length text
+
+                Err charsLeft ->
+                    charsLeft
+
+        Nothing ->
+            maxLength
+
+
+toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
+toDiscordHelper content =
     List.map
         (\item ->
             case item of
@@ -3696,22 +3736,22 @@ toDiscord content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.boldMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.italicMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.underlineMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.strikethroughMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord (List.Nonempty.toList nonempty))
+                    Discord.Markdown.spoiler (toDiscordHelper (List.Nonempty.toList nonempty))
 
                 BlockQuote _ nonempty ->
-                    Discord.Markdown.Quote (toDiscord nonempty)
+                    Discord.Markdown.Quote (toDiscordHelper nonempty)
 
                 Hyperlink data ->
                     Discord.Markdown.text (Url.toString data)

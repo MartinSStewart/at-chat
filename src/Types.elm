@@ -768,8 +768,8 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -778,9 +778,9 @@ type LocalChange
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
-    | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
-    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
+    | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
+    | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) NonemptyString
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage

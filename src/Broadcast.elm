@@ -50,6 +50,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Sticker exposing (StickerData)
+import String.Nonempty exposing (NonemptyString)
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Url
 import User exposing (BackendUser)
@@ -846,13 +847,14 @@ broadcastDm :
     -> ClientId
     -> Id UserId
     -> Id UserId
+    -> NonemptyString
     -> Nonempty (RichText (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel
     -> Command BackendOnly ToFrontend BackendMsg
-broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles stickers model =
+broadcastDm changeId time clientId userId otherUserId text richText threadRouteWithReplyTo attachedFiles stickers model =
     Command.batch
         [ LocalChangeResponse
             changeId
@@ -867,7 +869,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                     userId
                     time
                     (GuildOrDmId_Dm otherUserId2)
-                    text
+                    richText
                     threadRouteWithReplyTo
                     attachedFiles
                     stickers
@@ -884,7 +886,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                         otherUserId
                         (PersonName.toString otherUser.name)
                         otherUser.icon
-                        (RichText.toString True (NonemptyDict.toSeqDict model.users) text)
+                        (String.Nonempty.toString text)
                         (DmRoute
                             { otherUserId = otherUserId
                             , threadRoute =
