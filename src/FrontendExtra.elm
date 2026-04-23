@@ -658,6 +658,75 @@ routeViewingLocalChange local route =
         Just (Local_CurrentlyViewing localChange)
 
 
+clearRevealedSpoilers : LoadedFrontend -> LoadedFrontend
+clearRevealedSpoilers model =
+    { model
+        | loginStatus =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+
+                NotLoggedIn _ ->
+                    model.loginStatus
+    }
+
+
+enterSidebarRoute :
+    Bool
+    -> Maybe Route
+    -> Command FrontendOnly ToBackend FrontendMsg
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+enterSidebarRoute sameGuild previousRoute viewCmd model =
+    updateLoggedIn
+        (\loggedIn ->
+            ( if sameGuild || previousRoute == Nothing then
+                startOpeningChannelSidebar loggedIn
+
+              else
+                loggedIn
+            , viewCmd
+            )
+        )
+        model
+
+
+enterChannelRoute :
+    ThreadRouteWithFriends
+    -> Bool
+    -> Maybe Route
+    -> Command FrontendOnly ToBackend FrontendMsg
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+enterChannelRoute threadRoute sameGuild previousRoute viewCmd model =
+    let
+        showMembers : ShowMembersTab
+        showMembers =
+            case threadRoute of
+                ViewThreadWithFriends _ _ showMembers2 ->
+                    showMembers2
+
+                NoThreadWithFriends _ showMembers2 ->
+                    showMembers2
+    in
+    updateLoggedIn
+        (\loggedIn ->
+            ( case showMembers of
+                ShowMembersTab ->
+                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
+
+                HideMembersTab ->
+                    if sameGuild || previousRoute == Nothing then
+                        startOpeningChannelSidebar loggedIn
+
+                    else
+                        loggedIn
+            , Command.batch [ viewCmd, openChannelCmds threadRoute model ]
+            )
+        )
+        model
+
+
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routeRequest previousRoute newRoute model =
     let
@@ -722,102 +791,29 @@ routeRequest previousRoute newRoute model =
             let
                 model3 : LoadedFrontend
                 model3 =
-                    { model2
-                        | loginStatus =
-                            case model2.loginStatus of
-                                LoggedIn loggedIn ->
-                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+                    clearRevealedSpoilers model2
 
-                                NotLoggedIn _ ->
-                                    model2.loginStatus
-                    }
-
-                ( sameGuild, _ ) =
+                sameGuild : Bool
+                sameGuild =
                     case previousRoute of
-                        Just (GuildRoute previousGuildId previousChannelRoute) ->
-                            ( guildId == previousGuildId
-                            , guildId == previousGuildId && channelRoute == previousChannelRoute
-                            )
+                        Just (GuildRoute previousGuildId _) ->
+                            guildId == previousGuildId
 
                         _ ->
-                            ( False, False )
+                            False
             in
             case channelRoute of
                 ChannelRoute _ threadRoute ->
-                    let
-                        showMembers : ShowMembersTab
-                        showMembers =
-                            case threadRoute of
-                                ViewThreadWithFriends _ _ showMembers2 ->
-                                    showMembers2
-
-                                NoThreadWithFriends _ showMembers2 ->
-                                    showMembers2
-
-                        --previousShowMembers : ShowMembersTab
-                        --previousShowMembers =
-                        --    case threadRoute of
-                        --        ViewThreadWithFriends threadId _ showMembers2 ->
-                        --            showMembers2
-                        --
-                        --        NoThreadWithFriends maybeId showMembers2 ->
-                        --            showMembers2
-                    in
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( case showMembers of
-                                ShowMembersTab ->
-                                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                                HideMembersTab ->
-                                    if sameGuild || previousRoute == Nothing then
-                                        startOpeningChannelSidebar loggedIn
-
-                                    else
-                                        loggedIn
-                            , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
-                            )
-                        )
-                        model3
+                    enterChannelRoute threadRoute sameGuild previousRoute viewCmd model3
 
                 NewChannelRoute ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
-
-                              else
-                                loggedIn
-                            , viewCmd
-                            )
-                        )
-                        model3
+                    enterSidebarRoute sameGuild previousRoute viewCmd model3
 
                 EditChannelRoute _ ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
-
-                              else
-                                loggedIn
-                            , viewCmd
-                            )
-                        )
-                        model3
+                    enterSidebarRoute sameGuild previousRoute viewCmd model3
 
                 GuildSettingsRoute ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
-
-                              else
-                                loggedIn
-                            , viewCmd
-                            )
-                        )
-                        model3
+                    enterSidebarRoute sameGuild previousRoute viewCmd model3
 
                 JoinRoute inviteLinkId ->
                     case model3.loginStatus of
@@ -859,102 +855,29 @@ routeRequest previousRoute newRoute model =
             let
                 model3 : LoadedFrontend
                 model3 =
-                    { model2
-                        | loginStatus =
-                            case model2.loginStatus of
-                                LoggedIn loggedIn ->
-                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+                    clearRevealedSpoilers model2
 
-                                NotLoggedIn _ ->
-                                    model2.loginStatus
-                    }
-
-                ( sameGuild, _ ) =
+                sameGuild : Bool
+                sameGuild =
                     case previousRoute of
                         Just (DiscordGuildRoute a) ->
-                            ( currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId
-                            , currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId && channelRoute == a.channelRoute
-                            )
+                            currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId
 
                         _ ->
-                            ( False, False )
+                            False
             in
             case channelRoute of
                 DiscordChannel_ChannelRoute _ threadRoute ->
-                    let
-                        showMembers : ShowMembersTab
-                        showMembers =
-                            case threadRoute of
-                                ViewThreadWithFriends _ _ showMembers2 ->
-                                    showMembers2
-
-                                NoThreadWithFriends _ showMembers2 ->
-                                    showMembers2
-
-                        --previousShowMembers : ShowMembersTab
-                        --previousShowMembers =
-                        --    case threadRoute of
-                        --        ViewThreadWithFriends threadId _ showMembers2 ->
-                        --            showMembers2
-                        --
-                        --        NoThreadWithFriends maybeId showMembers2 ->
-                        --            showMembers2
-                    in
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( case showMembers of
-                                ShowMembersTab ->
-                                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                                HideMembersTab ->
-                                    if sameGuild || previousRoute == Nothing then
-                                        startOpeningChannelSidebar loggedIn
-
-                                    else
-                                        loggedIn
-                            , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
-                            )
-                        )
-                        model3
+                    enterChannelRoute threadRoute sameGuild previousRoute viewCmd model3
 
                 DiscordChannel_NewChannelRoute ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
-
-                              else
-                                loggedIn
-                            , viewCmd
-                            )
-                        )
-                        model3
+                    enterSidebarRoute sameGuild previousRoute viewCmd model3
 
                 DiscordChannel_EditChannelRoute _ ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
-
-                              else
-                                loggedIn
-                            , viewCmd
-                            )
-                        )
-                        model3
+                    enterSidebarRoute sameGuild previousRoute viewCmd model3
 
                 DiscordChannel_GuildSettingsRoute ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
-
-                              else
-                                loggedIn
-                            , viewCmd
-                            )
-                        )
-                        model3
+                    enterSidebarRoute sameGuild previousRoute viewCmd model3
 
         AiChatRoute ->
             ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
@@ -963,15 +886,7 @@ routeRequest previousRoute newRoute model =
             let
                 model3 : LoadedFrontend
                 model3 =
-                    { model2
-                        | loginStatus =
-                            case model2.loginStatus of
-                                LoggedIn loggedIn ->
-                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
-
-                                NotLoggedIn _ ->
-                                    model2.loginStatus
-                    }
+                    clearRevealedSpoilers model2
             in
             updateLoggedIn
                 (\loggedIn ->
@@ -985,15 +900,7 @@ routeRequest previousRoute newRoute model =
             let
                 model3 : LoadedFrontend
                 model3 =
-                    { model2
-                        | loginStatus =
-                            case model2.loginStatus of
-                                LoggedIn loggedIn ->
-                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
-
-                                NotLoggedIn _ ->
-                                    model2.loginStatus
-                    }
+                    clearRevealedSpoilers model2
             in
             updateLoggedIn
                 (\loggedIn ->
@@ -3412,6 +3319,7 @@ initAdminData adminData =
     , filesCount = adminData.filesCount
     , toBackendLogs = adminData.toBackendLogs
     , vulnerabilityChecks = adminData.vulnerabilityChecks
+    , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     }
 
 

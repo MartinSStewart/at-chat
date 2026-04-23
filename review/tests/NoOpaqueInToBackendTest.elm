@@ -1,8 +1,14 @@
 module NoOpaqueInToBackendTest exposing (all)
 
-import NoOpaqueInToBackend exposing (rule)
+import NoOpaqueInToBackend
+import Review.Rule exposing (Rule)
 import Review.Test
 import Test exposing (Test, describe, test)
+
+
+rule : Rule
+rule =
+    NoOpaqueInToBackend.rule { exemptions = [] }
 
 
 all : Test

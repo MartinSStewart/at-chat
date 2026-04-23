@@ -22,18 +22,20 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
+use rand::RngExt;
 use std::time::Duration;
 use std::time::SystemTime;
 use subtle::ConstantTimeEq;
-
+use std::sync::Arc;
+use std::sync::Mutex;
 #[tokio::main]
 async fn main() {
     // secret.txt should match Env.secretKey
-    match fs::read_to_string("./var/lib/atchat/secret.txt") {
+    match fs::read_to_string(SERVER_SECRET_PATH.to_string()) {
         Ok(secret_key) => {
-            let state = AppState {
+            let state = Arc::new(Mutex::new(AppState {
                 secret_key: secret_key.trim().as_bytes().to_vec(),
-            };
+            }));
 
             let app = Router::new()
                 .route(
@@ -43,6 +45,10 @@ async fn main() {
                 .route(
                     "/file/internal/upload-backup/{filename}",
                     post(post_backup_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/internal/regenerate-server-secret",
+                    post(regenerate_server_secret_endpoint).options(options_endpoint),
                 )
                 .route(
                     "/file/upload",
@@ -85,10 +91,12 @@ async fn main() {
             };
         }
         Err(error) => {
-            println!("Server didn't start due to secret.txt not getting loaded: {error}");
+            println!("Server didn't start due to {SERVER_SECRET_PATH} not getting loaded: {error}");
         }
     }
 }
+
+const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
 
 #[derive(Clone)]
 struct AppState {
@@ -96,7 +104,7 @@ struct AppState {
 }
 
 async fn require_internal_secret(
-    State(state): State<AppState>,
+    State(state): State<Arc<Mutex<AppState>>>,
     req: Request,
     next: Next,
 ) -> Response<Body> {
@@ -110,7 +118,7 @@ async fn require_internal_secret(
 
         match provided {
             Some(token) => {
-                let authorized = token.as_bytes().to_vec().ct_eq(&state.secret_key).into();
+                let authorized = token.as_bytes().to_vec().ct_eq(&state.lock().unwrap().secret_key).into();
                 if authorized {
                     next.run(req).await
                 } else {
@@ -324,6 +332,24 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Resp
         (Err(error_a), Err(error_b)) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
+        ),
+    }
+}
+
+async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -> Response<String> {
+    let mut rng = rand::rng();
+    let random_string: String = (0..64)
+        .map(|_| format!("{}", (rng.random_range(0..10))))
+        .collect();
+    match fs::write(String::from(SERVER_SECRET_PATH), &random_string) {
+        Ok(_) => {
+            let mut state2 = state.lock().unwrap();
+            state2.secret_key = random_string.clone().into();
+            response_with_headers(StatusCode::OK, random_string)
+        },
+        Err(error) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("Write failed\n{:?}", error),
         ),
     }
 }

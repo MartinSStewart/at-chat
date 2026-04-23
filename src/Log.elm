@@ -43,6 +43,7 @@ type Log
     | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
     | FailedToLoadDiscordStandardStickerPacks Discord.HttpError
     | FailedToGenerateScheduledBackup Http.Error
+    | FailedToRegenerateServerSecret Http.Error
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -118,6 +119,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToGenerateScheduledBackup _ ->
+            Nothing
+
+        FailedToRegenerateServerSecret _ ->
             Nothing
 
 
@@ -475,6 +479,13 @@ logContent onPressCopy log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Scheduled backend backup generation failed"
                 , fieldRow "Error" (Ui.text (httpErrorToString httpError))
+                ]
+
+        FailedToRegenerateServerSecret error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Regenerating server secret failed"
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 
 

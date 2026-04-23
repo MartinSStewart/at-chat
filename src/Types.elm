@@ -328,6 +328,7 @@ type alias BackendModel =
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
+    , serverSecretRegeneratedAt : Maybe Time.Posix
     }
 
 
@@ -615,6 +616,7 @@ type BackendMsg
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
+    | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
 
 
 type MessageFromGuildOrDm

@@ -222,6 +222,7 @@ init =
       , discordStickers = OneToOne.empty
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
+      , serverSecretRegeneratedAt = Nothing
       }
     , Command.none
     )
@@ -1550,6 +1551,25 @@ update msg model =
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error) model
+
+        RegeneratedServerSecret time changeId clientId result ->
+            let
+                responseCmd : Command BackendOnly ToFrontend BackendMsg
+                responseCmd =
+                    FilledInByBackend (Result.map (\_ -> time) result)
+                        |> Pages.Admin.RegenerateServerSecret
+                        |> Local_Admin
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+            in
+            case result of
+                Ok serverSecret ->
+                    ( { model | serverSecret = serverSecret, serverSecretRegeneratedAt = Just time }
+                    , responseCmd
+                    )
+
+                Err error ->
+                    BackendExtra.addLogWithCmd time (Log.FailedToRegenerateServerSecret error) model responseCmd
 
 
 gotDiscordStickers :
@@ -5357,6 +5377,39 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Pages.Admin.RegenerateServerSecret _ ->
+            ( model
+            , Http.task
+                { method = "POST"
+                , url = FileStatus.domain ++ "/file/internal/regenerate-server-secret"
+                , body = Http.emptyBody
+                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
+                , resolver =
+                    Http.stringResolver
+                        (\result ->
+                            case result of
+                                Http.BadStatus_ metadata body ->
+                                    Http.BadBody
+                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                        |> Err
+
+                                Http.GoodStatus_ _ text ->
+                                    Ok (SecretId.fromString text)
+
+                                Http.BadUrl_ string ->
+                                    Err (Http.BadUrl string)
+
+                                Http.Timeout_ ->
+                                    Err Http.Timeout
+
+                                Http.NetworkError_ ->
+                                    Err Http.NetworkError
+                        )
+                , timeout = Nothing
+                }
+                |> Task.attempt (RegeneratedServerSecret time changeId clientId)
+            )
 
 
 updateFromFrontendAdmin :

@@ -854,6 +854,7 @@ adminData model lastLogPageViewed =
 
                             Nothing ->
                                 ""
+    , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
     }
 
 
