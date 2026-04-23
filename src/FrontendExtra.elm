@@ -659,15 +659,6 @@ clearRevealedSpoilers model =
     }
 
 
-maybeOpenSidebar : Bool -> Maybe Route -> LoggedIn2 -> LoggedIn2
-maybeOpenSidebar sameGuild previousRoute loggedIn =
-    if sameGuild || previousRoute == Nothing then
-        startOpeningChannelSidebar loggedIn
-
-    else
-        loggedIn
-
-
 enterSidebarRoute :
     Bool
     -> Maybe Route
@@ -677,7 +668,11 @@ enterSidebarRoute :
 enterSidebarRoute sameGuild previousRoute viewCmd model =
     updateLoggedIn
         (\loggedIn ->
-            ( maybeOpenSidebar sameGuild previousRoute loggedIn
+            ( if sameGuild || previousRoute == Nothing then
+                startOpeningChannelSidebar loggedIn
+
+              else
+                loggedIn
             , viewCmd
             )
         )
@@ -709,7 +704,11 @@ enterChannelRoute threadRoute sameGuild previousRoute viewCmd model =
                     startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
                 HideMembersTab ->
-                    maybeOpenSidebar sameGuild previousRoute loggedIn
+                    if sameGuild || previousRoute == Nothing then
+                        startOpeningChannelSidebar loggedIn
+
+                    else
+                        loggedIn
             , Command.batch [ viewCmd, openChannelCmds threadRoute model ]
             )
         )
