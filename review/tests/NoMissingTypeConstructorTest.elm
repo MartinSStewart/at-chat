@@ -123,6 +123,15 @@ allThings = [ A, C, B, D, E ]
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectNoErrors
+        , test "should not report when declarations take parameters" <|
+            \_ ->
+                """module A exposing (..)
+type Thing = A String | B Int | C Thing | D | E
+allThings : List Thing
+allThings = [ A "", C D, B 5, B 4, D, E ]
+"""
+                    |> Review.Test.run rule
+                    |> Review.Test.expectNoErrors
         , test "should not report when a declaration named `all...` is a list of an unknown custom type" <|
             \_ ->
                 """module A exposing (..)
