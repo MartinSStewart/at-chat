@@ -3293,7 +3293,7 @@ changeUpdate localMsg local =
                     }
 
                 Server_VoiceChatChange voiceChatFrontendMsg ->
-                    VoiceChat.changeUpdate voiceChatFrontendMsg local
+                    { local | calls = VoiceChat.changeUpdate voiceChatFrontendMsg local.calls }
 
 
 guildSendMessage :

@@ -254,28 +254,20 @@ localChangeUpdate change model =
             model
 
 
-changeUpdate : ServerChange -> { a | calls : Model } -> { a | calls : Model }
-changeUpdate change local =
+changeUpdate : ServerChange -> Model -> Model
+changeUpdate change model =
     case change of
         Server_Joined connectionId ->
-            let
-                calls : Model
-                calls =
-                    local.calls
-            in
-            { local
-                | calls =
-                    { calls
-                        | voiceChats =
-                            addSessionIdHash connectionId.roomId connectionId.otherSession calls.voiceChats
-                    }
+            { model
+                | voiceChats =
+                    addSessionIdHash connectionId.roomId connectionId.otherSession model.voiceChats
             }
 
         Server_Left connectionId ->
-            { local | calls = removeSessionIdHash connectionId.roomId connectionId.otherSession local.calls }
+            removeSessionIdHash connectionId.roomId connectionId.otherSession model
 
         Server_SignalReceived _ _ ->
-            local
+            model
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
