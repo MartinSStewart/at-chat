@@ -20,12 +20,14 @@ port module VoiceChat exposing
 
 import Codec exposing (Codec)
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Html exposing (Html)
 import Html.Attributes
 import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Encode
+import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -34,7 +36,7 @@ import SessionIdHash exposing (SessionIdHash)
 
 type LocalChange
     = Local_Join RoomId
-    | Local_Leave RoomId
+    | Local_Leave
     | Local_Signal ConnectionId Signal
 
 
@@ -45,10 +47,10 @@ type ServerChange
 
 
 type alias Model =
-    { currentRoom : Maybe RoomId, voiceChats : SeqDict RoomId (NonemptySet SessionIdHash) }
+    { currentRoom : Maybe RoomId, voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) }
 
 
-init : SeqDict RoomId (NonemptySet SessionIdHash) -> Model
+init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Model
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
@@ -56,7 +58,7 @@ init voiceChats =
 
 
 type alias ConnectionId =
-    { roomId : RoomId, otherSession : SessionIdHash }
+    { roomId : RoomId, otherSession : ( Id UserId, ClientId ) }
 
 
 type RoomId
@@ -159,38 +161,38 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-peerHasJoined :
-    RoomId
-    ->
-        { b
-            | calls : Model
-            , otherSessions : SeqDict SessionIdHash f
-        }
-    -> Bool
-peerHasJoined otherUserId local =
-    case SeqDict.get otherUserId local.calls.voiceChats of
+peerHasJoined : RoomId -> Model -> SeqDict (Id UserId) (NonemptySet ClientId)
+peerHasJoined roomId model =
+    case SeqDict.get roomId model.voiceChats of
         Just voiceChat ->
-            SeqDict.foldl
-                (\sessionId _ set -> SeqSet.remove sessionId set)
-                (NonemptySet.toSeqSet voiceChat)
-                local.otherSessions
-                |> SeqSet.isEmpty
-                |> not
+            NonemptySet.foldl
+                (\( userId, clientId ) dict ->
+                    SeqDict.update
+                        userId
+                        (\maybe ->
+                            case maybe of
+                                Just nonempty ->
+                                    NonemptySet.insert clientId nonempty |> Just
+
+                                Nothing ->
+                                    NonemptySet.singleton clientId |> Just
+                        )
+                        dict
+                )
+                SeqDict.empty
+                voiceChat
 
         Nothing ->
-            False
+            SeqDict.empty
 
 
-serverChangeCmd :
-    ServerChange
-    -> SessionIdHash
-    -> Command FrontendOnly toBackend msg
-serverChangeCmd change sessionIdHash =
+serverChangeCmd : ServerChange -> ClientId -> Command FrontendOnly toBackend msg
+serverChangeCmd change clientId =
     case change of
         Server_Joined connectionId ->
             voiceChatStart
                 connectionId
-                (SessionIdHash.toString sessionIdHash < SessionIdHash.toString connectionId.otherSession)
+                (Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherSession))
 
         Server_Left connectionId ->
             voiceChatStop connectionId
@@ -218,37 +220,14 @@ addSessionIdHash otherUserId sessionIdHash dmVoiceChats =
         dmVoiceChats
 
 
-removeSessionIdHash : RoomId -> SessionIdHash -> Model -> Model
-removeSessionIdHash roomId sessionIdHash model =
-    case SeqDict.get roomId model.voiceChats of
-        Just dmVoiceChat ->
-            { model
-                | voiceChats =
-                    SeqDict.update
-                        roomId
-                        (\_ -> NonemptySet.remove sessionIdHash dmVoiceChat |> NonemptySet.fromSeqSet)
-                        model.voiceChats
-            }
-
-        Nothing ->
-            model
-
-
 localChangeUpdate : LocalChange -> Model -> Model
 localChangeUpdate change model =
     case change of
         Local_Join roomId ->
             { model | currentRoom = Just roomId }
 
-        Local_Leave roomId ->
-            { model
-                | currentRoom =
-                    if Just roomId == model.currentRoom then
-                        Nothing
-
-                    else
-                        model.currentRoom
-            }
+        Local_Leave ->
+            { model | currentRoom = Nothing }
 
         Local_Signal _ _ ->
             model
@@ -263,8 +242,19 @@ changeUpdate change model =
                     addSessionIdHash connectionId.roomId connectionId.otherSession model.voiceChats
             }
 
-        Server_Left connectionId ->
-            removeSessionIdHash connectionId.roomId connectionId.otherSession model
+        Server_Left { roomId, otherSession } ->
+            case SeqDict.get roomId model.voiceChats of
+                Just dmVoiceChat ->
+                    { model
+                        | voiceChats =
+                            SeqDict.update
+                                roomId
+                                (\_ -> NonemptySet.remove otherSession dmVoiceChat |> NonemptySet.fromSeqSet)
+                                model.voiceChats
+                    }
+
+                Nothing ->
+                    model
 
         Server_SignalReceived _ _ ->
             model
@@ -329,7 +319,7 @@ voiceChatFromJs msg =
                 |> Result.withDefault
                     (msg
                         { roomId = DmRoomId (Id.fromInt 0)
-                        , otherSession = SessionIdHash.fromString ""
+                        , otherSession = ( Id.fromInt 0, Lamdera.clientIdFromString "" )
                         }
                         (OfferSignal { sdp = "" })
                     )
@@ -343,7 +333,9 @@ connectionIdToString { roomId, otherSession } =
             Id.toString otherUserId
     )
         ++ " "
-        ++ SessionIdHash.toString otherSession
+        ++ Id.toString (Tuple.first otherSession)
+        ++ " "
+        ++ Lamdera.clientIdToString (Tuple.second otherSession)
 
 
 connectionIdCodec : Codec ConnectionId
@@ -351,15 +343,15 @@ connectionIdCodec =
     Codec.andThen
         (\text ->
             case String.split " " text of
-                [ first, second ] ->
-                    case String.toInt first of
-                        Just int ->
+                [ first, second, third ] ->
+                    case ( String.toInt first, String.toInt second ) of
+                        ( Just int, Just userId ) ->
                             Codec.succeed
                                 { roomId = DmRoomId (Id.fromInt int)
-                                , otherSession = SessionIdHash.fromString second
+                                , otherSession = ( Id.fromInt userId, Lamdera.clientIdFromString third )
                                 }
 
-                        Nothing ->
+                        _ ->
                             Codec.fail ("Invalid connectionId: " ++ text)
 
                 _ ->

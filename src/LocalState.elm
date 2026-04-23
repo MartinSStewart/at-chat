@@ -10,6 +10,7 @@ module LocalState exposing
     , BackendChannel
     , BackendGuild
     , ChannelStatus(..)
+    , ConnectionData
     , DiscordBackendChannel
     , DiscordBackendGuild
     , DiscordFrontendChannel
@@ -510,6 +511,10 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     }
+
+
+type alias ConnectionData =
+    { lastRequest : LastRequest, call : Maybe VoiceChat.RoomId }
 
 
 type LastRequest

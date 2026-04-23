@@ -300,7 +300,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
                             , Command.batch
-                                [ getLoginData sessionId session user requestMessagesFor model
+                                [ getLoginData sessionId clientId session user requestMessagesFor model
                                     |> LoginSuccess
                                     |> LoginWithTokenResponse
                                     |> Lamdera.sendToFrontends sessionId
@@ -422,12 +422,13 @@ validateAttachedFiles uploadedFiles dict =
 
 getLoginData :
     SessionId
+    -> ClientId
     -> UserSession
     -> BackendUser
     -> InitialLoadRequest
     -> BackendModel
     -> LoginData
-getLoginData sessionId session user requestMessagesFor model =
+getLoginData sessionId clientId session user requestMessagesFor model =
     let
         ( otherDiscordUsers, linkedDiscordUsers ) =
             getLinkedDiscordUsersAndOtherUsers session.userId model
@@ -561,35 +562,46 @@ getLoginData sessionId session user requestMessagesFor model =
     , stickers = model.stickers
     , voiceChatPeers =
         SeqDict.foldl
-            (\dmChannelId participants dict ->
-                let
-                    participatingSessions : SeqSet SessionIdHash
-                    participatingSessions =
-                        NonemptySet.foldl
-                            (\participant set ->
-                                case SeqDict.get participant model.sessions of
-                                    Just session2 ->
-                                        SeqSet.insert session2.sessionIdHash set
+            (\otherSessionId connections dict ->
+                case SeqDict.get otherSessionId model.sessions of
+                    Just otherSession ->
+                        NonemptyDict.foldl
+                            (\otherClientId data dict2 ->
+                                case ( data.call, otherClientId == clientId ) of
+                                    ( Just roomId, False ) ->
+                                        case roomId of
+                                            DmRoomId dmingWith ->
+                                                if dmingWith == session.userId then
+                                                    SeqDict.update
+                                                        roomId
+                                                        (\maybe ->
+                                                            (case maybe of
+                                                                Just nonempty ->
+                                                                    NonemptySet.insert
+                                                                        ( otherSession.userId, otherClientId )
+                                                                        nonempty
 
-                                    Nothing ->
-                                        set
+                                                                Nothing ->
+                                                                    NonemptySet.singleton ( otherSession.userId, otherClientId )
+                                                            )
+                                                                |> Just
+                                                        )
+                                                        dict2
+
+                                                else
+                                                    dict2
+
+                                    _ ->
+                                        dict2
                             )
-                            SeqSet.empty
-                            participants
-                in
-                case
-                    ( NonemptySet.fromSeqSet participatingSessions
-                    , DmChannel.otherUserId session.userId dmChannelId
-                    )
-                of
-                    ( Just participatingSessions2, Just otherUserId ) ->
-                        SeqDict.insert (DmRoomId otherUserId) participatingSessions2 dict
+                            dict
+                            connections
 
-                    _ ->
+                    Nothing ->
                         dict
             )
             SeqDict.empty
-            model.voiceChatParticipants
+            model.connections
     }
 
 

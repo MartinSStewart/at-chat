@@ -70,7 +70,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -288,7 +288,7 @@ type EmojiSelector
 type alias BackendModel =
     { users : NonemptyDict (Id UserId) BackendUser
     , sessions : SeqDict SessionId UserSession
-    , connections : SeqDict SessionId (NonemptyDict ClientId LastRequest)
+    , connections : SeqDict SessionId (NonemptyDict ClientId ConnectionData)
     , secretCounter : Int
     , pendingLogins : SeqDict SessionId LoginTokenData
     , logs : Array { time : Time.Posix, log : Log, isHidden : Bool }
@@ -328,7 +328,6 @@ type alias BackendModel =
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
-    , voiceChatParticipants : SeqDict DmChannelId (NonemptySet SessionId)
     }
 
 
@@ -683,7 +682,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
-    , voiceChatPeers : SeqDict RoomId (NonemptySet SessionIdHash)
+    , voiceChatPeers : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
     }
 
 

@@ -3067,7 +3067,12 @@ voiceChatButton voiceChatId local =
             VoiceChat.hasJoined voiceChatId local.calls
 
         peerHasJoined =
-            VoiceChat.peerHasJoined voiceChatId local
+            VoiceChat.peerHasJoined voiceChatId local.calls
+                |> SeqDict.toList
+                |> List.map
+                    (\( userId, clientIds ) ->
+                        0
+                    )
     in
     Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
