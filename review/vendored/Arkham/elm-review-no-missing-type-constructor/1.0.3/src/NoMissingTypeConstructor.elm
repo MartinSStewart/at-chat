@@ -297,6 +297,9 @@ constructorName expr =
         Expression.FunctionOrValue _ name ->
             Just name
 
+        Expression.Application ((Node _ (Expression.FunctionOrValue _ name)) :: _) ->
+            Just name
+
         _ ->
             Nothing
 

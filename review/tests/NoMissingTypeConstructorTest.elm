@@ -132,6 +132,33 @@ allThings = [ A "", C D, B 5, B 4, D, E ]
 """
                     |> Review.Test.run rule
                     |> Review.Test.expectNoErrors
+        , test "should report missing constructors when listed constructors take parameters" <|
+            \_ ->
+                """module A exposing (..)
+type Thing = A String | B Int | C | D
+allThings : List Thing
+allThings = [ A "", B 5 ]
+"""
+                    |> Review.Test.run rule
+                    |> Review.Test.expectErrors
+                        [ Review.Test.error
+                            { message = "`allThings` does not contain all the type constructors for `Thing`"
+                            , details =
+                                [ "We expect `allThings` to contain all the type constructors for `Thing`."
+                                , """In this case, you are missing the following constructors:
+    , C
+    , D"""
+                                ]
+                            , under = "allThings"
+                            }
+                            |> Review.Test.atExactly { start = { row = 4, column = 1 }, end = { row = 4, column = 10 } }
+                            |> Review.Test.whenFixed
+                                """module A exposing (..)
+type Thing = A String | B Int | C | D
+allThings : List Thing
+allThings = [ A "", B 5, C, D ]
+"""
+                        ]
         , test "should not report when a declaration named `all...` is a list of an unknown custom type" <|
             \_ ->
                 """module A exposing (..)
