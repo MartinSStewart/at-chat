@@ -220,6 +220,7 @@ init =
       , discordStickers = OneToOne.empty
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
+      , serverSecretRegeneratedAt = Nothing
       }
     , Command.none
     )
@@ -1537,6 +1538,25 @@ update msg model =
 
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToGenerateScheduledBackup error) model
+
+        RegeneratedServerSecret time changeId clientId result ->
+            let
+                responseCmd : Command BackendOnly ToFrontend BackendMsg
+                responseCmd =
+                    FilledInByBackend (Result.map (\_ -> time) result)
+                        |> Pages.Admin.RegenerateServerSecret
+                        |> Local_Admin
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+            in
+            case result of
+                Ok serverSecret ->
+                    ( { model | serverSecret = serverSecret, serverSecretRegeneratedAt = Just time }
+                    , responseCmd
+                    )
+
+                Err error ->
+                    BackendExtra.addLogWithCmd time (Log.FailedToRegenerateServerSecret error) model responseCmd
 
 
 gotDiscordStickers :
@@ -5180,6 +5200,17 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Pages.Admin.RegenerateServerSecret _ ->
+            ( model
+            , Http.post
+                { url = FileStatus.domain ++ "/internal/regenerate-server-secret"
+                , body = Http.emptyBody
+                , expect =
+                    Http.expectString
+                        (\text -> RegeneratedServerSecret time changeId clientId (Result.map SecretId.fromString text))
+                }
+            )
 
 
 updateFromFrontendAdmin :

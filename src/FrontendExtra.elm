@@ -3295,6 +3295,7 @@ initAdminData adminData =
     , filesCount = adminData.filesCount
     , toBackendLogs = adminData.toBackendLogs
     , vulnerabilityChecks = adminData.vulnerabilityChecks
+    , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     }
 
 

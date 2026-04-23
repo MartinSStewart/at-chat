@@ -26,6 +26,7 @@ module LocalState exposing
     , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
+    , ServerSecretStatus(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -111,6 +112,7 @@ import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Embed exposing (EmbedData)
@@ -501,7 +503,14 @@ type alias AdminData =
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
+    , serverSecretRefreshedAt : ServerSecretStatus
     }
+
+
+type ServerSecretStatus
+    = NotBeingRegenerated (Maybe Time.Posix)
+    | BeingRegenerated
+    | RegenerationFailed Http.Error
 
 
 type LastRequest

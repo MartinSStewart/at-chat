@@ -40,6 +40,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Download
 import Effect.File.Select
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Task as Task
 import Effect.Time as Time
@@ -52,7 +53,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -132,6 +133,7 @@ type Msg
     | PressedUnhideLog (Id ItemId)
     | PressedShowHiddenLogs Bool
     | PressedDisconnectClient SessionIdHash ClientId
+    | PressedRegenerateServerSecret
 
 
 type ToBackend
@@ -218,6 +220,7 @@ type alias InitAdminData =
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
+    , serverSecretRegeneratedAt : Maybe Time.Posix
     }
 
 
@@ -250,6 +253,7 @@ type AdminChange
     | HideLog (Id ItemId)
     | UnhideLog (Id ItemId)
     | DisconnectClient SessionIdHash ClientId
+    | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
 
 
 type alias EditedBackendUser =
@@ -521,6 +525,26 @@ updateAdmin changedBy change adminData local =
             { local
                 | adminData =
                     IsAdmin (disconnectClient sessionIdHash clientId adminData)
+            }
+
+        RegenerateServerSecret time ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | serverSecretRefreshedAt =
+                                case time of
+                                    EmptyPlaceholder ->
+                                        BeingRegenerated
+
+                                    FilledInByBackend result ->
+                                        case result of
+                                            Ok time2 ->
+                                                NotBeingRegenerated (Just time2)
+
+                                            Err error ->
+                                                RegenerationFailed error
+                        }
             }
 
 
@@ -1047,6 +1071,9 @@ update navigationKey time adminData localState msg model =
             , NoOutMsg
             )
 
+        PressedRegenerateServerSecret ->
+            ( model, Command.none, AdminChange (RegenerateServerSecret EmptyPlaceholder) )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -1322,6 +1349,9 @@ pendingChangesText change =
 
         DisconnectClient _ _ ->
             "Disconnect client"
+
+        RegenerateServerSecret _ ->
+            "Regenerate server secret"
 
 
 view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
@@ -1800,6 +1830,32 @@ apiKeysSection local user adminData2 model =
             PostmarkKeyEditableMsg
             (Postmark.apiKeyToString adminData2.postmarkKey)
             model.postmarkKey
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.elButton
+                (Dom.id "admin_regenerateServerSecret")
+                PressedRegenerateServerSecret
+                []
+                (Ui.text "Regenerate server secret")
+            , case adminData2.serverSecretRefreshedAt of
+                NotBeingRegenerated time ->
+                    case time of
+                        Just time2 ->
+                            "Last regenerated at "
+                                ++ MyUi.datestamp time2
+                                ++ " "
+                                ++ MyUi.timestamp time2 local.localUser.timezone
+                                |> Ui.text
+
+                        Nothing ->
+                            Ui.text "No regenerated"
+
+                BeingRegenerated ->
+                    Ui.text "Regenerating"
+
+                RegenerationFailed error ->
+                    MyUi.errorBox (Dom.id "Admin_serverSecretError") PressedCopyText (Log.httpErrorToString error)
+            ]
         ]
 
 
