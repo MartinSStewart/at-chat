@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), SkinTone(..))
+import Emoji exposing (SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -2882,9 +2882,9 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                             (\index localChange ->
                                                 attacker.sendToBackend 100 (LocalModelChangeRequest (ChangeId index) localChange)
                                             )
-                                            attackerLocalChanges
+                                            allAttackerLocalChanges
                                             |> T.collapsableGroup "attacks"
-                                        , List.map (attacker.sendToBackend 100) attackerToBackendChanges
+                                        , List.map (attacker.sendToBackend 100) allAttackerToBackendChanges
                                             |> T.collapsableGroup "attacks"
                                         , T.checkState
                                             500
@@ -3356,8 +3356,8 @@ attackerShouldNotGetThisToFrontend toFrontend =
             False
 
 
-attackerToBackendChanges : List ToBackend
-attackerToBackendChanges =
+allAttackerToBackendChanges : List ToBackend
+allAttackerToBackendChanges =
     [ CheckLoginRequest InitialLoadRequested_None
     , LoginWithTokenRequest InitialLoadRequested_None 0 UserAgent.init
     , LoginWithTwoFactorRequest InitialLoadRequested_None 0 UserAgent.init
@@ -3383,8 +3383,8 @@ legitGuildId =
     Id.fromInt 0
 
 
-attackerLocalChanges : List LocalChange
-attackerLocalChanges =
+allAttackerLocalChanges : List LocalChange
+allAttackerLocalChanges =
     let
         normalUserId : Id UserId
         normalUserId =
