@@ -114,28 +114,22 @@ iceCodec =
         |> Codec.buildObject
 
 
-audioNodes :
-    { b
-        | calls : Model
-        , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
-    }
-    -> Html msg
-audioNodes local =
-    SeqDict.toList local.calls.voiceChats
+audioNodes : Model -> Html msg
+audioNodes model =
+    SeqDict.toList model.voiceChats
         |> List.concatMap
             (\( roomId, sessions ) ->
-                if hasJoined roomId local.calls then
-                    NonemptySet.remove local.localUser.session.sessionIdHash sessions
-                        |> SeqSet.toList
-                        |> List.map
-                            (\session ->
-                                Html.audio
-                                    [ connectionIdToString { roomId = roomId, otherSession = session } |> Html.Attributes.id
-                                    , Html.Attributes.autoplay True
-                                    , Html.Attributes.style "display" "none"
-                                    ]
-                                    []
-                            )
+                if hasJoined roomId model then
+                    List.map
+                        (\session ->
+                            Html.audio
+                                [ connectionIdToString { roomId = roomId, otherSession = session } |> Html.Attributes.id
+                                , Html.Attributes.autoplay True
+                                , Html.Attributes.style "display" "none"
+                                ]
+                                []
+                        )
+                        (NonemptySet.toList sessions)
 
                 else
                     []
@@ -148,14 +142,18 @@ hasJoined roomId model =
     model.currentRoom == Just roomId
 
 
-leaveVoiceChatCmds : RoomId -> SessionIdHash -> Model -> Command FrontendOnly toMsg msg
-leaveVoiceChatCmds voiceChatId sessionIdHash model =
-    case SeqDict.get voiceChatId model.voiceChats of
-        Just voiceChat ->
-            NonemptySet.remove sessionIdHash voiceChat
-                |> SeqSet.toList
-                |> List.map (\sessionIdHash2 -> voiceChatStop { roomId = voiceChatId, otherSession = sessionIdHash2 })
-                |> Command.batch
+leaveVoiceChatCmds : Model -> Command FrontendOnly toMsg msg
+leaveVoiceChatCmds model =
+    case model.currentRoom of
+        Just currentRoom ->
+            case SeqDict.get currentRoom model.voiceChats of
+                Just voiceChat ->
+                    NonemptySet.toList voiceChat
+                        |> List.map (\sessionIdHash2 -> voiceChatStop { roomId = currentRoom, otherSession = sessionIdHash2 })
+                        |> Command.batch
+
+                Nothing ->
+                    Command.none
 
         Nothing ->
             Command.none
@@ -166,7 +164,6 @@ peerHasJoined :
     ->
         { b
             | calls : Model
-            , localUser : { d | session : { e | sessionIdHash : SessionIdHash } }
             , otherSessions : SeqDict SessionIdHash f
         }
     -> Bool
@@ -225,13 +222,12 @@ removeSessionIdHash : RoomId -> SessionIdHash -> Model -> Model
 removeSessionIdHash roomId sessionIdHash model =
     case SeqDict.get roomId model.voiceChats of
         Just dmVoiceChat ->
-            let
-                voiceChatParticipants2 =
-                    NonemptySet.remove sessionIdHash dmVoiceChat
-                        |> NonemptySet.fromSeqSet
-            in
             { model
-                | voiceChats = SeqDict.update roomId (\_ -> voiceChatParticipants2) model.voiceChats
+                | voiceChats =
+                    SeqDict.update
+                        roomId
+                        (\_ -> NonemptySet.remove sessionIdHash dmVoiceChat |> NonemptySet.fromSeqSet)
+                        model.voiceChats
             }
 
         Nothing ->

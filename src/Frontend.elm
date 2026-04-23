@@ -4056,7 +4056,7 @@ pressedVoiceChatButton roomId model =
                     model.time
                     (Local_Leave roomId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (VoiceChat.leaveVoiceChatCmds roomId currentSession local.calls)
+                    (VoiceChat.leaveVoiceChatCmds local.calls)
 
             else
                 FrontendExtra.handleLocalChange
@@ -5492,7 +5492,7 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.audioNodes local |> Ui.html |> Ui.behindContent
+                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.behindContent
                                     ]
                                     (page loggedIn local)
 
