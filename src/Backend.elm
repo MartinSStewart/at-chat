@@ -5203,17 +5203,35 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.RegenerateServerSecret _ ->
             ( model
-            , Http.request
+            , Http.task
                 { method = "POST"
                 , url = FileStatus.domain ++ "/file/internal/regenerate-server-secret"
                 , body = Http.emptyBody
                 , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
-                , expect =
-                    Http.expectString
-                        (\text -> RegeneratedServerSecret time changeId clientId (Result.map SecretId.fromString text))
+                , resolver =
+                    Http.stringResolver
+                        (\result ->
+                            case result of
+                                Http.BadStatus_ metadata body ->
+                                    Http.BadBody
+                                        ("Status code: " ++ String.fromInt metadata.statusCode ++ ", body: " ++ body)
+                                        |> Err
+
+                                Http.GoodStatus_ _ text ->
+                                    Ok (SecretId.fromString text)
+
+                                Http.BadUrl_ string ->
+                                    Err (Http.BadUrl string)
+
+                                Http.Timeout_ ->
+                                    Err Http.Timeout
+
+                                Http.NetworkError_ ->
+                                    Err Http.NetworkError
+                        )
                 , timeout = Nothing
-                , tracker = Nothing
                 }
+                |> Task.attempt (RegeneratedServerSecret time changeId clientId)
             )
 
 
