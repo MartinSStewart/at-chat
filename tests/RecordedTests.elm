@@ -312,6 +312,11 @@ attackerEmail =
     Unsafe.emailAddress "hacker-joe@hotmail.com"
 
 
+regeneratedServerSecretValue : String
+regeneratedServerSecretValue =
+    "regenerated-server-secret-from-rust-server"
+
+
 enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 enableNotifications isMobile user =
     [ user.click 100 (Dom.id "guild_showUserOptions")
@@ -928,6 +933,15 @@ handleInternalRequests discordStickerPacks currentRequest rest =
                     }
                     ""
 
+            [ "regenerate-server-secret" ] ->
+                StringHttpResponse
+                    { url = currentRequest.url
+                    , statusCode = 200
+                    , statusText = "OK"
+                    , headers = Dict.empty
+                    }
+                    regeneratedServerSecretValue
+
             [ "embed" ] ->
                 case currentRequest.body of
                     T.JsonBody json ->
@@ -1192,6 +1206,70 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_goToHomepage")
+                ]
+            )
+        ]
+    , startTest
+        "Regenerate server secret button hits rust-server and applies response"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Not regenerated" ])
+                , admin.click 100 (Dom.id "admin_regenerateServerSecret")
+                , T.checkState
+                    100
+                    (\data ->
+                        case
+                            List.filter
+                                (\request ->
+                                    (request.url == "http://localhost:3000/file/internal/regenerate-server-secret")
+                                        && (request.method == "POST")
+                                        && (request.requestedBy == RequestedByBackend)
+                                        && List.member ( "x-secret-key", Env.secretKey ) request.headers
+                                )
+                                data.httpRequests
+                        of
+                            [ _ ] ->
+                                Ok ()
+
+                            [] ->
+                                Err "Expected one POST to rust-server /file/internal/regenerate-server-secret"
+
+                            _ ->
+                                Err "Expected exactly one POST to rust-server /file/internal/regenerate-server-secret"
+                    )
+                , T.checkState
+                    100
+                    (\data ->
+                        if SecretId.toString data.backend.serverSecret == regeneratedServerSecretValue then
+                            Ok ()
+
+                        else
+                            Err
+                                ("Backend server secret was not updated, got: "
+                                    ++ SecretId.toString data.backend.serverSecret
+                                )
+                    )
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Last regenerated at " ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Not regenerated" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Regenerating" ])
                 ]
             )
         ]
