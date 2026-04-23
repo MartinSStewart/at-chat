@@ -1832,10 +1832,9 @@ apiKeysSection local user adminData2 model =
             model.postmarkKey
         , Ui.row
             [ Ui.spacing 8 ]
-            [ MyUi.elButton
+            [ MyUi.simpleButton
                 (Dom.id "admin_regenerateServerSecret")
                 PressedRegenerateServerSecret
-                []
                 (Ui.text "Regenerate server secret")
             , case adminData2.serverSecretRefreshedAt of
                 NotBeingRegenerated time ->
@@ -1848,7 +1847,7 @@ apiKeysSection local user adminData2 model =
                                 |> Ui.text
 
                         Nothing ->
-                            Ui.text "No regenerated"
+                            Ui.text "Not regenerated"
 
                 BeingRegenerated ->
                     Ui.text "Regenerating"

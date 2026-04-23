@@ -5203,12 +5203,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.RegenerateServerSecret _ ->
             ( model
-            , Http.post
-                { url = FileStatus.domain ++ "/internal/regenerate-server-secret"
+            , Http.request
+                { method = "POST"
+                , url = FileStatus.domain ++ "/file/internal/regenerate-server-secret"
                 , body = Http.emptyBody
+                , headers = [ FileStatus.secretKeyHeader model.serverSecret ]
                 , expect =
                     Http.expectString
                         (\text -> RegeneratedServerSecret time changeId clientId (Result.map SecretId.fromString text))
+                , timeout = Nothing
+                , tracker = Nothing
                 }
             )
 
