@@ -22,6 +22,7 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
+use rand::RngExt;
 use std::time::Duration;
 use std::time::SystemTime;
 use subtle::ConstantTimeEq;
@@ -29,7 +30,7 @@ use subtle::ConstantTimeEq;
 #[tokio::main]
 async fn main() {
     // secret.txt should match Env.secretKey
-    match fs::read_to_string("./var/lib/atchat/secret.txt") {
+    match fs::read_to_string(SERVER_SECRET_PATH.to_string()) {
         Ok(secret_key) => {
             let state = AppState {
                 secret_key: secret_key.trim().as_bytes().to_vec(),
@@ -43,6 +44,10 @@ async fn main() {
                 .route(
                     "/file/internal/upload-backup/{filename}",
                     post(post_backup_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/internal/regenerate-server-secret",
+                    post(regenerate_server_secret_endpoint).options(options_endpoint),
                 )
                 .route(
                     "/file/upload",
@@ -89,6 +94,8 @@ async fn main() {
         }
     }
 }
+
+const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
 
 #[derive(Clone)]
 struct AppState {
@@ -324,6 +331,20 @@ async fn post_backup_endpoint(Path(filename): Path<String>, body: Bytes) -> Resp
         (Err(error_a), Err(error_b)) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Both file writes failed\n{:?}\n{:?}", error_a, error_b),
+        ),
+    }
+}
+
+async fn regenerate_server_secret_endpoint() -> Response<String> {
+    let mut rng = rand::rng();
+    let random_string: String = (0..64)
+        .map(|_| format!("{}", (rng.random_range(0..10))))
+        .collect();
+    match fs::write(String::from(SERVER_SECRET_PATH), &random_string) {
+        Ok(_) => response_with_headers(StatusCode::OK, random_string),
+        Err(error) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            format!("Write failed\n{:?}", error),
         ),
     }
 }
