@@ -10,9 +10,9 @@ port module VoiceChat exposing
     , changeUpdate
     , hasJoined
     , init
+    , joinedUsers
     , leaveVoiceChatCmds
     , localChangeUpdate
-    , peerHasJoined
     , serverChangeCmd
     , voiceChatFromJs
     , voiceChatStart
@@ -161,8 +161,8 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-peerHasJoined : RoomId -> Model -> SeqDict (Id UserId) (NonemptySet ClientId)
-peerHasJoined roomId model =
+joinedUsers : RoomId -> Model -> SeqDict (Id UserId) (NonemptySet ClientId)
+joinedUsers roomId model =
     case SeqDict.get roomId model.voiceChats of
         Just voiceChat ->
             NonemptySet.foldl
@@ -190,9 +190,7 @@ serverChangeCmd : ServerChange -> ClientId -> Command FrontendOnly toBackend msg
 serverChangeCmd change clientId =
     case change of
         Server_Joined connectionId ->
-            voiceChatStart
-                connectionId
-                (Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherSession))
+            voiceChatStart clientId connectionId
 
         Server_Left connectionId ->
             voiceChatStop connectionId
@@ -266,8 +264,13 @@ port voice_chat_to_js : Json.Encode.Value -> Cmd msg
 port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
-voiceChatStart : ConnectionId -> Bool -> Command FrontendOnly toBackend msg
-voiceChatStart connectionId shouldOffer =
+voiceChatStart : ClientId -> ConnectionId -> Command FrontendOnly toBackend msg
+voiceChatStart clientId connectionId =
+    let
+        shouldOffer : Bool
+        shouldOffer =
+            Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherSession)
+    in
     Command.sendToJs
         "voice_chat_to_js"
         voice_chat_to_js

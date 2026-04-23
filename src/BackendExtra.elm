@@ -282,6 +282,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 session =
                                     UserSession.init
                                         sessionId
+                                        clientId
                                         pendingLogin.userId
                                         (case requestMessagesFor of
                                             InitialLoadRequested_None ->

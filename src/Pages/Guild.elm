@@ -3066,22 +3066,45 @@ voiceChatButton voiceChatId local =
         hasJoined =
             VoiceChat.hasJoined voiceChatId local.calls
 
-        peerHasJoined =
-            VoiceChat.peerHasJoined voiceChatId local.calls
+        joined : Element msg
+        joined =
+            VoiceChat.joinedUsers voiceChatId local.calls
                 |> SeqDict.toList
                 |> List.map
                     (\( userId, clientIds ) ->
-                        0
+                        let
+                            count =
+                                NonemptySet.size clientIds
+                        in
+                        Ui.el
+                            [ if count > 1 then
+                                Ui.el
+                                    [ Ui.alignRight
+                                    , Ui.alignBottom
+                                    , Ui.background MyUi.background3
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.border 1
+                                    , Ui.rounded 4
+                                    ]
+                                    (Icons.numbers 20 (String.fromInt count) |> Html.div [] |> Ui.html)
+                                    |> Ui.inFront
+
+                              else
+                                Ui.noAttr
+                            ]
+                            (case LocalState.getUser userId local.localUser of
+                                Just user ->
+                                    User.profileImage user.icon
+
+                                Nothing ->
+                                    User.profileImage Nothing
+                            )
                     )
+                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
     in
     Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
-        [ case SeqDict.get voiceChatId local.calls.voiceChats of
-            Just voiceChat ->
-                String.fromInt (NonemptySet.size voiceChat) ++ " sessions in voice chat" |> Ui.text
-
-            Nothing ->
-                Ui.none
+        [ joined
         , MyUi.elButton
             (Dom.id "guild_voiceChat")
             (PressedVoiceChatButton voiceChatId)
@@ -3092,8 +3115,8 @@ voiceChatButton voiceChatId local =
             (Ui.row
                 [ Ui.spacing 2, Ui.centerY ]
                 [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-                , case ( hasJoined, peerHasJoined ) of
-                    ( True, True ) ->
+                , case hasJoined of
+                    True ->
                         Ui.el
                             [ Ui.width (Ui.px 8)
                             , Ui.height (Ui.px 8)
@@ -3102,25 +3125,7 @@ voiceChatButton voiceChatId local =
                             ]
                             Ui.none
 
-                    ( False, True ) ->
-                        Ui.el
-                            [ Ui.width (Ui.px 8)
-                            , Ui.height (Ui.px 8)
-                            , Ui.background (Ui.rgb 200 60 60)
-                            , Ui.rounded 4
-                            ]
-                            Ui.none
-
-                    ( True, False ) ->
-                        Ui.el
-                            [ Ui.width (Ui.px 8)
-                            , Ui.height (Ui.px 8)
-                            , Ui.background (Ui.rgb 200 160 60)
-                            , Ui.rounded 4
-                            ]
-                            Ui.none
-
-                    ( False, False ) ->
+                    False ->
                         Ui.none
                 ]
             )

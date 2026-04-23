@@ -18,7 +18,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Select
 import Effect.Http as Http
-import Effect.Lamdera as Lamdera
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
@@ -4047,14 +4047,14 @@ pressedVoiceChatButton roomId model =
                 local =
                     Local.model loggedIn.localState
 
-                currentSession : SessionIdHash
-                currentSession =
-                    local.localUser.session.sessionIdHash
+                clientId : ClientId
+                clientId =
+                    local.localUser.session.clientId
             in
             if VoiceChat.hasJoined roomId local.calls then
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_Leave roomId |> Local_VoiceChatChange |> Just)
+                    (Local_VoiceChatChange Local_Leave |> Just)
                     loggedIn
                     (VoiceChat.leaveVoiceChatCmds local.calls)
 
@@ -4067,9 +4067,7 @@ pressedVoiceChatButton roomId model =
                         Just nonempty ->
                             List.map
                                 (\otherSession ->
-                                    VoiceChat.voiceChatStart
-                                        { roomId = roomId, otherSession = otherSession }
-                                        (SessionIdHash.toString currentSession < SessionIdHash.toString otherSession)
+                                    VoiceChat.voiceChatStart clientId { roomId = roomId, otherSession = otherSession }
                                 )
                                 (NonemptySet.toList nonempty)
                                 |> Command.batch
@@ -5320,9 +5318,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
-                                    , VoiceChat.serverChangeCmd
-                                        voiceChatChange
-                                        local.localUser.session.sessionIdHash
+                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.clientId
                                     )
 
                                 _ ->

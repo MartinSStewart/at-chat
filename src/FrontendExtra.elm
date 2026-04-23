@@ -189,7 +189,7 @@ pendingChangesText localChange =
                 VoiceChat.Local_Join _ ->
                     "Joined voice chat"
 
-                VoiceChat.Local_Leave _ ->
+                VoiceChat.Local_Leave ->
                     "Left voice chat"
 
                 VoiceChat.Local_Signal _ _ ->

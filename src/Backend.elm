@@ -1913,6 +1913,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             session =
                                 UserSession.init
                                     sessionId
+                                    clientId
                                     userId
                                     (case requestMessagesFor of
                                         InitialLoadRequested_None ->
@@ -1967,6 +1968,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         session =
                                             UserSession.init
                                                 sessionId
+                                                clientId
                                                 pendingLogin.userId
                                                 (case requestMessagesFor of
                                                     InitialLoadRequested_None ->
