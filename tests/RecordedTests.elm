@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (SkinTone(..))
+import Emoji exposing (Category(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -1223,9 +1223,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_showUserOptions")
                 , admin.click 100 (Dom.id "userOptions_gotoAdmin")
                 , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Not regenerated" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Not regenerated" ])
                 , admin.click 100 (Dom.id "admin_regenerateServerSecret")
                 , T.checkState
                     100
@@ -1261,15 +1259,14 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                     ++ SecretId.toString data.backend.serverSecret
                                 )
                     )
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Last regenerated at " ])
                 , admin.checkView
                     100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Last regenerated at " ])
-                , admin.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Not regenerated" ])
-                , admin.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "Regenerating" ])
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "Not regenerated"
+                        , Test.Html.Selector.exactText "Regenerating"
+                        ]
+                    )
                 ]
             )
         ]
