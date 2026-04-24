@@ -11,6 +11,7 @@
 * Fix block quotes appearing making reply preview take up multiple lines
 * Extra line break appears underneath block quotes
 * Prevent files larger than 10mb being attached to Discord messages (unless it's a nitro user)
+* Make it more clear when a message hasn't been sent yet
 
 Requested features:
 
