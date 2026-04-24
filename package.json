@@ -1,6 +1,7 @@
 {
   "scripts": {
     "tests": "elm-test-rs --compiler $(which lamdera) --fuzz 1000",
+    "review-tests": "cd review && elm-test-rs --compiler $(which lamdera) --fuzz 1000",
     "elm-review": "npx elm-review --compiler $(which lamdera)",
     "check": "lamdera check && elm-test-rs --compiler $(which lamdera) && npx elm-review --fix-all $(which lamdera)",
     "make": "lamdera make src/Frontend.elm src/Backend.elm src/UiViewer.elm",
