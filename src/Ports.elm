@@ -5,6 +5,8 @@ port module Ports exposing
     , ExecCommandPort
     , NotificationPermission(..)
     , PwaStatus(..)
+    , WordBoundingBox
+    , WordBoundingBoxesResponse
     , checkNotificationPermission
     , checkNotificationPermissionResponse
     , checkPwaStatus
@@ -18,6 +20,7 @@ port module Ports exposing
     , focusChanged
     , getScrollbarWidth
     , getUserAgent
+    , getWordBoundingBoxes
     , hapticFeedback
     , loadSounds
     , pageHasFocus
@@ -36,6 +39,7 @@ port module Ports exposing
     , textInputSelectAll
     , userAgentSub
     , visualViewportResized
+    , wordBoundingBoxesSub
     )
 
 import Codec exposing (Codec)
@@ -574,3 +578,65 @@ cropImageDataCodec =
         |> Codec.field "width" .width CodecExtra.quantityInt
         |> Codec.field "height" .height CodecExtra.quantityInt
         |> Codec.buildObject
+
+
+port word_bounding_boxes_to_js : Json.Encode.Value -> Cmd msg
+
+
+port word_bounding_boxes_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+type alias WordBoundingBox =
+    { word : String
+    , x : Float
+    , y : Float
+    , width : Float
+    , height : Float
+    }
+
+
+type alias WordBoundingBoxesResponse =
+    { requestId : Int
+    , boxes : List WordBoundingBox
+    }
+
+
+getWordBoundingBoxes : Int -> HtmlId -> Command FrontendOnly toMsg msg
+getWordBoundingBoxes requestId htmlId =
+    Command.sendToJs
+        "word_bounding_boxes_to_js"
+        word_bounding_boxes_to_js
+        (Json.Encode.object
+            [ ( "requestId", Json.Encode.int requestId )
+            , ( "htmlId", Json.Encode.string (Dom.idToString htmlId) )
+            ]
+        )
+
+
+wordBoundingBoxesSub : (Result String WordBoundingBoxesResponse -> msg) -> Subscription FrontendOnly msg
+wordBoundingBoxesSub msg =
+    Subscription.fromJs
+        "word_bounding_boxes_from_js"
+        word_bounding_boxes_from_js
+        (\json ->
+            Json.Decode.decodeValue wordBoundingBoxesResponseDecoder json
+                |> Result.mapError Json.Decode.errorToString
+                |> msg
+        )
+
+
+wordBoundingBoxesResponseDecoder : Json.Decode.Decoder WordBoundingBoxesResponse
+wordBoundingBoxesResponseDecoder =
+    Json.Decode.map2 WordBoundingBoxesResponse
+        (Json.Decode.field "requestId" Json.Decode.int)
+        (Json.Decode.field "boxes" (Json.Decode.list wordBoundingBoxDecoder))
+
+
+wordBoundingBoxDecoder : Json.Decode.Decoder WordBoundingBox
+wordBoundingBoxDecoder =
+    Json.Decode.map5 WordBoundingBox
+        (Json.Decode.field "word" Json.Decode.string)
+        (Json.Decode.field "x" Json.Decode.float)
+        (Json.Decode.field "y" Json.Decode.float)
+        (Json.Decode.field "width" Json.Decode.float)
+        (Json.Decode.field "height" Json.Decode.float)

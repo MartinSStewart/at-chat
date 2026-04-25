@@ -5,6 +5,7 @@
 const stuff = require('./elm-pkg-js/stuff.js');
 const setFavicon = require('./elm-pkg-js/set-favicon.js');
 const cropImage = require('./elm-pkg-js/crop-image.js');
+const wordBoundingBoxes = require('./elm-pkg-js/word-bounding-boxes.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -13,4 +14,5 @@ exports.init = async function init(app) {
   stuff.init(app);
   setFavicon.init(app);
   cropImage.init(app);
+  wordBoundingBoxes.init(app);
 }
