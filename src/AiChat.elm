@@ -466,6 +466,29 @@ richTextToMessage previousText previousList nonempty =
                         Nothing ->
                             ( currentText, list )
 
+                RichText.Heading level _ b ->
+                    let
+                        marker =
+                            case level of
+                                RichText.H1 ->
+                                    "\n# "
+
+                                RichText.H2 ->
+                                    "\n## "
+
+                                RichText.H3 ->
+                                    "\n### "
+
+                                RichText.Small ->
+                                    "\n-# "
+                    in
+                    case List.Nonempty.fromList b of
+                        Just nonempty2 ->
+                            richTextToMessage (currentText ++ marker) list nonempty2
+
+                        Nothing ->
+                            ( currentText ++ marker, list )
+
                 RichText.Hyperlink url ->
                     ( "", ImageUrlMessage (Url.toString url) :: TextMessage currentText :: list )
 
