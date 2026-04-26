@@ -110,7 +110,7 @@ async fn require_internal_secret(
 ) -> Response<Body> {
     let path = req.uri().path();
 
-    if path.to_string().starts_with("/file/internal/") {
+    if path.to_string().starts_with("/file/internal/") && (req.method() != axum::http::Method::OPTIONS) {
         let provided = req
             .headers()
             .get("x-secret-key")

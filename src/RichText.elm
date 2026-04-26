@@ -2,7 +2,6 @@ module RichText exposing
     ( Domain(..)
     , EscapedChar(..)
     , HasLeadingLineBreak(..)
-    , HeadingLevel(..)
     , Language(..)
     , Modifiers(..)
     , RichText(..)
@@ -38,7 +37,7 @@ import Basics.Extra
 import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
-import Discord.Markdown
+import Discord.Markdown exposing (HeadingLevel(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
@@ -86,13 +85,6 @@ type RichText userId
 type HasLeadingLineBreak
     = HasLeadingLineBreak
     | NoLeadingLineBreak
-
-
-type HeadingLevel
-    = H1
-    | H2
-    | H3
-    | Small
 
 
 type EscapedChar
@@ -4011,8 +4003,7 @@ toDiscordHelper content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    Discord.Markdown.boldMarkdown
-                        (Discord.Markdown.text prefix :: toDiscordHelper (List.Nonempty.toList nonempty))
+                    Discord.Markdown.Heading level prefix :: toDiscordHelper (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
                     Discord.Markdown.text (Url.toString data)
