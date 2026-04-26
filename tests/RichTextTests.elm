@@ -402,44 +402,43 @@ test =
                 [ NormalText '\n' "after" ]
             )
         , fromNonemptyStringTest "# hello"
-            (Nonempty (Heading H1 NoLeadingLineBreak [ NormalText 'h' "ello" ]) [])
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
         , fromNonemptyStringTest "## hello"
-            (Nonempty (Heading H2 NoLeadingLineBreak [ NormalText 'h' "ello" ]) [])
+            (Nonempty (Heading H2 NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
         , fromNonemptyStringTest "### hello"
-            (Nonempty (Heading H3 NoLeadingLineBreak [ NormalText 'h' "ello" ]) [])
+            (Nonempty (Heading H3 NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
         , fromNonemptyStringTest "-# small"
-            (Nonempty (Heading Small NoLeadingLineBreak [ NormalText 's' "mall" ]) [])
+            (Nonempty (Heading Small NoLeadingLineBreak (Nonempty (NormalText 's' "mall") [])) [])
         , fromNonemptyStringTest "\n# heading"
-            (Nonempty (Heading H1 HasLeadingLineBreak [ NormalText 'h' "eading" ]) [])
+            (Nonempty (Heading H1 HasLeadingLineBreak (Nonempty (NormalText 'h' "eading") [])) [])
         , fromNonemptyStringTest "\n## heading"
-            (Nonempty (Heading H2 HasLeadingLineBreak [ NormalText 'h' "eading" ]) [])
+            (Nonempty (Heading H2 HasLeadingLineBreak (Nonempty (NormalText 'h' "eading") [])) [])
         , fromNonemptyStringTest "\n### heading"
-            (Nonempty (Heading H3 HasLeadingLineBreak [ NormalText 'h' "eading" ]) [])
+            (Nonempty (Heading H3 HasLeadingLineBreak (Nonempty (NormalText 'h' "eading") [])) [])
         , fromNonemptyStringTest "\n-# tiny"
-            (Nonempty (Heading Small HasLeadingLineBreak [ NormalText 't' "iny" ]) [])
+            (Nonempty (Heading Small HasLeadingLineBreak (Nonempty (NormalText 't' "iny") [])) [])
         , fromNonemptyStringTest "before\n# title"
-            (Nonempty (NormalText 'b' "efore") [ Heading H1 HasLeadingLineBreak [ NormalText 't' "itle" ] ])
+            (Nonempty (NormalText 'b' "efore") [ Heading H1 HasLeadingLineBreak (Nonempty (NormalText 't' "itle") []) ])
         , fromNonemptyStringTest "# title\nafter"
-            (Nonempty (Heading H1 NoLeadingLineBreak [ NormalText 't' "itle" ]) [ NormalText '\n' "after" ])
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 't' "itle") [])) [ NormalText '\n' "after" ])
         , fromNonemptyStringTest "# *bold heading*"
-            (Nonempty (Heading H1 NoLeadingLineBreak [ Bold (Nonempty (NormalText 'b' "old heading") []) ]) [])
-        , fromNonemptyStringTest "## "
-            (Nonempty (Heading H2 NoLeadingLineBreak []) [])
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (Bold (Nonempty (NormalText 'b' "old heading") [])) [])) [])
+        , fromNonemptyStringTest "## " (Nonempty (NormalText '#' "# ") [])
         , fromNonemptyStringTest "#hello" (Nonempty (NormalText '#' "hello") [])
         , fromNonemptyStringTest "-#nope" (Nonempty (NormalText '-' "#nope") [])
         , fromNonemptyStringTest "# one\n## two\n### three\n-# small"
             (Nonempty
-                (Heading H1 NoLeadingLineBreak [ NormalText 'o' "ne" ])
-                [ Heading H2 HasLeadingLineBreak [ NormalText 't' "wo" ]
-                , Heading H3 HasLeadingLineBreak [ NormalText 't' "hree" ]
-                , Heading Small HasLeadingLineBreak [ NormalText 's' "mall" ]
+                (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'o' "ne") []))
+                [ Heading H2 HasLeadingLineBreak (Nonempty (NormalText 't' "wo") [])
+                , Heading H3 HasLeadingLineBreak (Nonempty (NormalText 't' "hree") [])
+                , Heading Small HasLeadingLineBreak (Nonempty (NormalText 's' "mall") [])
                 ]
             )
         , toStringTest
-            (Nonempty (Heading H1 NoLeadingLineBreak [ NormalText 'h' "i" ]) [])
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'h' "i") [])) [])
             "# hi"
         , toStringTest
-            (Nonempty (Heading Small HasLeadingLineBreak [ NormalText 'a' "" ]) [])
+            (Nonempty (Heading Small HasLeadingLineBreak (Nonempty (NormalText 'a' "") [])) [])
             "\n-# a"
         , Test.test
             "Heading round trip"
