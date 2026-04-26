@@ -5,6 +5,7 @@ port module Ports exposing
     , ExecCommandPort
     , NotificationPermission(..)
     , PwaStatus(..)
+    , cacheGuildIcons
     , checkNotificationPermission
     , checkNotificationPermissionResponse
     , checkPwaStatus
@@ -105,6 +106,9 @@ port user_agent_from_js : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
+
+
+port cache_guild_icons_to_js : Json.Encode.Value -> Cmd msg
 
 
 port fix_cursor_position_to_js : Json.Encode.Value -> Cmd msg
@@ -220,6 +224,14 @@ fixCursorPosition htmlId =
 registerServiceWorker : Command FrontendOnly toMsg msg
 registerServiceWorker =
     Command.sendToJs "register_service_worker_to_js" register_service_worker_to_js Json.Encode.null
+
+
+cacheGuildIcons : List String -> Command FrontendOnly toMsg msg
+cacheGuildIcons urls =
+    Command.sendToJs
+        "cache_guild_icons_to_js"
+        cache_guild_icons_to_js
+        (Json.Encode.list Json.Encode.string urls)
 
 
 getScrollbarWidth : Command FrontendOnly toMsg msg

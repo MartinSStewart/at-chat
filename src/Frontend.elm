@@ -313,14 +313,28 @@ initLoadedFrontend loading time userAgent loginResult =
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
         , Http.get { url = "/_i", expect = Http.expectJson GotVersionNumber (Json.Decode.field "v" Json.Decode.int) }
         , case loginResult of
-            Ok _ ->
-                Ports.registerServiceWorker
+            Ok loginData ->
+                Command.batch
+                    [ Ports.registerServiceWorker
+                    , Ports.cacheGuildIcons (guildIconUrls loginData)
+                    ]
 
             Err _ ->
                 Command.none
         , Emoji.requestEmojiData GotEmojiData
         ]
     )
+
+
+guildIconUrls : LoginData -> List String
+guildIconUrls loginData =
+    let
+        toUrl : { a | icon : Maybe FileStatus.FileHash } -> Maybe String
+        toUrl guild =
+            Maybe.map (FileStatus.fileUrl FileStatus.pngContent) guild.icon
+    in
+    List.filterMap toUrl (SeqDict.values loginData.guilds)
+        ++ List.filterMap toUrl (SeqDict.values loginData.discordGuilds)
 
 
 loadedInitHelper :

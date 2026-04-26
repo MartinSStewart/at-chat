@@ -248,6 +248,18 @@ exports.init = async function init(app)
         activeNotifications = [];
     });
 
+    app.ports.cache_guild_icons_to_js.subscribe((urls) => {
+        if (!navigator.serviceWorker) {
+            return;
+        }
+        navigator.serviceWorker.ready.then((registration) => {
+            const target = registration.active || navigator.serviceWorker.controller;
+            if (target) {
+                target.postMessage({ type: 'cache-guild-icons', urls: urls });
+            }
+        });
+    });
+
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
         navigator.serviceWorker.ready
         .then(function(registration) {
