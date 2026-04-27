@@ -2,6 +2,7 @@ module CustomEmoji exposing
     ( CustomEmojiData
     , CustomEmojiUrl(..)
     , addUrl
+    , emojiSize
     , idToString
     , view
     )
@@ -40,19 +41,20 @@ addUrl uploadResponse customEmoji =
             Err ()
 
 
+emojiSize : String
+emojiSize =
+    "1em"
+
+
 view : Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
 view customEmojiId customEmojis2 animationMode =
-    let
-        emojiSize2 =
-            "1em"
-    in
     case SeqDict.get customEmojiId customEmojis2 of
         Just customEmoji ->
             case customEmoji.url of
                 CustomEmojiLoading ->
                     Html.div
-                        [ Html.Attributes.style "width" emojiSize2
-                        , Html.Attributes.style "height" emojiSize2
+                        [ Html.Attributes.style "width" emojiSize
+                        , Html.Attributes.style "height" emojiSize
                         , Html.Attributes.style "background-color" "gray"
                         , Html.Attributes.style "display" "inline-block"
                         ]
@@ -61,15 +63,15 @@ view customEmojiId customEmojis2 animationMode =
                 CustomEmojiInternal fileHash _ ->
                     if customEmoji.isAnimated then
                         Sticker.animatedImageView
-                            emojiSize2
-                            emojiSize2
+                            emojiSize
+                            emojiSize
                             (FileStatus.fileUrl FileStatus.gifContent fileHash)
                             animationMode
 
                     else
                         Html.img
-                            [ Html.Attributes.style "width" emojiSize2
-                            , Html.Attributes.style "height" emojiSize2
+                            [ Html.Attributes.style "width" emojiSize
+                            , Html.Attributes.style "height" emojiSize
                             , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
                             , Html.Attributes.style "display" "inline-block"
                             ]
@@ -77,8 +79,8 @@ view customEmojiId customEmojis2 animationMode =
 
         Nothing ->
             Html.div
-                [ Html.Attributes.style "width" emojiSize2
-                , Html.Attributes.style "height" emojiSize2
+                [ Html.Attributes.style "width" emojiSize
+                , Html.Attributes.style "height" emojiSize
                 , Html.Attributes.style "background-color" "gray"
                 ]
                 [ Html.text "Custom emoji failed to load" ]

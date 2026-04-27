@@ -730,8 +730,8 @@ selector searchHasFocus isMobile width model userData emojiData availableCustomE
                                 , Ui.attrIf
                                     (model.emojiHovered == Just item)
                                     (Ui.background MyUi.hoverHighlight)
-                                , Ui.width (Ui.px emojiWidth)
                                 , Ui.contentCenterX
+                                , Ui.width Ui.shrink
                                 ]
                                 text
                         )

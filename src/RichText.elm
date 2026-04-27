@@ -3384,7 +3384,8 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                     , Array.append
                         output2
                         (Array.fromList
-                            [ Html.span
+                            [ Html.text "\n"
+                            , Html.span
                                 [ Html.Attributes.style "position" "relative" ]
                                 [ Html.div
                                     [ Html.Attributes.style "position" "absolute"
@@ -3393,6 +3394,8 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
 
                                       else
                                         Html.Attributes.style "opacity" "transparent"
+                                    , Html.Attributes.style "top" "0"
+                                    , Html.Attributes.style "left" "0"
                                     ]
                                     [ Sticker.view "2lh" stickerId stickers2 Sticker.LoopForever ]
                                 , Html.div
@@ -3406,10 +3409,12 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
 
                                       else
                                         Html.Attributes.style "opacity" "transparent"
+                                    , Html.Attributes.style "top" "0"
+                                    , Html.Attributes.style "left" "0"
                                     ]
                                     []
                                 ]
-                            , Html.text "\n\n\n"
+                            , Html.text "\n\n"
                             ]
                         )
                     )
@@ -3439,13 +3444,17 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                         Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground)
 
                                       else
-                                        Html.Attributes.style "opacity" "transparent"
+                                        Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+                                    , Html.Attributes.style "top" "0.1lh"
+                                    , Html.Attributes.style "left" "0"
                                     ]
                                     [ CustomEmoji.view customEmojiId customEmojis Sticker.LoopForever ]
                                 , Html.div
                                     [ Html.Attributes.style "position" "absolute"
-                                    , Html.Attributes.style "width" "1em"
+                                    , Html.Attributes.style "width" CustomEmoji.emojiSize
                                     , Html.Attributes.style "height" "1lh"
+                                    , Html.Attributes.style "top" "0"
+                                    , Html.Attributes.style "left" "0"
                                     , if isSelected then
                                         Html.Attributes.style
                                             "background-color"
@@ -3456,8 +3465,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                     ]
                                     []
                                 ]
-
-                            --, Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
+                            , Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
                             ]
                         )
                     )
