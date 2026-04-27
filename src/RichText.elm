@@ -3384,7 +3384,8 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                     ]
                                     []
                                 ]
-                            , Html.text text
+
+                            --, Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
                             ]
                         )
                     )

@@ -720,6 +720,7 @@ discordDmChannelView routeData loggedIn local model =
                 , threads = SeqDict.empty
                 }
                 SeqSet.empty
+                SeqSet.empty
 
         Nothing ->
             Ui.el
@@ -1525,6 +1526,15 @@ discordChannelView routeData guild loggedIn local model =
         DiscordChannel_ChannelRoute channelId threadRoute ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
+                    let
+                        availableCustomEmojis : SeqSet (Id CustomEmojiId)
+                        availableCustomEmojis =
+                            SeqSet.intersect local.localUser.user.availableCustomEmojis guild.customEmojis
+
+                        availableStickers : SeqSet (Id StickerId)
+                        availableStickers =
+                            SeqSet.intersect local.localUser.user.availableStickers guild.stickers
+                    in
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                             SeqDict.get threadMessageIndex channel.threads
@@ -1553,7 +1563,8 @@ discordChannelView routeData guild loggedIn local model =
                                             threadMessageIndex
                                             channel
                                     )
-                                    guild.stickers
+                                    availableCustomEmojis
+                                    availableStickers
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             discordConversationView
@@ -1570,7 +1581,8 @@ discordChannelView routeData guild loggedIn local model =
                                 local
                                 (ChannelName.toString channel.name)
                                 channel
-                                (SeqSet.intersect local.localUser.user.availableStickers guild.stickers)
+                                availableCustomEmojis
+                                availableStickers
 
                 Nothing ->
                     pageMissing "Channel does not exist"
@@ -3119,8 +3131,15 @@ privateChatWith name =
     ]
 
 
-emojiSelector : Bool -> SeqSet (Id StickerId) -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
-emojiSelector isMobile availableStickers local loggedIn model =
+emojiSelector :
+    Bool
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqSet (Id StickerId)
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> Ui.Attribute FrontendMsg
+emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model =
     let
         emojiConfig : EmojiConfig
         emojiConfig =
@@ -3151,6 +3170,8 @@ emojiSelector isMobile availableStickers local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
@@ -3174,6 +3195,8 @@ emojiSelector isMobile availableStickers local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
@@ -3201,6 +3224,8 @@ emojiSelector isMobile availableStickers local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
@@ -3297,6 +3322,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         , Ui.el
             [ emojiSelector
                 isMobile
+                local.localUser.user.availableCustomEmojis
                 local.localUser.user.availableStickers
                 local
                 loggedIn
@@ -3453,9 +3479,10 @@ discordConversationView :
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
         }
+    -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> Element FrontendMsg
-discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableStickers =
+discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableCustomEmojis availableStickers =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -3518,7 +3545,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile availableStickers local loggedIn model
+            [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3809,7 +3836,13 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local.localUser.user.availableStickers local loggedIn model
+            [ emojiSelector
+                isMobile
+                local.localUser.user.availableCustomEmojis
+                local.localUser.user.availableStickers
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3960,10 +3993,11 @@ discordThreadConversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
+    -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> DiscordFrontendThread
     -> Element FrontendMsg
-discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableStickers channel =
+discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableCustomEmojis availableStickers channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -4026,7 +4060,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile availableStickers local loggedIn model
+            [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]

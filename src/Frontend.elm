@@ -7,6 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji
 import Discord
 import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
@@ -1174,6 +1175,10 @@ updateLoaded msg model =
                                         EmojiOrSticker_Sticker _ ->
                                             ( loggedIn, Command.none )
 
+                                        EmojiOrSticker_CustomEmoji id ->
+                                            Debug.todo ""
+
+                                --( loggedIn, Command.none )
                                 EmojiSelectorForMessage maybeSelection ->
                                     insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
 
@@ -1188,10 +1193,14 @@ updateLoaded msg model =
                 Emoji.PressedCategory category ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Local_SetEmojiCategory category |> Just)
-                                loggedIn
+                                { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Nothing } }
                                 Command.none
                         )
                         model
@@ -3682,19 +3691,24 @@ insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
     let
         text : String
         text =
-            case ( emojiOrSticker, model.emojiData ) of
-                ( EmojiOrSticker_Emoji emoji, Just emojiData ) ->
-                    Emoji.emojiWithSkinTone
-                        (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
-                        emoji
-                        emojiData
-                        ++ " "
+            case emojiOrSticker of
+                EmojiOrSticker_Emoji emoji ->
+                    case model.emojiData of
+                        Just emojiData ->
+                            Emoji.emojiWithSkinTone
+                                (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
+                                emoji
+                                emojiData
+                                ++ " "
 
-                ( EmojiOrSticker_Sticker stickerId, _ ) ->
+                        Nothing ->
+                            ""
+
+                EmojiOrSticker_Sticker stickerId ->
                     Sticker.idToString stickerId
 
-                _ ->
-                    ""
+                EmojiOrSticker_CustomEmoji customEmojiId ->
+                    CustomEmoji.idToString customEmojiId
     in
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
     , case maybeSelection of
