@@ -137,7 +137,9 @@ basicFormattingTests =
             )
         , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
         , fromNonemptyStringTest "<abc:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
-        , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543") [])
+        , fromNonemptyStringTest "<abc:542>" (Nonempty (NormalText '<' "abc:542>") [])
+        , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543>") [])
+        , fromNonemptyStringTest "<http:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
         ]
 
 

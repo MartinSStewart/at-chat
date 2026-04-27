@@ -3827,7 +3827,7 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                     (accText ++ "<")
                                     revNodes
 
-                    _ ->
+                    Just "h" ->
                         case tryParseDiscordCustomEmoji customEmojis (index + 1) source of
                             Just ( emojiId, nextIndex ) ->
                                 discordParseLoop
@@ -3872,6 +3872,20 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                             modifiers
                                             (accText ++ "<" ++ errText)
                                             revNodes
+
+                    _ ->
+                        case tryParseDiscordCustomEmoji customEmojis (index + 1) source of
+                            Just ( emojiId, nextIndex ) ->
+                                discordParseLoop
+                                    customEmojis
+                                    source
+                                    nextIndex
+                                    modifiers
+                                    ""
+                                    (CustomEmoji emojiId :: flushText accText revNodes)
+
+                            Nothing ->
+                                discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "<") revNodes
 
             "*" ->
                 if String.slice index (index + 2) source == "**" then
