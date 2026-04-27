@@ -12,7 +12,6 @@ module CustomEmoji exposing
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord
 import FileStatus exposing (FileHash)
 import Html exposing (Html)
 import Html.Attributes

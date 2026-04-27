@@ -224,7 +224,7 @@ spoilerAttachedFile fileId nonempty =
                 Sticker _ ->
                     richText
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     richText
         )
         nonempty
@@ -393,7 +393,7 @@ unspoilerAttachedFile fileId nonempty =
                 Sticker _ ->
                     Nonempty richText []
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     Nonempty richText []
         )
         nonempty
@@ -466,7 +466,7 @@ removeAttachedFile shouldRemove list =
                 Sticker _ ->
                     Just richText
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     Just richText
         )
         (List.Nonempty.toList list)
@@ -526,7 +526,7 @@ hyperlinks nonempty =
                 Sticker _ ->
                     []
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -590,7 +590,7 @@ attachmentsHelper isSpoilered nonempty =
                 Sticker _ ->
                     []
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -649,7 +649,7 @@ stickers nonempty =
                 Sticker stickerId ->
                     [ stickerId ]
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -2043,7 +2043,7 @@ mentionsUserHelper set nonempty =
                 Sticker _ ->
                     set2
 
-                CustomEmoji id ->
+                CustomEmoji _ ->
                     set2
         )
         set

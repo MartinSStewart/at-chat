@@ -1175,7 +1175,7 @@ updateLoaded msg model =
                                         EmojiOrSticker_Sticker _ ->
                                             ( loggedIn, Command.none )
 
-                                        EmojiOrSticker_CustomEmoji id ->
+                                        EmojiOrSticker_CustomEmoji _ ->
                                             Debug.todo ""
 
                                 --( loggedIn, Command.none )

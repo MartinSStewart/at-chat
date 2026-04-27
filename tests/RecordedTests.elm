@@ -3412,7 +3412,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_LinkedDiscordUserStickersLoaded _ ->
                             True
 
-                        Types.Server_LinkedDiscordUserCustomEmojisLoaded seqDict ->
+                        Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
