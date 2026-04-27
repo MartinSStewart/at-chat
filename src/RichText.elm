@@ -1,5 +1,6 @@
 module RichText exposing
-    ( Domain(..)
+    ( DiscordCustomEmojiIdAndName
+    , Domain(..)
     , EscapedChar(..)
     , HasLeadingLineBreak(..)
     , HeadingLevel(..)
@@ -37,7 +38,7 @@ module RichText exposing
 import Array exposing (Array)
 import Basics.Extra
 import Coord exposing (Coord)
-import CustomEmoji exposing (CustomEmojiData)
+import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -3569,7 +3570,7 @@ fromDiscord :
     String
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
-    -> OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (Id StickerId)
     -> Discord.OptionalData (List Discord.MessageSnapshot)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
@@ -3605,7 +3606,7 @@ fromDiscordHelper :
     String
     -> SeqDict (Id FileId) { fileData : FileData, isSpoilered : Bool }
     -> Discord.OptionalData (List Discord.Embed)
-    -> OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (Id StickerId)
     -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text attachments2 embeds customEmojis stickers2 =
@@ -3789,7 +3790,7 @@ discordModifierToSymbol modifier =
 {-| <https://discord.com/developers/docs/reference#message-formatting>
 -}
 discordParseLoop :
-    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> String
     -> Int
     -> List DiscordModifiers
@@ -3954,8 +3955,8 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                             (accText ++ "<" ++ errText)
                                             revNodes
 
-                    _ ->
-                        case tryParseDiscordCustomEmoji customEmojis (index + 1) source of
+                    Just ":" ->
+                        case tryParseDiscordCustomEmoji customEmojis (index + 2) source of
                             Just ( emojiId, nextIndex ) ->
                                 discordParseLoop
                                     customEmojis
@@ -3967,6 +3968,9 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
 
                             Nothing ->
                                 discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "<") revNodes
+
+                    _ ->
+                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "<") revNodes
 
             "*" ->
                 if String.slice index (index + 2) source == "**" then
@@ -4237,7 +4241,7 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
 
 
 toDiscord :
-    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> Result Int String
 toDiscord customEmojis content =
@@ -4253,7 +4257,7 @@ toDiscord customEmojis content =
 
 
 discordCharsLeft :
-    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
     -> Int
 discordCharsLeft customEmojis richText =
@@ -4270,8 +4274,12 @@ discordCharsLeft customEmojis richText =
             maxLength
 
 
+type alias DiscordCustomEmojiIdAndName =
+    { id : Discord.Id Discord.CustomEmojiId, name : EmojiName }
+
+
 toDiscordHelper :
-    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List (RichText (Discord.Id Discord.UserId))
     -> String
 toDiscordHelper customEmojis content =
@@ -4349,8 +4357,12 @@ toDiscordHelper customEmojis content =
 
                 CustomEmoji id ->
                     case OneToOne.first id customEmojis of
-                        Just discordId ->
-                            "<name:" ++ Discord.idToString discordId ++ ">"
+                        Just discordIdAndName ->
+                            "<:"
+                                ++ CustomEmoji.emojiNameToString discordIdAndName.name
+                                ++ ":"
+                                ++ Discord.idToString discordIdAndName.id
+                                ++ ">"
 
                         Nothing ->
                             "<missing:123123123>"
@@ -4395,7 +4407,7 @@ escapeDiscordText text =
 
 
 discordParseInner :
-    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> String
     -> Int
     -> List DiscordModifiers
@@ -4404,7 +4416,7 @@ discordParseInner customEmojis source index modifiers =
     discordParseLoop customEmojis source index modifiers "" []
 
 
-parseDiscordBlockQuoteContent : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId) -> String -> List (RichText (Discord.Id Discord.UserId))
+parseDiscordBlockQuoteContent : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> String -> List (RichText (Discord.Id Discord.UserId))
 parseDiscordBlockQuoteContent customEmojis content =
     case discordParseLoop customEmojis content 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
@@ -4414,7 +4426,7 @@ parseDiscordBlockQuoteContent customEmojis content =
             []
 
 
-parseDiscordHeadingContent : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId) -> NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordHeadingContent : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
 parseDiscordHeadingContent customEmojis content =
     case discordParseLoop customEmojis (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
@@ -4425,7 +4437,7 @@ parseDiscordHeadingContent customEmojis content =
 
 
 tryParseDiscordCustomEmoji :
-    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> Int
     -> String
     -> Maybe ( Id CustomEmojiId, Int )
@@ -4433,9 +4445,13 @@ tryParseDiscordCustomEmoji customEmojis index source =
     case ( findChar source index (String.length source) ':', findChar source index (String.length source) '>' ) of
         ( Just nameEnd, Just idEnd ) ->
             if nameEnd < idEnd then
-                case ( index + 1 < nameEnd, String.slice (nameEnd + 1) idEnd source |> Discord.idFromString ) of
-                    ( True, Just discordId ) ->
-                        case OneToOne.second discordId customEmojis of
+                case
+                    ( String.slice index nameEnd source |> CustomEmoji.emojiNameFromString
+                    , String.slice (nameEnd + 1) idEnd source |> Discord.idFromString
+                    )
+                of
+                    ( Ok name, Just discordId ) ->
+                        case OneToOne.second { id = discordId, name = name } customEmojis of
                             Just emojiId ->
                                 Just ( emojiId, idEnd + 1 )
 

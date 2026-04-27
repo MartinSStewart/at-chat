@@ -783,7 +783,7 @@ selector searchHasFocus isMobile width model userData emojiData availableCustomE
                                 Just sticker ->
                                     [ Ui.el
                                         [ Ui.Font.size 16, Ui.width Ui.shrink ]
-                                        (Ui.text (":" ++ sticker.name ++ ":"))
+                                        (Ui.text (":" ++ CustomEmoji.emojiNameToString sticker.name ++ ":"))
                                     ]
 
                                 Nothing ->

@@ -89,7 +89,7 @@ import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
-import RichText exposing (Domain, RichText)
+import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -327,7 +327,7 @@ type alias BackendModel =
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-    , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix

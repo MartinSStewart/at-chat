@@ -1,7 +1,10 @@
 module CustomEmoji exposing
     ( CustomEmojiData
     , CustomEmojiUrl(..)
+    , EmojiName
     , addUrl
+    , emojiNameFromString
+    , emojiNameToString
     , emojiSize
     , idToString
     , view
@@ -25,9 +28,29 @@ type CustomEmojiUrl
 
 type alias CustomEmojiData =
     { url : CustomEmojiUrl
-    , name : String
+    , name : EmojiName
     , isAnimated : Bool
     }
+
+
+{-| OpaqueVariants
+-}
+type EmojiName
+    = EmojiName String
+
+
+emojiNameFromString : String -> Result () EmojiName
+emojiNameFromString text =
+    if String.length text >= 2 && String.length text < 32 then
+        Ok (EmojiName text)
+
+    else
+        Err ()
+
+
+emojiNameToString : EmojiName -> String
+emojiNameToString (EmojiName a) =
+    a
 
 
 addUrl : FileStatus.UploadResponse -> CustomEmojiData -> Result () CustomEmojiData

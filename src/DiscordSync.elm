@@ -53,7 +53,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import PersonName
 import Quantity
-import RichText exposing (RichText(..))
+import RichText exposing (DiscordCustomEmojiIdAndName, RichText(..))
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -678,7 +678,7 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     List Discord.Message
-    -> OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
@@ -2435,12 +2435,12 @@ handleCustomEmojis :
     ->
         { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
         , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-        , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+        , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
         }
     ->
         { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
         , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-        , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+        , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
         }
 handleCustomEmojis secretKey emojisToCheck state =
     List.foldl
@@ -2449,49 +2449,54 @@ handleCustomEmojis secretKey emojisToCheck state =
                 Discord.UnicodeEmojiType _ ->
                     acc
 
-                Discord.CustomEmojiType { id, name } ->
-                    case OneToOne.second id acc.discordCustomEmojis of
-                        Just _ ->
-                            acc
+                Discord.CustomEmojiType idAndName ->
+                    case maybeEmojiNameAndIdToNameAndId idAndName of
+                        Just idAndName2 ->
+                            case OneToOne.second idAndName2 acc.discordCustomEmojis of
+                                Just _ ->
+                                    acc
+
+                                Nothing ->
+                                    let
+                                        animated : Bool
+                                        animated =
+                                            case emoji.animated of
+                                                Included a ->
+                                                    a
+
+                                                Missing ->
+                                                    False
+
+                                        customEmojiId : Id CustomEmojiId
+                                        customEmojiId =
+                                            Id.nextId acc.customEmojis
+                                    in
+                                    { tasks =
+                                        (FileStatus.uploadUrl
+                                            { sessionId = backendSessionIdHash secretKey
+                                            , url =
+                                                Discord.customEmojiUrl
+                                                    (Discord.TwoToNthPower 7)
+                                                    Nothing
+                                                    (Discord.idToUInt64 idAndName2.id |> Discord.idFromUInt64)
+                                            }
+                                            |> taskResult
+                                            |> Task.map (\result -> ( customEmojiId, result ))
+                                        )
+                                            :: acc.tasks
+                                    , customEmojis =
+                                        SeqDict.insert
+                                            customEmojiId
+                                            { url = CustomEmojiLoading
+                                            , name = idAndName2.name
+                                            , isAnimated = animated
+                                            }
+                                            acc.customEmojis
+                                    , discordCustomEmojis = OneToOne.insert idAndName2 customEmojiId acc.discordCustomEmojis
+                                    }
 
                         Nothing ->
-                            let
-                                animated : Bool
-                                animated =
-                                    case emoji.animated of
-                                        Included a ->
-                                            a
-
-                                        Missing ->
-                                            False
-
-                                customEmojiId : Id CustomEmojiId
-                                customEmojiId =
-                                    Id.nextId acc.customEmojis
-                            in
-                            { tasks =
-                                (FileStatus.uploadUrl
-                                    { sessionId = backendSessionIdHash secretKey
-                                    , url =
-                                        Discord.customEmojiUrl
-                                            (Discord.TwoToNthPower 7)
-                                            Nothing
-                                            (Discord.idToUInt64 id |> Discord.idFromUInt64)
-                                    }
-                                    |> taskResult
-                                    |> Task.map (\result -> ( customEmojiId, result ))
-                                )
-                                    :: acc.tasks
-                            , customEmojis =
-                                SeqDict.insert
-                                    customEmojiId
-                                    { url = CustomEmojiLoading
-                                    , name = Maybe.withDefault "" name
-                                    , isAnimated = animated
-                                    }
-                                    acc.customEmojis
-                            , discordCustomEmojis = OneToOne.insert id customEmojiId acc.discordCustomEmojis
-                            }
+                            acc
         )
         state
         emojisToCheck
@@ -2529,7 +2534,7 @@ handleReadyData userId readyData model =
         customEmojiData :
             { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
             , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-            , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+            , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
             }
         customEmojiData =
             List.foldl
@@ -2597,9 +2602,23 @@ handleReadyData userId readyData model =
     )
 
 
+maybeEmojiNameAndIdToNameAndId nameAndId =
+    case nameAndId.name of
+        Just name ->
+            case CustomEmoji.emojiNameFromString name of
+                Ok name3 ->
+                    Just { id = nameAndId.id, name = name3 }
+
+                Err () ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
 addDiscordGuild :
     OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
-    -> OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     -> List Discord.MergedMember
     -> Discord.GatewayGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
@@ -2631,8 +2650,13 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                             List.filterMap
                                 (\emoji ->
                                     case emoji.type_ of
-                                        Discord.CustomEmojiType { id } ->
-                                            OneToOne.second id existingCustomEmojis
+                                        Discord.CustomEmojiType nameAndId ->
+                                            case maybeEmojiNameAndIdToNameAndId nameAndId of
+                                                Just nameAndId2 ->
+                                                    OneToOne.second nameAndId2 existingCustomEmojis
+
+                                                Nothing ->
+                                                    Nothing
 
                                         Discord.UnicodeEmojiType _ ->
                                             Nothing
@@ -2661,8 +2685,13 @@ addDiscordGuild existingStickers existingCustomEmojis members guild discordGuild
                         List.filterMap
                             (\emoji ->
                                 case emoji.type_ of
-                                    Discord.CustomEmojiType { id } ->
-                                        OneToOne.second id existingCustomEmojis
+                                    Discord.CustomEmojiType nameAndId ->
+                                        case maybeEmojiNameAndIdToNameAndId nameAndId of
+                                            Just nameAndId2 ->
+                                                OneToOne.second nameAndId2 existingCustomEmojis
+
+                                            Nothing ->
+                                                Nothing
 
                                     Discord.UnicodeEmojiType _ ->
                                         Nothing
