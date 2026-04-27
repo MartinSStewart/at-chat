@@ -1972,6 +1972,7 @@ view :
     -> List (Html msg)
 view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonempty =
     viewHelper
+        False
         (ShowLargeContent containerWidth)
         (Just ( htmlIdPrefix, onPressSpoiler ))
         onPressLink
@@ -1987,6 +1988,7 @@ view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonemp
 preview : (Url -> msg) -> PreviewConfig a userId -> Nonempty (RichText userId) -> List (Html msg)
 preview onPressLink config nonempty =
     viewHelper
+        False
         NoLargeContent
         Nothing
         onPressLink
@@ -2037,7 +2039,8 @@ normalTextView text state =
 
 
 viewHelper :
-    ShowLargeContent
+    Bool
+    -> ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
     -> (Url -> msg)
     -> Int
@@ -2046,24 +2049,33 @@ viewHelper :
     -> Array Embed
     -> Int
     -> Nonempty (RichText userId)
-    -> ( Int, Int, List (Html msg) )
-viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
+    -> ( ( Bool, Int ), Int, List (Html msg) )
+viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
     List.foldl
-        (\item ( spoilerIndex2, embedIndex2, currentList ) ->
+        (\item ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
+                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
 
                 NormalText char text ->
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ normalTextView (String.cons char text) state
+                    , currentList
+                        ++ normalTextView
+                            (if dropNextLineBreak2 && char == '\n' then
+                                text
+
+                             else
+                                String.cons char text
+                            )
+                            state
                     )
 
                 Italic nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2074,12 +2086,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Underline nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2090,12 +2103,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Bold nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2106,12 +2120,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Strikethrough nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2122,7 +2137,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Spoiler nonempty2 ->
                     let
@@ -2130,8 +2145,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             SeqSet.member spoilerIndex2 config.revealedSpoilers
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
-                        ( _, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, _ ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2147,7 +2163,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex2 + 1
+                    ( ( dropNextLineBreak3, spoilerIndex2 + 1 )
                     , embedIndex3
                     , currentList
                         ++ [ Html.span
@@ -2186,10 +2202,11 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                         borderLeft =
                             4
 
-                        ( spoilerIndex3, embedIndex3, list2 ) =
+                        ( ( _, spoilerIndex3 ), embedIndex3, list2 ) =
                             case List.Nonempty.fromList list of
                                 Just nonempty2 ->
                                     viewHelper
+                                        True
                                         (case showLargeContent of
                                             ShowLargeContent a ->
                                                 ShowLargeContent (a - sidePadding - borderLeft)
@@ -2207,9 +2224,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         nonempty2
 
                                 Nothing ->
-                                    ( spoilerIndex2, embedIndex2, [ Html.text " " ] )
+                                    ( ( True, spoilerIndex2 ), embedIndex2, [ Html.text " " ] )
                     in
-                    ( spoilerIndex3
+                    ( ( True, spoilerIndex3 )
                     , embedIndex3
                     , currentList
                         ++ [ case showLargeContent of
@@ -2231,8 +2248,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
 
                 Heading level _ nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list2 ) =
+                        ( ( _, spoilerIndex3 ), embedIndex3, list2 ) =
                             viewHelper
+                                True
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2249,7 +2267,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                     case level of
                                         H1 ->
                                             Html.h1
-                                                [ Html.Attributes.style "font-size" "1.5em"
+                                                [ Html.Attributes.style "font-size" "2em"
                                                 , Html.Attributes.style "font-weight" "700"
                                                 , Html.Attributes.style "margin" "0"
                                                 ]
@@ -2257,7 +2275,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
 
                                         H2 ->
                                             Html.h2
-                                                [ Html.Attributes.style "font-size" "1.25em"
+                                                [ Html.Attributes.style "font-size" "1.5em"
                                                 , Html.Attributes.style "font-weight" "700"
                                                 , Html.Attributes.style "margin" "0"
                                                 ]
@@ -2265,7 +2283,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
 
                                         H3 ->
                                             Html.h3
-                                                [ Html.Attributes.style "font-size" "1.1em"
+                                                [ Html.Attributes.style "font-size" "1.25em"
                                                 , Html.Attributes.style "font-weight" "700"
                                                 , Html.Attributes.style "margin" "0"
                                                 ]
@@ -2291,7 +2309,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         )
                                         list2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ [ headingElement ] )
+                    ( ( True, spoilerIndex3 ), embedIndex3, currentList ++ [ headingElement ] )
 
                 Hyperlink data ->
                     let
@@ -2299,7 +2317,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                         text =
                             Url.toString data
                     in
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2 + 1
                     , currentList
                         ++ [ if state.spoiler then
@@ -2342,7 +2360,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                         aliasText =
                             String.Nonempty.toString alias
                     in
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2
                     , currentList
                         ++ [ if state.spoiler then
@@ -2371,7 +2389,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     )
 
                 InlineCode char rest ->
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2
                     , currentList
                         ++ [ Html.span
@@ -2393,7 +2411,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                 CodeBlock _ text ->
                     case showLargeContent of
                         ShowLargeContent _ ->
-                            ( spoilerIndex2
+                            ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList
                                 ++ [ Html.div
@@ -2420,12 +2438,12 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             )
 
                         NoLargeContent ->
-                            ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text "<...>" ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Html.text "<...>" ] )
 
                 AttachedFile fileId ->
                     case showLargeContent of
                         ShowLargeContent containerWidth2 ->
-                            ( spoilerIndex2
+                            ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , case SeqDict.get fileId config.attachedFiles of
                                 Just fileData ->
@@ -2481,23 +2499,23 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             )
 
                         NoLargeContent ->
-                            ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
 
                 EscapedChar char ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
+                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
                 Sticker stickerId ->
                     case showLargeContent of
                         ShowLargeContent _ ->
-                            ( spoilerIndex2
+                            ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList ++ [ Sticker.view "160px" stickerId config.stickers config.animationMode ]
                             )
 
                         NoLargeContent ->
-                            ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
         )
-        ( spoilerIndex, embedIndex, [] )
+        ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
 
 
