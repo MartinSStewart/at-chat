@@ -2281,7 +2281,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 richText =
                                                     textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) model
                                             in
-                                            case ( RichText.toDiscord richText, threadRouteWithMaybeReplyTo ) of
+                                            case ( RichText.toDiscord model.discordCustomEmojis richText, threadRouteWithMaybeReplyTo ) of
                                                 ( Ok discordText, NoThreadWithMaybeMessage maybeReplyTo ) ->
                                                     ( { model
                                                         | pendingDiscordCreateMessages =
@@ -2420,7 +2420,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                         model
                                             in
-                                            case RichText.toDiscord richText of
+                                            case RichText.toDiscord model.discordCustomEmojis richText of
                                                 Ok discordText ->
                                                     ( { model
                                                         | pendingDiscordCreateDmMessages =
@@ -3250,7 +3250,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model
                                     in
                                     case
-                                        ( RichText.toDiscord richText
+                                        ( RichText.toDiscord model.discordCustomEmojis richText
                                         , LocalState.editMessageHelper
                                             time
                                             currentUserId
@@ -3340,7 +3340,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model
                             in
                             case
-                                ( RichText.toDiscord richText
+                                ( RichText.toDiscord model.discordCustomEmojis richText
                                 , LocalState.editMessageHelperNoThread
                                     time
                                     dmData.currentUserId

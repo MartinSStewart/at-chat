@@ -23,6 +23,7 @@ import Bitwise
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
@@ -37,7 +38,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -52,6 +53,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
+import OneToOne
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
@@ -2242,7 +2244,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         maybeRepliedTo
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
-                                        (RichText.discordCharsLeft editRichText)
+                                        (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         edit
                                         editRichText
                                         loggedIn.textInputFocus
@@ -2799,7 +2801,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         message
                                         maybeRepliedTo
                                         revealedSpoilers
-                                        (RichText.discordCharsLeft editRichText)
+                                        (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         editing
                                         editRichText
                                         loggedIn.textInputFocus
@@ -3415,6 +3417,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
@@ -3625,7 +3628,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                             name
                                        )
                         )
-                        (RichText.discordCharsLeft draftRichText)
+                        (RichText.discordCharsLeft OneToOne.empty draftRichText)
                         draft
                         draftRichText
                         (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
@@ -3635,6 +3638,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         loggedIn.textInputFocus
                         (LocalState.allDiscordUsers local.localUser)
@@ -3936,6 +3940,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
@@ -4131,7 +4136,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     DiscordGuildOrDmId_Dm _ ->
                         "Write a message in this thread"
                 )
-                (RichText.discordCharsLeft draftRichText)
+                (RichText.discordCharsLeft OneToOne.empty draftRichText)
                 draft
                 draftRichText
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
@@ -4141,6 +4146,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allDiscordUsers local.localUser)
@@ -4335,7 +4341,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             Nothing
                             Nothing
                             SeqDict.empty
-                            (RichText.discordCharsLeft editRichText)
+                            (RichText.discordCharsLeft OneToOne.empty editRichText)
                             edit
                             editRichText
                             loggedIn.textInputFocus
@@ -4510,6 +4516,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         editing.text
                         editingRichText
                         editing.attachedFiles
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         pingUser
                         allUsers
@@ -4540,7 +4547,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                     |> Dom.idToString
                     |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4590,7 +4597,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Ui.none
                 , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
-                        previewThreadLastMessage local.localUser.timezone allUsers messageId thread
+                        previewThreadLastMessage local.localUser.timezone local.localUser.customEmojis allUsers messageId thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
@@ -4645,6 +4652,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         editing.text
                         editingRichText
                         editing.attachedFiles
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         pingUser
                         allUsers
@@ -4666,7 +4674,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 , Ui.spacing 4
                 , threadMessageHtmlId messageId |> Dom.idToString |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4974,6 +4982,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 (case highlight of
                     NoHighlight ->
@@ -5011,6 +5020,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 highlight
                 messageIndex
@@ -5032,6 +5042,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 highlight
                 messageIndex
@@ -5162,7 +5173,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
+            [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers localUser.customEmojis allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5189,6 +5200,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , users = allUsers
                     , attachedFiles = message2.attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
+                    , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
                     , animationMode =
                         case isHovered of
@@ -5283,15 +5295,17 @@ replyToHeaderAboveMessage :
     Bool
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
+replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers customEmojis allUsers =
     case maybeRepliedTo of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
                 isMobile
                 repliedToIndex
                 (userTextMessagePreview
+                    customEmojis
                     allUsers
                     (case SeqDict.get repliedToIndex revealedSpoilers of
                         Just set ->
@@ -5320,11 +5334,12 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
 
 
 userTextMessagePreview :
-    SeqDict userId { a | name : PersonName }
+    SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessagePreview allUsers revealedSpoilers message =
+userTextMessagePreview customEmojis allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -5340,6 +5355,7 @@ userTextMessagePreview allUsers revealedSpoilers message =
                 { revealedSpoilers = revealedSpoilers
                 , users = allUsers
                 , attachedFiles = message.attachedFiles
+                , customEmojis = customEmojis
                 , domainWhitelist = SeqSet.empty
                 }
                 message.content
@@ -5398,6 +5414,7 @@ messagePaddingX =
 messageContainer :
     Bool
     -> Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> HighlightMessage
     -> Id ChannelMessageId
@@ -5409,7 +5426,7 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -5506,7 +5523,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone customEmojis allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -5623,11 +5640,12 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
 
 previewThreadLastMessage :
     Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone allUsers messageId thread =
+previewThreadLastMessage timezone customEmojis allUsers messageId thread =
     let
         lastMessage =
             Array.Extra.last thread.messages
@@ -5692,6 +5710,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                         { revealedSpoilers = SeqSet.empty
                                         , users = allUsers
                                         , attachedFiles = data.attachedFiles
+                                        , customEmojis = customEmojis
                                         , domainWhitelist = SeqSet.empty
                                         }
                                         data.content

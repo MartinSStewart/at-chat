@@ -17,6 +17,7 @@ module MessageInput exposing
     )
 
 import Array
+import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -28,7 +29,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
+import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
@@ -130,11 +131,12 @@ textarea :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -253,6 +255,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                     RichText.textInputView
                         users
                         attachedFiles
+                        customEmojis
                         stickers
                         (Maybe.map .selection textInputFocus)
                         richText2
@@ -324,6 +327,7 @@ disabledTextarea placeholderText text attachedFiles local =
                     RichText.textInputView
                         users
                         attachedFiles
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         Nothing
                         (RichText.fromNonemptyString users nonempty)
@@ -351,17 +355,18 @@ editView :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -426,17 +431,18 @@ view :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }

@@ -10,6 +10,7 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , attachments
+    , customEmojisFromDiscord
     , discordCharsLeft
     , domainToString
     , emptyPlaceholder
@@ -36,6 +37,7 @@ module RichText exposing
 import Array exposing (Array)
 import Basics.Extra
 import Coord exposing (Coord)
+import CustomEmoji exposing (CustomEmojiData)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -47,11 +49,12 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (Id, StickerId)
+import Id exposing (CustomEmojiId, Id, StickerId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyExtra
+import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import Range exposing (Range)
 import SeqDict exposing (SeqDict)
@@ -80,6 +83,7 @@ type RichText userId
     | AttachedFile (Id FileId)
     | EscapedChar EscapedChar
     | Sticker (Id StickerId)
+    | CustomEmoji (Id CustomEmojiId)
 
 
 type HasLeadingLineBreak
@@ -218,6 +222,9 @@ spoilerAttachedFile fileId nonempty =
 
                 Sticker _ ->
                     richText
+
+                CustomEmoji id ->
+                    richText
         )
         nonempty
 
@@ -315,6 +322,9 @@ unspoilerAttachedFile fileId nonempty =
 
                         Sticker _ ->
                             Nonempty ( False, richText ) []
+
+                        CustomEmoji _ ->
+                            Nonempty ( False, richText ) []
                 )
                 nonempty2
     in
@@ -380,6 +390,9 @@ unspoilerAttachedFile fileId nonempty =
                     Nonempty richText []
 
                 Sticker _ ->
+                    Nonempty richText []
+
+                CustomEmoji id ->
                     Nonempty richText []
         )
         nonempty
@@ -451,6 +464,9 @@ removeAttachedFile shouldRemove list =
 
                 Sticker _ ->
                     Just richText
+
+                CustomEmoji id ->
+                    Just richText
         )
         (List.Nonempty.toList list)
         |> List.Nonempty.fromList
@@ -507,6 +523,9 @@ hyperlinks nonempty =
                     []
 
                 Sticker _ ->
+                    []
+
+                CustomEmoji id ->
                     []
         )
         (List.Nonempty.toList nonempty)
@@ -569,6 +588,9 @@ attachmentsHelper isSpoilered nonempty =
 
                 Sticker _ ->
                     []
+
+                CustomEmoji id ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -625,6 +647,9 @@ stickers nonempty =
 
                 Sticker stickerId ->
                     [ stickerId ]
+
+                CustomEmoji id ->
+                    []
         )
         (List.Nonempty.toList nonempty)
 
@@ -788,6 +813,9 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
 
                     else
                         Sticker.idToString id
+
+                CustomEmoji id ->
+                    CustomEmoji.idToString id
         )
         list
         |> String.concat
@@ -999,6 +1027,9 @@ normalize nonempty =
 
                 Sticker id ->
                     List.Nonempty.cons (Sticker id) nonempty2
+
+                CustomEmoji id ->
+                    List.Nonempty.cons (CustomEmoji id) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -1057,6 +1088,9 @@ normalize nonempty =
 
                 Sticker id ->
                     Sticker id
+
+                CustomEmoji id ->
+                    CustomEmoji id
             )
             []
         )
@@ -1935,6 +1969,9 @@ mentionsUserHelper set nonempty =
 
                 Sticker _ ->
                     set2
+
+                CustomEmoji id ->
+                    set2
         )
         set
         nonempty
@@ -1999,6 +2036,7 @@ preview onPressLink config nonempty =
         , users = config.users
         , attachedFiles = config.attachedFiles
         , stickers = SeqDict.empty
+        , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
         }
         Array.empty
@@ -2013,6 +2051,7 @@ type alias Config a userId =
     , users : SeqDict userId { a | name : PersonName }
     , attachedFiles : SeqDict (Id FileId) FileData
     , stickers : SeqDict (Id StickerId) StickerData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
     }
 
@@ -2022,6 +2061,7 @@ type alias PreviewConfig a userId =
     , revealedSpoilers : SeqSet Int
     , users : SeqDict userId { a | name : PersonName }
     , attachedFiles : SeqDict (Id FileId) FileData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 
@@ -2514,6 +2554,12 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
 
                         NoLargeContent ->
                             ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
+
+                CustomEmoji id ->
+                    ( ( False, spoilerIndex2 )
+                    , embedIndex2
+                    , currentList ++ [ CustomEmoji.view id config.customEmojis config.animationMode ]
+                    )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -2922,15 +2968,17 @@ fileDownloadView isSpoilered fileData =
 textInputView :
     SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe Range
     -> Nonempty (RichText userId)
     -> List (Html msg)
-textInputView users attachedFiles stickers2 selection nonempty =
+textInputView users attachedFiles customEmojis stickers2 selection nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         users
         attachedFiles
+        customEmojis
         stickers2
         0
         selection
@@ -2958,6 +3006,7 @@ textInputViewHelper :
     RichTextState
     -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) b
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Int
     -> Maybe Range
@@ -2965,7 +3014,7 @@ textInputViewHelper :
     -> Bool
     -> Array (Html msg)
     -> ( Int, Array (Html msg) )
-textInputViewHelper state allUsers attachedFiles stickers2 index selection list inBlockQuote output =
+textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index selection list inBlockQuote output =
     List.foldl
         (\item ( index2, output2 ) ->
             case item of
@@ -3025,6 +3074,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 { state | italic = True }
                                 allUsers
                                 attachedFiles
+                                customEmojis
                                 stickers2
                                 (index2 + 1)
                                 selection
@@ -3041,6 +3091,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 { state | underline = True }
                                 allUsers
                                 attachedFiles
+                                customEmojis
                                 stickers2
                                 (index2 + 2)
                                 selection
@@ -3057,6 +3108,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 { state | bold = True }
                                 allUsers
                                 attachedFiles
+                                customEmojis
                                 stickers2
                                 (index2 + 1)
                                 selection
@@ -3073,6 +3125,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 { state | strikethrough = True }
                                 allUsers
                                 attachedFiles
+                                customEmojis
                                 stickers2
                                 (index2 + 2)
                                 selection
@@ -3089,6 +3142,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                 { state | spoiler = True }
                                 allUsers
                                 attachedFiles
+                                customEmojis
                                 stickers2
                                 (index2 + 2)
                                 selection
@@ -3103,6 +3157,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                         state
                         allUsers
                         attachedFiles
+                        customEmojis
                         stickers2
                         (index2 + 3)
                         selection
@@ -3138,6 +3193,7 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                         state
                         allUsers
                         attachedFiles
+                        customEmojis
                         stickers2
                         (index2 + String.length marker)
                         selection
@@ -3282,6 +3338,53 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                                     []
                                 ]
                             , Html.text "\n\n\n"
+                            ]
+                        )
+                    )
+
+                CustomEmoji customEmojiId ->
+                    let
+                        text =
+                            CustomEmoji.idToString customEmojiId
+
+                        isSelected =
+                            case selection of
+                                Just selection2 ->
+                                    index2 >= selection2.start && index2 < selection2.end
+
+                                Nothing ->
+                                    False
+                    in
+                    ( index2 + String.length text
+                    , Array.append
+                        output2
+                        (Array.fromList
+                            [ Html.span
+                                [ Html.Attributes.style "position" "relative" ]
+                                [ Html.div
+                                    [ Html.Attributes.style "position" "absolute"
+                                    , if isSelected then
+                                        Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.selectedTextBackground)
+
+                                      else
+                                        Html.Attributes.style "opacity" "transparent"
+                                    ]
+                                    [ CustomEmoji.view customEmojiId customEmojis Sticker.LoopForever ]
+                                , Html.div
+                                    [ Html.Attributes.style "position" "absolute"
+                                    , Html.Attributes.style "width" "1em"
+                                    , Html.Attributes.style "height" "1lh"
+                                    , if isSelected then
+                                        Html.Attributes.style
+                                            "background-color"
+                                            (MyUi.colorToStyle (MyUi.colorWithAlpha 0.5 MyUi.selectedTextBackground))
+
+                                      else
+                                        Html.Attributes.style "opacity" "transparent"
+                                    ]
+                                    []
+                                ]
+                            , Html.text text
                             ]
                         )
                     )
@@ -3526,18 +3629,18 @@ fromDiscordHelper text attachments2 embeds stickers2 =
                     ( startIndex, startRevNodes ) =
                         case extractBlockQuote source 0 of
                             Just ( content, endIndex ) ->
-                                ( endIndex, [ BlockQuote NoLeadingLineBreak (parseDiscordBlockQuoteContent content) ] )
+                                ( endIndex, [ BlockQuote NoLeadingLineBreak (parseDiscordBlockQuoteContent customEmojis content) ] )
 
                             Nothing ->
                                 case extractHeading source 0 of
                                     Just ( level, content, endIndex ) ->
-                                        ( endIndex, [ Heading level NoLeadingLineBreak (parseDiscordHeadingContent content) ] )
+                                        ( endIndex, [ Heading level NoLeadingLineBreak (parseDiscordHeadingContent customEmojis content) ] )
 
                                     Nothing ->
                                         ( 0, [] )
 
                     result =
-                        discordParseLoop source startIndex [] "" startRevNodes
+                        discordParseLoop customEmojis source startIndex [] "" startRevNodes
                  in
                  case List.Nonempty.fromList result.nodes of
                     Just nonempty2 ->
@@ -3602,13 +3705,14 @@ discordModifierToSymbol modifier =
 {-| <https://discord.com/developers/docs/reference#message-formatting>
 -}
 discordParseLoop :
-    String
+    OneToOne (Id CustomEmojiId) (Discord.Id Discord.CustomEmojiId)
+    -> String
     -> Int
     -> List DiscordModifiers
     -> String
     -> List (RichText (Discord.Id Discord.UserId))
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordParseLoop source index modifiers accText revNodes =
+discordParseLoop customEmojis source index modifiers accText revNodes =
     if index >= String.length source then
         finalizeResult discordModifierToSymbol accText revNodes modifiers index
 
@@ -3619,29 +3723,47 @@ discordParseLoop source index modifiers accText revNodes =
                     case extractBlockQuote source (index + 1) of
                         Just ( content, endIndex ) ->
                             discordParseLoop
+                                customEmojis
                                 source
                                 endIndex
                                 modifiers
                                 ""
-                                (BlockQuote HasLeadingLineBreak (parseDiscordBlockQuoteContent content) :: flushText accText revNodes)
+                                (BlockQuote HasLeadingLineBreak (parseDiscordBlockQuoteContent customEmojis content)
+                                    :: flushText accText revNodes
+                                )
 
                         Nothing ->
                             case extractHeading source (index + 1) of
                                 Just ( level, content, endIndex ) ->
                                     discordParseLoop
+                                        customEmojis
                                         source
                                         endIndex
                                         modifiers
                                         ""
-                                        (Heading level HasLeadingLineBreak (parseDiscordHeadingContent content) :: flushText accText revNodes)
+                                        (Heading level HasLeadingLineBreak (parseDiscordHeadingContent customEmojis content)
+                                            :: flushText accText revNodes
+                                        )
 
                                 Nothing ->
                                     case parseStickerId (index + 1) source of
                                         ( index2, Just stickerId ) ->
-                                            discordParseLoop source index2 modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                                            discordParseLoop
+                                                customEmojis
+                                                source
+                                                index2
+                                                modifiers
+                                                ""
+                                                (Sticker stickerId :: flushText accText revNodes)
 
                                         ( _, Nothing ) ->
-                                            discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
+                                            discordParseLoop
+                                                customEmojis
+                                                source
+                                                (index + 1)
+                                                modifiers
+                                                (accText ++ "\n")
+                                                revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -3672,50 +3794,75 @@ discordParseLoop source index modifiers accText revNodes =
                 case stringAt afterBackslash source of
                     Just nextChar ->
                         if Set.member nextChar discordEscapableChars then
-                            discordParseLoop source (afterBackslash + 1) modifiers (accText ++ nextChar) revNodes
+                            discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ nextChar) revNodes
 
                         else
-                            discordParseLoop source (afterBackslash + 1) modifiers (accText ++ "\\" ++ nextChar) revNodes
+                            discordParseLoop customEmojis source (afterBackslash + 1) modifiers (accText ++ "\\" ++ nextChar) revNodes
 
                     Nothing ->
-                        discordParseLoop source afterBackslash modifiers (accText ++ "\\") revNodes
+                        discordParseLoop customEmojis source afterBackslash modifiers (accText ++ "\\") revNodes
 
             "<" ->
-                case tryParseDiscordMention source index (String.length source) of
-                    Just ( userId, nextIndex ) ->
-                        discordParseLoop source nextIndex modifiers "" (UserMention userId :: flushText accText revNodes)
+                case stringAt (index + 1) source of
+                    Just "@" ->
+                        case tryParseDiscordMention source index of
+                            Just ( userId, nextIndex ) ->
+                                discordParseLoop customEmojis source nextIndex modifiers "" (UserMention userId :: flushText accText revNodes)
 
-                    Nothing ->
-                        case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
-                            Ok url ->
-                                let
-                                    index2 =
-                                        index + 1 + String.length (Url.toString url)
-                                in
-                                case stringAt index2 source of
-                                    Just ">" ->
-                                        discordParseLoop
-                                            source
-                                            (index2 + 1)
-                                            modifiers
-                                            ""
-                                            (Hyperlink url :: flushText accText revNodes)
-
-                                    _ ->
-                                        discordParseLoop
-                                            source
-                                            (index2 + 1)
-                                            modifiers
-                                            ""
-                                            (Hyperlink url :: flushText (accText ++ "<") revNodes)
-
-                            Err errText ->
+                            Nothing ->
                                 discordParseLoop
+                                    customEmojis
                                     source
-                                    (index + 1 + String.length errText)
+                                    (index + 1)
                                     modifiers
-                                    (accText ++ "<" ++ errText)
+                                    (accText ++ "<")
                                     revNodes
+
+                    _ ->
+                        case tryParseDiscordCustomEmoji customEmojis (index + 1) source of
+                            Just ( emojiName, emojiId, nextIndex ) ->
+                                discordParseLoop
+                                    customEmojis
+                                    source
+                                    nextIndex
+                                    modifiers
+                                    ""
+                                    (CustomEmoji emojiId :: flushText accText revNodes)
+
+                            Nothing ->
+                                case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
+                                    Ok url ->
+                                        let
+                                            index2 =
+                                                index + 1 + String.length (Url.toString url)
+                                        in
+                                        case stringAt index2 source of
+                                            Just ">" ->
+                                                discordParseLoop
+                                                    customEmojis
+                                                    source
+                                                    (index2 + 1)
+                                                    modifiers
+                                                    ""
+                                                    (Hyperlink url :: flushText accText revNodes)
+
+                                            _ ->
+                                                discordParseLoop
+                                                    customEmojis
+                                                    source
+                                                    (index2 + 1)
+                                                    modifiers
+                                                    ""
+                                                    (Hyperlink url :: flushText (accText ++ "<") revNodes)
+
+                                    Err errText ->
+                                        discordParseLoop
+                                            customEmojis
+                                            source
+                                            (index + 1 + String.length errText)
+                                            modifiers
+                                            (accText ++ "<" ++ errText)
+                                            revNodes
 
             "*" ->
                 if String.slice index (index + 2) source == "**" then
@@ -3735,12 +3882,12 @@ discordParseLoop source index modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol (DiscordIsBold :: modifiers)
+                                discordParseInner customEmojis source afterSymbol (DiscordIsBold :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
+                        discordParseLoop customEmojis source inner.nextIndex modifiers "" newRevNodes
 
                 else
                     let
@@ -3759,7 +3906,7 @@ discordParseLoop source index modifiers accText revNodes =
                                 String.slice afterSymbol (afterSymbol + 1) source
                         in
                         if nextChar == "*" || nextChar == " " then
-                            discordParseLoop source afterSymbol modifiers (accText ++ "*") revNodes
+                            discordParseLoop customEmojis source afterSymbol modifiers (accText ++ "*") revNodes
 
                         else
                             let
@@ -3767,12 +3914,12 @@ discordParseLoop source index modifiers accText revNodes =
                                     flushText accText revNodes
 
                                 inner =
-                                    discordParseInner source afterSymbol (DiscordIsItalic :: modifiers)
+                                    discordParseInner customEmojis source afterSymbol (DiscordIsItalic :: modifiers)
 
                                 newRevNodes =
                                     List.foldl (\node acc -> node :: acc) flushed inner.nodes
                             in
-                            discordParseLoop source inner.nextIndex modifiers "" newRevNodes
+                            discordParseLoop customEmojis source inner.nextIndex modifiers "" newRevNodes
 
             "_" ->
                 if String.slice index (index + 2) source == "__" then
@@ -3792,12 +3939,12 @@ discordParseLoop source index modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol (DiscordIsUnderlined :: modifiers)
+                                discordParseInner customEmojis source afterSymbol (DiscordIsUnderlined :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
+                        discordParseLoop customEmojis source inner.nextIndex modifiers "" newRevNodes
 
                 else
                     let
@@ -3816,16 +3963,16 @@ discordParseLoop source index modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol (DiscordIsItalic2 :: modifiers)
+                                discordParseInner customEmojis source afterSymbol (DiscordIsItalic2 :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
+                        discordParseLoop customEmojis source inner.nextIndex modifiers "" newRevNodes
 
             "~" ->
                 if (List.head modifiers /= Just DiscordIsStrikethrough) && String.slice index (index + 4) source == "~~~~" then
-                    discordParseLoop source (index + 4) modifiers (accText ++ "~~~~") revNodes
+                    discordParseLoop customEmojis source (index + 4) modifiers (accText ++ "~~~~") revNodes
 
                 else if String.slice index (index + 2) source == "~~" then
                     let
@@ -3844,19 +3991,19 @@ discordParseLoop source index modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol (DiscordIsStrikethrough :: modifiers)
+                                discordParseInner customEmojis source afterSymbol (DiscordIsStrikethrough :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
+                        discordParseLoop customEmojis source inner.nextIndex modifiers "" newRevNodes
 
                 else
-                    discordParseLoop source (index + 1) modifiers (accText ++ "~") revNodes
+                    discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "~") revNodes
 
             "|" ->
                 if (List.head modifiers /= Just DiscordIsSpoilered) && String.slice index (index + 4) source == "||||" then
-                    discordParseLoop source (index + 4) modifiers (accText ++ "||||") revNodes
+                    discordParseLoop customEmojis source (index + 4) modifiers (accText ++ "||||") revNodes
 
                 else if String.slice index (index + 2) source == "||" then
                     let
@@ -3875,15 +4022,15 @@ discordParseLoop source index modifiers accText revNodes =
                                 flushText accText revNodes
 
                             inner =
-                                discordParseInner source afterSymbol (DiscordIsSpoilered :: modifiers)
+                                discordParseInner customEmojis source afterSymbol (DiscordIsSpoilered :: modifiers)
 
                             newRevNodes =
                                 List.foldl (\node acc -> node :: acc) flushed inner.nodes
                         in
-                        discordParseLoop source inner.nextIndex modifiers "" newRevNodes
+                        discordParseLoop customEmojis source inner.nextIndex modifiers "" newRevNodes
 
                 else
-                    discordParseLoop source (index + 1) modifiers (accText ++ "|") revNodes
+                    discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "|") revNodes
 
             "`" ->
                 case ( stringAtRange index 3 source, findSubstring source (index + 3) "```" ) of
@@ -3897,10 +4044,22 @@ discordParseLoop source index modifiers accText revNodes =
                         in
                         case String.Nonempty.fromString codeContent of
                             Just _ ->
-                                discordParseLoop source (closeIndex + 3) modifiers "" (CodeBlock language codeContent :: flushText accText revNodes)
+                                discordParseLoop
+                                    customEmojis
+                                    source
+                                    (closeIndex + 3)
+                                    modifiers
+                                    ""
+                                    (CodeBlock language codeContent :: flushText accText revNodes)
 
                             Nothing ->
-                                discordParseLoop source (closeIndex + 3) modifiers (accText ++ "``````") revNodes
+                                discordParseLoop
+                                    customEmojis
+                                    source
+                                    (closeIndex + 3)
+                                    modifiers
+                                    (accText ++ "``````")
+                                    revNodes
 
                     _ ->
                         case findSingleBacktick source (index + 1) of
@@ -3911,18 +4070,25 @@ discordParseLoop source index modifiers accText revNodes =
                                 in
                                 case ( String.Nonempty.fromString content, String.contains "\n" content ) of
                                     ( Just a, False ) ->
-                                        discordParseLoop source (closeIndex + 1) modifiers "" (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
+                                        discordParseLoop
+                                            customEmojis
+                                            source
+                                            (closeIndex + 1)
+                                            modifiers
+                                            ""
+                                            (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a) :: flushText accText revNodes)
 
                                     _ ->
-                                        discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
+                                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "`") revNodes
 
                             Nothing ->
-                                discordParseLoop source (index + 1) modifiers (accText ++ "`") revNodes
+                                discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "`") revNodes
 
             "h" ->
                 case parseUrlBody False discordModifierToSymbol modifiers index source of
                     Ok url ->
                         discordParseLoop
+                            customEmojis
                             source
                             (index + String.length (Url.toString url))
                             modifiers
@@ -3931,6 +4097,7 @@ discordParseLoop source index modifiers accText revNodes =
 
                     Err errText ->
                         discordParseLoop
+                            customEmojis
                             source
                             (index + String.length errText)
                             modifiers
@@ -3940,24 +4107,39 @@ discordParseLoop source index modifiers accText revNodes =
             "[" ->
                 case parseMarkdownLink source (index + 1) of
                     Just ( alias, url, nextIndex ) ->
-                        discordParseLoop source nextIndex modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
+                        discordParseLoop
+                            customEmojis
+                            source
+                            nextIndex
+                            modifiers
+                            ""
+                            (MarkdownLink alias url :: flushText accText revNodes)
 
                     Nothing ->
-                        discordParseLoop source (index + 1) modifiers (accText ++ "[") revNodes
+                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "[") revNodes
 
             _ ->
                 let
                     nextIndex =
                         skipDiscordNormalChars source (index + 1) (String.length source)
                 in
-                discordParseLoop source nextIndex modifiers (accText ++ String.slice index nextIndex source) revNodes
+                discordParseLoop
+                    customEmojis
+                    source
+                    nextIndex
+                    modifiers
+                    (accText ++ String.slice index nextIndex source)
+                    revNodes
 
 
-toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> Result Int String
-toDiscord content =
+toDiscord :
+    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> Nonempty (RichText (Discord.Id Discord.UserId))
+    -> Result Int String
+toDiscord customEmojis content =
     let
         text =
-            toDiscordHelper (List.Nonempty.toList content)
+            toDiscordHelper customEmojis (List.Nonempty.toList content)
     in
     if String.length text > maxLength then
         Err (maxLength - String.length text)
@@ -3966,11 +4148,14 @@ toDiscord content =
         Ok text
 
 
-discordCharsLeft : Maybe (Nonempty (RichText (Discord.Id Discord.UserId))) -> Int
-discordCharsLeft richText =
+discordCharsLeft :
+    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> Maybe (Nonempty (RichText (Discord.Id Discord.UserId)))
+    -> Int
+discordCharsLeft customEmojis richText =
     case richText of
         Just richText2 ->
-            case toDiscord richText2 of
+            case toDiscord customEmojis richText2 of
                 Ok text ->
                     maxLength - String.length text
 
@@ -3981,8 +4166,11 @@ discordCharsLeft richText =
             maxLength
 
 
-toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> String
-toDiscordHelper content =
+toDiscordHelper :
+    OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+    -> List (RichText (Discord.Id Discord.UserId))
+    -> String
+toDiscordHelper customEmojis content =
     List.map
         (\item ->
             case item of
@@ -3993,22 +4181,22 @@ toDiscordHelper content =
                     escapeDiscordText (String.cons char string)
 
                 Bold nonempty ->
-                    "**" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "**"
+                    "**" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    "*" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "*"
+                    "*" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "*"
 
                 Underline nonempty ->
-                    "__" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "__"
+                    "__" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    "~~" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "~~"
+                    "~~" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    "||" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "||"
+                    "||" ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty) ++ "||"
 
                 BlockQuote _ list ->
-                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper list)
+                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper customEmojis list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -4023,7 +4211,7 @@ toDiscordHelper content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    prefix ++ toDiscordHelper (List.Nonempty.toList nonempty)
+                    prefix ++ toDiscordHelper customEmojis (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
                     Url.toString data
@@ -4054,9 +4242,41 @@ toDiscordHelper content =
 
                 Sticker _ ->
                     ""
+
+                CustomEmoji id ->
+                    case OneToOne.first id customEmojis of
+                        Just discordId ->
+                            "<name:" ++ Discord.idToString discordId ++ ">"
+
+                        Nothing ->
+                            "<missing:123123123>"
         )
         content
         |> String.concat
+
+
+customEmojisFromDiscord : String -> List ( String, Discord.Id Discord.CustomEmojiId )
+customEmojisFromDiscord text =
+    String.split "<" text
+        |> List.filterMap
+            (\text2 ->
+                case String.split ">" text2 of
+                    head :: _ ->
+                        case String.split ":" head of
+                            [ name, id ] ->
+                                case Discord.idFromString id of
+                                    Just id2 ->
+                                        Just ( name, id2 )
+
+                                    Nothing ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+
+                    [] ->
+                        Nothing
+            )
 
 
 escapeDiscordText : String -> String
@@ -4071,17 +4291,18 @@ escapeDiscordText text =
 
 
 discordParseInner :
-    String
+    OneToOne (Id CustomEmojiId) (Discord.Id Discord.CustomEmojiId)
+    -> String
     -> Int
     -> List DiscordModifiers
     -> { nodes : List (RichText (Discord.Id Discord.UserId)), nextIndex : Int }
-discordParseInner source index modifiers =
-    discordParseLoop source index modifiers "" []
+discordParseInner customEmojis source index modifiers =
+    discordParseLoop customEmojis source index modifiers "" []
 
 
-parseDiscordBlockQuoteContent : String -> List (RichText (Discord.Id Discord.UserId))
-parseDiscordBlockQuoteContent content =
-    case discordParseLoop content 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
+parseDiscordBlockQuoteContent : OneToOne (Id CustomEmojiId) (Discord.Id Discord.CustomEmojiId) -> String -> List (RichText (Discord.Id Discord.UserId))
+parseDiscordBlockQuoteContent customEmojis content =
+    case discordParseLoop customEmojis content 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty |> List.Nonempty.toList
 
@@ -4089,9 +4310,9 @@ parseDiscordBlockQuoteContent content =
             []
 
 
-parseDiscordHeadingContent : NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
-parseDiscordHeadingContent content =
-    case discordParseLoop (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
+parseDiscordHeadingContent : OneToOne (Id CustomEmojiId) (Discord.Id Discord.CustomEmojiId) -> NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordHeadingContent customEmojis content =
+    case discordParseLoop customEmojis (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
         Just nonempty ->
             normalize nonempty
 
@@ -4099,37 +4320,64 @@ parseDiscordHeadingContent content =
             Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
 
 
-tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )
-tryParseDiscordMention source index len =
-    let
-        afterLt =
-            index + 1
-    in
-    if afterLt < len && String.slice afterLt (afterLt + 1) source == "@" then
-        let
-            afterAt =
-                afterLt + 1
+tryParseDiscordCustomEmoji :
+    OneToOne (Id CustomEmojiId) (Discord.Id Discord.CustomEmojiId)
+    -> Int
+    -> String
+    -> Maybe ( NonemptyString, Id CustomEmojiId, Int )
+tryParseDiscordCustomEmoji customEmojis index source =
+    case ( findChar source index (String.length source) ':', findChar source index (String.length source) '>' ) of
+        ( Just nameEnd, Just idEnd ) ->
+            if nameEnd < idEnd then
+                case
+                    ( String.slice index nameEnd source |> String.Nonempty.fromString
+                    , String.slice (nameEnd + 1) idEnd source |> Discord.idFromString
+                    )
+                of
+                    ( Just name, Just discordId ) ->
+                        case OneToOne.first discordId customEmojis of
+                            Just emojiId ->
+                                Just ( name, emojiId, idEnd + 1 )
 
-            afterBang =
-                if afterAt < len && String.slice afterAt (afterAt + 1) source == "!" then
-                    afterAt + 1
+                            Nothing ->
+                                Nothing
 
-                else
-                    afterAt
+                    _ ->
+                        Nothing
 
-            digitEnd =
-                skipDigits source afterBang len
-        in
-        if digitEnd > afterBang && digitEnd < len && String.slice digitEnd (digitEnd + 1) source == ">" then
-            case UInt64.fromString (String.slice afterBang digitEnd source) of
-                Just discordUserId ->
-                    Just ( Discord.idFromUInt64 discordUserId, digitEnd + 1 )
+            else
+                Nothing
 
-                Nothing ->
-                    Nothing
-
-        else
+        _ ->
             Nothing
+
+
+tryParseDiscordMention : String -> Int -> Maybe ( Discord.Id Discord.UserId, Int )
+tryParseDiscordMention source index =
+    let
+        len =
+            String.length source
+
+        afterAt =
+            index + 2
+
+        afterBang =
+            if afterAt < len && String.slice afterAt (afterAt + 1) source == "!" then
+                afterAt + 1
+
+            else
+                afterAt
+
+        digitEnd =
+            skipDigits source afterBang len
+    in
+    if digitEnd > afterBang && digitEnd < len && String.slice digitEnd (digitEnd + 1) source == ">" then
+        case UInt64.fromString (String.slice afterBang digitEnd source) of
+            Just discordUserId ->
+                Just ( Discord.idFromUInt64 discordUserId, digitEnd + 1 )
+
+            Nothing ->
+                Nothing
 
     else
         Nothing

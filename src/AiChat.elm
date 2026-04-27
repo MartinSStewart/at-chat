@@ -506,6 +506,9 @@ richTextToMessage previousText previousList nonempty =
 
                 RichText.Sticker _ ->
                     ( currentText, list )
+
+                RichText.CustomEmoji id ->
+                    ( currentText, list )
         )
         ( previousText, previousList )
         (List.Nonempty.toList nonempty)

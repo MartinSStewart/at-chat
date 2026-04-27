@@ -1,4 +1,10 @@
-module CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..), addUrl, idToString, view)
+module CustomEmoji exposing
+    ( CustomEmojiData
+    , CustomEmojiUrl(..)
+    , addUrl
+    , idToString
+    , view
+    )
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -19,7 +25,7 @@ type CustomEmojiUrl
 type alias CustomEmojiData =
     { url : CustomEmojiUrl
     , name : String
-    , animated : Bool
+    , isAnimated : Bool
     }
 
 
@@ -34,8 +40,12 @@ addUrl uploadResponse customEmoji =
             Err ()
 
 
-view : String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
-view emojiSize2 customEmojiId customEmojis2 animationMode =
+view : Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
+view customEmojiId customEmojis2 animationMode =
+    let
+        emojiSize2 =
+            "1em"
+    in
     case SeqDict.get customEmojiId customEmojis2 of
         Just customEmoji ->
             case customEmoji.url of
@@ -49,7 +59,7 @@ view emojiSize2 customEmojiId customEmojis2 animationMode =
                         []
 
                 CustomEmojiInternal fileHash _ ->
-                    if customEmoji.animated then
+                    if customEmoji.isAnimated then
                         Sticker.animatedImageView
                             emojiSize2
                             emojiSize2
@@ -75,5 +85,5 @@ view emojiSize2 customEmojiId customEmojis2 animationMode =
 
 
 idToString : Id CustomEmojiId -> String
-idToString _ =
-    Debug.todo ""
+idToString id =
+    "❓" ++ Sticker.toBase4 (Id.toInt id)

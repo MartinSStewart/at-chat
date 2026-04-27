@@ -1,4 +1,13 @@
-module Sticker exposing (AnimationMode(..), StickerData, StickerUrl(..), addUrl, animatedImageView, idToString, view)
+module Sticker exposing
+    ( AnimationMode(..)
+    , StickerData
+    , StickerUrl(..)
+    , addUrl
+    , animatedImageView
+    , idToString
+    , toBase4
+    , view
+    )
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
