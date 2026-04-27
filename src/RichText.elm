@@ -1287,6 +1287,70 @@ parseStickerIdHelper id index source =
             ( index, Nothing )
 
 
+parseCustomEmojiId : Int -> String -> ( Int, Maybe (Id CustomEmojiId) )
+parseCustomEmojiId index source =
+    case stringAt index source of
+        Just char ->
+            case char of
+                "\u{200B}" ->
+                    ( index + 1
+                    , case stringAt (index + 1) source of
+                        Just "\u{200B}" ->
+                            Nothing
+
+                        Just "\u{200C}" ->
+                            Nothing
+
+                        Just "\u{200D}" ->
+                            Nothing
+
+                        Just "\u{2060}" ->
+                            Nothing
+
+                        _ ->
+                            Just (Id.fromInt 0)
+                    )
+
+                "\u{200C}" ->
+                    parseCustomEmojiIdHelper 1 (index + 1) source |> Tuple.mapSecond Just
+
+                "\u{200D}" ->
+                    parseCustomEmojiIdHelper 2 (index + 1) source |> Tuple.mapSecond Just
+
+                "\u{2060}" ->
+                    parseCustomEmojiIdHelper 3 (index + 1) source |> Tuple.mapSecond Just
+
+                _ ->
+                    ( index, Nothing )
+
+        Nothing ->
+            ( index, Nothing )
+
+
+parseCustomEmojiIdHelper : Int -> Int -> String -> ( Int, Id CustomEmojiId )
+parseCustomEmojiIdHelper id index source =
+    case stringAt index source of
+        Just char ->
+            case char of
+                "\u{200B}" ->
+                    parseCustomEmojiIdHelper (4 * id) (index + 1) source
+
+                "\u{200C}" ->
+                    parseCustomEmojiIdHelper (1 + 4 * id) (index + 1) source
+
+                "\u{200D}" ->
+                    parseCustomEmojiIdHelper (2 + 4 * id) (index + 1) source
+
+                "\u{2060}" ->
+                    parseCustomEmojiIdHelper (3 + 4 * id) (index + 1) source
+
+                _ ->
+                    ( index, Id.fromInt id )
+
+        Nothing ->
+            ( index, Id.fromInt id )
+
+
 stringToStickers : String -> List ( Range, Maybe (Id StickerId) )
 stringToStickers text =
     String.indexes "\n\u{200B}" text
@@ -1319,6 +1383,14 @@ parseLoop source index users modifiers accText revNodes =
 
     else
         case String.slice index (index + 1) source of
+            "❓" ->
+                case parseCustomEmojiId (index + 1) source of
+                    ( index2, Just customEmojiId ) ->
+                        parseLoop source index2 users modifiers "" (CustomEmoji customEmojiId :: flushText accText revNodes)
+
+                    ( _, Nothing ) ->
+                        parseLoop source (index + 1) users modifiers (accText ++ "❓") revNodes
+
             "\n" ->
                 if List.isEmpty modifiers then
                     case extractBlockQuote source (index + 1) of
@@ -1905,7 +1977,7 @@ skipNormalChars source index =
             c =
                 String.slice index (index + 1) source
         in
-        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" then
+        if c == "[" || c == "@" || c == "h" || c == "`" || c == "\\" || c == "*" || c == "_" || c == "~" || c == "|" || c == "\n" || c == "❓" then
             index
 
         else
