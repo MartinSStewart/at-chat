@@ -2,6 +2,7 @@ module RichText exposing
     ( Domain(..)
     , EscapedChar(..)
     , HasLeadingLineBreak(..)
+    , HeadingLevel(..)
     , Language(..)
     , Modifiers(..)
     , RichText(..)
@@ -37,7 +38,6 @@ import Basics.Extra
 import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
-import Discord.Markdown exposing (HeadingLevel(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
@@ -85,6 +85,13 @@ type RichText userId
 type HasLeadingLineBreak
     = HasLeadingLineBreak
     | NoLeadingLineBreak
+
+
+type HeadingLevel
+    = H1
+    | H2
+    | H3
+    | Small
 
 
 type EscapedChar
@@ -3930,20 +3937,15 @@ discordParseLoop source index modifiers accText revNodes =
 
 toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> Result Int String
 toDiscord content =
-    case removeAttachedFile (\_ -> True) content of
-        Just text2 ->
-            let
-                text3 =
-                    toDiscordHelper (List.Nonempty.toList text2) |> Discord.Markdown.toString
-            in
-            if String.length text3 > maxLength then
-                Err (maxLength - String.length text3)
+    let
+        text =
+            toDiscordHelper (List.Nonempty.toList content)
+    in
+    if String.length text > maxLength then
+        Err (maxLength - String.length text)
 
-            else
-                Ok text3
-
-        Nothing ->
-            Ok ""
+    else
+        Ok text
 
 
 discordCharsLeft : Maybe (Nonempty (RichText (Discord.Id Discord.UserId))) -> Int
@@ -3961,34 +3963,34 @@ discordCharsLeft richText =
             maxLength
 
 
-toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
+toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> String
 toDiscordHelper content =
     List.map
         (\item ->
             case item of
                 UserMention discordUserId ->
-                    Discord.Markdown.ping discordUserId
+                    "<@!" ++ Discord.idToString discordUserId ++ ">"
 
                 NormalText char string ->
-                    Discord.Markdown.text (String.cons char string)
+                    escapeDiscordText (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "**" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "*" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "*"
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "__" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "~~" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "||" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "||"
 
-                BlockQuote _ nonempty ->
-                    Discord.Markdown.Quote (toDiscordHelper nonempty)
+                BlockQuote _ list ->
+                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper list)
 
                 Heading level hasLeadingLineBreak nonempty ->
                     let
@@ -4003,38 +4005,51 @@ toDiscordHelper content =
                             )
                                 ++ headingLevelToMarker level
                     in
-                    Discord.Markdown.Heading level prefix :: toDiscordHelper (List.Nonempty.toList nonempty)
+                    prefix ++ toDiscordHelper (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
-                    Discord.Markdown.text (Url.toString data)
+                    Url.toString data
 
                 MarkdownLink alias url ->
-                    Discord.Markdown.text ("[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")")
+                    "[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")"
 
                 InlineCode char string ->
-                    Discord.Markdown.code (String.cons char string)
+                    "`" ++ String.cons char string ++ "`"
 
                 CodeBlock language string ->
-                    Discord.Markdown.codeBlock
-                        (case language of
-                            Language language2 ->
-                                Just (String.Nonempty.toString language2)
+                    "```"
+                        ++ (case language of
+                                Language language2 ->
+                                    String.Nonempty.toString language2 ++ "\n"
 
-                            NoLanguage ->
-                                Nothing
-                        )
-                        string
+                                NoLanguage ->
+                                    ""
+                           )
+                        ++ string
+                        ++ "```"
 
                 AttachedFile _ ->
-                    Discord.Markdown.text ""
+                    ""
 
                 EscapedChar char ->
-                    Discord.Markdown.text (escapedCharToString char)
+                    escapeDiscordText (escapedCharToString char)
 
                 Sticker _ ->
-                    Discord.Markdown.text ""
+                    ""
         )
         content
+        |> String.concat
+
+
+escapeDiscordText : String -> String
+escapeDiscordText text =
+    String.replace "\\" "\\\\" text
+        |> String.replace "_" "\\_"
+        |> String.replace "*" "\\*"
+        |> String.replace "`" "\\`"
+        |> String.replace ">" "\\>"
+        |> String.replace "@" "\\@"
+        |> String.replace "~" "\\~"
 
 
 discordParseInner :
