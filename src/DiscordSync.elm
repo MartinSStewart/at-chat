@@ -220,6 +220,7 @@ handleDiscordDmEditMessage edit attachments model =
                                 edit.content
                                 attachments
                                 (Included edit.embeds)
+                                model.discordCustomEmojis
                                 (case edit.stickerItems of
                                     Missing ->
                                         []
@@ -354,6 +355,7 @@ handleDiscordGuildEditMessage guildId guild edit attachments model =
                 edit.content
                 attachments
                 (Included edit.embeds)
+                model.discordCustomEmojis
                 (case edit.stickerItems of
                     Missing ->
                         []
@@ -676,13 +678,14 @@ addDiscordChannel discordChannel =
 
 messagesAndLinks :
     List Discord.Message
+    -> OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
     -> OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
     -> SeqDict DiscordAttachmentId DiscordAttachmentData
     ->
         ( Array (Message messageId (Discord.Id Discord.UserId))
         , OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         )
-messagesAndLinks messages discordStickers discordAttachments =
+messagesAndLinks messages customEmojis discordStickers discordAttachments =
     let
         linkedMessageIds : OneToOne (Discord.Id Discord.MessageId) (Id messageId)
         linkedMessageIds =
@@ -702,6 +705,7 @@ messagesAndLinks messages discordStickers discordAttachments =
                     message.content
                     attachments
                     message.embeds
+                    customEmojis
                     (case message.stickerItems of
                         Missing ->
                             []
@@ -822,6 +826,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                     discordMessage.content
                                     attachments
                                     discordMessage.embeds
+                                    model.discordCustomEmojis
                                     (case discordMessage.stickerItems of
                                         Missing ->
                                             []
@@ -1105,6 +1110,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                             content
                                             attachments
                                             discordMessage.embeds
+                                            model.discordCustomEmojis
                                             (case discordMessage.stickerItems of
                                                 Missing ->
                                                     []

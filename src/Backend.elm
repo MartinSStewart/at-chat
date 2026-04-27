@@ -862,7 +862,11 @@ update msg model =
                                 DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
                             ( messages2, linkedMessageIds ) =
-                                DiscordSync.messagesAndLinks (List.reverse messages) model.discordStickers attachments2
+                                DiscordSync.messagesAndLinks
+                                    (List.reverse messages)
+                                    model.discordCustomEmojis
+                                    model.discordStickers
+                                    attachments2
 
                             --( attachments3, channel2 ) =
                             --case result of
@@ -954,7 +958,11 @@ update msg model =
                                     model.discordAttachments
 
                             ( messages2, linkedMessageIds ) =
-                                DiscordSync.messagesAndLinks (List.reverse messages) model.discordStickers attachments2
+                                DiscordSync.messagesAndLinks
+                                    (List.reverse messages)
+                                    model.discordCustomEmojis
+                                    model.discordStickers
+                                    attachments2
 
                             model2 : BackendModel
                             model2 =

@@ -2,7 +2,9 @@ module DiscordMarkdownTests exposing (test)
 
 import Discord
 import Expect
+import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
+import OneToOne exposing (OneToOne)
 import RichText exposing (HasLeadingLineBreak(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
@@ -24,9 +26,14 @@ test =
         ]
 
 
+customEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+customEmojis =
+    OneToOne.fromList [ ( Unsafe.uint64 "543" |> Discord.idFromUInt64, Id.fromInt 999 ) ]
+
+
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing [] Discord.Missing |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
 
 
 basicFormattingTests : Test
@@ -129,12 +136,24 @@ basicFormattingTests =
                 [ NormalText '\n' "", BlockQuote HasLeadingLineBreak [ NormalText '2' "3" ] ]
             )
         , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
+        , fromNonemptyStringTest "<abc:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
+        , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543") [])
         ]
 
 
 fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId)) -> Test
 fromNonemptyStringTest input expected =
-    Test.test (Debug.toString input) (\_ -> RichText.fromDiscord input SeqDict.empty Discord.Missing [] Discord.Missing |> Expect.equal expected)
+    Test.test
+        (Debug.toString input)
+        (\_ ->
+            RichText.fromDiscord input
+                SeqDict.empty
+                Discord.Missing
+                customEmojis
+                []
+                Discord.Missing
+                |> Expect.equal expected
+        )
 
 
 unsafeUrl : String -> Url
