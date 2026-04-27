@@ -13,6 +13,7 @@ import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
 import ChannelDescription
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -31,7 +32,7 @@ import Emoji
 import Env
 import FileStatus exposing (FileData, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
 import List.Extra
@@ -218,6 +219,8 @@ init =
       , toBackendLogs = Array.empty
       , stickers = SeqDict.empty
       , discordStickers = OneToOne.empty
+      , customEmojis = SeqDict.empty
+      , discordCustomEmojis = OneToOne.empty
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
@@ -1427,6 +1430,62 @@ update msg model =
                                 model
                     )
 
+        GotDiscordReadyDataCustomEmojis userId results time ->
+            let
+                ( errors, customEmojis, newCustomEmojis ) =
+                    gotDiscordCustomEmojis results model
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildCustomEmojis nonempty (List.length results))
+                        { model
+                            | customEmojis = customEmojis
+                            , users = NonemptyDict.updateIfExists userId (User.addNewCustomEmojis newCustomEmojis) model.users
+                        }
+
+                Nothing ->
+                    ( { model
+                        | customEmojis = customEmojis
+                        , users = NonemptyDict.updateIfExists userId (User.addNewCustomEmojis newCustomEmojis) model.users
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        userId
+                        (Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis |> ServerChange)
+                        model
+                    )
+
+        GotDiscordMessageCustomEmojis guildOrDmId results time ->
+            let
+                ( errors, customEmojis, newCustomEmojis ) =
+                    gotDiscordCustomEmojis results model
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildCustomEmojis nonempty (List.length results))
+                        { model | customEmojis = customEmojis }
+
+                Nothing ->
+                    ( { model | customEmojis = customEmojis }
+                    , case guildOrDmId of
+                        MessageFromGuildOrDm_Guild guildId ->
+                            Broadcast.toDiscordGuild
+                                guildId
+                                (Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis |> ServerChange)
+                                model
+
+                        MessageFromGuildOrDm_Dm channelId ->
+                            Broadcast.toDiscordDmChannel
+                                channelId
+                                (Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis |> ServerChange)
+                                model
+                    )
+
         HourlyUpdate time ->
             let
                 shouldExport : Bool
@@ -1590,6 +1649,37 @@ gotDiscordStickers results model =
         results
 
 
+gotDiscordCustomEmojis :
+    List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )
+    -> BackendModel
+    -> ( List ( Id CustomEmojiId, Http.Error ), SeqDict (Id CustomEmojiId) CustomEmojiData, SeqDict (Id CustomEmojiId) CustomEmojiData )
+gotDiscordCustomEmojis results model =
+    List.foldl
+        (\( customEmojiId, result ) ( errors2, customEmojis2, newCustomEmojis2 ) ->
+            case result of
+                Ok uploadResponse ->
+                    case SeqDict.get customEmojiId customEmojis2 of
+                        Just customEmoji ->
+                            case CustomEmoji.addUrl uploadResponse customEmoji of
+                                Ok customEmoji2 ->
+                                    ( errors2
+                                    , SeqDict.insert customEmojiId customEmoji2 customEmojis2
+                                    , SeqDict.insert customEmojiId customEmoji2 newCustomEmojis2
+                                    )
+
+                                Err () ->
+                                    ( errors2, customEmojis2, newCustomEmojis2 )
+
+                        Nothing ->
+                            ( errors2, customEmojis2, newCustomEmojis2 )
+
+                Err error ->
+                    ( ( customEmojiId, error ) :: errors2, customEmojis2, newCustomEmojis2 )
+        )
+        ( [], model.customEmojis, SeqDict.empty )
+        results
+
+
 addDiscordGuildData :
     Discord.Id Discord.UserId
     -> { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
@@ -1619,6 +1709,7 @@ addDiscordGuildData discordUserId data guild =
         MembersAndOwner.addMember discordUserId { joinedAt = Nothing } guild.membersAndOwner
             |> Result.withDefault guild.membersAndOwner
     , stickers = guild.stickers
+    , customEmojis = guild.customEmojis
     }
 
 

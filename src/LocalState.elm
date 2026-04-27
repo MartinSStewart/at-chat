@@ -109,6 +109,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -119,7 +120,7 @@ import Embed exposing (EmbedData)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
@@ -176,6 +177,7 @@ type alias LocalUser =
       timezone : Time.Zone
     , userAgent : UserAgent
     , stickers : SeqDict (Id StickerId) StickerData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 
@@ -201,6 +203,7 @@ type alias DiscordBackendGuild =
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
+    , customEmojis : SeqSet (Id CustomEmojiId)
     }
 
 
@@ -221,6 +224,7 @@ type alias DiscordFrontendGuild =
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
+    , customEmojis : SeqSet (Id CustomEmojiId)
     }
 
 

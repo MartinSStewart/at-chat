@@ -3178,6 +3178,19 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | customEmojis = SeqDict.union newCustomEmojis localUser.customEmojis
+                                , user = User.addNewCustomEmojis newCustomEmojis localUser.user
+                            }
+                    }
+
 
 guildSendMessage :
     Id GuildId

@@ -6,7 +6,7 @@ import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import Icons
-import Id exposing (ChannelMessageId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import Postmark
@@ -42,6 +42,7 @@ type Log
     | EmptyDiscordMessage String
     | FailedToLoadDiscordGuildStickers (Nonempty ( Id StickerId, Http.Error )) Int
     | FailedToLoadDiscordStandardStickerPacks Discord.HttpError
+    | FailedToLoadDiscordGuildCustomEmojis (Nonempty ( Id CustomEmojiId, Http.Error )) Int
     | FailedToGenerateScheduledBackup Http.Error
     | FailedToRegenerateServerSecret Http.Error
 
@@ -116,6 +117,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToLoadDiscordStandardStickerPacks _ ->
+            Nothing
+
+        FailedToLoadDiscordGuildCustomEmojis _ _ ->
             Nothing
 
         FailedToGenerateScheduledBackup _ ->
@@ -473,6 +477,18 @@ logContent onPressCopy log =
                 [ tag errorTag "Discord standard sticker packs failed to load"
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
+
+        FailedToLoadDiscordGuildCustomEmojis nonempty totalCustomEmojis ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                (tag errorTag "Discord guild custom emojis failed to load"
+                    :: fieldRow "Total custom emojis" (Ui.text (String.fromInt totalCustomEmojis))
+                    :: List.map
+                        (\( customEmojiId, error ) ->
+                            fieldRow ("Custom emoji " ++ Id.toString customEmojiId) (Ui.text (httpErrorToString error))
+                        )
+                        (List.Nonempty.toList nonempty)
+                )
 
         FailedToGenerateScheduledBackup httpError ->
             Ui.column

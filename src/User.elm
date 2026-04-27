@@ -10,6 +10,7 @@ module User exposing
     , NotificationLevel(..)
     , addDirectMention
     , addDiscordDirectMention
+    , addNewCustomEmojis
     , addNewStickers
     , addRecentlyUsedEmoji
     , backendToFrontend
@@ -40,13 +41,14 @@ module User exposing
 import Array
 import Base64
 import Codec exposing (Codec)
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Category(..), Emoji, EmojiCategory(..), EmojiConfig, SkinTone)
 import FileStatus exposing (FileHash)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -91,6 +93,7 @@ type alias BackendUser =
     , domainWhitelist : SeqSet Domain
     , emojiConfig : EmojiConfig
     , availableStickers : SeqSet (Id StickerId)
+    , availableCustomEmojis : SeqSet (Id CustomEmojiId)
     }
 
 
@@ -228,6 +231,7 @@ init createdAt name email userIsAdmin =
     , domainWhitelist = SeqSet.empty
     , emojiConfig = { skinTone = Nothing, category = EmojiCategory SmileysAndEmotion, lastUsedEmojis = Array.empty }
     , availableStickers = SeqSet.empty
+    , availableCustomEmojis = SeqSet.empty
     }
 
 
@@ -247,6 +251,14 @@ addNewStickers :
     -> { a | availableStickers : SeqSet (Id StickerId) }
 addNewStickers stickers user =
     { user | availableStickers = SeqDict.keys stickers |> SeqSet.fromList |> SeqSet.union user.availableStickers }
+
+
+addNewCustomEmojis :
+    SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> { a | availableCustomEmojis : SeqSet (Id CustomEmojiId) }
+    -> { a | availableCustomEmojis : SeqSet (Id CustomEmojiId) }
+addNewCustomEmojis customEmojis user =
+    { user | availableCustomEmojis = SeqDict.keys customEmojis |> SeqSet.fromList |> SeqSet.union user.availableCustomEmojis }
 
 
 addDiscordDirectMention :
@@ -552,6 +564,7 @@ backendToFrontendCurrent user =
     , domainWhitelist = user.domainWhitelist
     , emojiConfig = user.emojiConfig
     , availableStickers = user.availableStickers
+    , availableCustomEmojis = user.availableCustomEmojis
     }
 
 

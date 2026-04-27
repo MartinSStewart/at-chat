@@ -47,6 +47,7 @@ import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
@@ -66,7 +67,7 @@ import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -325,6 +326,8 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
@@ -610,6 +613,8 @@ type BackendMsg
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordReadyDataCustomEmojis (Id UserId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordMessageCustomEmojis MessageFromGuildOrDm (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
@@ -681,6 +686,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 
@@ -765,6 +771,7 @@ type ServerChange
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
+    | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
 
 
 type LocalChange

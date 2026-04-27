@@ -557,6 +557,7 @@ getLoginData sessionId session user requestMessagesFor model =
     , publicVapidKey = model.publicVapidKey
     , textEditor = model.textEditor
     , stickers = model.stickers
+    , customEmojis = model.customEmojis
     }
 
 
@@ -603,6 +604,7 @@ discordGuildToFrontend requestMessagesFor guild =
             guild.channels
     , membersAndOwner = guild.membersAndOwner
     , stickers = guild.stickers
+    , customEmojis = guild.customEmojis
     }
 
 

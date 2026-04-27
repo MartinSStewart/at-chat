@@ -23,6 +23,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import ChannelDescription
 import ChannelName exposing (ChannelName)
+import CustomEmoji exposing (CustomEmojiData, CustomEmojiUrl(..))
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordFullUserData, DiscordUserData(..))
@@ -39,7 +40,7 @@ import Emoji exposing (Emoji)
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -1494,15 +1495,56 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                                         Missing ->
                                             ( model2, Command.none )
+
+                                ( model4_, customEmojiCmds ) =
+                                    let
+                                        customEmojisInMessage : List Discord.EmojiData
+                                        customEmojisInMessage =
+                                            Debug.todo ""
+
+                                        customEmojiData =
+                                            handleCustomEmojis
+                                                model3.serverSecret
+                                                customEmojisInMessage
+                                                { tasks = []
+                                                , customEmojis = model3.customEmojis
+                                                , discordCustomEmojis = model3.discordCustomEmojis
+                                                }
+                                    in
+                                    ( { model3
+                                        | customEmojis = customEmojiData.customEmojis
+                                        , discordCustomEmojis = customEmojiData.discordCustomEmojis
+                                      }
+                                    , Task.sequence customEmojiData.tasks
+                                        |> Task.andThen
+                                            (\customEmojis2 ->
+                                                Task.map
+                                                    (GotDiscordMessageCustomEmojis
+                                                        (case message.guildId of
+                                                            Included guildId ->
+                                                                MessageFromGuildOrDm_Guild guildId
+
+                                                            Missing ->
+                                                                Discord.idToUInt64 message.channelId
+                                                                    |> Discord.idFromUInt64
+                                                                    |> MessageFromGuildOrDm_Dm
+                                                        )
+                                                        customEmojis2
+                                                    )
+                                                    Time.now
+                                            )
+                                        |> Task.perform identity
+                                    )
                             in
                             case ( SeqDict.size attachments == List.length message.attachments, List.Nonempty.fromList message.attachments ) of
                                 ( False, Just nonempty ) ->
-                                    ( model3
+                                    ( model4_
                                     , joinThreadCmd
                                         :: stickerCmds
+                                        :: customEmojiCmds
                                         :: Task.perform
                                             (DiscordMessageCreate_AttachmentsUploaded message)
-                                            (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model3.serverSecret) nonempty))
+                                            (nonemptyTaskSequence (List.Nonempty.map (loadMessageAttachment model4_.serverSecret) nonempty))
                                         :: cmds
                                     )
 
@@ -1519,9 +1561,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                 )
                                                 message
                                                 attachments
-                                                model3
+                                                model4_
                                     in
-                                    ( model4, joinThreadCmd :: stickerCmds :: cmd2 :: cmds )
+                                    ( model4, joinThreadCmd :: stickerCmds :: customEmojiCmds :: cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
@@ -1838,7 +1880,7 @@ handleJoinOrCreateGuild :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleJoinOrCreateGuild discordUserId gatewayGuild model =
-    ( { model | discordGuilds = addDiscordGuild model.discordStickers [] gatewayGuild model.discordGuilds }
+    ( { model | discordGuilds = addDiscordGuild model.discordStickers model.discordCustomEmojis [] gatewayGuild model.discordGuilds }
     , getDiscordGuildData model.serverSecret gatewayGuild
         |> Task.map (\( _, guildData ) -> Ok guildData)
         |> Task.onError (\error -> Err error |> Task.succeed)
@@ -2371,6 +2413,81 @@ handleStickers secretKey stickersToCheck state =
         stickersToCheck
 
 
+handleCustomEmojis :
+    SecretId ServerSecret
+    -> List Discord.EmojiData
+    ->
+        { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+        , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+        }
+    ->
+        { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+        , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+        , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+        }
+handleCustomEmojis secretKey emojisToCheck state =
+    List.foldl
+        (\emoji acc ->
+            case emoji.type_ of
+                Discord.UnicodeEmojiType _ ->
+                    acc
+
+                Discord.CustomEmojiType { id, name } ->
+                    case OneToOne.second id acc.discordCustomEmojis of
+                        Just _ ->
+                            acc
+
+                        Nothing ->
+                            let
+                                animated : Bool
+                                animated =
+                                    case emoji.animated of
+                                        Included a ->
+                                            a
+
+                                        Missing ->
+                                            False
+
+                                customEmojiId : Id CustomEmojiId
+                                customEmojiId =
+                                    Id.nextId acc.customEmojis
+
+                                imageType : Discord.Choices Discord.Png Discord.Gif Never Never
+                                imageType =
+                                    if animated then
+                                        Discord.Choice2 Discord.Gif
+
+                                    else
+                                        Discord.Choice1 Discord.Png
+                            in
+                            { tasks =
+                                (FileStatus.uploadUrl
+                                    { sessionId = backendSessionIdHash secretKey
+                                    , url =
+                                        Discord.customEmojiUrl
+                                            { size = Discord.DefaultImageSize, imageType = imageType }
+                                            (Discord.idToUInt64 id |> Discord.idFromUInt64)
+                                    }
+                                    |> taskResult
+                                    |> Task.map (\result -> ( customEmojiId, result ))
+                                )
+                                    :: acc.tasks
+                            , customEmojis =
+                                SeqDict.insert
+                                    customEmojiId
+                                    { url = CustomEmojiLoading
+                                    , name = Maybe.withDefault "" name
+                                    , animated = animated
+                                    }
+                                    acc.customEmojis
+                            , discordCustomEmojis = OneToOne.insert id customEmojiId acc.discordCustomEmojis
+                            }
+        )
+        state
+        emojisToCheck
+
+
 handleReadyData : Id UserId -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleReadyData userId readyData model =
     let
@@ -2399,6 +2516,17 @@ handleReadyData userId readyData model =
                 (\guild state -> handleStickers model.serverSecret guild.stickers state)
                 { tasks = [], stickers = model.stickers, discordStickers = model.discordStickers }
                 readyData.guilds
+
+        customEmojiData :
+            { tasks : List (Task BackendOnly x ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse ))
+            , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+            , discordCustomEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+            }
+        customEmojiData =
+            List.foldl
+                (\guild state -> handleCustomEmojis model.serverSecret guild.emojis state)
+                { tasks = [], customEmojis = model.customEmojis, discordCustomEmojis = model.discordCustomEmojis }
+                readyData.guilds
     in
     ( { model
         | discordGuilds =
@@ -2406,10 +2534,10 @@ handleReadyData userId readyData model =
                 (\guild ( mergedMembers, guilds ) ->
                     case mergedMembers of
                         head :: rest ->
-                            ( rest, addDiscordGuild stickerData.discordStickers head guild guilds )
+                            ( rest, addDiscordGuild stickerData.discordStickers customEmojiData.discordCustomEmojis head guild guilds )
 
                         [] ->
-                            ( [], addDiscordGuild stickerData.discordStickers [] guild guilds )
+                            ( [], addDiscordGuild stickerData.discordStickers customEmojiData.discordCustomEmojis [] guild guilds )
                 )
                 ( case readyData.mergedMembers of
                     Included members2 ->
@@ -2424,11 +2552,16 @@ handleReadyData userId readyData model =
         , discordUsers = List.foldl addDiscordUserData model.discordUsers discordUsers
         , discordStickers = stickerData.discordStickers
         , stickers = stickerData.stickers
+        , discordCustomEmojis = customEmojiData.discordCustomEmojis
+        , customEmojis = customEmojiData.customEmojis
       }
     , Command.batch
         [ getUserAvatars model.serverSecret model.discordUsers discordUsers
         , Task.sequence stickerData.tasks
             |> Task.andThen (\stickers -> Task.map (GotDiscordReadyDataStickers userId stickers) Time.now)
+            |> Task.perform identity
+        , Task.sequence customEmojiData.tasks
+            |> Task.andThen (\customEmojis -> Task.map (GotDiscordReadyDataCustomEmojis userId customEmojis) Time.now)
             |> Task.perform identity
         , (List.filterMap
             (\guild ->
@@ -2457,11 +2590,12 @@ handleReadyData userId readyData model =
 
 addDiscordGuild :
     OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    -> OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
     -> List Discord.MergedMember
     -> Discord.GatewayGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     -> SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
-addDiscordGuild existingStickers members guild discordGuilds =
+addDiscordGuild existingStickers existingCustomEmojis members guild discordGuilds =
     SeqDict.update
         guild.properties.id
         (\maybe ->
@@ -2484,6 +2618,18 @@ addDiscordGuild existingStickers members guild discordGuilds =
                                 (\sticker -> OneToOne.second sticker.id existingStickers)
                                 guild.stickers
                                 |> SeqSet.fromList
+                        , customEmojis =
+                            List.filterMap
+                                (\emoji ->
+                                    case emoji.type_ of
+                                        Discord.CustomEmojiType { id } ->
+                                            OneToOne.second id existingCustomEmojis
+
+                                        Discord.UnicodeEmojiType _ ->
+                                            Nothing
+                                )
+                                guild.emojis
+                                |> SeqSet.fromList
                     }
                         |> Just
 
@@ -2501,6 +2647,18 @@ addDiscordGuild existingStickers members guild discordGuilds =
                         List.filterMap
                             (\sticker -> OneToOne.second sticker.id existingStickers)
                             guild.stickers
+                            |> SeqSet.fromList
+                    , customEmojis =
+                        List.filterMap
+                            (\emoji ->
+                                case emoji.type_ of
+                                    Discord.CustomEmojiType { id } ->
+                                        OneToOne.second id existingCustomEmojis
+
+                                    Discord.UnicodeEmojiType _ ->
+                                        Nothing
+                            )
+                            guild.emojis
                             |> SeqSet.fromList
                     }
                         |> Just
