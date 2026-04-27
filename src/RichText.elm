@@ -2,6 +2,7 @@ module RichText exposing
     ( Domain(..)
     , EscapedChar(..)
     , HasLeadingLineBreak(..)
+    , HeadingLevel(..)
     , Language(..)
     , Modifiers(..)
     , RichText(..)
@@ -37,7 +38,6 @@ import Basics.Extra
 import Coord exposing (Coord)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
-import Discord.Markdown
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Embed exposing (Embed(..), EmbedData)
@@ -72,6 +72,7 @@ type RichText userId
     | Strikethrough (Nonempty (RichText userId))
     | Spoiler (Nonempty (RichText userId))
     | BlockQuote HasLeadingLineBreak (List (RichText userId))
+    | Heading HeadingLevel HasLeadingLineBreak (Nonempty (RichText userId))
     | Hyperlink Url
     | MarkdownLink NonemptyString Url
     | InlineCode Char String
@@ -84,6 +85,13 @@ type RichText userId
 type HasLeadingLineBreak
     = HasLeadingLineBreak
     | NoLeadingLineBreak
+
+
+type HeadingLevel
+    = H1
+    | H2
+    | H3
+    | Small
 
 
 type EscapedChar
@@ -183,6 +191,9 @@ spoilerAttachedFile fileId nonempty =
                         Nothing ->
                             richText
 
+                Heading level a nonempty2 ->
+                    spoilerAttachedFile fileId nonempty2 |> Heading level a
+
                 Hyperlink _ ->
                     richText
 
@@ -277,6 +288,9 @@ unspoilerAttachedFile fileId nonempty =
                                 Nothing ->
                                     Nonempty ( False, richText ) []
 
+                        Heading level hasLeadingLineBreak nonempty3 ->
+                            Nonempty (helper nonempty3 |> Tuple.mapSecond (\a -> Heading level hasLeadingLineBreak a)) []
+
                         Hyperlink _ ->
                             Nonempty ( False, richText ) []
 
@@ -344,6 +358,9 @@ unspoilerAttachedFile fileId nonempty =
                         Nothing ->
                             Nonempty richText []
 
+                Heading level a nonempty2 ->
+                    Nonempty (Heading level a (unspoilerAttachedFile fileId nonempty2)) []
+
                 Hyperlink _ ->
                     Nonempty richText []
 
@@ -406,6 +423,9 @@ removeAttachedFile shouldRemove list =
 
                         Nothing ->
                             Just richText
+
+                Heading level a nonempty ->
+                    removeAttachedFile shouldRemove nonempty |> Maybe.map (Heading level a)
 
                 Hyperlink _ ->
                     Just richText
@@ -471,6 +491,9 @@ hyperlinks nonempty =
                 BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map hyperlinks |> Maybe.withDefault []
 
+                Heading _ _ nonempty2 ->
+                    hyperlinks nonempty2
+
                 InlineCode _ _ ->
                     []
 
@@ -529,6 +552,9 @@ attachmentsHelper isSpoilered nonempty =
                 BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map (attachmentsHelper isSpoilered) |> Maybe.withDefault []
 
+                Heading _ _ nonempty2 ->
+                    attachmentsHelper isSpoilered nonempty2
+
                 InlineCode _ _ ->
                     []
 
@@ -582,6 +608,9 @@ stickers nonempty =
                 BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map stickers |> Maybe.withDefault []
 
+                Heading _ _ nonempty2 ->
+                    stickers nonempty2
+
                 InlineCode _ _ ->
                     []
 
@@ -625,6 +654,35 @@ blockQuoteToString hasLeadingLineBreak inner =
                     )
                 |> String.join "\n"
            )
+
+
+headingLevelToMarker : HeadingLevel -> String
+headingLevelToMarker level =
+    case level of
+        H1 ->
+            "# "
+
+        H2 ->
+            "## "
+
+        H3 ->
+            "### "
+
+        Small ->
+            "-# "
+
+
+headingToString : HasLeadingLineBreak -> HeadingLevel -> String -> String
+headingToString hasLeadingLineBreak level inner =
+    (case hasLeadingLineBreak of
+        NoLeadingLineBreak ->
+            ""
+
+        HasLeadingLineBreak ->
+            "\n"
+    )
+        ++ headingLevelToMarker level
+        ++ inner
 
 
 toString : Bool -> SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
@@ -687,6 +745,12 @@ toStringHelper userToString emojisForStickersAndAttachments users list =
                         hasLeadingLineBreak
                         (toStringHelper userToString emojisForStickersAndAttachments users a)
 
+                Heading level hasLeadingLineBreak a ->
+                    headingToString
+                        hasLeadingLineBreak
+                        level
+                        (toStringHelper userToString emojisForStickersAndAttachments users (List.Nonempty.toList a))
+
                 Hyperlink data ->
                     Url.toString data
 
@@ -741,7 +805,12 @@ fromNonemptyString users string =
                     ( endIndex, [ BlockQuote NoLeadingLineBreak (parseBlockQuoteContent users content) ] )
 
                 Nothing ->
-                    ( 0, [] )
+                    case extractHeading source 0 of
+                        Just ( level, content, endIndex ) ->
+                            ( endIndex, [ Heading level NoLeadingLineBreak (parseHeadingContent users content) ] )
+
+                        Nothing ->
+                            ( 0, [] )
 
         result =
             parseLoop source startIndex users [] "" startRevNodes
@@ -764,6 +833,16 @@ parseBlockQuoteContent users content =
             []
 
 
+parseHeadingContent : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
+parseHeadingContent users content =
+    case parseLoop (String.Nonempty.toString content) 0 users [] "" [] |> .nodes |> List.Nonempty.fromList of
+        Just nonempty ->
+            normalize nonempty
+
+        Nothing ->
+            Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
+
+
 extractBlockQuote : String -> Int -> Maybe ( String, Int )
 extractBlockQuote source index =
     case stringAtRange index 2 source of
@@ -775,6 +854,43 @@ extractBlockQuote source index =
             Just ( content, endIndex )
 
         _ ->
+            Nothing
+
+
+extractHeading : String -> Int -> Maybe ( HeadingLevel, NonemptyString, Int )
+extractHeading source index =
+    case stringAtRange index 4 source of
+        Just "### " ->
+            collectHeadingLine H3 source (index + 4)
+
+        _ ->
+            case stringAtRange index 3 source of
+                Just "## " ->
+                    collectHeadingLine H2 source (index + 3)
+
+                Just "-# " ->
+                    collectHeadingLine Small source (index + 3)
+
+                _ ->
+                    case stringAtRange index 2 source of
+                        Just "# " ->
+                            collectHeadingLine H1 source (index + 2)
+
+                        _ ->
+                            Nothing
+
+
+collectHeadingLine : HeadingLevel -> String -> Int -> Maybe ( HeadingLevel, NonemptyString, Int )
+collectHeadingLine level source contentStart =
+    let
+        lineEnd =
+            findLineEnd source contentStart
+    in
+    case String.slice contentStart lineEnd source |> String.Nonempty.fromString of
+        Just nonempty ->
+            Just ( level, nonempty, lineEnd )
+
+        Nothing ->
             Nothing
 
 
@@ -860,6 +976,9 @@ normalize nonempty =
                         )
                         nonempty2
 
+                Heading level hasLeadingLineBreak a ->
+                    List.Nonempty.cons (Heading level hasLeadingLineBreak (normalize a)) nonempty2
+
                 Hyperlink data ->
                     List.Nonempty.cons (Hyperlink data) nonempty2
 
@@ -914,6 +1033,9 @@ normalize nonempty =
                             Nothing ->
                                 list
                         )
+
+                Heading level hasLeadingLineBreak a ->
+                    Heading level hasLeadingLineBreak (normalize a)
 
                 Hyperlink data ->
                     Hyperlink data
@@ -1180,12 +1302,28 @@ parseLoop source index users modifiers accText revNodes =
                                 )
 
                         Nothing ->
-                            case parseStickerId (index + 1) source of
-                                ( index2, Just stickerId ) ->
-                                    parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                            case extractHeading source (index + 1) of
+                                Just ( level, content, endIndex ) ->
+                                    parseLoop
+                                        source
+                                        endIndex
+                                        users
+                                        modifiers
+                                        ""
+                                        (Heading
+                                            level
+                                            HasLeadingLineBreak
+                                            (parseHeadingContent users content)
+                                            :: flushText accText revNodes
+                                        )
 
-                                ( _, Nothing ) ->
-                                    parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
+                                Nothing ->
+                                    case parseStickerId (index + 1) source of
+                                        ( index2, Just stickerId ) ->
+                                            parseLoop source index2 users modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                                        ( _, Nothing ) ->
+                                            parseLoop source (index + 1) users modifiers (accText ++ "\n") revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -1774,6 +1912,9 @@ mentionsUserHelper set nonempty =
                 BlockQuote _ list ->
                     List.Nonempty.fromList list |> Maybe.map (mentionsUserHelper set2) |> Maybe.withDefault set2
 
+                Heading _ _ nonempty2 ->
+                    mentionsUserHelper set2 nonempty2
+
                 Hyperlink _ ->
                     set2
 
@@ -1831,6 +1972,7 @@ view :
     -> List (Html msg)
 view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonempty =
     viewHelper
+        False
         (ShowLargeContent containerWidth)
         (Just ( htmlIdPrefix, onPressSpoiler ))
         onPressLink
@@ -1846,6 +1988,7 @@ view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonemp
 preview : (Url -> msg) -> PreviewConfig a userId -> Nonempty (RichText userId) -> List (Html msg)
 preview onPressLink config nonempty =
     viewHelper
+        False
         NoLargeContent
         Nothing
         onPressLink
@@ -1896,7 +2039,8 @@ normalTextView text state =
 
 
 viewHelper :
-    ShowLargeContent
+    Bool
+    -> ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
     -> (Url -> msg)
     -> Int
@@ -1905,24 +2049,33 @@ viewHelper :
     -> Array Embed
     -> Int
     -> Nonempty (RichText userId)
-    -> ( Int, Int, List (Html msg) )
-viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
+    -> ( ( Bool, Int ), Int, List (Html msg) )
+viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
     List.foldl
-        (\item ( spoilerIndex2, embedIndex2, currentList ) ->
+        (\item ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
+                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ MyUi.userLabelHtml userId config.users ] )
 
                 NormalText char text ->
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ normalTextView (String.cons char text) state
+                    , currentList
+                        ++ normalTextView
+                            (if dropNextLineBreak2 && char == '\n' then
+                                text
+
+                             else
+                                String.cons char text
+                            )
+                            state
                     )
 
                 Italic nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -1933,12 +2086,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Underline nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -1949,12 +2103,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Bold nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -1965,12 +2120,13 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Strikethrough nonempty2 ->
                     let
-                        ( spoilerIndex3, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -1981,7 +2137,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex3, embedIndex3, currentList ++ list )
+                    ( ( dropNextLineBreak3, spoilerIndex3 ), embedIndex3, currentList ++ list )
 
                 Spoiler nonempty2 ->
                     let
@@ -1989,8 +2145,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             SeqSet.member spoilerIndex2 config.revealedSpoilers
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
-                        ( _, embedIndex3, list ) =
+                        ( ( dropNextLineBreak3, _ ), embedIndex3, list ) =
                             viewHelper
+                                dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
                                 onPressLink
@@ -2006,7 +2163,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                 embedIndex2
                                 nonempty2
                     in
-                    ( spoilerIndex2 + 1
+                    ( ( dropNextLineBreak3, spoilerIndex2 + 1 )
                     , embedIndex3
                     , currentList
                         ++ [ Html.span
@@ -2045,10 +2202,11 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                         borderLeft =
                             4
 
-                        ( spoilerIndex3, embedIndex3, list2 ) =
+                        ( ( _, spoilerIndex3 ), embedIndex3, list2 ) =
                             case List.Nonempty.fromList list of
                                 Just nonempty2 ->
                                     viewHelper
+                                        True
                                         (case showLargeContent of
                                             ShowLargeContent a ->
                                                 ShowLargeContent (a - sidePadding - borderLeft)
@@ -2066,9 +2224,9 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                                         nonempty2
 
                                 Nothing ->
-                                    ( spoilerIndex2, embedIndex2, [ Html.text " " ] )
+                                    ( ( True, spoilerIndex2 ), embedIndex2, [ Html.text " " ] )
                     in
-                    ( spoilerIndex3
+                    ( ( True, spoilerIndex3 )
                     , embedIndex3
                     , currentList
                         ++ [ case showLargeContent of
@@ -2088,13 +2246,78 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                            ]
                     )
 
+                Heading level _ nonempty2 ->
+                    let
+                        ( ( _, spoilerIndex3 ), embedIndex3, list2 ) =
+                            viewHelper
+                                True
+                                showLargeContent
+                                maybePressedSpoiler
+                                onPressLink
+                                spoilerIndex2
+                                state
+                                config
+                                embeds
+                                embedIndex2
+                                nonempty2
+
+                        headingElement =
+                            case showLargeContent of
+                                ShowLargeContent _ ->
+                                    case level of
+                                        H1 ->
+                                            Html.h1
+                                                [ Html.Attributes.style "font-size" "2em"
+                                                , Html.Attributes.style "font-weight" "700"
+                                                , Html.Attributes.style "margin" "0"
+                                                ]
+                                                list2
+
+                                        H2 ->
+                                            Html.h2
+                                                [ Html.Attributes.style "font-size" "1.5em"
+                                                , Html.Attributes.style "font-weight" "700"
+                                                , Html.Attributes.style "margin" "0"
+                                                ]
+                                                list2
+
+                                        H3 ->
+                                            Html.h3
+                                                [ Html.Attributes.style "font-size" "1.25em"
+                                                , Html.Attributes.style "font-weight" "700"
+                                                , Html.Attributes.style "margin" "0"
+                                                ]
+                                                list2
+
+                                        Small ->
+                                            Html.div
+                                                [ Html.Attributes.style "font-size" "0.8em"
+                                                , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+                                                ]
+                                                list2
+
+                                NoLargeContent ->
+                                    Html.span
+                                        (case level of
+                                            Small ->
+                                                [ Html.Attributes.style "font-size" "0.8em"
+                                                , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font2)
+                                                ]
+
+                                            _ ->
+                                                [ Html.Attributes.style "font-weight" "700" ]
+                                        )
+                                        list2
+                    in
+                    ( ( True, spoilerIndex3 ), embedIndex3, currentList ++ [ headingElement ] )
+
                 Hyperlink data ->
                     let
                         text : String
                         text =
                             Url.toString data
                     in
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2 + 1
                     , currentList
                         ++ [ if state.spoiler then
@@ -2137,7 +2360,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                         aliasText =
                             String.Nonempty.toString alias
                     in
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2
                     , currentList
                         ++ [ if state.spoiler then
@@ -2166,7 +2389,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                     )
 
                 InlineCode char rest ->
-                    ( spoilerIndex2
+                    ( ( False, spoilerIndex2 )
                     , embedIndex2
                     , currentList
                         ++ [ Html.span
@@ -2188,7 +2411,7 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                 CodeBlock _ text ->
                     case showLargeContent of
                         ShowLargeContent _ ->
-                            ( spoilerIndex2
+                            ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList
                                 ++ [ Html.div
@@ -2215,12 +2438,12 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             )
 
                         NoLargeContent ->
-                            ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text "<...>" ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Html.text "<...>" ] )
 
                 AttachedFile fileId ->
                     case showLargeContent of
                         ShowLargeContent containerWidth2 ->
-                            ( spoilerIndex2
+                            ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , case SeqDict.get fileId config.attachedFiles of
                                 Just fileData ->
@@ -2276,23 +2499,23 @@ viewHelper showLargeContent maybePressedSpoiler onPressLink spoilerIndex state c
                             )
 
                         NoLargeContent ->
-                            ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
 
                 EscapedChar char ->
-                    ( spoilerIndex2, embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
+                    ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
 
                 Sticker stickerId ->
                     case showLargeContent of
                         ShowLargeContent _ ->
-                            ( spoilerIndex2
+                            ( ( True, spoilerIndex2 )
                             , embedIndex2
                             , currentList ++ [ Sticker.view "160px" stickerId config.stickers config.animationMode ]
                             )
 
                         NoLargeContent ->
-                            ( spoilerIndex2, embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
         )
-        ( spoilerIndex, embedIndex, [] )
+        ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
         (List.Nonempty.toList nonempty)
 
 
@@ -2898,6 +3121,30 @@ textInputViewHelper state allUsers attachedFiles stickers2 index selection list 
                             output2
                         )
 
+                Heading level hasLeadingLineBreak nonempty2 ->
+                    let
+                        marker : String
+                        marker =
+                            (case hasLeadingLineBreak of
+                                HasLeadingLineBreak ->
+                                    "\n"
+
+                                NoLeadingLineBreak ->
+                                    ""
+                            )
+                                ++ headingLevelToMarker level
+                    in
+                    textInputViewHelper
+                        state
+                        allUsers
+                        attachedFiles
+                        stickers2
+                        (index2 + String.length marker)
+                        selection
+                        (List.Nonempty.toList nonempty2)
+                        inBlockQuote
+                        (Array.push (formatText marker) output2)
+
                 Hyperlink data ->
                     let
                         text =
@@ -3282,7 +3529,12 @@ fromDiscordHelper text attachments2 embeds stickers2 =
                                 ( endIndex, [ BlockQuote NoLeadingLineBreak (parseDiscordBlockQuoteContent content) ] )
 
                             Nothing ->
-                                ( 0, [] )
+                                case extractHeading source 0 of
+                                    Just ( level, content, endIndex ) ->
+                                        ( endIndex, [ Heading level NoLeadingLineBreak (parseDiscordHeadingContent content) ] )
+
+                                    Nothing ->
+                                        ( 0, [] )
 
                     result =
                         discordParseLoop source startIndex [] "" startRevNodes
@@ -3374,12 +3626,22 @@ discordParseLoop source index modifiers accText revNodes =
                                 (BlockQuote HasLeadingLineBreak (parseDiscordBlockQuoteContent content) :: flushText accText revNodes)
 
                         Nothing ->
-                            case parseStickerId (index + 1) source of
-                                ( index2, Just stickerId ) ->
-                                    discordParseLoop source index2 modifiers "" (Sticker stickerId :: flushText accText revNodes)
+                            case extractHeading source (index + 1) of
+                                Just ( level, content, endIndex ) ->
+                                    discordParseLoop
+                                        source
+                                        endIndex
+                                        modifiers
+                                        ""
+                                        (Heading level HasLeadingLineBreak (parseDiscordHeadingContent content) :: flushText accText revNodes)
 
-                                ( _, Nothing ) ->
-                                    discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
+                                Nothing ->
+                                    case parseStickerId (index + 1) source of
+                                        ( index2, Just stickerId ) ->
+                                            discordParseLoop source index2 modifiers "" (Sticker stickerId :: flushText accText revNodes)
+
+                                        ( _, Nothing ) ->
+                                            discordParseLoop source (index + 1) modifiers (accText ++ "\n") revNodes
 
                 else
                     -- Line breaks should terminate any open modifiers
@@ -3693,20 +3955,15 @@ discordParseLoop source index modifiers accText revNodes =
 
 toDiscord : Nonempty (RichText (Discord.Id Discord.UserId)) -> Result Int String
 toDiscord content =
-    case removeAttachedFile (\_ -> True) content of
-        Just text2 ->
-            let
-                text3 =
-                    toDiscordHelper (List.Nonempty.toList text2) |> Discord.Markdown.toString
-            in
-            if String.length text3 > maxLength then
-                Err (maxLength - String.length text3)
+    let
+        text =
+            toDiscordHelper (List.Nonempty.toList content)
+    in
+    if String.length text > maxLength then
+        Err (maxLength - String.length text)
 
-            else
-                Ok text3
-
-        Nothing ->
-            Ok ""
+    else
+        Ok text
 
 
 discordCharsLeft : Maybe (Nonempty (RichText (Discord.Id Discord.UserId))) -> Int
@@ -3724,65 +3981,93 @@ discordCharsLeft richText =
             maxLength
 
 
-toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> List (Discord.Markdown.Markdown a)
+toDiscordHelper : List (RichText (Discord.Id Discord.UserId)) -> String
 toDiscordHelper content =
     List.map
         (\item ->
             case item of
                 UserMention discordUserId ->
-                    Discord.Markdown.ping discordUserId
+                    "<@!" ++ Discord.idToString discordUserId ++ ">"
 
                 NormalText char string ->
-                    Discord.Markdown.text (String.cons char string)
+                    escapeDiscordText (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "**" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "**"
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "*" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "*"
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "__" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "__"
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "~~" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "~~"
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscordHelper (List.Nonempty.toList nonempty))
+                    "||" ++ toDiscordHelper (List.Nonempty.toList nonempty) ++ "||"
 
-                BlockQuote _ nonempty ->
-                    Discord.Markdown.Quote (toDiscordHelper nonempty)
+                BlockQuote _ list ->
+                    "\n> " ++ String.replace "\n" "\n> " (toDiscordHelper list)
+
+                Heading level hasLeadingLineBreak nonempty ->
+                    let
+                        prefix : String
+                        prefix =
+                            (case hasLeadingLineBreak of
+                                HasLeadingLineBreak ->
+                                    "\n"
+
+                                NoLeadingLineBreak ->
+                                    ""
+                            )
+                                ++ headingLevelToMarker level
+                    in
+                    prefix ++ toDiscordHelper (List.Nonempty.toList nonempty)
 
                 Hyperlink data ->
-                    Discord.Markdown.text (Url.toString data)
+                    Url.toString data
 
                 MarkdownLink alias url ->
-                    Discord.Markdown.text ("[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")")
+                    "[" ++ String.Nonempty.toString alias ++ "](" ++ Url.toString url ++ ")"
 
                 InlineCode char string ->
-                    Discord.Markdown.code (String.cons char string)
+                    "`" ++ String.cons char string ++ "`"
 
                 CodeBlock language string ->
-                    Discord.Markdown.codeBlock
-                        (case language of
-                            Language language2 ->
-                                Just (String.Nonempty.toString language2)
+                    "```"
+                        ++ (case language of
+                                Language language2 ->
+                                    String.Nonempty.toString language2 ++ "\n"
 
-                            NoLanguage ->
-                                Nothing
-                        )
-                        string
+                                NoLanguage ->
+                                    ""
+                           )
+                        ++ string
+                        ++ "```"
 
                 AttachedFile _ ->
-                    Discord.Markdown.text ""
+                    ""
 
                 EscapedChar char ->
-                    Discord.Markdown.text (escapedCharToString char)
+                    escapeDiscordText (escapedCharToString char)
 
                 Sticker _ ->
-                    Discord.Markdown.text ""
+                    ""
         )
         content
+        |> String.concat
+
+
+escapeDiscordText : String -> String
+escapeDiscordText text =
+    String.replace "\\" "\\\\" text
+        |> String.replace "_" "\\_"
+        |> String.replace "*" "\\*"
+        |> String.replace "`" "\\`"
+        |> String.replace ">" "\\>"
+        |> String.replace "@" "\\@"
+        |> String.replace "~" "\\~"
 
 
 discordParseInner :
@@ -3802,6 +4087,16 @@ parseDiscordBlockQuoteContent content =
 
         Nothing ->
             []
+
+
+parseDiscordHeadingContent : NonemptyString -> Nonempty (RichText (Discord.Id Discord.UserId))
+parseDiscordHeadingContent content =
+    case discordParseLoop (String.Nonempty.toString content) 0 [] "" [] |> .nodes |> List.Nonempty.fromList of
+        Just nonempty ->
+            normalize nonempty
+
+        Nothing ->
+            Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
 
 
 tryParseDiscordMention : String -> Int -> Int -> Maybe ( Discord.Id Discord.UserId, Int )
