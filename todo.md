@@ -10,6 +10,8 @@
 * Login/signup button doesn't work if failed to link Discord message is visible
 * Prevent files larger than 10mb being attached to Discord messages (unless it's a nitro user)
 * Make it more clear when a message hasn't been sent yet
+* https://blog.x-way.org/Webdesign/2024/08/03/Increase-emoji-size-with-CSS-only.html Try this trick to make emojis
+  larger
 
 Requested features:
 

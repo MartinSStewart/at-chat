@@ -83,6 +83,7 @@ view stickerSize2 stickerId stickers2 animationMode =
                             animatedImageView
                                 stickerSize2
                                 stickerSize2
+                                Nothing
                                 (FileStatus.fileUrl FileStatus.pngContent fileHash)
                                 animationMode
 
@@ -93,6 +94,7 @@ view stickerSize2 stickerId stickers2 animationMode =
                             animatedImageView
                                 stickerSize2
                                 stickerSize2
+                                Nothing
                                 (FileStatus.fileUrl FileStatus.gifContent fileHash)
                                 animationMode
 
@@ -108,6 +110,7 @@ view stickerSize2 stickerId stickers2 animationMode =
                             animatedImageView
                                 stickerSize2
                                 stickerSize2
+                                Nothing
                                 (FileStatus.discordStickerUrl discordStickerId sticker.format)
                                 animationMode
 
@@ -133,16 +136,16 @@ animationModeToInt animationMode =
             "2"
 
 
-animatedImageView : String -> String -> String -> AnimationMode -> Html msg
-animatedImageView width height url animationMode =
+animatedImageView : String -> String -> Maybe String -> String -> AnimationMode -> Html msg
+animatedImageView width height yOffset url animationMode =
     Html.node
         "animated-image-player"
-        [ Html.Attributes.style "width" width
-        , Html.Attributes.style "height" height
-        , Html.Attributes.attribute "src" url
-        , Html.Attributes.style "display" "block"
-        , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
-        , Html.Attributes.style
+        ([ Html.Attributes.style "width" width
+         , Html.Attributes.style "height" height
+         , Html.Attributes.attribute "src" url
+         , Html.Attributes.style "display" "block"
+         , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
+         , Html.Attributes.style
             "background-color"
             (if Env.isProduction then
                 "transparent"
@@ -151,7 +154,15 @@ animatedImageView width height url animationMode =
                 -- Make it easier to understand what is going on in end-to-end tests where the actual animation doesn't load
                 "rgba(0,0,0,0.1)"
             )
-        ]
+         ]
+            ++ (case yOffset of
+                    Just yOffset2 ->
+                        [ Html.Attributes.style "transform" ("translate(" ++ yOffset2 ++ ")") ]
+
+                    Nothing ->
+                        []
+               )
+        )
         []
 
 

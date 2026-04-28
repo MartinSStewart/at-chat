@@ -2642,7 +2642,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                 CustomEmoji id ->
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ [ CustomEmoji.view id config.customEmojis config.animationMode ]
+                    , currentList ++ [ CustomEmoji.view "1.1em " "0.2em" id config.customEmojis config.animationMode ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
@@ -2782,7 +2782,7 @@ embedView onPressLink containerWidth domainWhitelist playAnimation url embed =
                                     False
                     in
                     if isAnimatedImage then
-                        Sticker.animatedImageView width2 height2 imageData.url playAnimation |> Just
+                        Sticker.animatedImageView width2 height2 Nothing imageData.url playAnimation |> Just
 
                     else
                         Html.img
@@ -3457,25 +3457,10 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
 
                                       else
                                         Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
-                                    , Html.Attributes.style "top" "0.1lh"
+                                    , Html.Attributes.style "top" "0"
                                     , Html.Attributes.style "left" "0.1em"
                                     ]
-                                    [ CustomEmoji.view customEmojiId customEmojis Sticker.LoopForever ]
-                                , Html.div
-                                    [ Html.Attributes.style "position" "absolute"
-                                    , Html.Attributes.style "width" CustomEmoji.emojiSize
-                                    , Html.Attributes.style "height" "1lh"
-                                    , Html.Attributes.style "top" "0"
-                                    , Html.Attributes.style "left" "0"
-                                    , if isSelected then
-                                        Html.Attributes.style
-                                            "background-color"
-                                            (MyUi.colorToStyle (MyUi.colorWithAlpha 0.5 MyUi.selectedTextBackground))
-
-                                      else
-                                        Html.Attributes.style "opacity" "transparent"
-                                    ]
-                                    []
+                                    [ CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis Sticker.LoopForever ]
                                 ]
                             , Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
                             ]

@@ -5,7 +5,6 @@ module CustomEmoji exposing
     , addUrl
     , emojiNameFromString
     , emojiNameToString
-    , emojiSize
     , idToString
     , view
     )
@@ -63,13 +62,8 @@ addUrl uploadResponse customEmoji =
             Err ()
 
 
-emojiSize : String
-emojiSize =
-    "1em"
-
-
-view : Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
-view customEmojiId customEmojis2 animationMode =
+view : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Sticker.AnimationMode -> Html msg
+view emojiSize yOffset customEmojiId customEmojis2 animationMode =
     case SeqDict.get customEmojiId customEmojis2 of
         Just customEmoji ->
             case customEmoji.url of
@@ -79,6 +73,7 @@ view customEmojiId customEmojis2 animationMode =
                         , Html.Attributes.style "height" emojiSize
                         , Html.Attributes.style "background-color" "gray"
                         , Html.Attributes.style "display" "inline-block"
+                        , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
                         ]
                         []
 
@@ -87,6 +82,7 @@ view customEmojiId customEmojis2 animationMode =
                         Sticker.animatedImageView
                             emojiSize
                             emojiSize
+                            (Just yOffset)
                             (FileStatus.fileUrl FileStatus.gifContent fileHash)
                             animationMode
 
@@ -96,6 +92,7 @@ view customEmojiId customEmojis2 animationMode =
                             , Html.Attributes.style "height" emojiSize
                             , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
                             , Html.Attributes.style "display" "inline-block"
+                            , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
                             ]
                             []
 
@@ -104,6 +101,7 @@ view customEmojiId customEmojis2 animationMode =
                 [ Html.Attributes.style "width" emojiSize
                 , Html.Attributes.style "height" emojiSize
                 , Html.Attributes.style "background-color" "gray"
+                , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
                 ]
                 [ Html.text "Custom emoji failed to load" ]
 

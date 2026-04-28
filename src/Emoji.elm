@@ -721,7 +721,13 @@ selector searchHasFocus isMobile width model userData emojiData availableCustomE
                                             Sticker.view "2lh" stickerId stickersData Sticker.LoopForever |> Ui.html
 
                                         EmojiOrSticker_CustomEmoji id ->
-                                            CustomEmoji.view id customEmojisData Sticker.LoopForever |> Ui.html
+                                            CustomEmoji.view
+                                                (String.fromInt emojiWidth ++ "px")
+                                                "0"
+                                                id
+                                                customEmojisData
+                                                Sticker.LoopForever
+                                                |> Ui.html
                             in
                             MyUi.elButton
                                 (emojiButtonId index)
