@@ -1388,7 +1388,7 @@ view isMobile2 version local adminData user model =
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , filesSection user adminData
-            , stickersSection local user
+            , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
             , exportSection user model
             ]
@@ -1450,8 +1450,8 @@ filesSection user adminData =
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-stickersSection : LocalState -> BackendUser -> Element Msg
-stickersSection local user =
+stickersAndEmojisSection : LocalState -> BackendUser -> Element Msg
+stickersAndEmojisSection local user =
     let
         stickers =
             local.localUser.stickers
@@ -1510,7 +1510,7 @@ stickersSection local user =
     section
         8
         user.expandedSections
-        StickersSection
+        StickersAndEmojisSection
         [ Ui.text ("Sticker count: " ++ String.fromInt stickerCount)
         , Ui.column
             [ Ui.spacing 2 ]
@@ -1535,24 +1535,14 @@ stickersSection local user =
             |> List.map
                 (\( customEmojiId, customEmoji ) ->
                     Ui.row
-                        [ Ui.spacing 6, Ui.width Ui.shrink, Ui.contentCenterY ]
-                        [ CustomEmoji.viewHelper "1.5em" "0" customEmoji Sticker.LoopAFewTimesOnLoad
+                        [ Ui.spacing 6, Ui.width (Ui.px 300), Ui.contentCenterY ]
+                        [ CustomEmoji.viewHelper "32px" "0" customEmoji Sticker.LoopForever
                             |> Ui.html
                             |> Ui.el [ Ui.width Ui.shrink ]
                         , Ui.text (CustomEmoji.emojiNameToString customEmoji.name)
-                        , Ui.el
-                            [ Ui.Font.color MyUi.font3, Ui.Font.size 12 ]
-                            (Ui.text
-                                (if customEmoji.isAnimated then
-                                    "animated"
-
-                                 else
-                                    "static"
-                                )
-                            )
                         ]
                 )
-            |> Ui.column [ Ui.spacing 4 ]
+            |> Ui.row [ Ui.spacing 4, Ui.wrap ]
         ]
 
 
