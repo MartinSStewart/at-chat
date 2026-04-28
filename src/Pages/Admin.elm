@@ -31,6 +31,7 @@ import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
+import CustomEmoji
 import Discord
 import Duration exposing (Duration)
 import Editable
@@ -1499,6 +1500,12 @@ stickersSection local user =
                 )
                 SeqDict.empty
                 stickers
+
+        customEmojis =
+            local.localUser.customEmojis
+
+        customEmojiCount =
+            SeqDict.size customEmojis
     in
     section
         8
@@ -1523,6 +1530,29 @@ stickersSection local user =
                     )
                     (SeqDict.toList urlTypeCounts)
             )
+        , Ui.text ("Custom emoji count: " ++ String.fromInt customEmojiCount)
+        , SeqDict.toList customEmojis
+            |> List.map
+                (\( customEmojiId, customEmoji ) ->
+                    Ui.row
+                        [ Ui.spacing 6, Ui.width Ui.shrink, Ui.contentCenterY ]
+                        [ CustomEmoji.viewHelper "1.5em" "0" customEmoji Sticker.LoopAFewTimesOnLoad
+                            |> Ui.html
+                            |> Ui.el [ Ui.width Ui.shrink ]
+                        , Ui.text (CustomEmoji.emojiNameToString customEmoji.name)
+                        , Ui.el
+                            [ Ui.Font.color MyUi.font3, Ui.Font.size 12 ]
+                            (Ui.text
+                                (if customEmoji.isAnimated then
+                                    "animated"
+
+                                 else
+                                    "static"
+                                )
+                            )
+                        ]
+                )
+            |> Ui.column [ Ui.spacing 4 ]
         ]
 
 
