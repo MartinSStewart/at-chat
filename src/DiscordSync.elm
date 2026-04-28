@@ -2452,7 +2452,7 @@ handleCustomEmojis secretKey emojisToCheck state =
                 Discord.CustomEmojiType idAndName ->
                     case maybeEmojiNameAndIdToNameAndId idAndName of
                         Just idAndName2 ->
-                            case OneToOne.second idAndName2 acc.discordCustomEmojis |> Debug.log "emoji" of
+                            case OneToOne.second idAndName2 acc.discordCustomEmojis of
                                 Just _ ->
                                     acc
 

@@ -140,6 +140,8 @@ basicFormattingTests =
         , fromNonemptyStringTest "<:abc:542>" (Nonempty (NormalText '<' ":abc:542>") [])
         , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543>") [])
         , fromNonemptyStringTest "<:http:543>" (Nonempty (NormalText '<' ":http:543>") [])
+        , fromNonemptyStringTest "<a:abc:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
+        , fromNonemptyStringTest "<b:abc:543>" (Nonempty (NormalText '<' "b:abc:543>") [])
         ]
 
 

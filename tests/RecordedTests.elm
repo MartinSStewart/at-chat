@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), SkinTone(..))
+import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -3512,8 +3512,9 @@ allAttackerLocalChanges =
         threadRouteWithMaybeMessage =
             NoThreadWithMaybeMessage (Just (Id.fromInt 0))
 
+        emoji : EmojiOrCustomEmoji
         emoji =
-            Emoji.Emoji "👍"
+            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "👍")
 
         discordDmData : DiscordGuildOrDmId_DmData
         discordDmData =
