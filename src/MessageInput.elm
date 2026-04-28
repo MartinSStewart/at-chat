@@ -82,6 +82,8 @@ type Msg
     | PressedUploadFile
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
+    | TypedPageUp
+    | TypedPageDown
 
 
 counterThreshold : number
@@ -122,6 +124,12 @@ isPress msg =
         OnPasteFiles _ ->
             False
 
+        TypedPageUp ->
+            False
+
+        TypedPageDown ->
+            False
+
 
 textarea :
     Bool
@@ -152,6 +160,12 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
 
                             else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
                                 Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True )
+
+                            else if key == "PageUp" then
+                                Json.Decode.succeed ( TypedPageUp, True )
+
+                            else if key == "PageDown" then
+                                Json.Decode.succeed ( TypedPageDown, True )
 
                             else
                                 Json.Decode.fail ""
@@ -215,6 +229,12 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                                             "Enter" ->
                                                 Json.Decode.succeed
                                                     ( PressedDropdownItem dropdownIndex, True )
+
+                                            "PageUp" ->
+                                                Json.Decode.succeed ( TypedPageUp, True )
+
+                                            "PageDown" ->
+                                                Json.Decode.succeed ( TypedPageDown, True )
 
                                             _ ->
                                                 Json.Decode.fail ""

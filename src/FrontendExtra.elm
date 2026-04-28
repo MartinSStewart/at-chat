@@ -1306,6 +1306,9 @@ isPressMsg msg =
         EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             True
 
+        PageUpOrDownScroll ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

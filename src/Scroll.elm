@@ -1,5 +1,6 @@
 module Scroll exposing
     ( smoothScroll
+    , smoothScrollBy
     , toBottomOfChannel
     , toBottomOfChannelIfAtBottom
     , toBottomOfChannelSmooth
@@ -36,27 +37,34 @@ smoothScroll targetId =
             )
 
 
+smoothScrollBy : Float -> Task FrontendOnly Dom.Error ()
+smoothScrollBy scrollYAmount =
+    Task.andThen
+        (\{ viewport } -> smoothScrollY 0 viewport.x viewport.y (viewport.y + scrollYAmount))
+        (Dom.getViewportOf Pages.Guild.conversationContainerId)
+
+
 smoothScrollSteps : number
 smoothScrollSteps =
     20
 
 
 smoothScrollY : Int -> Float -> Float -> Float -> Task FrontendOnly Dom.Error ()
-smoothScrollY stepsLeft x startY endY =
+smoothScrollY stepCount x startY endY =
     let
         t =
-            toFloat stepsLeft / smoothScrollSteps |> Ease.inOutQuart
+            toFloat stepCount / smoothScrollSteps |> Ease.inOutQuart
 
         y : Float
         y =
             startY + (endY - startY) * t
     in
-    if stepsLeft > smoothScrollSteps then
+    if stepCount > smoothScrollSteps then
         Task.succeed ()
 
     else
         Dom.setViewportOf Pages.Guild.conversationContainerId x y
-            |> Task.andThen (\() -> smoothScrollY (stepsLeft + 1) x startY endY)
+            |> Task.andThen (\() -> smoothScrollY (stepCount + 1) x startY endY)
 
 
 toBottomOfChannel : Command FrontendOnly toMsg FrontendMsg

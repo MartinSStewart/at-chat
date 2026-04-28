@@ -3004,6 +3004,19 @@ updateLoaded msg model =
                         |> Task.attempt GotEditMessageTextInputPositionForEmojiSelector
                     )
 
+                MessageInput.TypedPageUp ->
+                    let
+                        _ =
+                            Debug.log "TypedPageUp" ()
+                    in
+                    pageUpOrDownScroll True model
+
+                MessageInput.TypedPageDown ->
+                    pageUpOrDownScroll False model
+
+        PageUpOrDownScroll ->
+            ( model, Command.none )
+
         GotEditMessageTextInputPositionForEmojiSelector result ->
             case result of
                 Ok ok ->
@@ -3417,6 +3430,12 @@ updateLoaded msg model =
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
 
+                MessageInput.TypedPageUp ->
+                    pageUpOrDownScroll True model
+
+                MessageInput.TypedPageDown ->
+                    pageUpOrDownScroll False model
+
         GotEmojiData result ->
             case result of
                 Ok emojiData ->
@@ -3528,6 +3547,22 @@ removePartialStickers htmlId text =
 
         list ->
             Ports.execCommand { htmlId = htmlId, commands = list }
+
+
+pageUpOrDownScroll : Bool -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg FrontendMsg )
+pageUpOrDownScroll isUp model =
+    ( model
+    , Scroll.smoothScrollBy
+        ((if isUp then
+            -0.9
+
+          else
+            0.9
+         )
+            * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight)
+        )
+        |> Task.attempt (\_ -> PageUpOrDownScroll)
+    )
 
 
 messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
