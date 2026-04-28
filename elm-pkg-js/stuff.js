@@ -310,6 +310,12 @@ exports.init = async function init(app)
         });
     });
 
+    app.ports.smooth_scroll_by_to_js.subscribe((data) => {
+        const container = document.getElementById(data.containerId);
+        if (!container) return;
+        container.scrollBy({ top: data.scrollY, left: 0, behavior: "smooth" });
+    });
+
     app.ports.set_cursor_position_to_js.subscribe((data) => {
         requestAnimationFrame(() =>
             {

@@ -11,6 +11,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task exposing (Task)
 import Pages.Guild
+import Ports
 import Types exposing (FrontendMsg(..), ScrollPosition(..))
 
 
@@ -37,11 +38,9 @@ smoothScroll targetId =
             )
 
 
-smoothScrollBy : Float -> Task FrontendOnly Dom.Error ()
+smoothScrollBy : Float -> Command FrontendOnly toMsg msg
 smoothScrollBy scrollYAmount =
-    Task.andThen
-        (\{ viewport } -> smoothScrollY 0 viewport.x viewport.y (viewport.y + scrollYAmount))
-        (Dom.getViewportOf Pages.Guild.conversationContainerId)
+    Ports.smoothScrollBy Pages.Guild.conversationContainerId scrollYAmount
 
 
 smoothScrollSteps : number

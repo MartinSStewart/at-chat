@@ -33,6 +33,7 @@ port module Ports exposing
     , setFavicon
     , shiftScrollByElementDelta
     , showNotification
+    , smoothScrollBy
     , textInputSelectAll
     , userAgentSub
     , visualViewportResized
@@ -296,6 +297,21 @@ shiftScrollByElementDelta containerId elementId =
         (Json.Encode.object
             [ ( "containerId", Json.Encode.string (Dom.idToString containerId) )
             , ( "elementId", Json.Encode.string (Dom.idToString elementId) )
+            ]
+        )
+
+
+port smooth_scroll_by_to_js : Json.Encode.Value -> Cmd msg
+
+
+smoothScrollBy : HtmlId -> Float -> Command FrontendOnly toMsg msg
+smoothScrollBy containerId scrollY =
+    Command.sendToJs
+        "smooth_scroll_by_to_js"
+        smooth_scroll_by_to_js
+        (Json.Encode.object
+            [ ( "containerId", Json.Encode.string (Dom.idToString containerId) )
+            , ( "scrollY", Json.Encode.float scrollY )
             ]
         )
 

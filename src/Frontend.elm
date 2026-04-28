@@ -3590,7 +3590,6 @@ pageUpOrDownScroll isUp model =
              )
                 * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight)
             )
-            |> Task.attempt (\_ -> PageUpOrDownScroll)
         , Dom.getViewportOf Pages.Guild.conversationContainerId
             |> Task.attempt PageUpGotViewport
         ]
