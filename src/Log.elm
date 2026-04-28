@@ -1,15 +1,18 @@
-module Log exposing (Log(..), MsgConfig, httpErrorToString, shouldNotifyAdmin, timeToString, view)
+module Log exposing (Log(..), MsgConfig, emojiOrCustomEmojiView, httpErrorToString, shouldNotifyAdmin, timeToString, view)
 
+import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrCustomEmoji(..))
 import Icons
 import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import Postmark
+import SeqDict exposing (SeqDict)
+import Sticker exposing (AnimationMode(..))
 import Time exposing (Month(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -28,10 +31,10 @@ type Log
     | FailedToDeleteDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Discord.HttpError
     | FailedToEditDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Discord.HttpError
     | FailedToEditDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Discord.HttpError
-    | FailedToAddReactionToDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji Discord.HttpError
-    | FailedToAddReactionToDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji Discord.HttpError
-    | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji Discord.HttpError
-    | FailedToRemoveReactionToDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji Discord.HttpError
+    | FailedToAddReactionToDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji Discord.HttpError
+    | FailedToAddReactionToDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji Discord.HttpError
     | FailedToLoadDiscordUserData (Discord.Id Discord.UserId) Discord.HttpError
     | FailedToSendDiscordGuildMessage (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
     | FailedToSendDiscordDmMessage (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) Discord.HttpError
@@ -194,8 +197,17 @@ type alias MsgConfig msg =
     }
 
 
-view : Bool -> Bool -> Time.Zone -> MsgConfig msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
-view isMobile2 isHidden timezone msgConfig isCopied isHighlighted { time, log } =
+view :
+    Bool
+    -> Bool
+    -> Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> MsgConfig msg
+    -> Bool
+    -> Bool
+    -> { time : Time.Posix, log : Log }
+    -> Element msg
+view isMobile2 isHidden timezone customEmojis msgConfig isCopied isHighlighted { time, log } =
     Ui.el
         [ Ui.attrIf isHighlighted (Ui.background MyUi.mentionColor)
         , Ui.paddingXY 8 4
@@ -248,11 +260,26 @@ view isMobile2 isHidden timezone msgConfig isCopied isHighlighted { time, log } 
             ]
             |> Ui.inFront
         ]
-        (logContent msgConfig.onPressCopy log)
+        (logContent msgConfig.onPressCopy customEmojis log)
 
 
-logContent : (String -> msg) -> Log -> Element msg
-logContent onPressCopy log =
+emojiOrCustomEmojiView : SeqDict (Id CustomEmojiId) CustomEmojiData -> EmojiOrCustomEmoji -> Element msg
+emojiOrCustomEmojiView customEmojis emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji emoji2 ->
+            Emoji.view emoji2
+
+        EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+            case SeqDict.get customEmojiId customEmojis of
+                Just customEmoji ->
+                    CustomEmoji.viewHelper "1.1em" "0" customEmoji LoopAFewTimesOnLoad |> Ui.html
+
+                Nothing ->
+                    Id.toString customEmojiId |> Ui.text
+
+
+logContent : (String -> msg) -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Log -> Element msg
+logContent onPressCopy customEmojis log =
     case log of
         LoginEmail result emailAddress ->
             case result of
@@ -349,7 +376,7 @@ logContent onPressCopy log =
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -360,7 +387,7 @@ logContent onPressCopy log =
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -371,7 +398,7 @@ logContent onPressCopy log =
                 , fieldRow "Guild" (Ui.text (Discord.idToString guildId))
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
@@ -382,7 +409,7 @@ logContent onPressCopy log =
                 , fieldRow "Channel" (Ui.text (Discord.idToString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.idToString discordMessageId))
-                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Emoji" (emojiOrCustomEmojiView customEmojis emoji)
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

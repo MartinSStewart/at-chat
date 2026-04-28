@@ -1,16 +1,20 @@
-module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView)
+module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView, reactionEmojiButtonContent)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji exposing (CustomEmojiData)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrCustomEmoji(..))
 import Html exposing (Html)
 import Html.Attributes
 import Icons
+import Id exposing (CustomEmojiId, Id)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import SeqDict exposing (SeqDict)
+import Sticker exposing (AnimationMode(..))
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Anim
@@ -26,8 +30,8 @@ type MessageViewMsg
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
     | MessageView_AltPressedMessage Bool (Coord CssPixels)
-    | MessageView_PressedReactionEmoji_Remove Emoji
-    | MessageView_PressedReactionEmoji_Add Emoji
+    | MessageView_PressedReactionEmoji_Remove EmojiOrCustomEmoji
+    | MessageView_PressedReactionEmoji_Add EmojiOrCustomEmoji
     | MessageView_PressedReplyLink
     | MessageViewMsg_PressedShowReactionEmojiSelector
     | MessageViewMsg_PressedEditMessage
@@ -35,7 +39,7 @@ type MessageViewMsg
     | MessageViewMsg_PressedShowFullMenu Bool (Coord CssPixels)
     | MessageView_PressedViewThreadLink
     | MessageView_NoOp
-    | MessageViewMsg_PressedReactionEmoji Emoji
+    | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -90,8 +94,22 @@ isPressMsg msg =
             True
 
 
-miniView : FrontendCurrentUser -> Bool -> Bool -> Element MessageViewMsg
-miniView user isThreadStarter canEdit =
+reactionEmojiButtonContent : SeqDict (Id CustomEmojiId) CustomEmojiData -> EmojiOrCustomEmoji -> Html msg
+reactionEmojiButtonContent customEmojis emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji emoji2 ->
+            Html.div
+                [ Html.Attributes.style "font-size" "20px"
+                , Html.Attributes.style "transform" "translateY(-3px)"
+                ]
+                [ Emoji.toString emoji2 |> Html.text ]
+
+        EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+            CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis LoopAFewTimesOnLoad
+
+
+miniView : FrontendCurrentUser -> Bool -> Bool -> SeqDict (Id CustomEmojiId) CustomEmojiData -> Element MessageViewMsg
+miniView user isThreadStarter canEdit customEmojis =
     let
         recentEmojis : List (Element MessageViewMsg)
         recentEmojis =
@@ -102,12 +120,7 @@ miniView user isThreadStarter canEdit =
                         miniButton
                             (Dom.id ("miniView_emojiReact_" ++ String.fromInt index))
                             (MessageViewMsg_PressedReactionEmoji emoji)
-                            (Html.div
-                                [ Html.Attributes.style "font-size" "20px"
-                                , Html.Attributes.style "transform" "translateY(-3px)"
-                                ]
-                                [ Html.text (Emoji.toString emoji) ]
-                            )
+                            (reactionEmojiButtonContent customEmojis emoji)
                     )
     in
     Ui.row

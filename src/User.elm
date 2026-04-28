@@ -46,7 +46,7 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), Emoji, EmojiCategory(..), EmojiConfig, SkinTone)
+import Emoji exposing (Category(..), Emoji, EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
@@ -97,17 +97,22 @@ type alias BackendUser =
     }
 
 
-commonlyUsedEmojis : FrontendCurrentUser -> List ( Emoji, Int )
+commonlyUsedEmojis : FrontendCurrentUser -> List ( EmojiOrCustomEmoji, Int )
 commonlyUsedEmojis user =
     Array.foldl
         (\emoji dict -> SeqDict.update emoji (\maybe -> Maybe.withDefault 0 maybe |> (+) 1 |> Just) dict)
-        (SeqDict.fromList [ ( Emoji.heart, 0 ), ( Emoji.thumbsUp, 0 ), ( Emoji.smiley, 0 ) ])
+        (SeqDict.fromList
+            [ ( EmojiOrCustomEmoji_Emoji Emoji.heart, 0 )
+            , ( EmojiOrCustomEmoji_Emoji Emoji.thumbsUp, 0 )
+            , ( EmojiOrCustomEmoji_Emoji Emoji.smiley, 0 )
+            ]
+        )
         user.emojiConfig.lastUsedEmojis
         |> SeqDict.toList
         |> List.sortBy (\( _, count ) -> -count)
 
 
-addRecentlyUsedEmoji : Emoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
+addRecentlyUsedEmoji : EmojiOrCustomEmoji -> { a | emojiConfig : EmojiConfig } -> { a | emojiConfig : EmojiConfig }
 addRecentlyUsedEmoji emoji user =
     let
         emojiConfig =

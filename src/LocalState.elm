@@ -117,7 +117,7 @@ import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Embed exposing (EmbedData)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -338,7 +338,7 @@ type alias DiscordFrontendChannel =
     }
 
 
-messageReactions : GuildOrDmId -> ThreadRouteWithMessage -> LocalState -> SeqDict Emoji (NonemptySet (Id UserId))
+messageReactions : GuildOrDmId -> ThreadRouteWithMessage -> LocalState -> SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
 messageReactions guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
@@ -364,7 +364,7 @@ messageReactionsHelper :
         , threads : SeqDict (Id ChannelMessageId) { b | messages : Array (MessageState ThreadMessageId userId) }
     }
     -> ThreadRouteWithMessage
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 messageReactionsHelper channel threadRoute2 =
     case threadRoute2 of
         NoThreadWithMessage messageId ->
@@ -382,7 +382,7 @@ messageReactionsHelper channel threadRoute2 =
 messageReactionsNoThread :
     Id messageId
     -> { a | messages : Array (MessageState messageId userId) }
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 messageReactionsNoThread messageId channel =
     case DmChannel.getArray messageId channel.messages of
         Just (MessageLoaded message) ->
@@ -1486,7 +1486,7 @@ allDiscordUsers localUser =
 
 
 addReactionEmoji :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1512,7 +1512,7 @@ addReactionEmoji emoji userId threadRoute channel =
 
 
 addReactionEmojiHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (Message messageId userId) }
@@ -1522,7 +1522,7 @@ addReactionEmojiHelper emoji userId messageId channel =
 
 
 addReactionEmojiFrontend :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1551,7 +1551,7 @@ addReactionEmojiFrontend emoji userId threadRoute channel =
 
 
 addReactionEmojiFrontendHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId userId) }
@@ -1749,7 +1749,7 @@ editMessageFrontendHelperNoThread time editedBy newContent attachedFiles message
 
 
 removeReactionEmoji :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1778,7 +1778,7 @@ removeReactionEmoji emoji userId threadRoute channel =
 
 
 removeReactionEmojiHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (Message messageId userId) }
@@ -1788,7 +1788,7 @@ removeReactionEmojiHelper emoji userId messageId channel =
 
 
 removeReactionEmojiFrontend :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1817,7 +1817,7 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 
 
 removeReactionEmojiFrontendHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId userId) }

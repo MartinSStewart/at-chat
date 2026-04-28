@@ -21,7 +21,7 @@ import Array exposing (Array)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)
@@ -37,7 +37,7 @@ import Url exposing (Url)
 
 type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
-    | UserJoinedMessage Time.Posix userId (SeqDict Emoji (NonemptySet userId))
+    | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage Time.Posix
 
 
@@ -233,7 +233,7 @@ type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
     , createdBy : userId
     , content : Nonempty (RichText userId)
-    , reactions : SeqDict Emoji (NonemptySet userId)
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
@@ -248,7 +248,7 @@ type MessageStateNoReply userId
 
 type MessageNoReply userId
     = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
-    | UserJoinedMessage_NoReply Time.Posix userId (SeqDict Emoji (NonemptySet userId))
+    | UserJoinedMessage_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
 
 
@@ -256,7 +256,7 @@ type alias UserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
     , createdBy : userId
     , content : Nonempty (RichText userId)
-    , reactions : SeqDict Emoji (NonemptySet userId)
+    , reactions : SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
     }
@@ -275,7 +275,7 @@ createdAt message =
             time
 
 
-addReactionEmoji : userId -> Emoji -> Message messageId userId -> Message messageId userId
+addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -320,7 +320,7 @@ addReactionEmoji userId emoji message =
             message
 
 
-removeReactionEmoji : userId -> Emoji -> Message messageId userId -> Message messageId userId
+removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -365,7 +365,7 @@ removeReactionEmoji userId emoji message =
             message
 
 
-reactionEmojis : Message messageId userId -> SeqDict Emoji (NonemptySet userId)
+reactionEmojis : Message messageId userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 reactionEmojis message =
     case message of
         UserTextMessage data ->

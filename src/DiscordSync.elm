@@ -36,7 +36,7 @@ import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrCustomEmoji(..))
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -85,9 +85,9 @@ addOrRemoveDiscordReaction isAdding reaction model =
                     case discordChannelIdToChannelId reaction.channelId reaction.messageId guild of
                         Just ( channelId, channel, threadRoute ) ->
                             let
-                                emoji : Emoji
+                                emoji : EmojiOrCustomEmoji
                                 emoji =
-                                    Emoji.fromDiscord reaction.emoji
+                                    emojiFromDiscord model.discordCustomEmojis reaction.emoji
                             in
                             ( { model
                                 | discordGuilds =
@@ -153,9 +153,9 @@ addOrRemoveDiscordReaction isAdding reaction model =
                     case OneToOne.second reaction.messageId channel.linkedMessageIds of
                         Just messageId ->
                             let
-                                emoji : Emoji
+                                emoji : EmojiOrCustomEmoji
                                 emoji =
-                                    Emoji.fromDiscord reaction.emoji
+                                    emojiFromDiscord model.discordCustomEmojis reaction.emoji
                             in
                             ( { model
                                 | discordDmChannels =
@@ -2452,7 +2452,7 @@ handleCustomEmojis secretKey emojisToCheck state =
                 Discord.CustomEmojiType idAndName ->
                     case maybeEmojiNameAndIdToNameAndId idAndName of
                         Just idAndName2 ->
-                            case OneToOne.second idAndName2 acc.discordCustomEmojis of
+                            case OneToOne.second idAndName2 acc.discordCustomEmojis |> Debug.log "emoji" of
                                 Just _ ->
                                     acc
 
@@ -2600,6 +2600,26 @@ handleReadyData userId readyData model =
             |> Task.perform identity
         ]
     )
+
+
+emojiFromDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> Discord.EmojiData -> EmojiOrCustomEmoji
+emojiFromDiscord customEmojis emoji =
+    case emoji.type_ of
+        Discord.UnicodeEmojiType string ->
+            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji string)
+
+        Discord.CustomEmojiType idAndName ->
+            case maybeEmojiNameAndIdToNameAndId idAndName of
+                Just idAndName2 ->
+                    case OneToOne.second idAndName2 customEmojis of
+                        Just customEmojiId ->
+                            EmojiOrCustomEmoji_CustomEmoji customEmojiId
+
+                        Nothing ->
+                            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "❓")
+
+                Nothing ->
+                    EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "❓")
 
 
 maybeEmojiNameAndIdToNameAndId : { a | name : Maybe String, id : Discord.Id Discord.CustomEmojiId } -> Maybe DiscordCustomEmojiIdAndName

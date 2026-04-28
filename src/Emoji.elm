@@ -5,6 +5,7 @@ module Emoji exposing
     , EmojiCategory(..)
     , EmojiConfig
     , EmojiData
+    , EmojiOrCustomEmoji(..)
     , EmojiOrSticker(..)
     , EmojiResponse
     , Model
@@ -12,7 +13,6 @@ module Emoji exposing
     , SkinTone(..)
     , emojiButtonId
     , emojiWithSkinTone
-    , fromDiscord
     , heart
     , isPressed
     , requestEmojiData
@@ -42,6 +42,8 @@ import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
 import Json.Decode
 import MyUi
+import OneToOne exposing (OneToOne)
+import RichText exposing (DiscordCustomEmojiIdAndName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
@@ -58,6 +60,11 @@ type Emoji
     = UnicodeEmoji String
 
 
+type EmojiOrCustomEmoji
+    = EmojiOrCustomEmoji_Emoji Emoji
+    | EmojiOrCustomEmoji_CustomEmoji (Id CustomEmojiId)
+
+
 toString : Emoji -> String
 toString emoji =
     case emoji of
@@ -66,20 +73,8 @@ toString emoji =
 
 
 view : Emoji -> Element msg
-view emoji =
-    case emoji of
-        UnicodeEmoji text ->
-            Ui.el [ Ui.Font.size 20 ] (Ui.text text)
-
-
-fromDiscord : Discord.EmojiData -> Emoji
-fromDiscord emoji =
-    case emoji.type_ of
-        Discord.UnicodeEmojiType string ->
-            UnicodeEmoji string
-
-        Discord.CustomEmojiType _ ->
-            UnicodeEmoji "❓"
+view (UnicodeEmoji emoji) =
+    Ui.el [ Ui.Font.size 20 ] (Ui.text emoji)
 
 
 type Category
@@ -267,7 +262,7 @@ type alias Model =
 type alias EmojiConfig =
     { skinTone : Maybe SkinTone
     , category : Category
-    , lastUsedEmojis : Array Emoji
+    , lastUsedEmojis : Array EmojiOrCustomEmoji
     }
 
 

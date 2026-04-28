@@ -22,6 +22,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
+import MessageView
 import MyUi
 import OneToOne
 import PersonName exposing (PersonName)
@@ -536,7 +537,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                                             , buttonHeight isMobile |> Ui.px |> Ui.height
                                             , Ui.Font.size 24
                                             ]
-                                            (Ui.text (Emoji.toString emoji))
+                                            (Ui.html (MessageView.reactionEmojiButtonContent local.localUser.customEmojis emoji))
                                     )
                     in
                     Ui.el

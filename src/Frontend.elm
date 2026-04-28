@@ -24,7 +24,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji, EmojiOrSticker(..))
+import Emoji exposing (Emoji, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -1168,15 +1168,19 @@ updateLoaded msg model =
                                         EmojiOrSticker_Emoji emoji ->
                                             FrontendExtra.handleLocalChange
                                                 model.time
-                                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                                (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_Emoji emoji) |> Just)
                                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                                 (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
 
                                         EmojiOrSticker_Sticker _ ->
                                             ( loggedIn, Command.none )
 
-                                        EmojiOrSticker_CustomEmoji _ ->
-                                            Debug.todo ""
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_CustomEmoji customEmojiId) |> Just)
+                                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
 
                                 --( loggedIn, Command.none )
                                 EmojiSelectorForMessage maybeSelection ->
@@ -3601,7 +3605,7 @@ pageUpOrDownScroll isUp model =
     )
 
 
-messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
+messageHasReaction : EmojiOrCustomEmoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
 messageHasReaction emoji guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId guildOrDmId3 ->
@@ -3681,7 +3685,7 @@ scrollEmojiIntoView index =
 
 
 toggleReactionEmoji :
-    Emoji
+    EmojiOrCustomEmoji
     -> AnyGuildOrDmId
     -> ThreadRouteWithMessage
     -> LoadedFrontend

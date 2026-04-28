@@ -28,7 +28,7 @@ import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress
-import Emoji
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileData, FileId)
 import GuildName
@@ -45,14 +45,14 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
-import OneToOne
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import PersonName
 import Postmark
 import Quantity
 import RateLimit
-import RichText exposing (RichText)
+import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -2850,8 +2850,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 currentUserId
                                 (\session userData user guild ->
-                                    case SeqDict.get channelId guild.channels of
-                                        Just channel ->
+                                    case
+                                        ( SeqDict.get channelId guild.channels
+                                        , emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji
+                                        )
+                                    of
+                                        ( Just channel, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordGuilds =
                                                     SeqDict.insert
@@ -2879,7 +2883,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -2897,7 +2901,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        Nothing ->
+                                        _ ->
                                             ( model
                                             , BackendExtra.invalidChangeResponse changeId clientId
                                             )
@@ -2909,8 +2913,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\session userData user channel ->
-                                    case threadRoute of
-                                        NoThreadWithMessage messageId ->
+                                    case ( threadRoute, emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji ) of
+                                        ( NoThreadWithMessage messageId, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordDmChannels =
                                                     SeqDict.updateIfExists
@@ -2938,7 +2942,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = Discord.idToUInt64 data.channelId |> Discord.idFromUInt64
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -2955,7 +2959,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        ViewThreadWithMessage _ _ ->
+                                        _ ->
                                             ( model, Command.none )
                                 )
 
@@ -3035,8 +3039,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 currentUserId
                                 (\_ userData _ guild ->
-                                    case SeqDict.get channelId guild.channels of
-                                        Just channel ->
+                                    case
+                                        ( SeqDict.get channelId guild.channels
+                                        , emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji
+                                        )
+                                    of
+                                        ( Just channel, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordGuilds =
                                                     SeqDict.insert
@@ -3068,7 +3076,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -3086,7 +3094,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        Nothing ->
+                                        _ ->
                                             ( model
                                             , BackendExtra.invalidChangeResponse changeId clientId
                                             )
@@ -3098,8 +3106,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\_ userData _ channel ->
-                                    case threadRoute of
-                                        NoThreadWithMessage messageId ->
+                                    case ( threadRoute, emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji ) of
+                                        ( NoThreadWithMessage messageId, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordDmChannels =
                                                     SeqDict.updateIfExists
@@ -3126,7 +3134,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = Discord.idToUInt64 data.channelId |> Discord.idFromUInt64
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -3143,7 +3151,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        ViewThreadWithMessage _ _ ->
+                                        _ ->
                                             ( model, Command.none )
                                 )
 
@@ -4620,6 +4628,23 @@ textToDiscordRichText text memberIds model =
             memberIds
         )
         text
+
+
+emojiOrCustomEmojiToDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Result () Discord.Emoji
+emojiOrCustomEmojiToDiscord customEmojis emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji emoji2 ->
+            Emoji.toString emoji2 |> Discord.UnicodeEmoji |> Ok
+
+        EmojiOrCustomEmoji_CustomEmoji id ->
+            case OneToOne.first id customEmojis of
+                Just discordEmoji ->
+                    Discord.CustomEmoji
+                        { id = discordEmoji.id, name = CustomEmoji.emojiNameToString discordEmoji.name }
+                        |> Ok
+
+                Nothing ->
+                    Err ()
 
 
 threadRouteToDiscordMessageId :

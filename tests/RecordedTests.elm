@@ -3513,7 +3513,7 @@ allAttackerLocalChanges =
             NoThreadWithMaybeMessage (Just (Id.fromInt 0))
 
         emoji =
-            Emoji.UnicodeEmoji "👍"
+            Emoji.Emoji "👍"
 
         discordDmData : DiscordGuildOrDmId_DmData
         discordDmData =

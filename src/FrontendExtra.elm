@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji)
+import Emoji exposing (Emoji, EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
@@ -3402,7 +3402,7 @@ discordDmMemberTyping time userId channelId local =
     }
 
 
-addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
+addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> EmojiOrCustomEmoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId threadRoute emoji local =
     let
         localUser : LocalUser
@@ -3474,7 +3474,7 @@ removeReactionEmoji :
     Id UserId
     -> AnyGuildOrDmId
     -> ThreadRouteWithMessage
-    -> Emoji
+    -> EmojiOrCustomEmoji
     -> LocalState
     -> LocalState
 removeReactionEmoji userId guildOrDmId threadRoute emoji local =

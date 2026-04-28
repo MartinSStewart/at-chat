@@ -30,7 +30,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji, EmojiConfig)
+import Emoji exposing (Emoji, EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -61,7 +61,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Sticker
+import Sticker exposing (AnimationMode(..))
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
@@ -4462,8 +4462,13 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-reactionEmojiView : userId -> SeqDict Emoji (NonemptySet userId) -> Maybe (Element MessageViewMsg)
-reactionEmojiView currentUserId reactions =
+reactionEmojiView :
+    userId
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> Sticker.AnimationMode
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> Maybe (Element MessageViewMsg)
+reactionEmojiView currentUserId customEmojis animationMode reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
@@ -4511,7 +4516,22 @@ reactionEmojiView currentUserId reactions =
                         , Ui.width Ui.shrink
                         , Ui.Font.bold
                         ]
-                        [ Emoji.view emoji, Ui.text (String.fromInt (NonemptySet.size users)) ]
+                        [ case emoji of
+                            EmojiOrCustomEmoji_Emoji emoji2 ->
+                                Emoji.view emoji2
+
+                            EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                                Ui.el
+                                    [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
+                                        |> Ui.html
+                                        |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
+                                        |> Ui.inFront
+                                    , Ui.Font.color (Ui.rgba 0 0 0 0)
+                                    , Ui.Font.size 20
+                                    ]
+                                    (Ui.text "❓")
+                        , Ui.text (String.fromInt (NonemptySet.size users))
+                        ]
                 )
                 (SeqDict.toList reactions)
             )
@@ -4540,7 +4560,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    reactionEmojiView currentUserId data.reactions
+                    reactionEmojiView currentUserId local.localUser.customEmojis LoopAFewTimesOnLoad data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -4673,7 +4693,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView currentUserId data.reactions
+                    reactionEmojiView currentUserId local.localUser.customEmojis LoopAFewTimesOnLoad data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -5129,6 +5149,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 currentUserId
                 localUser.user
                 message2.reactions
+                localUser.customEmojis
                 isHovered
                 (userTextMessageContent
                     (Dom.id "threadSpoiler")
@@ -5152,6 +5173,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 currentUserId
                 localUser.user
                 reactions
+                localUser.customEmojis
                 isHovered
                 (Ui.row
                     []
@@ -5168,8 +5190,22 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 localUser.session.userId
                 localUser.user
                 SeqDict.empty
+                localUser.customEmojis
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
+
+
+isHoveredToAnimationMode : IsHovered -> AnimationMode
+isHoveredToAnimationMode isHovered =
+    case isHovered of
+        IsNotHovered ->
+            Sticker.LoopAFewTimesOnLoad
+
+        IsHovered ->
+            Sticker.ResetAndLoopAFewTimes
+
+        IsHoveredButNoMenu ->
+            Sticker.ResetAndLoopAFewTimes
 
 
 userTextMessageContent :
@@ -5242,16 +5278,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , domainWhitelist = localUser.user.domainWhitelist
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
-                    , animationMode =
-                        case isHovered of
-                            IsNotHovered ->
-                                Sticker.LoopAFewTimesOnLoad
-
-                            IsHovered ->
-                                Sticker.ResetAndLoopAFewTimes
-
-                            IsHoveredButNoMenu ->
-                                Sticker.ResetAndLoopAFewTimes
+                    , animationMode = isHoveredToAnimationMode isHovered
                     }
                     message2.embeds
                     message2.content
@@ -5461,7 +5488,7 @@ messageContainer :
     -> Bool
     -> userId
     -> FrontendCurrentUser
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
     -> IsHovered
     -> Element MessageViewMsg
@@ -5470,7 +5497,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView currentUserId reactions
+            reactionEmojiView currentUserId customEmojis (isHoveredToAnimationMode isHovered) reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -5541,7 +5568,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser isThreadStarter canEdit |> Ui.inFront
+                        , MessageView.miniView currentUser isThreadStarter canEdit customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -5578,15 +5605,16 @@ threadMessageContainer :
     -> Bool
     -> userId
     -> FrontendCurrentUser
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions isHovered messageContent =
+threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions customEmojis isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView currentUserId reactions
+            reactionEmojiView currentUserId customEmojis (isHoveredToAnimationMode isHovered) reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -5657,7 +5685,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser False canEdit |> Ui.inFront
+                        , MessageView.miniView currentUser False canEdit customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->

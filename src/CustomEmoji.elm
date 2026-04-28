@@ -7,6 +7,7 @@ module CustomEmoji exposing
     , emojiNameToString
     , idToString
     , view
+    , viewHelper
     )
 
 import Coord exposing (Coord)
@@ -39,7 +40,7 @@ type EmojiName
 
 emojiNameFromString : String -> Result () EmojiName
 emojiNameFromString text =
-    if String.length text >= 2 && String.length text < 32 then
+    if String.length text >= 2 && String.length text < 32 && not (String.contains ":" text) then
         Ok (EmojiName text)
 
     else
@@ -66,35 +67,7 @@ view : String -> String -> Id CustomEmojiId -> SeqDict (Id CustomEmojiId) Custom
 view emojiSize yOffset customEmojiId customEmojis2 animationMode =
     case SeqDict.get customEmojiId customEmojis2 of
         Just customEmoji ->
-            case customEmoji.url of
-                CustomEmojiLoading ->
-                    Html.div
-                        [ Html.Attributes.style "width" emojiSize
-                        , Html.Attributes.style "height" emojiSize
-                        , Html.Attributes.style "background-color" "gray"
-                        , Html.Attributes.style "display" "inline-block"
-                        , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
-                        ]
-                        []
-
-                CustomEmojiInternal fileHash _ ->
-                    if customEmoji.isAnimated then
-                        Sticker.animatedImageView
-                            emojiSize
-                            emojiSize
-                            (Just yOffset)
-                            (FileStatus.fileUrl FileStatus.gifContent fileHash)
-                            animationMode
-
-                    else
-                        Html.img
-                            [ Html.Attributes.style "width" emojiSize
-                            , Html.Attributes.style "height" emojiSize
-                            , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                            , Html.Attributes.style "display" "inline-block"
-                            , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
-                            ]
-                            []
+            viewHelper emojiSize yOffset customEmoji animationMode
 
         Nothing ->
             Html.div
@@ -104,6 +77,39 @@ view emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
                 ]
                 [ Html.text "Custom emoji failed to load" ]
+
+
+viewHelper : String -> String -> { a | url : CustomEmojiUrl, isAnimated : Bool } -> Sticker.AnimationMode -> Html msg
+viewHelper emojiSize yOffset customEmoji animationMode =
+    case customEmoji.url of
+        CustomEmojiLoading ->
+            Html.div
+                [ Html.Attributes.style "width" emojiSize
+                , Html.Attributes.style "height" emojiSize
+                , Html.Attributes.style "background-color" "gray"
+                , Html.Attributes.style "display" "inline-block"
+                , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
+                ]
+                []
+
+        CustomEmojiInternal fileHash _ ->
+            if customEmoji.isAnimated then
+                Sticker.animatedImageView
+                    emojiSize
+                    emojiSize
+                    (Just yOffset)
+                    (FileStatus.fileUrl FileStatus.gifContent fileHash)
+                    animationMode
+
+            else
+                Html.img
+                    [ Html.Attributes.style "width" emojiSize
+                    , Html.Attributes.style "height" emojiSize
+                    , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                    , Html.Attributes.style "display" "inline-block"
+                    , Html.Attributes.style "transform" ("translateY(" ++ yOffset ++ ")")
+                    ]
+                    []
 
 
 idToString : Id CustomEmojiId -> String

@@ -53,7 +53,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LocalUser, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -1383,7 +1383,7 @@ view isMobile2 version local adminData user model =
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
-            , logSection isMobile2 local.localUser.timezone user adminData model
+            , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , filesSection user adminData
@@ -2788,8 +2788,8 @@ resetButton htmlId onPress =
         Icons.reset
 
 
-logSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-logSection isMobile2 timezone user adminData model =
+logSection : Bool -> LocalUser -> BackendUser -> AdminData -> Model -> Element Msg
+logSection isMobile2 localUser user adminData model =
     let
         pageIndex : Int
         pageIndex =
@@ -2825,7 +2825,8 @@ logSection isMobile2 timezone user adminData model =
                     Log.view
                         isMobile2
                         log.isHidden
-                        timezone
+                        localUser.timezone
+                        localUser.customEmojis
                         { onPressCopyLink = PressedCopyLogLink logId
                         , onPressCopy = PressedCopyText
                         , onPressHide = PressedHideLog logId
