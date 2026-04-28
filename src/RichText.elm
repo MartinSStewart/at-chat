@@ -1345,20 +1345,40 @@ parseCustomEmojiIdHelper id index source =
 
 stringToStickersAndCustomEmojis : String -> List ( Range, Maybe () )
 stringToStickersAndCustomEmojis text =
-    String.indexes "\n\u{200B}" text
-        ++ String.indexes "\n\u{200C}" text
-        ++ String.indexes "\n\u{200D}" text
-        ++ String.indexes "\n\u{2060}" text
-        |> List.foldl
-            (\index shouldRemove ->
-                let
-                    ( endIndex, stickerId ) =
-                        parseStickerId (index + 1) text
-                in
-                ( { start = index, end = endIndex }, Maybe.map (\_ -> ()) stickerId ) :: shouldRemove
-            )
-            []
-        |> List.sortBy (\( range, _ ) -> -range.start)
+    let
+        stickers2 : List ( Range, Maybe () )
+        stickers2 =
+            String.indexes "\n\u{200B}" text
+                ++ String.indexes "\n\u{200C}" text
+                ++ String.indexes "\n\u{200D}" text
+                ++ String.indexes "\n\u{2060}" text
+                |> List.foldl
+                    (\index shouldRemove ->
+                        let
+                            ( endIndex, stickerId ) =
+                                parseStickerId (index + 1) text
+                        in
+                        ( { start = index, end = endIndex }, Maybe.map (\_ -> ()) stickerId ) :: shouldRemove
+                    )
+                    []
+
+        customEmojis : List ( Range, Maybe () )
+        customEmojis =
+            String.indexes "❓\u{200B}" text
+                ++ String.indexes "❓\u{200C}" text
+                ++ String.indexes "❓\u{200D}" text
+                ++ String.indexes "❓\u{2060}" text
+                |> List.foldl
+                    (\index shouldRemove ->
+                        let
+                            ( endIndex, customEmojiId ) =
+                                parseCustomEmojiId (index + 1) text
+                        in
+                        ( { start = index, end = endIndex }, Maybe.map (\_ -> ()) customEmojiId ) :: shouldRemove
+                    )
+                    []
+    in
+    stickers2 ++ customEmojis |> List.sortBy (\( range, _ ) -> -range.start)
 
 
 parseLoop :
@@ -3438,7 +3458,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                       else
                                         Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
                                     , Html.Attributes.style "top" "0.1lh"
-                                    , Html.Attributes.style "left" "0"
+                                    , Html.Attributes.style "left" "0.1em"
                                     ]
                                     [ CustomEmoji.view customEmojiId customEmojis Sticker.LoopForever ]
                                 , Html.div

@@ -3476,7 +3476,7 @@ removePartialStickers htmlId text =
             Command.none
 
         list ->
-            Ports.execCommand { htmlId = htmlId, commands = list }
+            Ports.execCommand { htmlId = htmlId, commands = Ports.Undo :: list }
 
 
 loadOlderMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
