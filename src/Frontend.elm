@@ -2935,7 +2935,7 @@ updateLoaded msg model =
                                 ( Just ( guildOrDmId, threadRoute ), True ) ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (loadOlderMessages guildOrDmId threadRoute (Local.model loggedIn.localState))
+                                        (loadOlderMessages guildOrDmId threadRoute (Local.model loggedIn.localState) |> Debug.log "abc")
                                         loggedIn
                                         Command.none
 
@@ -3479,30 +3479,39 @@ removePartialStickers htmlId text =
             Ports.execCommand { htmlId = htmlId, commands = list }
 
 
+loadOlderMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
 loadOlderMessages guildOrDmId threadRoute local =
+    let
+        messagesLeft channel localChange =
+            if Id.toInt channel.visibleMessages.oldest > 0 then
+                Just localChange
+
+            else
+                Nothing
+    in
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             case LocalState.getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
-                    (case threadRoute of
+                    case threadRoute of
                         NoThread ->
                             Local_LoadChannelMessages
                                 (GuildOrDmId_Guild guildId channelId)
                                 channel.visibleMessages.oldest
                                 EmptyPlaceholder
+                                |> messagesLeft channel
 
                         ViewThread threadId ->
+                            let
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.frontendInit
+                            in
                             Local_LoadThreadMessages
                                 (GuildOrDmId_Guild guildId channelId)
                                 threadId
-                                (SeqDict.get threadId channel.threads
-                                    |> Maybe.withDefault Thread.frontendInit
-                                    |> .visibleMessages
-                                    |> .oldest
-                                )
+                                thread.visibleMessages.oldest
                                 EmptyPlaceholder
-                    )
-                        |> Just
+                                |> messagesLeft thread
 
                 Nothing ->
                     Nothing
@@ -3514,48 +3523,48 @@ loadOlderMessages guildOrDmId threadRoute local =
                     SeqDict.get otherUserId local.dmChannels
                         |> Maybe.withDefault DmChannel.frontendInit
             in
-            (case threadRoute of
+            case threadRoute of
                 NoThread ->
                     Local_LoadChannelMessages
                         (GuildOrDmId_Dm otherUserId)
                         dmChannel.visibleMessages.oldest
                         EmptyPlaceholder
+                        |> messagesLeft dmChannel
 
                 ViewThread threadId ->
+                    let
+                        thread =
+                            SeqDict.get threadId dmChannel.threads |> Maybe.withDefault Thread.frontendInit
+                    in
                     Local_LoadThreadMessages
                         (GuildOrDmId_Dm otherUserId)
                         threadId
-                        (SeqDict.get threadId dmChannel.threads
-                            |> Maybe.withDefault Thread.frontendInit
-                            |> .visibleMessages
-                            |> .oldest
-                        )
+                        thread.visibleMessages.oldest
                         EmptyPlaceholder
-            )
-                |> Just
+                        |> messagesLeft thread
 
         DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild _ guildId channelId) as guildOrDmId2) ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
-                    (case threadRoute of
+                    case threadRoute of
                         NoThread ->
                             Local_Discord_LoadChannelMessages
                                 guildOrDmId2
                                 channel.visibleMessages.oldest
                                 EmptyPlaceholder
+                                |> messagesLeft channel
 
                         ViewThread threadId ->
+                            let
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.discordFrontendInit
+                            in
                             Local_Discord_LoadThreadMessages
                                 guildOrDmId2
                                 threadId
-                                (SeqDict.get threadId channel.threads
-                                    |> Maybe.withDefault Thread.discordFrontendInit
-                                    |> .visibleMessages
-                                    |> .oldest
-                                )
+                                thread.visibleMessages.oldest
                                 EmptyPlaceholder
-                    )
-                        |> Just
+                                |> messagesLeft thread
 
                 Nothing ->
                     Nothing
@@ -3567,7 +3576,7 @@ loadOlderMessages guildOrDmId threadRoute local =
                         guildOrDmId2
                         dmChannel.visibleMessages.oldest
                         EmptyPlaceholder
-                        |> Just
+                        |> messagesLeft dmChannel
 
                 Nothing ->
                     Nothing
