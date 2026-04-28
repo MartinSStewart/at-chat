@@ -484,6 +484,7 @@ type FrontendMsg
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpOrDownScroll
+    | PageUpGotViewport (Result Dom.Error Dom.Viewport)
 
 
 type ScrollPosition

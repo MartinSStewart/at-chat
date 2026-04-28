@@ -1309,6 +1309,9 @@ isPressMsg msg =
         PageUpOrDownScroll ->
             False
 
+        PageUpGotViewport result ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

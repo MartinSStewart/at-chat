@@ -13,6 +13,7 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
+    , scrollCloseToTop
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -3065,6 +3066,11 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
+scrollCloseToTop : number
+scrollCloseToTop =
+    300
+
+
 decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
 decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
@@ -3072,7 +3078,7 @@ decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
             if scrollTop + clientHeight >= scrollHeight - 5 then
                 ScrolledToBottom
 
-            else if scrollTop <= 300 then
+            else if scrollTop <= scrollCloseToTop then
                 ScrolledToTop
 
             else
