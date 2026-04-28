@@ -77,6 +77,7 @@ stringFuzzer =
         , "#"
         , "-"
         , "❓"
+        , "\u{FEFF}"
         ]
 
 
@@ -497,11 +498,14 @@ test =
             (Nonempty (Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) [ NormalText ' ' "test" ])) [])
             (Nonempty (AttachedFile (Id.fromInt 1)) [ Spoiler (Nonempty (NormalText ' ' "test") []) ])
             (RichText.unspoilerAttachedFile (Id.fromInt 1))
-        , fromNonemptyStringTest "❓\u{200B}" (Nonempty (CustomEmoji (Id.fromInt 0)) [])
-        , fromNonemptyStringTest "❓\u{2060}" (Nonempty (CustomEmoji (Id.fromInt 3)) [])
-        , fromNonemptyStringTest "❓\u{2060}\u{2060}" (Nonempty (CustomEmoji (Id.fromInt 15)) [])
+        , fromNonemptyStringTest "❓\u{200B}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 0)) [])
+        , fromNonemptyStringTest "❓\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 3)) [])
+        , fromNonemptyStringTest "❓\u{2060}\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 15)) [])
+        , fromNonemptyStringTest "❓\u{200B}\u{2060}\u{FEFF}" (Nonempty (NormalText '❓' "\u{200B}\u{2060}\u{FEFF}") [])
         , fromNonemptyStringTest "❓\u{200B}\u{2060}" (Nonempty (NormalText '❓' "\u{200B}\u{2060}") [])
-        , fromNonemptyStringTest "❓\u{2060}❓\u{2060}" (Nonempty (CustomEmoji (Id.fromInt 3)) [ CustomEmoji (Id.fromInt 3) ])
+        , fromNonemptyStringTest "❓\u{200B}" (Nonempty (NormalText '❓' "\u{200B}") [])
+        , fromNonemptyStringTest "❓\u{2060}" (Nonempty (NormalText '❓' "\u{2060}") [])
+        , fromNonemptyStringTest "❓\u{2060}\u{FEFF}❓\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 3)) [ CustomEmoji (Id.fromInt 3) ])
         ]
 
 

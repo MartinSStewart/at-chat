@@ -25,7 +25,7 @@ module RichText exposing
     , removeAttachedFile
     , spoilerAttachedFile
     , stickers
-    , stringToStickers
+    , stringToStickersAndCustomEmojis
     , textInputView
     , toDiscord
     , toString
@@ -1294,32 +1294,20 @@ parseCustomEmojiId index source =
         Just char ->
             case char of
                 "\u{200B}" ->
-                    ( index + 1
-                    , case stringAt (index + 1) source of
-                        Just "\u{200B}" ->
-                            Nothing
+                    if stringAt (index + 1) source == Just "\u{FEFF}" then
+                        ( index + 2, Just (Id.fromInt 0) )
 
-                        Just "\u{200C}" ->
-                            Nothing
-
-                        Just "\u{200D}" ->
-                            Nothing
-
-                        Just "\u{2060}" ->
-                            Nothing
-
-                        _ ->
-                            Just (Id.fromInt 0)
-                    )
+                    else
+                        ( index + 1, Nothing )
 
                 "\u{200C}" ->
-                    parseCustomEmojiIdHelper 1 (index + 1) source |> Tuple.mapSecond Just
+                    parseCustomEmojiIdHelper 1 (index + 1) source
 
                 "\u{200D}" ->
-                    parseCustomEmojiIdHelper 2 (index + 1) source |> Tuple.mapSecond Just
+                    parseCustomEmojiIdHelper 2 (index + 1) source
 
                 "\u{2060}" ->
-                    parseCustomEmojiIdHelper 3 (index + 1) source |> Tuple.mapSecond Just
+                    parseCustomEmojiIdHelper 3 (index + 1) source
 
                 _ ->
                     ( index, Nothing )
@@ -1328,7 +1316,7 @@ parseCustomEmojiId index source =
             ( index, Nothing )
 
 
-parseCustomEmojiIdHelper : Int -> Int -> String -> ( Int, Id CustomEmojiId )
+parseCustomEmojiIdHelper : Int -> Int -> String -> ( Int, Maybe (Id CustomEmojiId) )
 parseCustomEmojiIdHelper id index source =
     case stringAt index source of
         Just char ->
@@ -1345,15 +1333,18 @@ parseCustomEmojiIdHelper id index source =
                 "\u{2060}" ->
                     parseCustomEmojiIdHelper (3 + 4 * id) (index + 1) source
 
+                "\u{FEFF}" ->
+                    ( index + 1, Just (Id.fromInt id) )
+
                 _ ->
-                    ( index, Id.fromInt id )
+                    ( index, Nothing )
 
         Nothing ->
-            ( index, Id.fromInt id )
+            ( index, Nothing )
 
 
-stringToStickers : String -> List ( Range, Maybe (Id StickerId) )
-stringToStickers text =
+stringToStickersAndCustomEmojis : String -> List ( Range, Maybe () )
+stringToStickersAndCustomEmojis text =
     String.indexes "\n\u{200B}" text
         ++ String.indexes "\n\u{200C}" text
         ++ String.indexes "\n\u{200D}" text
@@ -1364,7 +1355,7 @@ stringToStickers text =
                     ( endIndex, stickerId ) =
                         parseStickerId (index + 1) text
                 in
-                ( { start = index, end = endIndex }, stickerId ) :: shouldRemove
+                ( { start = index, end = endIndex }, Maybe.map (\_ -> ()) stickerId ) :: shouldRemove
             )
             []
         |> List.sortBy (\( range, _ ) -> -range.start)

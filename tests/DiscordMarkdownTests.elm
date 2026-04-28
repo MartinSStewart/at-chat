@@ -5,7 +5,7 @@ import Expect
 import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
-import RichText exposing (HasLeadingLineBreak(..), RichText(..))
+import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -26,9 +26,9 @@ test =
         ]
 
 
-customEmojis : OneToOne (Discord.Id Discord.CustomEmojiId) (Id CustomEmojiId)
+customEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
 customEmojis =
-    OneToOne.fromList [ ( Unsafe.uint64 "543" |> Discord.idFromUInt64, Id.fromInt 999 ) ]
+    OneToOne.fromList [ ( { id = Unsafe.uint64 "543" |> Discord.idFromUInt64, name = Unsafe.emojiName "abc" }, Id.fromInt 999 ) ]
 
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
@@ -137,9 +137,9 @@ basicFormattingTests =
             )
         , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
         , fromNonemptyStringTest "<:abc:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
-        , fromNonemptyStringTest "<:abc:542>" (Nonempty (NormalText '<' "abc:542>") [])
+        , fromNonemptyStringTest "<:abc:542>" (Nonempty (NormalText '<' ":abc:542>") [])
         , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543>") [])
-        , fromNonemptyStringTest "<:http:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
+        , fromNonemptyStringTest "<:http:543>" (Nonempty (NormalText '<' ":http:543>") [])
         ]
 
 

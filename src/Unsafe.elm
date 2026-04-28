@@ -1,12 +1,14 @@
 module Unsafe exposing
     ( channelName
     , emailAddress
+    , emojiName
     , guildName
     , personName
     , uint64
     )
 
 import ChannelName exposing (ChannelName)
+import CustomEmoji
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
@@ -60,6 +62,16 @@ uint64 text =
             b
 
         Nothing ->
+            unreachable 0
+
+
+emojiName : String -> CustomEmoji.EmojiName
+emojiName text =
+    case CustomEmoji.emojiNameFromString text of
+        Ok b ->
+            b
+
+        Err () ->
             unreachable 0
 
 

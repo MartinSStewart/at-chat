@@ -99,7 +99,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") Env.adminEmail True
+    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") (Unsafe.emailAddress "a@a.se") True
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -5389,10 +5389,6 @@ updateFromFrontendAdmin clientId toBackend model =
         Pages.Admin.ImportBackendRequest bytes ->
             case Bytes.Decode.decode WireHelper.decodeStreamedBackendModel bytes of
                 Just model2 ->
-                    let
-                        _ =
-                            Debug.log "asdf" model2.lastScheduledExportTime
-                    in
                     ( model2
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
                     )

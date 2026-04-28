@@ -294,7 +294,7 @@ startTime =
 
 adminEmail : EmailAddress
 adminEmail =
-    Env.adminEmail
+    Backend.adminUser.email
 
 
 userEmail : EmailAddress
@@ -2212,7 +2212,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         , T.checkState
             (Duration.hours 4.01 |> Duration.inMilliseconds)
             (\data ->
-                case List.filterMap (isLogErrorEmail Env.adminEmail) data.httpRequests of
+                case List.filterMap (isLogErrorEmail adminEmail) data.httpRequests of
                     [ "LoginsRateLimited" ] ->
                         Ok ()
 
@@ -2755,7 +2755,7 @@ checkNoErrorLogs =
     T.checkState
         100
         (\data ->
-            case List.filterMap (isLogErrorEmail Env.adminEmail) data.httpRequests of
+            case List.filterMap (isLogErrorEmail Backend.adminUser.email) data.httpRequests of
                 [] ->
                     Ok ()
 

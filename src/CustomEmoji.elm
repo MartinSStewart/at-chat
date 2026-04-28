@@ -110,4 +110,4 @@ view customEmojiId customEmojis2 animationMode =
 
 idToString : Id CustomEmojiId -> String
 idToString id =
-    "❓" ++ Sticker.toBase4 (Id.toInt id)
+    "❓" ++ Sticker.toBase4 (Id.toInt id) ++ "\u{FEFF}"

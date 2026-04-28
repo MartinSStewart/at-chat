@@ -2602,6 +2602,7 @@ handleReadyData userId readyData model =
     )
 
 
+maybeEmojiNameAndIdToNameAndId : { a | name : Maybe String, id : Discord.Id Discord.CustomEmojiId } -> Maybe DiscordCustomEmojiIdAndName
 maybeEmojiNameAndIdToNameAndId nameAndId =
     case nameAndId.name of
         Just name ->

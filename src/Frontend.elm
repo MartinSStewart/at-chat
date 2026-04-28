@@ -3470,7 +3470,7 @@ removePartialStickers htmlId text =
                     Nothing ->
                         Ports.InsertText "" range |> Just
             )
-            (RichText.stringToStickers text)
+            (RichText.stringToStickersAndCustomEmojis text)
     of
         [] ->
             Command.none
@@ -3995,7 +3995,7 @@ adjustSelection selectionOld selection text =
                 Nothing ->
                     Nothing
         )
-        (RichText.stringToStickers text)
+        (RichText.stringToStickersAndCustomEmojis text)
 
 
 textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
