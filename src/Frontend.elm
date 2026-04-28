@@ -2925,10 +2925,6 @@ updateLoaded msg model =
         PageUpGotViewport result ->
             case result of
                 Ok viewport ->
-                    let
-                        _ =
-                            Debug.log "a" viewport.viewport.y
-                    in
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             case
