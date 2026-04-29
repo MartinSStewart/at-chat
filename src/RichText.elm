@@ -3464,12 +3464,20 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
 
                                       else
                                         Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background2)
+                                    , Html.Attributes.style "top" "-0.1em"
+                                    , Html.Attributes.style "left" "0.1em"
+                                    , Html.Attributes.style "width" "1.4em"
+                                    , Html.Attributes.style "height" "1.6em"
+                                    ]
+                                    []
+                                , Html.div
+                                    [ Html.Attributes.style "position" "absolute"
                                     , Html.Attributes.style "top" "0"
                                     , Html.Attributes.style "left" "0.1em"
                                     ]
                                     [ CustomEmoji.view "1.4em" "0" customEmojiId customEmojis Sticker.LoopForever ]
                                 ]
-                            , Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
+                            , Html.span [] [ Html.text text ]
                             ]
                         )
                     )
