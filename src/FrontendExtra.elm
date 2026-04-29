@@ -35,6 +35,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -2178,10 +2179,7 @@ changeUpdate localMsg local =
                                 | user =
                                     { user
                                         | availableCustomEmojis =
-                                            List.foldl
-                                                SeqSet.insert
-                                                user.availableCustomEmojis
-                                                customEmojiIds
+                                            SeqSet.union (NonemptySet.toSeqSet customEmojiIds) user.availableCustomEmojis
                                     }
                             }
                     }

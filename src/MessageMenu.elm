@@ -24,6 +24,7 @@ import Message exposing (Message(..), MessageState(..))
 import MessageInput
 import MessageView
 import MyUi
+import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
@@ -513,7 +514,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
     case maybeData of
         Just ( canEditAndDelete, text, messageCustomEmojiIdsList ) ->
             let
-                newCustomEmojiIds : List (Id CustomEmojiId)
+                newCustomEmojiIds : Maybe (NonemptySet (Id CustomEmojiId))
                 newCustomEmojiIds =
                     List.filter
                         (\id ->
@@ -521,8 +522,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                                 && not (SeqSet.member id local.localUser.user.availableCustomEmojis)
                         )
                         messageCustomEmojiIdsList
-                        |> SeqSet.fromList
-                        |> SeqSet.toList
+                        |> NonemptySet.fromList
             in
             [ Ui.row
                 []
@@ -620,22 +620,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 (PressedCopyText text)
                 |> Just
             , case newCustomEmojiIds of
-                [] ->
-                    Nothing
-
-                _ ->
+                Just newCustomEmojiIds2 ->
                     button
                         isMobile
                         (Dom.id "messageMenu_addCustomEmojis")
                         Icons.plusIcon
-                        (if List.length newCustomEmojiIds == 1 then
-                            "Add 1 custom emoji"
-
-                         else
-                            "Add " ++ String.fromInt (List.length newCustomEmojiIds) ++ " custom emojis"
-                        )
-                        (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds)
+                        "Add stickers and emoji to selector"
+                        (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
                         |> Just
+
+                Nothing ->
+                    Nothing
             , if canEditAndDelete && not isMobile then
                 Ui.el
                     [ Ui.height (Ui.px (buttonHeight False))
