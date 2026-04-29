@@ -180,6 +180,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
         , Html.Attributes.style "min-height" "min-content"
         , Html.Attributes.style "width" "100%"
         , Html.Attributes.style "height" "fit-content"
+        , RichText.bigEmojiFont
         ]
         [ Html.textarea
             [ Html.Attributes.style "color" "rgba(255,0,0,1)"

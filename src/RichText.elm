@@ -11,6 +11,7 @@ module RichText exposing
     , attachedFilePrefix
     , attachedFileSuffix
     , attachments
+    , bigEmojiFont
     , customEmojisFromDiscord
     , discordCharsLeft
     , domainToString
@@ -2149,6 +2150,11 @@ type alias PreviewConfig a userId =
     }
 
 
+bigEmojiFont : Html.Attribute msg
+bigEmojiFont =
+    Html.Attributes.style "font-family" "\"myemoji\", sans-serif"
+
+
 normalTextView : String -> RichTextState -> List (Html msg)
 normalTextView text state =
     [ Html.span
@@ -2157,6 +2163,7 @@ normalTextView text state =
         , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
         , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
         , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
+        , bigEmojiFont
         ]
         [ Html.text text ]
     ]
@@ -2642,7 +2649,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                 CustomEmoji id ->
                     ( ( False, spoilerIndex2 )
                     , embedIndex2
-                    , currentList ++ [ CustomEmoji.view "1.1em " "0.2em" id config.customEmojis config.animationMode ]
+                    , currentList ++ [ CustomEmoji.view "1.4em " "0.2em" id config.customEmojis config.animationMode ]
                     )
         )
         ( ( dropNextLineBreak, spoilerIndex ), embedIndex, [] )
@@ -3460,7 +3467,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                     , Html.Attributes.style "top" "0"
                                     , Html.Attributes.style "left" "0.1em"
                                     ]
-                                    [ CustomEmoji.view "1.1em" "0.2em" customEmojiId customEmojis Sticker.LoopForever ]
+                                    [ CustomEmoji.view "1.4em" "0" customEmojiId customEmojis Sticker.LoopForever ]
                                 ]
                             , Html.span [ Html.Attributes.style "opacity" "0" ] [ Html.text text ]
                             ]
