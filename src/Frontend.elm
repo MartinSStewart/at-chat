@@ -2681,7 +2681,7 @@ updateLoaded msg model =
                                         }
                                         (Command.batch
                                             [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
-                                            , removePartialStickers loggedIn.textInputFocus MessageMenu.editMessageTextInputId text
+                                            , removePartialStickers loggedIn2.textInputFocus MessageMenu.editMessageTextInputId text
                                             ]
                                         )
 
