@@ -24,7 +24,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
-import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone, UnicodeEmoji)
+import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
 import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
@@ -1149,7 +1149,7 @@ dropdownContainer nameSoFar dropdown contentHeight content =
                     NameSoFar _ ->
                         "Mention a user:"
 
-                    EmojiSoFar nameSoFarData ->
+                    EmojiSoFar _ ->
                         "Add a sticker or emoji"
                 )
             )
