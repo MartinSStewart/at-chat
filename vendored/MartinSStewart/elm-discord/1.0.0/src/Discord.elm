@@ -1795,11 +1795,20 @@ imageIsAnimated (ImageHash hash) =
     String.startsWith "a_" hash
 
 
-customEmojiUrl : ImageCdnConfig (Choices Png Gif Never Never) -> Id Emoji -> String
-customEmojiUrl { size, imageType } emojiId =
+customEmojiUrl : ImageSize -> Maybe (Choices Png Gif Never Never) -> Id Emoji -> String
+customEmojiUrl size imageType emojiId =
     Url.Builder.crossOrigin
         discordCdnUrl
-        [ "emojis", idToString emojiId ++ imageExtensionPngGif imageType ]
+        [ "emojis"
+        , idToString emojiId
+            ++ (case imageType of
+                    Just imageType2 ->
+                        imageExtensionPngGif imageType2
+
+                    Nothing ->
+                        ""
+               )
+        ]
         (imageSizeQuery size)
 
 

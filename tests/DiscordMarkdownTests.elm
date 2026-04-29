@@ -1,9 +1,13 @@
 module DiscordMarkdownTests exposing (test)
 
+import CustomEmoji exposing (EmojiName)
 import Discord
 import Expect
+import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
-import RichText exposing (HasLeadingLineBreak(..), RichText(..))
+import OneToOne exposing (OneToOne)
+import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
+import RichTextTests
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -24,9 +28,27 @@ test =
         ]
 
 
+customEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
+customEmojis =
+    OneToOne.fromList
+        [ ( { isAnimated = False, id = Unsafe.uint64 "543" |> Discord.idFromUInt64, name = Unsafe.emojiName "abc" }, Id.fromInt 999 )
+        , ( { isAnimated = True, id = discordId, name = emojiName }, Id.fromInt 888 )
+        ]
+
+
+discordId : Discord.Id idType
+discordId =
+    Unsafe.uint64 "444" |> Discord.idFromUInt64
+
+
+emojiName : EmojiName
+emojiName =
+    Unsafe.emojiName "z_"
+
+
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
 fromDiscordHelper text =
-    RichText.fromDiscord text SeqDict.empty Discord.Missing [] Discord.Missing |> List.Nonempty.toList
+    RichText.fromDiscord text SeqDict.empty Discord.Missing customEmojis [] Discord.Missing |> List.Nonempty.toList
 
 
 basicFormattingTests : Test
@@ -129,12 +151,39 @@ basicFormattingTests =
                 [ NormalText '\n' "", BlockQuote HasLeadingLineBreak [ NormalText '2' "3" ] ]
             )
         , fromNonemptyStringTest "`a\na`" (Nonempty (NormalText '`' "a\na`") [])
+        , fromNonemptyStringTest "<:abc:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
+        , fromNonemptyStringTest "<:abc:542>" (Nonempty (NormalText '<' ":abc:542>") [])
+        , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543>") [])
+        , fromNonemptyStringTest "<:http:543>" (Nonempty (NormalText '<' ":http:543>") [])
+        , fromNonemptyStringTest "<a:abc:543>" (Nonempty (NormalText '<' "a:abc:543>") [])
+        , fromNonemptyStringTest "<a:z_:444>" (Nonempty (CustomEmoji (Id.fromInt 888)) [])
+        , fromNonemptyStringTest "<b:abc:543>" (Nonempty (NormalText '<' "b:abc:543>") [])
+        , RichTextTests.simpleTest
+            "Extract discord emojis"
+            "<:z_:444>"
+            [ { isAnimated = False, id = discordId, name = emojiName } ]
+            RichText.customEmojisFromDiscord
+        , RichTextTests.simpleTest
+            "Extract animated discord emojis"
+            "Animated! <a:z_:444>"
+            [ { isAnimated = True, id = discordId, name = emojiName } ]
+            RichText.customEmojisFromDiscord
         ]
 
 
 fromNonemptyStringTest : String -> Nonempty (RichText (Discord.Id Discord.UserId)) -> Test
 fromNonemptyStringTest input expected =
-    Test.test (Debug.toString input) (\_ -> RichText.fromDiscord input SeqDict.empty Discord.Missing [] Discord.Missing |> Expect.equal expected)
+    Test.test
+        (Debug.toString input)
+        (\_ ->
+            RichText.fromDiscord input
+                SeqDict.empty
+                Discord.Missing
+                customEmojis
+                []
+                Discord.Missing
+                |> Expect.equal expected
+        )
 
 
 unsafeUrl : String -> Url

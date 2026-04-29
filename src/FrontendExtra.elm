@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji)
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
@@ -1305,6 +1305,9 @@ isPressMsg msg =
 
         EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             True
+
+        PageUpGotViewport _ ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -3178,6 +3181,19 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | customEmojis = SeqDict.union newCustomEmojis localUser.customEmojis
+                                , user = User.addNewCustomEmojis newCustomEmojis localUser.user
+                            }
+                    }
+
 
 guildSendMessage :
     Id GuildId
@@ -3383,7 +3399,7 @@ discordDmMemberTyping time userId channelId local =
     }
 
 
-addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
+addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> EmojiOrCustomEmoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId threadRoute emoji local =
     let
         localUser : LocalUser
@@ -3455,7 +3471,7 @@ removeReactionEmoji :
     Id UserId
     -> AnyGuildOrDmId
     -> ThreadRouteWithMessage
-    -> Emoji
+    -> EmojiOrCustomEmoji
     -> LocalState
     -> LocalState
 removeReactionEmoji userId guildOrDmId threadRoute emoji local =

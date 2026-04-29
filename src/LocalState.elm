@@ -60,6 +60,7 @@ module LocalState exposing
     , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
     , discordChannelToFrontend
+    , discordGuildAvailableStickersAndCustomEmojis
     , discordGuildOrDmIdToMessage
     , discordGuildOrDmIdToMessages
     , discordTopicToDescription
@@ -109,6 +110,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -116,10 +118,10 @@ import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Embed exposing (EmbedData)
-import Emoji exposing (Emoji)
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
@@ -176,6 +178,7 @@ type alias LocalUser =
       timezone : Time.Zone
     , userAgent : UserAgent
     , stickers : SeqDict (Id StickerId) StickerData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 
@@ -201,6 +204,7 @@ type alias DiscordBackendGuild =
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordBackendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
+    , customEmojis : SeqSet (Id CustomEmojiId)
     }
 
 
@@ -221,6 +225,7 @@ type alias DiscordFrontendGuild =
     , channels : SeqDict (Discord.Id Discord.ChannelId) DiscordFrontendChannel
     , membersAndOwner : MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix }
     , stickers : SeqSet (Id StickerId)
+    , customEmojis : SeqSet (Id CustomEmojiId)
     }
 
 
@@ -334,7 +339,7 @@ type alias DiscordFrontendChannel =
     }
 
 
-messageReactions : GuildOrDmId -> ThreadRouteWithMessage -> LocalState -> SeqDict Emoji (NonemptySet (Id UserId))
+messageReactions : GuildOrDmId -> ThreadRouteWithMessage -> LocalState -> SeqDict EmojiOrCustomEmoji (NonemptySet (Id UserId))
 messageReactions guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
@@ -360,7 +365,7 @@ messageReactionsHelper :
         , threads : SeqDict (Id ChannelMessageId) { b | messages : Array (MessageState ThreadMessageId userId) }
     }
     -> ThreadRouteWithMessage
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 messageReactionsHelper channel threadRoute2 =
     case threadRoute2 of
         NoThreadWithMessage messageId ->
@@ -378,7 +383,7 @@ messageReactionsHelper channel threadRoute2 =
 messageReactionsNoThread :
     Id messageId
     -> { a | messages : Array (MessageState messageId userId) }
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 messageReactionsNoThread messageId channel =
     case DmChannel.getArray messageId channel.messages of
         Just (MessageLoaded message) ->
@@ -1482,7 +1487,7 @@ allDiscordUsers localUser =
 
 
 addReactionEmoji :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1508,7 +1513,7 @@ addReactionEmoji emoji userId threadRoute channel =
 
 
 addReactionEmojiHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (Message messageId userId) }
@@ -1518,7 +1523,7 @@ addReactionEmojiHelper emoji userId messageId channel =
 
 
 addReactionEmojiFrontend :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1547,7 +1552,7 @@ addReactionEmojiFrontend emoji userId threadRoute channel =
 
 
 addReactionEmojiFrontendHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId userId) }
@@ -1745,7 +1750,7 @@ editMessageFrontendHelperNoThread time editedBy newContent attachedFiles message
 
 
 removeReactionEmoji :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1774,7 +1779,7 @@ removeReactionEmoji emoji userId threadRoute channel =
 
 
 removeReactionEmojiHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (Message messageId userId) }
@@ -1784,7 +1789,7 @@ removeReactionEmojiHelper emoji userId messageId channel =
 
 
 removeReactionEmojiFrontend :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> ThreadRouteWithMessage
     ->
@@ -1813,7 +1818,7 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 
 
 removeReactionEmojiFrontendHelper :
-    Emoji
+    EmojiOrCustomEmoji
     -> userId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId userId) }
@@ -2743,3 +2748,10 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
+
+
+discordGuildAvailableStickersAndCustomEmojis : LocalUser -> DiscordFrontendGuild -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
+discordGuildAvailableStickersAndCustomEmojis localUser guild =
+    ( SeqSet.intersect localUser.user.availableCustomEmojis guild.customEmojis
+    , SeqSet.intersect localUser.user.availableStickers guild.stickers
+    )

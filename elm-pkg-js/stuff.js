@@ -310,6 +310,30 @@ exports.init = async function init(app)
         });
     });
 
+    app.ports.smooth_scroll_by_to_js.subscribe((data) => {
+        const container = document.getElementById(data.containerId);
+        if (!container) return;
+        const duration = 250;
+        const startTime = performance.now();
+        const total = data.scrollY;
+        let traveled = 0;
+        function easeInOutQuart(t) {
+            return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+        }
+        function step(now) {
+            const t = Math.min((now - startTime) / duration, 1);
+            const desired = total * easeInOutQuart(t);
+            // Apply the delta on top of the current scrollTop so that any
+            // shift caused by content being prepended above (e.g. older
+            // messages loading in) is preserved instead of fighting the
+            // animation.
+            container.scrollTop += desired - traveled;
+            traveled = desired;
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    });
+
     app.ports.set_cursor_position_to_js.subscribe((data) => {
         requestAnimationFrame(() =>
             {

@@ -39,7 +39,6 @@ import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
-import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -68,6 +67,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
@@ -107,7 +107,7 @@ addLog time log model =
                     Just emailAddress ->
                         Postmark.sendEmailTask
                             model2.postmarkApiKey
-                            { from = { name = "", email = Env.noReplyEmailAddress }
+                            { from = { name = "", email = noReplyEmailAddress }
                             , to = Nonempty { name = "", email = emailAddress } []
                             , subject = NonemptyString 'A' "n error was logged that needs attention"
                             , body =
@@ -127,6 +127,11 @@ addLog time log model =
 
         _ ->
             ( model2, Broadcast.toAdmins model2 (Server_NewLog time log |> ServerChange) )
+
+
+noReplyEmailAddress : EmailAddress
+noReplyEmailAddress =
+    Unsafe.emailAddress "no-reply@at-chat.app"
 
 
 adminEmailAddress : BackendModel -> Maybe EmailAddress
@@ -177,7 +182,7 @@ sendLoginEmail msg emailAddress loginCode postmarkServerToken =
         _ =
             Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
     in
-    { from = { name = "", email = Env.noReplyEmailAddress }
+    { from = { name = "", email = noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }
     , subject = loginEmailSubject
     , body =
@@ -557,6 +562,7 @@ getLoginData sessionId session user requestMessagesFor model =
     , publicVapidKey = model.publicVapidKey
     , textEditor = model.textEditor
     , stickers = model.stickers
+    , customEmojis = model.customEmojis
     }
 
 
@@ -603,6 +609,7 @@ discordGuildToFrontend requestMessagesFor guild =
             guild.channels
     , membersAndOwner = guild.membersAndOwner
     , stickers = guild.stickers
+    , customEmojis = guild.customEmojis
     }
 
 

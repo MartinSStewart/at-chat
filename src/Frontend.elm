@@ -7,6 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji
 import Discord
 import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
@@ -23,7 +24,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji, EmojiOrSticker(..))
+import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -40,7 +41,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
-import MessageInput exposing (NameSoFar(..))
+import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
 import MyUi
@@ -58,6 +59,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordErr
 import Scroll
 import SeqDict exposing (SeqDict)
 import Sticker
+import String.Extra
 import String.Nonempty
 import TextEditor
 import Thread
@@ -437,6 +439,7 @@ loginDataToLocalState userAgent timezone loginData =
         , timezone = timezone
         , userAgent = userAgent
         , stickers = loginData.stickers
+        , customEmojis = loginData.customEmojis
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
@@ -1163,16 +1166,24 @@ updateLoaded msg model =
 
                                 EmojiSelectorForReaction guildOrDmId threadRoute ->
                                     case emojiOrSticker of
-                                        EmojiOrSticker_Emoji emoji ->
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
                                             FrontendExtra.handleLocalChange
                                                 model.time
-                                                (Local_AddReactionEmoji guildOrDmId threadRoute emoji |> Just)
+                                                (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_Emoji emoji) |> Just)
                                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                                 (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
 
                                         EmojiOrSticker_Sticker _ ->
                                             ( loggedIn, Command.none )
 
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            FrontendExtra.handleLocalChange
+                                                model.time
+                                                (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_CustomEmoji customEmojiId) |> Just)
+                                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
+                                                (Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition)
+
+                                --( loggedIn, Command.none )
                                 EmojiSelectorForMessage maybeSelection ->
                                     insertEmojiOrSticker Pages.Guild.channelTextInputId maybeSelection emojiOrSticker model loggedIn
 
@@ -1187,10 +1198,14 @@ updateLoaded msg model =
                 Emoji.PressedCategory category ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
+                            let
+                                emojiSelector =
+                                    loggedIn.emojiSelector
+                            in
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Local_SetEmojiCategory category |> Just)
-                                loggedIn
+                                { loggedIn | emojiSelector = { emojiSelector | emojiHovered = Nothing } }
                                 Command.none
                         )
                         model
@@ -1590,98 +1605,7 @@ updateLoaded msg model =
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (case guildOrDmId of
-                                    GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                                        case LocalState.getGuildAndChannel guildId channelId local of
-                                            Just ( _, channel ) ->
-                                                (case threadRoute of
-                                                    NoThread ->
-                                                        Local_LoadChannelMessages
-                                                            (GuildOrDmId_Guild guildId channelId)
-                                                            channel.visibleMessages.oldest
-                                                            EmptyPlaceholder
-
-                                                    ViewThread threadId ->
-                                                        Local_LoadThreadMessages
-                                                            (GuildOrDmId_Guild guildId channelId)
-                                                            threadId
-                                                            (SeqDict.get threadId channel.threads
-                                                                |> Maybe.withDefault Thread.frontendInit
-                                                                |> .visibleMessages
-                                                                |> .oldest
-                                                            )
-                                                            EmptyPlaceholder
-                                                )
-                                                    |> Just
-
-                                            Nothing ->
-                                                Nothing
-
-                                    GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                                        let
-                                            dmChannel : FrontendDmChannel
-                                            dmChannel =
-                                                SeqDict.get otherUserId local.dmChannels
-                                                    |> Maybe.withDefault DmChannel.frontendInit
-                                        in
-                                        (case threadRoute of
-                                            NoThread ->
-                                                Local_LoadChannelMessages
-                                                    (GuildOrDmId_Dm otherUserId)
-                                                    dmChannel.visibleMessages.oldest
-                                                    EmptyPlaceholder
-
-                                            ViewThread threadId ->
-                                                Local_LoadThreadMessages
-                                                    (GuildOrDmId_Dm otherUserId)
-                                                    threadId
-                                                    (SeqDict.get threadId dmChannel.threads
-                                                        |> Maybe.withDefault Thread.frontendInit
-                                                        |> .visibleMessages
-                                                        |> .oldest
-                                                    )
-                                                    EmptyPlaceholder
-                                        )
-                                            |> Just
-
-                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild _ guildId channelId) as guildOrDmId2) ->
-                                        case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                                            Just ( _, channel ) ->
-                                                (case threadRoute of
-                                                    NoThread ->
-                                                        Local_Discord_LoadChannelMessages
-                                                            guildOrDmId2
-                                                            channel.visibleMessages.oldest
-                                                            EmptyPlaceholder
-
-                                                    ViewThread threadId ->
-                                                        Local_Discord_LoadThreadMessages
-                                                            guildOrDmId2
-                                                            threadId
-                                                            (SeqDict.get threadId channel.threads
-                                                                |> Maybe.withDefault Thread.discordFrontendInit
-                                                                |> .visibleMessages
-                                                                |> .oldest
-                                                            )
-                                                            EmptyPlaceholder
-                                                )
-                                                    |> Just
-
-                                            Nothing ->
-                                                Nothing
-
-                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm data) as guildOrDmId2) ->
-                                        case SeqDict.get data.channelId local.discordDmChannels of
-                                            Just dmChannel ->
-                                                Local_Discord_LoadChannelMessages
-                                                    guildOrDmId2
-                                                    dmChannel.visibleMessages.oldest
-                                                    EmptyPlaceholder
-                                                    |> Just
-
-                                            Nothing ->
-                                                Nothing
-                                )
+                                (loadOlderMessages guildOrDmId threadRoute local)
                                 { loggedIn | channelScrollPosition = scrollPosition }
                                 Command.none
 
@@ -2757,7 +2681,7 @@ updateLoaded msg model =
                                         }
                                         (Command.batch
                                             [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
-                                            , removePartialStickers MessageMenu.editMessageTextInputId text
+                                            , removePartialStickers loggedIn2.textInputFocus MessageMenu.editMessageTextInputId text
                                             ]
                                         )
 
@@ -2994,6 +2918,37 @@ updateLoaded msg model =
                         |> Task.attempt GotEditMessageTextInputPositionForEmojiSelector
                     )
 
+                MessageInput.TypedPageUp ->
+                    pageUpOrDownScroll True model
+
+                MessageInput.TypedPageDown ->
+                    pageUpOrDownScroll False model
+
+        PageUpGotViewport result ->
+            case result of
+                Ok viewport ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            case
+                                ( Route.toGuildOrDmId model.route
+                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
+                                )
+                            of
+                                ( Just ( guildOrDmId, threadRoute ), True ) ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (loadOlderMessages guildOrDmId threadRoute (Local.model loggedIn.localState) |> Debug.log "abc")
+                                        loggedIn
+                                        Command.none
+
+                                _ ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                Err _ ->
+                    ( model, Command.none )
+
         GotEditMessageTextInputPositionForEmojiSelector result ->
             case result of
                 Ok ok ->
@@ -3034,7 +2989,7 @@ updateLoaded msg model =
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                                    , removePartialStickers Pages.Guild.channelTextInputId text
+                                    , removePartialStickers loggedIn.textInputFocus Pages.Guild.channelTextInputId text
                                     ]
                                 )
                         )
@@ -3407,6 +3362,12 @@ updateLoaded msg model =
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
 
+                MessageInput.TypedPageUp ->
+                    pageUpOrDownScroll True model
+
+                MessageInput.TypedPageDown ->
+                    pageUpOrDownScroll False model
+
         GotEmojiData result ->
             case result of
                 Ok emojiData ->
@@ -3499,8 +3460,8 @@ updateLoaded msg model =
                 model
 
 
-removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg
-removePartialStickers htmlId text =
+removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg
+removePartialStickers textInputFocus htmlId text =
     case
         List.filterMap
             (\( range, maybeStickerId ) ->
@@ -3509,18 +3470,182 @@ removePartialStickers htmlId text =
                         Nothing
 
                     Nothing ->
-                        Ports.InsertText "" range |> Just
+                        Just range
             )
-            (RichText.stringToStickers text)
+            (RichText.stringToStickersAndCustomEmojis text)
     of
         [] ->
             Command.none
 
         list ->
-            Ports.execCommand { htmlId = htmlId, commands = list }
+            let
+                text2 : String
+                text2 =
+                    List.foldl (\range text3 -> String.Extra.replaceSlice "" range.start range.end text3) text list
+            in
+            Ports.execCommand
+                { htmlId = htmlId
+                , commands =
+                    [ Ports.Undo, Ports.InsertText text2 { start = 0, end = 999999 } ]
+                        ++ (case textInputFocus of
+                                Just textInputFocus2 ->
+                                    if textInputFocus2.htmlId == htmlId then
+                                        let
+                                            selection2 =
+                                                List.foldl
+                                                    (\range selection ->
+                                                        if range.end < selection.start then
+                                                            -- Not entirely sure why the -1 is needed.
+                                                            -- Maybe it's due to the current selection being out of date then the text changes by one character (since the user has pressed backspace)
+                                                            { start = selection.start - Range.rangeSize range - 1
+                                                            , end = selection.end - Range.rangeSize range - 1
+                                                            }
+
+                                                        else if range.start < selection.start then
+                                                            { start = selection.start - (range.start - selection.start) - 1
+                                                            , end = selection.end - (range.start - selection.start) - 1
+                                                            }
+
+                                                        else
+                                                            selection
+                                                    )
+                                                    textInputFocus2.selection
+                                                    list
+                                        in
+                                        [ Ports.SelectRange selection2 textInputFocus2.direction ]
+
+                                    else
+                                        []
+
+                                Nothing ->
+                                    []
+                           )
+                }
 
 
-messageHasReaction : Emoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
+loadOlderMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
+loadOlderMessages guildOrDmId threadRoute local =
+    let
+        messagesLeft channel localChange =
+            if Id.toInt channel.visibleMessages.oldest > 0 then
+                Just localChange
+
+            else
+                Nothing
+    in
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            case LocalState.getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        NoThread ->
+                            Local_LoadChannelMessages
+                                (GuildOrDmId_Guild guildId channelId)
+                                channel.visibleMessages.oldest
+                                EmptyPlaceholder
+                                |> messagesLeft channel
+
+                        ViewThread threadId ->
+                            let
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.frontendInit
+                            in
+                            Local_LoadThreadMessages
+                                (GuildOrDmId_Guild guildId channelId)
+                                threadId
+                                thread.visibleMessages.oldest
+                                EmptyPlaceholder
+                                |> messagesLeft thread
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            let
+                dmChannel : FrontendDmChannel
+                dmChannel =
+                    SeqDict.get otherUserId local.dmChannels
+                        |> Maybe.withDefault DmChannel.frontendInit
+            in
+            case threadRoute of
+                NoThread ->
+                    Local_LoadChannelMessages
+                        (GuildOrDmId_Dm otherUserId)
+                        dmChannel.visibleMessages.oldest
+                        EmptyPlaceholder
+                        |> messagesLeft dmChannel
+
+                ViewThread threadId ->
+                    let
+                        thread =
+                            SeqDict.get threadId dmChannel.threads |> Maybe.withDefault Thread.frontendInit
+                    in
+                    Local_LoadThreadMessages
+                        (GuildOrDmId_Dm otherUserId)
+                        threadId
+                        thread.visibleMessages.oldest
+                        EmptyPlaceholder
+                        |> messagesLeft thread
+
+        DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild _ guildId channelId) as guildOrDmId2) ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        NoThread ->
+                            Local_Discord_LoadChannelMessages
+                                guildOrDmId2
+                                channel.visibleMessages.oldest
+                                EmptyPlaceholder
+                                |> messagesLeft channel
+
+                        ViewThread threadId ->
+                            let
+                                thread =
+                                    SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.discordFrontendInit
+                            in
+                            Local_Discord_LoadThreadMessages
+                                guildOrDmId2
+                                threadId
+                                thread.visibleMessages.oldest
+                                EmptyPlaceholder
+                                |> messagesLeft thread
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm data) as guildOrDmId2) ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just dmChannel ->
+                    Local_Discord_LoadChannelMessages
+                        guildOrDmId2
+                        dmChannel.visibleMessages.oldest
+                        EmptyPlaceholder
+                        |> messagesLeft dmChannel
+
+                Nothing ->
+                    Nothing
+
+
+pageUpOrDownScroll : Bool -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg FrontendMsg )
+pageUpOrDownScroll isUp model =
+    ( model
+    , Command.batch
+        [ Scroll.smoothScrollBy
+            ((if isUp then
+                -0.9
+
+              else
+                0.9
+             )
+                * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight)
+            )
+        , Dom.getViewportOf Pages.Guild.conversationContainerId
+            |> Task.attempt PageUpGotViewport
+        ]
+    )
+
+
+messageHasReaction : EmojiOrCustomEmoji -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> Bool
 messageHasReaction emoji guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId guildOrDmId3 ->
@@ -3600,7 +3725,7 @@ scrollEmojiIntoView index =
 
 
 toggleReactionEmoji :
-    Emoji
+    EmojiOrCustomEmoji
     -> AnyGuildOrDmId
     -> ThreadRouteWithMessage
     -> LoadedFrontend
@@ -3681,19 +3806,24 @@ insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
     let
         text : String
         text =
-            case ( emojiOrSticker, model.emojiData ) of
-                ( EmojiOrSticker_Emoji emoji, Just emojiData ) ->
-                    Emoji.emojiWithSkinTone
-                        (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
-                        emoji
-                        emojiData
-                        ++ " "
+            case emojiOrSticker of
+                EmojiOrSticker_UnicodeEmoji emoji ->
+                    case model.emojiData of
+                        Just emojiData ->
+                            Emoji.emojiWithSkinTone
+                                (Local.model loggedIn.localState).localUser.user.emojiConfig.skinTone
+                                emoji
+                                emojiData
+                                ++ " "
 
-                ( EmojiOrSticker_Sticker stickerId, _ ) ->
+                        Nothing ->
+                            ""
+
+                EmojiOrSticker_Sticker stickerId ->
                     Sticker.idToString stickerId
 
-                _ ->
-                    ""
+                EmojiOrSticker_CustomEmoji customEmojiId ->
+                    CustomEmoji.idToString customEmojiId
     in
     ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }
     , case maybeSelection of
@@ -3748,7 +3878,22 @@ selectionChanged maybeHtmlId maybeRange model =
                                                 Just (EmojiSoFar emojiSoFar) ->
                                                     case model.emojiData of
                                                         Just emojiData2 ->
-                                                            MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
+                                                            let
+                                                                local =
+                                                                    Local.model loggedIn.localState
+
+                                                                ( availableCustomEmojis, availableStickers ) =
+                                                                    MessageInput.availableCustomEmojisAndStickers
+                                                                        guildOrDmId
+                                                                        local
+                                                            in
+                                                            MessageInput.emojiDropdownList
+                                                                (MyUi.isMobile model)
+                                                                emojiSoFar
+                                                                availableCustomEmojis
+                                                                availableStickers
+                                                                local.localUser
+                                                                emojiData2
                                                                 |> List.isEmpty
                                                                 |> not
 
@@ -3909,7 +4054,7 @@ adjustSelection selectionOld selection text =
                 Nothing ->
                     Nothing
         )
-        (RichText.stringToStickers text)
+        (RichText.stringToStickersAndCustomEmojis text)
 
 
 textInputFocusChanged : Maybe HtmlId -> Maybe ( Range, SelectionDirection ) -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

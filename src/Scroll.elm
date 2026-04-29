@@ -1,5 +1,6 @@
 module Scroll exposing
     ( smoothScroll
+    , smoothScrollBy
     , toBottomOfChannel
     , toBottomOfChannelIfAtBottom
     , toBottomOfChannelSmooth
@@ -10,6 +11,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task exposing (Task)
 import Pages.Guild
+import Ports
 import Types exposing (FrontendMsg(..), ScrollPosition(..))
 
 
@@ -36,27 +38,32 @@ smoothScroll targetId =
             )
 
 
+smoothScrollBy : Float -> Command FrontendOnly toMsg msg
+smoothScrollBy scrollYAmount =
+    Ports.smoothScrollBy Pages.Guild.conversationContainerId scrollYAmount
+
+
 smoothScrollSteps : number
 smoothScrollSteps =
     20
 
 
 smoothScrollY : Int -> Float -> Float -> Float -> Task FrontendOnly Dom.Error ()
-smoothScrollY stepsLeft x startY endY =
+smoothScrollY stepCount x startY endY =
     let
         t =
-            toFloat stepsLeft / smoothScrollSteps |> Ease.inOutQuart
+            toFloat stepCount / smoothScrollSteps |> Ease.inOutQuart
 
         y : Float
         y =
             startY + (endY - startY) * t
     in
-    if stepsLeft > smoothScrollSteps then
+    if stepCount > smoothScrollSteps then
         Task.succeed ()
 
     else
         Dom.setViewportOf Pages.Guild.conversationContainerId x y
-            |> Task.andThen (\() -> smoothScrollY (stepsLeft + 1) x startY endY)
+            |> Task.andThen (\() -> smoothScrollY (stepCount + 1) x startY endY)
 
 
 toBottomOfChannel : Command FrontendOnly toMsg FrontendMsg

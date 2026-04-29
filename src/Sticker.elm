@@ -1,4 +1,14 @@
-module Sticker exposing (AnimationMode(..), StickerData, StickerUrl(..), addUrl, animatedImageView, idToString, view)
+module Sticker exposing
+    ( AnimationMode(..)
+    , StickerData
+    , StickerUrl(..)
+    , addUrl
+    , animatedImageView
+    , idToString
+    , toBase4
+    , view
+    , viewHelper
+    )
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -49,58 +59,7 @@ view : String -> Id StickerId -> SeqDict (Id StickerId) StickerData -> Animation
 view stickerSize2 stickerId stickers2 animationMode =
     case SeqDict.get stickerId stickers2 of
         Just sticker ->
-            case sticker.url of
-                StickerLoading ->
-                    Html.div
-                        [ Html.Attributes.style "width" stickerSize2
-                        , Html.Attributes.style "height" stickerSize2
-                        , Html.Attributes.style "background-color" "gray"
-                        , Html.Attributes.style "display" "block"
-                        ]
-                        []
-
-                StickerInternal fileHash _ ->
-                    case sticker.format of
-                        Discord.PngFormat ->
-                            Html.img
-                                [ Html.Attributes.style "width" stickerSize2
-                                , Html.Attributes.style "height" stickerSize2
-                                , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                , Html.Attributes.style "display" "block"
-                                ]
-                                []
-
-                        Discord.ApngFormat ->
-                            animatedImageView
-                                stickerSize2
-                                stickerSize2
-                                (FileStatus.fileUrl FileStatus.pngContent fileHash)
-                                animationMode
-
-                        Discord.LottieFormat ->
-                            lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash) animationMode
-
-                        Discord.GifFormat ->
-                            animatedImageView
-                                stickerSize2
-                                stickerSize2
-                                (FileStatus.fileUrl FileStatus.gifContent fileHash)
-                                animationMode
-
-                DiscordStandardSticker discordStickerId ->
-                    case sticker.format of
-                        Discord.LottieFormat ->
-                            lottieView
-                                stickerSize2
-                                (FileStatus.discordStickerUrl discordStickerId sticker.format)
-                                animationMode
-
-                        _ ->
-                            animatedImageView
-                                stickerSize2
-                                stickerSize2
-                                (FileStatus.discordStickerUrl discordStickerId sticker.format)
-                                animationMode
+            viewHelper stickerSize2 sticker animationMode
 
         Nothing ->
             Html.div
@@ -109,6 +68,68 @@ view stickerSize2 stickerId stickers2 animationMode =
                 , Html.Attributes.style "background-color" "gray"
                 ]
                 [ Html.text "Sticker failed to load" ]
+
+
+viewHelper : String -> StickerData -> AnimationMode -> Html msg
+viewHelper stickerSize2 sticker animationMode =
+    case sticker.url of
+        StickerLoading ->
+            Html.div
+                [ Html.Attributes.style "width" stickerSize2
+                , Html.Attributes.style "height" stickerSize2
+                , Html.Attributes.style "background-color" "gray"
+                , Html.Attributes.style "display" "block"
+                ]
+                []
+
+        StickerInternal fileHash _ ->
+            case sticker.format of
+                Discord.PngFormat ->
+                    Html.img
+                        [ Html.Attributes.style "width" stickerSize2
+                        , Html.Attributes.style "height" stickerSize2
+                        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                        , Html.Attributes.style "display" "block"
+                        ]
+                        []
+
+                Discord.ApngFormat ->
+                    animatedImageView
+                        False
+                        stickerSize2
+                        stickerSize2
+                        Nothing
+                        (FileStatus.fileUrl FileStatus.pngContent fileHash)
+                        animationMode
+
+                Discord.LottieFormat ->
+                    lottieView stickerSize2 (FileStatus.fileUrl FileStatus.jsonContent fileHash) animationMode
+
+                Discord.GifFormat ->
+                    animatedImageView
+                        False
+                        stickerSize2
+                        stickerSize2
+                        Nothing
+                        (FileStatus.fileUrl FileStatus.gifContent fileHash)
+                        animationMode
+
+        DiscordStandardSticker discordStickerId ->
+            case sticker.format of
+                Discord.LottieFormat ->
+                    lottieView
+                        stickerSize2
+                        (FileStatus.discordStickerUrl discordStickerId sticker.format)
+                        animationMode
+
+                _ ->
+                    animatedImageView
+                        False
+                        stickerSize2
+                        stickerSize2
+                        Nothing
+                        (FileStatus.discordStickerUrl discordStickerId sticker.format)
+                        animationMode
 
 
 animationModeToInt : AnimationMode -> String
@@ -124,16 +145,16 @@ animationModeToInt animationMode =
             "2"
 
 
-animatedImageView : String -> String -> String -> AnimationMode -> Html msg
-animatedImageView width height url animationMode =
+animatedImageView : Bool -> String -> String -> Maybe String -> String -> AnimationMode -> Html msg
+animatedImageView isInline width height yOffset url animationMode =
     Html.node
         "animated-image-player"
-        [ Html.Attributes.style "width" width
-        , Html.Attributes.style "height" height
-        , Html.Attributes.attribute "src" url
-        , Html.Attributes.style "display" "block"
-        , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
-        , Html.Attributes.style
+        ([ Html.Attributes.style "width" width
+         , Html.Attributes.style "height" height
+         , Html.Attributes.attribute "src" url
+         , Html.Attributes.style "display" "block"
+         , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
+         , Html.Attributes.style
             "background-color"
             (if Env.isProduction then
                 "transparent"
@@ -142,7 +163,21 @@ animatedImageView width height url animationMode =
                 -- Make it easier to understand what is going on in end-to-end tests where the actual animation doesn't load
                 "rgba(0,0,0,0.1)"
             )
-        ]
+         ]
+            ++ (case yOffset of
+                    Just yOffset2 ->
+                        [ Html.Attributes.style "transform" ("translateY(" ++ yOffset2 ++ ")") ]
+
+                    Nothing ->
+                        []
+               )
+            ++ (if isInline then
+                    [ Html.Attributes.style "display" "inline-block" ]
+
+                else
+                    []
+               )
+        )
         []
 
 

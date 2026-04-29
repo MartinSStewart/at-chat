@@ -2,6 +2,7 @@ module Id exposing
     ( AnyGuildOrDmId(..)
     , ChannelId(..)
     , ChannelMessageId(..)
+    , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
     , DiscordGuildOrDmId_DmData
     , GuildId(..)
@@ -122,6 +123,10 @@ type InviteLinkId
 
 type StickerId
     = StickerId Never
+
+
+type CustomEmojiId
+    = CustomEmojiId Never
 
 
 type Id a

@@ -13,6 +13,7 @@ import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
 import ChannelDescription
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -27,11 +28,11 @@ import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress
-import Emoji
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileData, FileId)
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
 import List.Extra
@@ -44,14 +45,14 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
-import OneToOne
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import PersonName
 import Postmark
 import Quantity
 import RateLimit
-import RichText exposing (RichText)
+import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -98,7 +99,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") Env.adminEmail True
+    User.init (Time.millisToPosix 0) (Unsafe.personName "AT") (Unsafe.emailAddress "a@a.se") True
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -218,6 +219,8 @@ init =
       , toBackendLogs = Array.empty
       , stickers = SeqDict.empty
       , discordStickers = OneToOne.empty
+      , customEmojis = SeqDict.empty
+      , discordCustomEmojis = OneToOne.empty
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
@@ -859,7 +862,11 @@ update msg model =
                                 DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
                             ( messages2, linkedMessageIds ) =
-                                DiscordSync.messagesAndLinks (List.reverse messages) model.discordStickers attachments2
+                                DiscordSync.messagesAndLinks
+                                    (List.reverse messages)
+                                    model.discordCustomEmojis
+                                    model.discordStickers
+                                    attachments2
 
                             --( attachments3, channel2 ) =
                             --case result of
@@ -951,7 +958,11 @@ update msg model =
                                     model.discordAttachments
 
                             ( messages2, linkedMessageIds ) =
-                                DiscordSync.messagesAndLinks (List.reverse messages) model.discordStickers attachments2
+                                DiscordSync.messagesAndLinks
+                                    (List.reverse messages)
+                                    model.discordCustomEmojis
+                                    model.discordStickers
+                                    attachments2
 
                             model2 : BackendModel
                             model2 =
@@ -1427,6 +1438,62 @@ update msg model =
                                 model
                     )
 
+        GotDiscordReadyDataCustomEmojis userId results time ->
+            let
+                ( errors, customEmojis, newCustomEmojis ) =
+                    gotDiscordCustomEmojis results model
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildCustomEmojis nonempty (List.length results))
+                        { model
+                            | customEmojis = customEmojis
+                            , users = NonemptyDict.updateIfExists userId (User.addNewCustomEmojis newCustomEmojis) model.users
+                        }
+
+                Nothing ->
+                    ( { model
+                        | customEmojis = customEmojis
+                        , users = NonemptyDict.updateIfExists userId (User.addNewCustomEmojis newCustomEmojis) model.users
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        userId
+                        (Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis |> ServerChange)
+                        model
+                    )
+
+        GotDiscordMessageCustomEmojis guildOrDmId results time ->
+            let
+                ( errors, customEmojis, newCustomEmojis ) =
+                    gotDiscordCustomEmojis results model
+            in
+            case List.Nonempty.fromList errors of
+                Just nonempty ->
+                    BackendExtra.addLog
+                        time
+                        (Log.FailedToLoadDiscordGuildCustomEmojis nonempty (List.length results))
+                        { model | customEmojis = customEmojis }
+
+                Nothing ->
+                    ( { model | customEmojis = customEmojis }
+                    , case guildOrDmId of
+                        MessageFromGuildOrDm_Guild guildId ->
+                            Broadcast.toDiscordGuild
+                                guildId
+                                (Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis |> ServerChange)
+                                model
+
+                        MessageFromGuildOrDm_Dm channelId ->
+                            Broadcast.toDiscordDmChannel
+                                channelId
+                                (Server_LinkedDiscordUserCustomEmojisLoaded newCustomEmojis |> ServerChange)
+                                model
+                    )
+
         HourlyUpdate time ->
             let
                 shouldExport : Bool
@@ -1590,6 +1657,37 @@ gotDiscordStickers results model =
         results
 
 
+gotDiscordCustomEmojis :
+    List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )
+    -> BackendModel
+    -> ( List ( Id CustomEmojiId, Http.Error ), SeqDict (Id CustomEmojiId) CustomEmojiData, SeqDict (Id CustomEmojiId) CustomEmojiData )
+gotDiscordCustomEmojis results model =
+    List.foldl
+        (\( customEmojiId, result ) ( errors2, customEmojis2, newCustomEmojis2 ) ->
+            case result of
+                Ok uploadResponse ->
+                    case SeqDict.get customEmojiId customEmojis2 of
+                        Just customEmoji ->
+                            case CustomEmoji.addUrl uploadResponse customEmoji of
+                                Ok customEmoji2 ->
+                                    ( errors2
+                                    , SeqDict.insert customEmojiId customEmoji2 customEmojis2
+                                    , SeqDict.insert customEmojiId customEmoji2 newCustomEmojis2
+                                    )
+
+                                Err () ->
+                                    ( errors2, customEmojis2, newCustomEmojis2 )
+
+                        Nothing ->
+                            ( errors2, customEmojis2, newCustomEmojis2 )
+
+                Err error ->
+                    ( ( customEmojiId, error ) :: errors2, customEmojis2, newCustomEmojis2 )
+        )
+        ( [], model.customEmojis, SeqDict.empty )
+        results
+
+
 addDiscordGuildData :
     Discord.Id Discord.UserId
     -> { guild : Discord.GatewayGuild, channels : List Discord.Channel, icon : Maybe FileStatus.UploadResponse }
@@ -1619,6 +1717,7 @@ addDiscordGuildData discordUserId data guild =
         MembersAndOwner.addMember discordUserId { joinedAt = Nothing } guild.membersAndOwner
             |> Result.withDefault guild.membersAndOwner
     , stickers = guild.stickers
+    , customEmojis = guild.customEmojis
     }
 
 
@@ -2190,7 +2289,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 richText =
                                                     textToDiscordRichText text (MembersAndOwner.membersAndOwner guild.membersAndOwner) model
                                             in
-                                            case ( RichText.toDiscord richText, threadRouteWithMaybeReplyTo ) of
+                                            case ( RichText.toDiscord model.discordCustomEmojis richText, threadRouteWithMaybeReplyTo ) of
                                                 ( Ok discordText, NoThreadWithMaybeMessage maybeReplyTo ) ->
                                                     ( { model
                                                         | pendingDiscordCreateMessages =
@@ -2329,7 +2428,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (NonemptyDict.keys dmChannel.members |> List.Nonempty.toList)
                                                         model
                                             in
-                                            case RichText.toDiscord richText of
+                                            case RichText.toDiscord model.discordCustomEmojis richText of
                                                 Ok discordText ->
                                                     ( { model
                                                         | pendingDiscordCreateDmMessages =
@@ -2751,8 +2850,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 currentUserId
                                 (\session userData user guild ->
-                                    case SeqDict.get channelId guild.channels of
-                                        Just channel ->
+                                    case
+                                        ( SeqDict.get channelId guild.channels
+                                        , emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji
+                                        )
+                                    of
+                                        ( Just channel, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordGuilds =
                                                     SeqDict.insert
@@ -2780,7 +2883,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -2798,7 +2901,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        Nothing ->
+                                        _ ->
                                             ( model
                                             , BackendExtra.invalidChangeResponse changeId clientId
                                             )
@@ -2810,8 +2913,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\session userData user channel ->
-                                    case threadRoute of
-                                        NoThreadWithMessage messageId ->
+                                    case ( threadRoute, emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji ) of
+                                        ( NoThreadWithMessage messageId, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordDmChannels =
                                                     SeqDict.updateIfExists
@@ -2839,7 +2942,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = Discord.idToUInt64 data.channelId |> Discord.idFromUInt64
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -2856,7 +2959,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        ViewThreadWithMessage _ _ ->
+                                        _ ->
                                             ( model, Command.none )
                                 )
 
@@ -2936,8 +3039,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 currentUserId
                                 (\_ userData _ guild ->
-                                    case SeqDict.get channelId guild.channels of
-                                        Just channel ->
+                                    case
+                                        ( SeqDict.get channelId guild.channels
+                                        , emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji
+                                        )
+                                    of
+                                        ( Just channel, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordGuilds =
                                                     SeqDict.insert
@@ -2969,7 +3076,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -2987,7 +3094,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        Nothing ->
+                                        _ ->
                                             ( model
                                             , BackendExtra.invalidChangeResponse changeId clientId
                                             )
@@ -2999,8 +3106,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\_ userData _ channel ->
-                                    case threadRoute of
-                                        NoThreadWithMessage messageId ->
+                                    case ( threadRoute, emojiOrCustomEmojiToDiscord model.discordCustomEmojis emoji ) of
+                                        ( NoThreadWithMessage messageId, Ok discordEmoji ) ->
                                             ( { model
                                                 | discordDmChannels =
                                                     SeqDict.updateIfExists
@@ -3027,7 +3134,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = Discord.idToUInt64 data.channelId |> Discord.idFromUInt64
                                                             , messageId = discordMessageId
-                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            , emoji = discordEmoji
                                                             }
                                                             |> DiscordSync.http model.serverSecret
                                                             |> Task.attempt
@@ -3044,7 +3151,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 ]
                                             )
 
-                                        ViewThreadWithMessage _ _ ->
+                                        _ ->
                                             ( model, Command.none )
                                 )
 
@@ -3159,7 +3266,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model
                                     in
                                     case
-                                        ( RichText.toDiscord richText
+                                        ( RichText.toDiscord model.discordCustomEmojis richText
                                         , LocalState.editMessageHelper
                                             time
                                             currentUserId
@@ -3249,7 +3356,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model
                             in
                             case
-                                ( RichText.toDiscord richText
+                                ( RichText.toDiscord model.discordCustomEmojis richText
                                 , LocalState.editMessageHelperNoThread
                                     time
                                     dmData.currentUserId
@@ -4523,6 +4630,23 @@ textToDiscordRichText text memberIds model =
         text
 
 
+emojiOrCustomEmojiToDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> EmojiOrCustomEmoji -> Result () Discord.Emoji
+emojiOrCustomEmojiToDiscord customEmojis emoji =
+    case emoji of
+        EmojiOrCustomEmoji_Emoji emoji2 ->
+            Emoji.toString emoji2 |> Discord.UnicodeEmoji |> Ok
+
+        EmojiOrCustomEmoji_CustomEmoji id ->
+            case OneToOne.first id customEmojis of
+                Just discordEmoji ->
+                    Discord.CustomEmoji
+                        { id = discordEmoji.id, name = CustomEmoji.emojiNameToString discordEmoji.name }
+                        |> Ok
+
+                Nothing ->
+                    Err ()
+
+
 threadRouteToDiscordMessageId :
     Discord.Id Discord.ChannelId
     -> DiscordBackendChannel
@@ -5290,10 +5414,6 @@ updateFromFrontendAdmin clientId toBackend model =
         Pages.Admin.ImportBackendRequest bytes ->
             case Bytes.Decode.decode WireHelper.decodeStreamedBackendModel bytes of
                 Just model2 ->
-                    let
-                        _ =
-                            Debug.log "asdf" model2.lastScheduledExportTime
-                    in
                     ( model2
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
                     )

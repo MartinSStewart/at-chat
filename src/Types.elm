@@ -47,6 +47,7 @@ import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordUserData exposing (DiscordUserData)
@@ -63,10 +64,10 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
-import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
+import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -88,7 +89,7 @@ import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
-import RichText exposing (Domain, RichText)
+import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
@@ -325,6 +326,8 @@ type alias BackendModel =
     , toBackendLogs : Array ToBackendLogData
     , stickers : SeqDict (Id StickerId) StickerData
     , discordStickers : OneToOne (Discord.Id Discord.StickerId) (Id StickerId)
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , discordCustomEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
@@ -403,7 +406,7 @@ type FrontendMsg
     | RemoveFocus
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmId ThreadRouteWithMessage (Coord CssPixels)
-    | MessageMenu_PressedReactionEmoji Emoji
+    | MessageMenu_PressedReactionEmoji EmojiOrCustomEmoji
     | MessageMenu_PressedEditMessage AnyGuildOrDmId ThreadRouteWithMessage
     | EmojiSelectorMsg Emoji.Msg
     | MessageMenu_PressedReply ThreadRouteWithMessage
@@ -480,6 +483,7 @@ type FrontendMsg
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
+    | PageUpGotViewport (Result Dom.Error Dom.Viewport)
 
 
 type ScrollPosition
@@ -538,10 +542,10 @@ type BackendMsg
     | DeletedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | EditedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
     | EditedDiscordDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
-    | DiscordAddedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
-    | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
-    | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
-    | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Emoji (Result Discord.HttpError ())
+    | DiscordAddedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
+    | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
+    | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
+    | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) EmojiOrCustomEmoji (Result Discord.HttpError ())
     | DiscordTypingIndicatorSent
     | AiChatBackendMsg AiChat.BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id Discord.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
@@ -610,6 +614,8 @@ type BackendMsg
     | ToBackendCompleted ToBackendLog (Maybe (Id UserId)) { startTime : Time.Posix, endTime : Time.Posix }
     | GotDiscordReadyDataStickers (Id UserId) (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | GotDiscordMessageStickers MessageFromGuildOrDm (List ( Id StickerId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordReadyDataCustomEmojis (Id UserId) (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
+    | GotDiscordMessageCustomEmojis MessageFromGuildOrDm (List ( Id CustomEmojiId, Result Http.Error FileStatus.UploadResponse )) Time.Posix
     | HourlyUpdate Time.Posix
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
@@ -681,6 +687,7 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 
@@ -715,12 +722,12 @@ type ServerChange
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId ThreadRoute
     | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | Server_DiscordDmMemberTyping Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
-    | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
-    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
-    | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage Emoji
-    | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) Emoji
-    | Server_DiscordRemoveReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage Emoji
-    | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) Emoji
+    | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_DiscordAddReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_DiscordAddReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
+    | Server_DiscordRemoveReactionGuildEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Server_DiscordRemoveReactionDmEmoji (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) EmojiOrCustomEmoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id Discord.UserId)))
     | Server_DiscordSendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) (Nonempty (RichText (Discord.Id Discord.UserId)))
@@ -765,6 +772,7 @@ type ServerChange
     | Server_UpdateDiscordMembers (Discord.Id Discord.GuildId) (MembersAndOwner (Discord.Id Discord.UserId) { joinedAt : Maybe Time.Posix })
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
+    | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
 
 
 type LocalChange
@@ -778,8 +786,8 @@ type LocalChange
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
-    | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
-    | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
+    | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
+    | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji
     | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage NonemptyString (SeqDict (Id FileId) FileData)
     | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage NonemptyString
     | Local_Discord_SendEditDmMessage Time.Posix DiscordGuildOrDmId_DmData (Id ChannelMessageId) NonemptyString
