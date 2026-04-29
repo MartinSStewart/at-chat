@@ -1,7 +1,7 @@
 module CustomEmoji exposing
     ( CustomEmojiData
     , CustomEmojiUrl(..)
-    , EmojiName
+    , EmojiName(..)
     , addUrl
     , emojiNameFromString
     , emojiNameToString
