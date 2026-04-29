@@ -28,6 +28,7 @@ import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
@@ -399,6 +400,14 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
+hasNewCustomEmojis : LocalState -> Bool
+hasNewCustomEmojis local =
+    SeqDict.foldl
+        (\id _ acc -> acc || not (SeqSet.member id local.localUser.user.availableCustomEmojis))
+        False
+        local.localUser.customEmojis
+
+
 menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
@@ -586,6 +595,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                 ( ViewThreadWithMessage _ _, _ ) ->
                     Nothing
+            , if hasNewCustomEmojis local then
+                button
+                    isMobile
+                    (Dom.id "messageMenu_addAllCustomEmojis")
+                    Icons.plusIcon
+                    "Import custom emojis"
+                    MessageMenu_PressedAddAllCustomEmojis
+                    |> Just
+
+              else
+                Nothing
             , button
                 isMobile
                 (Dom.id "messageMenu_copy")

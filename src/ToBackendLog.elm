@@ -59,6 +59,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetDomainWhitelist
     | ToBackendLog_Local_SetEmojiCategory
     | ToBackendLog_Local_SetEmojiSkinTone
+    | ToBackendLog_Local_AddAllCustomEmojis
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -213,3 +214,6 @@ toBackendLogToString log =
 
         ToBackendLog_Local_SetEmojiSkinTone ->
             "Local_SetEmojiSkinTone"
+
+        ToBackendLog_Local_AddAllCustomEmojis ->
+            "Local_AddAllCustomEmojis"

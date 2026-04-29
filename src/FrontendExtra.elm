@@ -183,6 +183,9 @@ pendingChangesText localChange =
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
 
+        Local_AddAllCustomEmojis ->
+            "Added all available custom emojis"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -1124,6 +1127,9 @@ isPressMsg msg =
             True
 
         MessageMenu_PressedDeleteMessage _ _ ->
+            True
+
+        MessageMenu_PressedAddAllCustomEmojis ->
             True
 
         ScrolledToMessage ->
@@ -2156,6 +2162,14 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
+
+                Local_AddAllCustomEmojis ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.addNewCustomEmojis localUser.customEmojis localUser.user } }
 
         ServerChange serverChange ->
             case serverChange of
