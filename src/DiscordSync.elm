@@ -1511,7 +1511,15 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         customEmojiData =
                                             handleCustomEmojis
                                                 model3.serverSecret
-                                                customEmojisInMessage
+                                                (customEmojisInMessage
+                                                    ++ (case message.reactions of
+                                                            Included reactions ->
+                                                                emojiDataToEmojiIdAndName (List.map .emoji reactions)
+
+                                                            Missing ->
+                                                                []
+                                                       )
+                                                )
                                                 { tasks = []
                                                 , customEmojis = model3.customEmojis
                                                 , discordCustomEmojis = model3.discordCustomEmojis
@@ -2483,6 +2491,20 @@ handleCustomEmojis secretKey emojisToCheck state =
         emojisToCheck
 
 
+emojiDataToEmojiIdAndName : List Discord.EmojiData -> List DiscordCustomEmojiIdAndName
+emojiDataToEmojiIdAndName emojis =
+    List.filterMap
+        (\emoji ->
+            case emoji.type_ of
+                Discord.UnicodeEmojiType _ ->
+                    Nothing
+
+                Discord.CustomEmojiType idAndName ->
+                    maybeEmojiNameAndIdToNameAndId emoji.animated idAndName
+        )
+        emojis
+
+
 handleReadyData : Id UserId -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleReadyData userId readyData model =
     let
@@ -2519,23 +2541,7 @@ handleReadyData userId readyData model =
             }
         customEmojiData =
             List.foldl
-                (\guild state ->
-                    let
-                        emojis : List DiscordCustomEmojiIdAndName
-                        emojis =
-                            List.filterMap
-                                (\emoji ->
-                                    case emoji.type_ of
-                                        Discord.UnicodeEmojiType _ ->
-                                            Nothing
-
-                                        Discord.CustomEmojiType idAndName ->
-                                            maybeEmojiNameAndIdToNameAndId emoji.animated idAndName
-                                )
-                                guild.emojis
-                    in
-                    handleCustomEmojis model.serverSecret emojis state
-                )
+                (\guild state -> handleCustomEmojis model.serverSecret (emojiDataToEmojiIdAndName guild.emojis) state)
                 { tasks = [], customEmojis = model.customEmojis, discordCustomEmojis = model.discordCustomEmojis }
                 readyData.guilds
     in
