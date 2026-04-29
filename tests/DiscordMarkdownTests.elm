@@ -6,6 +6,7 @@ import Id exposing (CustomEmojiId, Id)
 import List.Nonempty exposing (Nonempty(..))
 import OneToOne exposing (OneToOne)
 import RichText exposing (DiscordCustomEmojiIdAndName, HasLeadingLineBreak(..), RichText(..))
+import RichTextTests
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -30,8 +31,16 @@ customEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
 customEmojis =
     OneToOne.fromList
         [ ( { isAnimated = False, id = Unsafe.uint64 "543" |> Discord.idFromUInt64, name = Unsafe.emojiName "abc" }, Id.fromInt 999 )
-        , ( { isAnimated = True, id = Unsafe.uint64 "444" |> Discord.idFromUInt64, name = Unsafe.emojiName "z_" }, Id.fromInt 888 )
+        , ( { isAnimated = True, id = discordId, name = emojiName }, Id.fromInt 888 )
         ]
+
+
+discordId =
+    Unsafe.uint64 "444" |> Discord.idFromUInt64
+
+
+emojiName =
+    Unsafe.emojiName "z_"
 
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
@@ -146,6 +155,16 @@ basicFormattingTests =
         , fromNonemptyStringTest "<a:abc:543>" (Nonempty (NormalText '<' "a:abc:543>") [])
         , fromNonemptyStringTest "<a:z_:444>" (Nonempty (CustomEmoji (Id.fromInt 888)) [])
         , fromNonemptyStringTest "<b:abc:543>" (Nonempty (NormalText '<' "b:abc:543>") [])
+        , RichTextTests.simpleTest
+            "Extract discord emojis"
+            "<:z_:444>"
+            [ { isAnimated = False, id = discordId, name = emojiName } ]
+            RichText.customEmojisFromDiscord
+        , RichTextTests.simpleTest
+            "Extract animated discord emojis"
+            "Animated! <a:z_:444>"
+            [ { isAnimated = True, id = discordId, name = emojiName } ]
+            RichText.customEmojisFromDiscord
         ]
 
 

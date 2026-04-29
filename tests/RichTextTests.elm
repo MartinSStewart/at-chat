@@ -1,4 +1,4 @@
-module RichTextTests exposing (test)
+module RichTextTests exposing (simpleTest, test)
 
 import Expect
 import Fuzz exposing (Fuzzer)

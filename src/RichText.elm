@@ -4386,10 +4386,10 @@ toDiscordHelper customEmojis content =
 customEmojisFromDiscord : String -> List DiscordCustomEmojiIdAndName
 customEmojisFromDiscord text =
     List.filterMap
-        (\index -> tryParseDiscordCustomEmoji False index text |> Maybe.map Tuple.first)
+        (\index -> tryParseDiscordCustomEmoji False (index + 2) text |> Maybe.map Tuple.first)
         (String.indexes "<:" text)
         ++ List.filterMap
-            (\index -> tryParseDiscordCustomEmoji True index text |> Maybe.map Tuple.first)
+            (\index -> tryParseDiscordCustomEmoji True (index + 3) text |> Maybe.map Tuple.first)
             (String.indexes "<a:" text)
 
 
