@@ -10,6 +10,8 @@
 * Prevent files larger than 10mb being attached to Discord messages (unless it's a nitro user)
 * Make it more clear when a message hasn't been sent yet
 * Don't send message while attachments are still loading
+* Message stickers and message custom emojis gets added to a user's available emojis on the frontend when it shouldn't
+  do that
 
 Requested features:
 

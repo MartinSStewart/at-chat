@@ -3241,6 +3241,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetEmojiSkinTone _ ->
                     False
 
+                Local_AddCustomEmojisToUser ids ->
+                    False
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
