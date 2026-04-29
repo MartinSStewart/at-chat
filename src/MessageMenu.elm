@@ -625,7 +625,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         isMobile
                         (Dom.id "messageMenu_addCustomEmojis")
                         Icons.plusIcon
-                        "Add stickers and emoji to selector"
+                        "Get stickers & emojis"
                         (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
                         |> Just
 
