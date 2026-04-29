@@ -60,6 +60,7 @@ module LocalState exposing
     , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
     , discordChannelToFrontend
+    , discordGuildAvailableStickersAndCustomEmojis
     , discordGuildOrDmIdToMessage
     , discordGuildOrDmIdToMessages
     , discordTopicToDescription
@@ -2747,3 +2748,10 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
+
+
+discordGuildAvailableStickersAndCustomEmojis : LocalUser -> DiscordFrontendGuild -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
+discordGuildAvailableStickersAndCustomEmojis localUser guild =
+    ( SeqSet.intersect localUser.user.availableCustomEmojis guild.customEmojis
+    , SeqSet.intersect localUser.user.availableStickers guild.stickers
+    )

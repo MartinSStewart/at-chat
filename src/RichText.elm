@@ -2782,7 +2782,7 @@ embedView onPressLink containerWidth domainWhitelist playAnimation url embed =
                                     False
                     in
                     if isAnimatedImage then
-                        Sticker.animatedImageView width2 height2 Nothing imageData.url playAnimation |> Just
+                        Sticker.animatedImageView False width2 height2 Nothing imageData.url playAnimation |> Just
 
                     else
                         Html.img

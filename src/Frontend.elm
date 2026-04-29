@@ -1165,7 +1165,7 @@ updateLoaded msg model =
 
                                 EmojiSelectorForReaction guildOrDmId threadRoute ->
                                     case emojiOrSticker of
-                                        EmojiOrSticker_Emoji emoji ->
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
                                             FrontendExtra.handleLocalChange
                                                 model.time
                                                 (Local_AddReactionEmoji guildOrDmId threadRoute (EmojiOrCustomEmoji_Emoji emoji) |> Just)
@@ -3764,7 +3764,7 @@ insertEmojiOrSticker inputId maybeSelection emojiOrSticker model loggedIn =
         text : String
         text =
             case emojiOrSticker of
-                EmojiOrSticker_Emoji emoji ->
+                EmojiOrSticker_UnicodeEmoji emoji ->
                     case model.emojiData of
                         Just emojiData ->
                             Emoji.emojiWithSkinTone
@@ -3835,7 +3835,22 @@ selectionChanged maybeHtmlId maybeRange model =
                                                 Just (EmojiSoFar emojiSoFar) ->
                                                     case model.emojiData of
                                                         Just emojiData2 ->
-                                                            MessageInput.emojiDropdownList (MyUi.isMobile model) emojiSoFar emojiData2
+                                                            let
+                                                                local =
+                                                                    Local.model loggedIn.localState
+
+                                                                ( availableCustomEmojis, availableStickers ) =
+                                                                    MessageInput.availableCustomEmojisAndStickers
+                                                                        guildOrDmId
+                                                                        local
+                                                            in
+                                                            MessageInput.emojiDropdownList
+                                                                (MyUi.isMobile model)
+                                                                emojiSoFar
+                                                                availableCustomEmojis
+                                                                availableStickers
+                                                                local.localUser
+                                                                emojiData2
                                                                 |> List.isEmpty
                                                                 |> not
 

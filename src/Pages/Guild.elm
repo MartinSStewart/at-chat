@@ -1528,13 +1528,8 @@ discordChannelView routeData guild loggedIn local model =
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     let
-                        availableCustomEmojis : SeqSet (Id CustomEmojiId)
-                        availableCustomEmojis =
-                            SeqSet.intersect local.localUser.user.availableCustomEmojis guild.customEmojis
-
-                        availableStickers : SeqSet (Id StickerId)
-                        availableStickers =
-                            SeqSet.intersect local.localUser.user.availableStickers guild.stickers
+                        ( availableCustomEmojis, availableStickers ) =
+                            LocalState.discordGuildAvailableStickersAndCustomEmojis local.localUser guild
                     in
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->

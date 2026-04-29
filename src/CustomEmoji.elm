@@ -73,6 +73,7 @@ view emojiSize yOffset customEmojiId customEmojis2 animationMode =
             Html.div
                 [ Html.Attributes.style "width" emojiSize
                 , Html.Attributes.style "height" emojiSize
+                , Html.Attributes.style "display" "inline-block"
                 , Html.Attributes.style "background-color" "gray"
                 , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
                 ]
@@ -95,6 +96,7 @@ viewHelper emojiSize yOffset customEmoji animationMode =
         CustomEmojiInternal fileHash _ ->
             if customEmoji.isAnimated then
                 Sticker.animatedImageView
+                    True
                     emojiSize
                     emojiSize
                     (Just yOffset)

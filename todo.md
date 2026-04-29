@@ -13,6 +13,8 @@
 * https://blog.x-way.org/Webdesign/2024/08/03/Increase-emoji-size-with-CSS-only.html Try this trick to make emojis
   larger
 * Don't send message while attachments are still loading
+* Undo is triggered as an intermediate step when removing a sticker. If a user was typing and then quickly backspaced
+  the sticker then the undo undoes their typing as well
 
 Requested features:
 
