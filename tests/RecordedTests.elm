@@ -23,15 +23,17 @@ import Expect
 import FileStatus
 import Frontend
 import Html.Attributes
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
+import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
 import MessageInput
 import NonemptyDict
+import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
@@ -3468,6 +3470,10 @@ legitGuildId =
 allAttackerLocalChanges : List LocalChange
 allAttackerLocalChanges =
     let
+        customEmojiId : Id CustomEmojiId
+        customEmojiId =
+            Id.fromInt 0
+
         normalUserId : Id UserId
         normalUserId =
             Id.fromInt 1
@@ -3592,7 +3598,7 @@ allAttackerLocalChanges =
     , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
-    , Local_AddCustomEmojisToUser
+    , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty customEmojiId []))
     ]
 
 
