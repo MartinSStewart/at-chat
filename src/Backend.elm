@@ -4503,6 +4503,39 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_AddCustomEmojisToUser customEmojiIds ->
+                    asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            let
+                                validIds : List (Id CustomEmojiId)
+                                validIds =
+                                    List.filter
+                                        (\id -> SeqDict.member id model.customEmojis)
+                                        customEmojiIds
+
+                                updatedUser : BackendUser
+                                updatedUser =
+                                    { user
+                                        | availableCustomEmojis =
+                                            List.foldl
+                                                SeqSet.insert
+                                                user.availableCustomEmojis
+                                                validIds
+                                    }
+                            in
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        updatedUser
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model

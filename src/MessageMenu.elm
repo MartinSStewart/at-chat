@@ -14,9 +14,10 @@ import Discord
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
@@ -28,6 +29,7 @@ import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
@@ -402,7 +404,7 @@ editMessageTextInputId =
 menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
-        helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String )
+        helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
             case DmChannel.getArray messageId thread.messages of
                 Just (MessageLoaded message) ->
@@ -413,13 +415,14 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         _ ->
                             False
                     , LocalState.messageToString (LocalState.allUsers local.localUser) message
+                    , messageCustomEmojiIds message
                     )
                         |> Just
 
                 _ ->
                     Nothing
 
-        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String )
+        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id Discord.UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         discordHelper messageId thread =
             case DmChannel.getArray messageId thread.messages of
                 Just (MessageLoaded message) ->
@@ -430,13 +433,14 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         _ ->
                             False
                     , LocalState.messageToString (LocalState.allDiscordUsers local.localUser) message
+                    , messageCustomEmojiIds message
                     )
                         |> Just
 
                 _ ->
                     Nothing
 
-        maybeData : Maybe ( Bool, String )
+        maybeData : Maybe ( Bool, String, List (Id CustomEmojiId) )
         maybeData =
             case guildOrDmId of
                 GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -507,7 +511,19 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                             Nothing
     in
     case maybeData of
-        Just ( canEditAndDelete, text ) ->
+        Just ( canEditAndDelete, text, messageCustomEmojiIdsList ) ->
+            let
+                newCustomEmojiIds : List (Id CustomEmojiId)
+                newCustomEmojiIds =
+                    List.filter
+                        (\id ->
+                            SeqDict.member id local.localUser.customEmojis
+                                && not (SeqSet.member id local.localUser.user.availableCustomEmojis)
+                        )
+                        messageCustomEmojiIdsList
+                        |> SeqSet.fromList
+                        |> SeqSet.toList
+            in
             [ Ui.row
                 []
                 [ -- We need to have this container around the button, otherwise the divider between button and emojis isn't centered for some reason
@@ -603,6 +619,23 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 )
                 (PressedCopyText text)
                 |> Just
+            , case newCustomEmojiIds of
+                [] ->
+                    Nothing
+
+                _ ->
+                    button
+                        isMobile
+                        (Dom.id "messageMenu_addCustomEmojis")
+                        Icons.plusIcon
+                        (if List.length newCustomEmojiIds == 1 then
+                            "Add 1 custom emoji"
+
+                         else
+                            "Add " ++ String.fromInt (List.length newCustomEmojiIds) ++ " custom emojis"
+                        )
+                        (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds)
+                        |> Just
             , if canEditAndDelete && not isMobile then
                 Ui.el
                     [ Ui.height (Ui.px (buttonHeight False))
@@ -648,6 +681,33 @@ button isMobile htmlId icon text msg =
         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
         ]
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
+
+
+messageCustomEmojiIds : Message messageId userId -> List (Id CustomEmojiId)
+messageCustomEmojiIds message =
+    let
+        reactionIds : SeqDict Emoji.EmojiOrCustomEmoji a -> List (Id CustomEmojiId)
+        reactionIds reactions =
+            SeqDict.keys reactions
+                |> List.filterMap
+                    (\emoji ->
+                        case emoji of
+                            EmojiOrCustomEmoji_CustomEmoji id ->
+                                Just id
+
+                            EmojiOrCustomEmoji_Emoji _ ->
+                                Nothing
+                    )
+    in
+    case message of
+        UserTextMessage data ->
+            RichText.customEmojiIds data.content ++ reactionIds data.reactions
+
+        UserJoinedMessage _ _ reactions ->
+            reactionIds reactions
+
+        DeletedMessage _ ->
+            []
 
 
 buttonHeight : Bool -> number

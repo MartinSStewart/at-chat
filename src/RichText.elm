@@ -12,6 +12,7 @@ module RichText exposing
     , attachedFileSuffix
     , attachments
     , bigEmojiFont
+    , customEmojiIds
     , customEmojisFromDiscord
     , discordCharsLeft
     , domainToString
@@ -593,6 +594,65 @@ attachmentsHelper isSpoilered nonempty =
 
                 CustomEmoji _ ->
                     []
+        )
+        (List.Nonempty.toList nonempty)
+
+
+customEmojiIds : Nonempty (RichText userId) -> List (Id CustomEmojiId)
+customEmojiIds nonempty =
+    List.concatMap
+        (\richText ->
+            case richText of
+                Hyperlink _ ->
+                    []
+
+                MarkdownLink _ _ ->
+                    []
+
+                UserMention _ ->
+                    []
+
+                NormalText _ _ ->
+                    []
+
+                Bold nonempty2 ->
+                    customEmojiIds nonempty2
+
+                Italic nonempty2 ->
+                    customEmojiIds nonempty2
+
+                Underline nonempty2 ->
+                    customEmojiIds nonempty2
+
+                Strikethrough nonempty2 ->
+                    customEmojiIds nonempty2
+
+                Spoiler nonempty2 ->
+                    customEmojiIds nonempty2
+
+                BlockQuote _ list ->
+                    List.Nonempty.fromList list |> Maybe.map customEmojiIds |> Maybe.withDefault []
+
+                Heading _ _ nonempty2 ->
+                    customEmojiIds nonempty2
+
+                InlineCode _ _ ->
+                    []
+
+                CodeBlock _ _ ->
+                    []
+
+                AttachedFile _ ->
+                    []
+
+                EscapedChar _ ->
+                    []
+
+                Sticker _ ->
+                    []
+
+                CustomEmoji customEmojiId ->
+                    [ customEmojiId ]
         )
         (List.Nonempty.toList nonempty)
 
