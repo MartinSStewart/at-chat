@@ -3884,6 +3884,10 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                         discordParseLoop customEmojis source afterBackslash modifiers (accText ++ "\\") revNodes
 
             "<" ->
+                let
+                    bailOutHelper () =
+                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "<") revNodes
+                in
                 case stringAt (index + 1) source of
                     Just "@" ->
                         case tryParseDiscordMention source index of
@@ -3897,76 +3901,88 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                                     (UserMention userId :: flushText accText revNodes)
 
                             Nothing ->
-                                discordParseLoop
-                                    customEmojis
-                                    source
-                                    (index + 1)
-                                    modifiers
-                                    (accText ++ "<")
-                                    revNodes
+                                bailOutHelper ()
 
                     Just "h" ->
-                        case tryParseDiscordCustomEmoji customEmojis (index + 1) source of
-                            Just ( emojiId, nextIndex ) ->
-                                discordParseLoop
-                                    customEmojis
-                                    source
-                                    nextIndex
-                                    modifiers
-                                    ""
-                                    (CustomEmoji emojiId :: flushText accText revNodes)
-
-                            Nothing ->
-                                case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
-                                    Ok url ->
-                                        let
-                                            index2 =
-                                                index + 1 + String.length (Url.toString url)
-                                        in
-                                        case stringAt index2 source of
-                                            Just ">" ->
-                                                discordParseLoop
-                                                    customEmojis
-                                                    source
-                                                    (index2 + 1)
-                                                    modifiers
-                                                    ""
-                                                    (Hyperlink url :: flushText accText revNodes)
-
-                                            _ ->
-                                                discordParseLoop
-                                                    customEmojis
-                                                    source
-                                                    (index2 + 1)
-                                                    modifiers
-                                                    ""
-                                                    (Hyperlink url :: flushText (accText ++ "<") revNodes)
-
-                                    Err errText ->
+                        case parseUrlBody True discordModifierToSymbol modifiers (index + 1) source of
+                            Ok url ->
+                                let
+                                    index2 =
+                                        index + 1 + String.length (Url.toString url)
+                                in
+                                case stringAt index2 source of
+                                    Just ">" ->
                                         discordParseLoop
                                             customEmojis
                                             source
-                                            (index + 1 + String.length errText)
+                                            (index2 + 1)
                                             modifiers
-                                            (accText ++ "<" ++ errText)
-                                            revNodes
+                                            ""
+                                            (Hyperlink url :: flushText accText revNodes)
 
-                    Just ":" ->
-                        case tryParseDiscordCustomEmoji customEmojis (index + 2) source of
-                            Just ( emojiId, nextIndex ) ->
+                                    _ ->
+                                        discordParseLoop
+                                            customEmojis
+                                            source
+                                            (index2 + 1)
+                                            modifiers
+                                            ""
+                                            (Hyperlink url :: flushText (accText ++ "<") revNodes)
+
+                            Err errText ->
                                 discordParseLoop
                                     customEmojis
                                     source
-                                    nextIndex
+                                    (index + 1 + String.length errText)
                                     modifiers
-                                    ""
-                                    (CustomEmoji emojiId :: flushText accText revNodes)
+                                    (accText ++ "<" ++ errText)
+                                    revNodes
+
+                    Just "a" ->
+                        case stringAt (index + 2) source of
+                            Just ":" ->
+                                case tryParseDiscordCustomEmoji True (index + 3) source of
+                                    Just ( nameAndId, nextIndex ) ->
+                                        case OneToOne.second nameAndId customEmojis of
+                                            Just emojiId ->
+                                                discordParseLoop
+                                                    customEmojis
+                                                    source
+                                                    nextIndex
+                                                    modifiers
+                                                    ""
+                                                    (CustomEmoji emojiId :: flushText accText revNodes)
+
+                                            Nothing ->
+                                                bailOutHelper ()
+
+                                    Nothing ->
+                                        bailOutHelper ()
+
+                            _ ->
+                                bailOutHelper ()
+
+                    Just ":" ->
+                        case tryParseDiscordCustomEmoji False (index + 2) source of
+                            Just ( nameAndId, nextIndex ) ->
+                                case OneToOne.second nameAndId customEmojis of
+                                    Just emojiId ->
+                                        discordParseLoop
+                                            customEmojis
+                                            source
+                                            nextIndex
+                                            modifiers
+                                            ""
+                                            (CustomEmoji emojiId :: flushText accText revNodes)
+
+                                    Nothing ->
+                                        bailOutHelper ()
 
                             Nothing ->
-                                discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "<") revNodes
+                                bailOutHelper ()
 
                     _ ->
-                        discordParseLoop customEmojis source (index + 1) modifiers (accText ++ "<") revNodes
+                        bailOutHelper ()
 
             "*" ->
                 if String.slice index (index + 2) source == "**" then
@@ -4271,7 +4287,7 @@ discordCharsLeft customEmojis richText =
 
 
 type alias DiscordCustomEmojiIdAndName =
-    { id : Discord.Id Discord.CustomEmojiId, name : EmojiName }
+    { isAnimated : Bool, id : Discord.Id Discord.CustomEmojiId, name : EmojiName }
 
 
 toDiscordHelper :
@@ -4367,28 +4383,14 @@ toDiscordHelper customEmojis content =
         |> String.concat
 
 
-customEmojisFromDiscord : String -> List ( String, Discord.Id Discord.CustomEmojiId )
+customEmojisFromDiscord : String -> List DiscordCustomEmojiIdAndName
 customEmojisFromDiscord text =
-    String.split "<" text
-        |> List.filterMap
-            (\text2 ->
-                case String.split ">" text2 of
-                    head :: _ ->
-                        case String.split ":" head of
-                            [ name, id ] ->
-                                case Discord.idFromString id of
-                                    Just id2 ->
-                                        Just ( name, id2 )
-
-                                    Nothing ->
-                                        Nothing
-
-                            _ ->
-                                Nothing
-
-                    [] ->
-                        Nothing
-            )
+    List.filterMap
+        (\index -> tryParseDiscordCustomEmoji False index text |> Maybe.map Tuple.first)
+        (String.indexes "<:" text)
+        ++ List.filterMap
+            (\index -> tryParseDiscordCustomEmoji True index text |> Maybe.map Tuple.first)
+            (String.indexes "<a:" text)
 
 
 escapeDiscordText : String -> String
@@ -4432,12 +4434,8 @@ parseDiscordHeadingContent customEmojis content =
             Nonempty (NormalText (String.Nonempty.head content) (String.Nonempty.tail content)) []
 
 
-tryParseDiscordCustomEmoji :
-    OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
-    -> Int
-    -> String
-    -> Maybe ( Id CustomEmojiId, Int )
-tryParseDiscordCustomEmoji customEmojis index source =
+tryParseDiscordCustomEmoji : Bool -> Int -> String -> Maybe ( DiscordCustomEmojiIdAndName, Int )
+tryParseDiscordCustomEmoji isAnimated index source =
     case ( findChar source index (String.length source) ':', findChar source index (String.length source) '>' ) of
         ( Just nameEnd, Just idEnd ) ->
             if nameEnd < idEnd then
@@ -4447,12 +4445,7 @@ tryParseDiscordCustomEmoji customEmojis index source =
                     )
                 of
                     ( Ok name, Just discordId ) ->
-                        case OneToOne.second { id = discordId, name = name } customEmojis of
-                            Just emojiId ->
-                                Just ( emojiId, idEnd + 1 )
-
-                            Nothing ->
-                                Nothing
+                        Just ( { isAnimated = isAnimated, id = discordId, name = name }, idEnd + 1 )
 
                     _ ->
                         Nothing

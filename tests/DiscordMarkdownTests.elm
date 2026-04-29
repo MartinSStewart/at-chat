@@ -28,7 +28,10 @@ test =
 
 customEmojis : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId)
 customEmojis =
-    OneToOne.fromList [ ( { id = Unsafe.uint64 "543" |> Discord.idFromUInt64, name = Unsafe.emojiName "abc" }, Id.fromInt 999 ) ]
+    OneToOne.fromList
+        [ ( { isAnimated = False, id = Unsafe.uint64 "543" |> Discord.idFromUInt64, name = Unsafe.emojiName "abc" }, Id.fromInt 999 )
+        , ( { isAnimated = True, id = Unsafe.uint64 "444" |> Discord.idFromUInt64, name = Unsafe.emojiName "z_" }, Id.fromInt 888 )
+        ]
 
 
 fromDiscordHelper : String -> List (RichText (Discord.Id Discord.UserId))
@@ -140,7 +143,8 @@ basicFormattingTests =
         , fromNonemptyStringTest "<:abc:542>" (Nonempty (NormalText '<' ":abc:542>") [])
         , fromNonemptyStringTest "<:543>" (Nonempty (NormalText '<' ":543>") [])
         , fromNonemptyStringTest "<:http:543>" (Nonempty (NormalText '<' ":http:543>") [])
-        , fromNonemptyStringTest "<a:abc:543>" (Nonempty (CustomEmoji (Id.fromInt 999)) [])
+        , fromNonemptyStringTest "<a:abc:543>" (Nonempty (NormalText '<' "a:abc:543>") [])
+        , fromNonemptyStringTest "<a:z_:444>" (Nonempty (CustomEmoji (Id.fromInt 888)) [])
         , fromNonemptyStringTest "<b:abc:543>" (Nonempty (NormalText '<' "b:abc:543>") [])
         ]
 

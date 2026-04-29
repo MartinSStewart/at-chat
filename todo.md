@@ -12,6 +12,7 @@
 * Make it more clear when a message hasn't been sent yet
 * https://blog.x-way.org/Webdesign/2024/08/03/Increase-emoji-size-with-CSS-only.html Try this trick to make emojis
   larger
+* Don't send message while attachments are still loading
 
 Requested features:
 

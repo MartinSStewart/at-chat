@@ -40,7 +40,7 @@ type EmojiName
 
 emojiNameFromString : String -> Result () EmojiName
 emojiNameFromString text =
-    if String.length text >= 2 && String.length text < 32 && not (String.contains ":" text) then
+    if String.length text >= 2 && String.length text <= 32 && String.all (\char -> Char.isAlphaNum char || char == '_') text then
         Ok (EmojiName text)
 
     else
