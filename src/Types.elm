@@ -64,7 +64,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
-import Emoji exposing (CachedEmojiData, Emoji, EmojiOrCustomEmoji, SkinTone)
+import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
@@ -483,7 +483,6 @@ type FrontendMsg
     | EnableToFrontendLogging
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
-    | PageUpOrDownScroll
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
 
 

@@ -30,7 +30,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji, EmojiConfig, EmojiOrCustomEmoji(..))
+import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -4465,7 +4465,7 @@ dropdownButtonId index =
 reactionEmojiView :
     userId
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
-    -> Sticker.AnimationMode
+    -> AnimationMode
     -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (Element MessageViewMsg)
 reactionEmojiView currentUserId customEmojis animationMode reactions =

@@ -1,11 +1,11 @@
-module Log exposing (Log(..), MsgConfig, emojiOrCustomEmojiView, httpErrorToString, shouldNotifyAdmin, timeToString, view)
+module Log exposing (Log(..), MsgConfig, httpErrorToString, shouldNotifyAdmin, timeToString, view)
 
 import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Emoji, EmojiOrCustomEmoji(..))
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import Icons
 import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)

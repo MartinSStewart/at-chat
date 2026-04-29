@@ -1,5 +1,6 @@
 module DiscordMarkdownTests exposing (test)
 
+import CustomEmoji exposing (EmojiName)
 import Discord
 import Expect
 import Id exposing (CustomEmojiId, Id)
@@ -35,10 +36,12 @@ customEmojis =
         ]
 
 
+discordId : Discord.Id idType
 discordId =
     Unsafe.uint64 "444" |> Discord.idFromUInt64
 
 
+emojiName : EmojiName
 emojiName =
     Unsafe.emojiName "z_"
 

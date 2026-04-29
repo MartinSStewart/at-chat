@@ -1533,7 +1533,7 @@ stickersAndEmojisSection local user =
         , Ui.text ("Custom emoji count: " ++ String.fromInt customEmojiCount)
         , SeqDict.toList customEmojis
             |> List.map
-                (\( customEmojiId, customEmoji ) ->
+                (\( _, customEmoji ) ->
                     Ui.row
                         [ Ui.spacing 6, Ui.width (Ui.px 300), Ui.contentCenterY ]
                         [ CustomEmoji.viewHelper "32px" "0" customEmoji Sticker.LoopForever

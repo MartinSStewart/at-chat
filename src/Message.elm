@@ -21,7 +21,7 @@ import Array exposing (Array)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Embed exposing (Embed(..), EmbedData)
-import Emoji exposing (Emoji, EmojiOrCustomEmoji)
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, StickerId)
 import List.Nonempty exposing (Nonempty)

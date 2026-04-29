@@ -14,7 +14,6 @@ import Discord
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)

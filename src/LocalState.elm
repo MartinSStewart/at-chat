@@ -117,7 +117,7 @@ import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
 import Embed exposing (EmbedData)
-import Emoji exposing (Emoji, EmojiOrCustomEmoji)
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)

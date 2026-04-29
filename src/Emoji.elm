@@ -13,6 +13,7 @@ module Emoji exposing
     , SkinTone(..)
     , emojiButtonId
     , emojiWithSkinTone
+    , fromString
     , heart
     , isPressed
     , requestEmojiData
@@ -32,7 +33,6 @@ import Array exposing (Array)
 import Codec exposing (Codec)
 import CustomEmoji exposing (CustomEmojiData)
 import Dict exposing (Dict)
-import Discord
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.Http as Http
@@ -42,8 +42,6 @@ import Icons
 import Id exposing (CustomEmojiId, Id, StickerId)
 import Json.Decode
 import MyUi
-import OneToOne exposing (OneToOne)
-import RichText exposing (DiscordCustomEmojiIdAndName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
@@ -70,6 +68,11 @@ toString emoji =
     case emoji of
         UnicodeEmoji text ->
             text
+
+
+fromString : String -> Emoji
+fromString =
+    UnicodeEmoji
 
 
 view : Emoji -> Element msg

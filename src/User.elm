@@ -46,7 +46,7 @@ import Discord exposing (OptionalData(..))
 import DiscordUserData exposing (DiscordUserLoadingData)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), Emoji, EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
+import Emoji exposing (Category(..), EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode

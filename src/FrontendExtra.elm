@@ -16,7 +16,7 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji, EmojiOrCustomEmoji)
+import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
@@ -1306,10 +1306,7 @@ isPressMsg msg =
         EditMessage_PressedToggleAttachedFileSpoiler _ _ ->
             True
 
-        PageUpOrDownScroll ->
-            False
-
-        PageUpGotViewport result ->
+        PageUpGotViewport _ ->
             False
 
 

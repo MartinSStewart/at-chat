@@ -39,7 +39,6 @@ import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
-import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)

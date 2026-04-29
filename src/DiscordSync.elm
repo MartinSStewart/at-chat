@@ -36,7 +36,7 @@ import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
-import Emoji exposing (Emoji, EmojiOrCustomEmoji(..))
+import Emoji exposing (EmojiOrCustomEmoji(..))
 import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -2603,7 +2603,7 @@ emojiFromDiscord : OneToOne DiscordCustomEmojiIdAndName (Id CustomEmojiId) -> Di
 emojiFromDiscord customEmojis emoji =
     case emoji.type_ of
         Discord.UnicodeEmojiType string ->
-            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji string)
+            EmojiOrCustomEmoji_Emoji (Emoji.fromString string)
 
         Discord.CustomEmojiType idAndName ->
             case maybeEmojiNameAndIdToNameAndId emoji.animated idAndName of
@@ -2613,10 +2613,10 @@ emojiFromDiscord customEmojis emoji =
                             EmojiOrCustomEmoji_CustomEmoji customEmojiId
 
                         Nothing ->
-                            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "❓")
+                            EmojiOrCustomEmoji_Emoji (Emoji.fromString "❓")
 
                 Nothing ->
-                    EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "❓")
+                    EmojiOrCustomEmoji_Emoji (Emoji.fromString "❓")
 
 
 maybeEmojiNameAndIdToNameAndId : OptionalData Bool -> { a | name : Maybe String, id : Discord.Id Discord.CustomEmojiId } -> Maybe DiscordCustomEmojiIdAndName

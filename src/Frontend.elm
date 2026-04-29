@@ -24,7 +24,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
-import Emoji exposing (Emoji, EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
@@ -2922,9 +2922,6 @@ updateLoaded msg model =
 
                 MessageInput.TypedPageDown ->
                     pageUpOrDownScroll False model
-
-        PageUpOrDownScroll ->
-            ( model, Command.none )
 
         PageUpGotViewport result ->
             case result of
