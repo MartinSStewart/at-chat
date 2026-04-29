@@ -1,11 +1,11 @@
-module RichTextTests exposing (test)
+module RichTextTests exposing (simpleTest, test)
 
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
-import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), Language(..), RichText(..))
+import RichText exposing (EscapedChar(..), HasLeadingLineBreak(..), HeadingLevel(..), Language(..), RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test exposing (Test)
@@ -66,6 +66,18 @@ stringFuzzer =
         , "> "
         , "\n>"
         , "\n> "
+        , "# "
+        , "## "
+        , "### "
+        , "-# "
+        , "\n# "
+        , "\n## "
+        , "\n### "
+        , "\n-# "
+        , "#"
+        , "-"
+        , "❓"
+        , "\u{FEFF}"
         ]
 
 
@@ -391,6 +403,56 @@ test =
                 (BlockQuote HasLeadingLineBreak [ NormalText 'q' "uote" ])
                 [ NormalText '\n' "after" ]
             )
+        , fromNonemptyStringTest "# hello"
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
+        , fromNonemptyStringTest "## hello"
+            (Nonempty (Heading H2 NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
+        , fromNonemptyStringTest "### hello"
+            (Nonempty (Heading H3 NoLeadingLineBreak (Nonempty (NormalText 'h' "ello") [])) [])
+        , fromNonemptyStringTest "-# small"
+            (Nonempty (Heading Small NoLeadingLineBreak (Nonempty (NormalText 's' "mall") [])) [])
+        , fromNonemptyStringTest "\n# heading"
+            (Nonempty (Heading H1 HasLeadingLineBreak (Nonempty (NormalText 'h' "eading") [])) [])
+        , fromNonemptyStringTest "\n## heading"
+            (Nonempty (Heading H2 HasLeadingLineBreak (Nonempty (NormalText 'h' "eading") [])) [])
+        , fromNonemptyStringTest "\n### heading"
+            (Nonempty (Heading H3 HasLeadingLineBreak (Nonempty (NormalText 'h' "eading") [])) [])
+        , fromNonemptyStringTest "\n-# tiny"
+            (Nonempty (Heading Small HasLeadingLineBreak (Nonempty (NormalText 't' "iny") [])) [])
+        , fromNonemptyStringTest "before\n# title"
+            (Nonempty (NormalText 'b' "efore") [ Heading H1 HasLeadingLineBreak (Nonempty (NormalText 't' "itle") []) ])
+        , fromNonemptyStringTest "# title\nafter"
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 't' "itle") [])) [ NormalText '\n' "after" ])
+        , fromNonemptyStringTest "# *bold heading*"
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (Bold (Nonempty (NormalText 'b' "old heading") [])) [])) [])
+        , fromNonemptyStringTest "## " (Nonempty (NormalText '#' "# ") [])
+        , fromNonemptyStringTest "#hello" (Nonempty (NormalText '#' "hello") [])
+        , fromNonemptyStringTest "-#nope" (Nonempty (NormalText '-' "#nope") [])
+        , fromNonemptyStringTest "# one\n## two\n### three\n-# small"
+            (Nonempty
+                (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'o' "ne") []))
+                [ Heading H2 HasLeadingLineBreak (Nonempty (NormalText 't' "wo") [])
+                , Heading H3 HasLeadingLineBreak (Nonempty (NormalText 't' "hree") [])
+                , Heading Small HasLeadingLineBreak (Nonempty (NormalText 's' "mall") [])
+                ]
+            )
+        , toStringTest
+            (Nonempty (Heading H1 NoLeadingLineBreak (Nonempty (NormalText 'h' "i") [])) [])
+            "# hi"
+        , toStringTest
+            (Nonempty (Heading Small HasLeadingLineBreak (Nonempty (NormalText 'a' "") [])) [])
+            "\n-# a"
+        , Test.test
+            "Heading round trip"
+            (\_ ->
+                let
+                    text =
+                        NonemptyString '#' " hello\n## world"
+                in
+                RichText.fromNonemptyString users text
+                    |> RichText.toString False users
+                    |> Expect.equal (String.Nonempty.toString text)
+            )
         , fromNonemptyStringTest "\n>no space" (Nonempty (NormalText '\n' ">no space") [])
         , fromNonemptyStringTest "> \n> " (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText '\n' "" ]) [])
         , toStringTest (Nonempty (BlockQuote NoLeadingLineBreak [ NormalText '\n' "" ]) []) "> \n> "
@@ -436,6 +498,16 @@ test =
             (Nonempty (Spoiler (Nonempty (AttachedFile (Id.fromInt 1)) [ NormalText ' ' "test" ])) [])
             (Nonempty (AttachedFile (Id.fromInt 1)) [ Spoiler (Nonempty (NormalText ' ' "test") []) ])
             (RichText.unspoilerAttachedFile (Id.fromInt 1))
+        , fromNonemptyStringTest "❓\u{200B}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 0)) [])
+        , fromNonemptyStringTest "❓\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 3)) [])
+        , fromNonemptyStringTest "a❓\u{2060}\u{FEFF}" (Nonempty (NormalText 'a' "") [ CustomEmoji (Id.fromInt 3) ])
+        , fromNonemptyStringTest "❓\u{2060}\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 15)) [])
+        , fromNonemptyStringTest "❓\u{200B}\u{2060}\u{FEFF}" (Nonempty (NormalText '❓' "\u{200B}\u{2060}\u{FEFF}") [])
+        , fromNonemptyStringTest "❓\u{200B}\u{2060}" (Nonempty (NormalText '❓' "\u{200B}\u{2060}") [])
+        , fromNonemptyStringTest "❓\u{200B}" (Nonempty (NormalText '❓' "\u{200B}") [])
+        , fromNonemptyStringTest "❓\u{2060}" (Nonempty (NormalText '❓' "\u{2060}") [])
+        , fromNonemptyStringTest "❓\u{2060}\u{FEFF}❓\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 3)) [ CustomEmoji (Id.fromInt 3) ])
+        , fromNonemptyStringTest "❓\u{2060}\u{200C}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 13)) [])
         ]
 
 

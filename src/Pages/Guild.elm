@@ -13,6 +13,7 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , newGuildFormInit
+    , scrollCloseToTop
     , threadMessageHtmlId
     , typingDebouncerDelay
     )
@@ -23,12 +24,13 @@ import Bitwise
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji exposing (Emoji, EmojiConfig)
+import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
 import GuildIcon exposing (ChannelNotificationType(..))
@@ -37,7 +39,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -52,13 +54,14 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
+import OneToOne
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Sticker
+import Sticker exposing (AnimationMode(..))
 import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
@@ -731,6 +734,7 @@ discordDmChannelView routeData loggedIn local model =
                 , lastTypedAt = dmChannel.lastTypedAt
                 , threads = SeqDict.empty
                 }
+                SeqSet.empty
                 SeqSet.empty
 
         Nothing ->
@@ -1537,6 +1541,10 @@ discordChannelView routeData guild loggedIn local model =
         DiscordChannel_ChannelRoute channelId threadRoute ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
+                    let
+                        ( availableCustomEmojis, availableStickers ) =
+                            LocalState.discordGuildAvailableStickersAndCustomEmojis local.localUser guild
+                    in
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                             SeqDict.get threadMessageIndex channel.threads
@@ -1565,7 +1573,8 @@ discordChannelView routeData guild loggedIn local model =
                                             threadMessageIndex
                                             channel
                                     )
-                                    guild.stickers
+                                    availableCustomEmojis
+                                    availableStickers
 
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             discordConversationView
@@ -1582,7 +1591,8 @@ discordChannelView routeData guild loggedIn local model =
                                 local
                                 (ChannelName.toString channel.name)
                                 channel
-                                (SeqSet.intersect local.localUser.user.availableStickers guild.stickers)
+                                availableCustomEmojis
+                                availableStickers
 
                 Nothing ->
                     pageMissing "Channel does not exist"
@@ -2228,7 +2238,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
-                                        (RichText.discordCharsLeft editRichText)
+                                        (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         edit
                                         editRichText
                                         loggedIn.textInputFocus
@@ -2729,7 +2739,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         message
                                         maybeRepliedTo2
                                         revealedSpoilers
-                                        (RichText.discordCharsLeft editRichText)
+                                        (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         editing
                                         editRichText
                                         loggedIn.textInputFocus
@@ -2981,6 +2991,11 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
+scrollCloseToTop : number
+scrollCloseToTop =
+    300
+
+
 decodeScrollToBottom : AnyGuildOrDmId -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
 decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
@@ -2988,7 +3003,7 @@ decodeScrollToBottom guildOrDmId threadRoute currentScrollPosition =
             if scrollTop + clientHeight >= scrollHeight - 5 then
                 ScrolledToBottom
 
-            else if scrollTop <= 300 then
+            else if scrollTop <= scrollCloseToTop then
                 ScrolledToTop
 
             else
@@ -3132,8 +3147,16 @@ voiceChatButton voiceChatId local =
         ]
 
 
-emojiSelector : Bool -> SeqSet (Id StickerId) -> LocalState -> LoggedIn2 -> LoadedFrontend -> Ui.Attribute FrontendMsg
-emojiSelector isMobile availableStickers local loggedIn model =
+
+emojiSelector :
+    Bool
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqSet (Id StickerId)
+    -> LocalState
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> Ui.Attribute FrontendMsg
+emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model =
     let
         emojiConfig : EmojiConfig
         emojiConfig =
@@ -3164,6 +3187,8 @@ emojiSelector isMobile availableStickers local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
@@ -3187,6 +3212,8 @@ emojiSelector isMobile availableStickers local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
@@ -3214,6 +3241,8 @@ emojiSelector isMobile availableStickers local loggedIn model =
                     loggedIn.emojiSelector
                     emojiConfig
                     model.emojiData
+                    availableCustomEmojis
+                    local.localUser.customEmojis
                     availableStickers
                     local.localUser.stickers
                     |> Ui.el
@@ -3310,6 +3339,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         , Ui.el
             [ emojiSelector
                 isMobile
+                local.localUser.user.availableCustomEmojis
                 local.localUser.user.availableStickers
                 local
                 loggedIn
@@ -3436,6 +3466,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
@@ -3471,9 +3502,10 @@ discordConversationView :
             , lastTypedAt : SeqDict (Discord.Id Discord.UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
         }
+    -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> Element FrontendMsg
-discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableStickers =
+discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel availableCustomEmojis availableStickers =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -3536,7 +3568,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile availableStickers local loggedIn model
+            [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3652,7 +3684,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                             name
                                        )
                         )
-                        (RichText.discordCharsLeft draftRichText)
+                        (RichText.discordCharsLeft OneToOne.empty draftRichText)
                         draft
                         draftRichText
                         (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
@@ -3662,6 +3694,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                             Nothing ->
                                 SeqDict.empty
                         )
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         loggedIn.textInputFocus
                         (LocalState.allDiscordUsers local.localUser)
@@ -3832,7 +3865,13 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile local.localUser.user.availableStickers local loggedIn model
+            [ emojiSelector
+                isMobile
+                local.localUser.user.availableCustomEmojis
+                local.localUser.user.availableStickers
+                local
+                loggedIn
+                model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -3969,6 +4008,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allUsers local.localUser)
@@ -3988,10 +4028,11 @@ discordThreadConversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
+    -> SeqSet (Id CustomEmojiId)
     -> SeqSet (Id StickerId)
     -> DiscordFrontendThread
     -> Element FrontendMsg
-discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableStickers channel =
+discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name availableCustomEmojis availableStickers channel =
     let
         guildOrDmId : ( AnyGuildOrDmId, ThreadRoute )
         guildOrDmId =
@@ -4054,7 +4095,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         ]
             )
         , Ui.el
-            [ emojiSelector isMobile availableStickers local loggedIn model
+            [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
             , Ui.height Ui.fill
             ]
@@ -4170,7 +4211,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     DiscordGuildOrDmId_Dm _ ->
                         "Write a message in this thread"
                 )
-                (RichText.discordCharsLeft draftRichText)
+                (RichText.discordCharsLeft OneToOne.empty draftRichText)
                 draft
                 draftRichText
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
@@ -4180,6 +4221,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Nothing ->
                         SeqDict.empty
                 )
+                local.localUser.customEmojis
                 local.localUser.stickers
                 loggedIn.textInputFocus
                 (LocalState.allDiscordUsers local.localUser)
@@ -4374,7 +4416,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             Nothing
                             Nothing
                             SeqDict.empty
-                            (RichText.discordCharsLeft editRichText)
+                            (RichText.discordCharsLeft OneToOne.empty editRichText)
                             edit
                             editRichText
                             loggedIn.textInputFocus
@@ -4460,8 +4502,13 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-reactionEmojiView : userId -> SeqDict Emoji (NonemptySet userId) -> Maybe (Element MessageViewMsg)
-reactionEmojiView currentUserId reactions =
+reactionEmojiView :
+    userId
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> AnimationMode
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> Maybe (Element MessageViewMsg)
+reactionEmojiView currentUserId customEmojis animationMode reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
@@ -4509,7 +4556,22 @@ reactionEmojiView currentUserId reactions =
                         , Ui.width Ui.shrink
                         , Ui.Font.bold
                         ]
-                        [ Emoji.view emoji, Ui.text (String.fromInt (NonemptySet.size users)) ]
+                        [ case emoji of
+                            EmojiOrCustomEmoji_Emoji emoji2 ->
+                                Emoji.view emoji2
+
+                            EmojiOrCustomEmoji_CustomEmoji customEmojiId ->
+                                Ui.el
+                                    [ CustomEmoji.view "1.1em" "0em" customEmojiId customEmojis animationMode
+                                        |> Ui.html
+                                        |> Ui.el [ Ui.centerY, Ui.move { x = 1, y = 0, z = 0 } ]
+                                        |> Ui.inFront
+                                    , Ui.Font.color (Ui.rgba 0 0 0 0)
+                                    , Ui.Font.size 20
+                                    ]
+                                    (Ui.text "❓")
+                        , Ui.text (String.fromInt (NonemptySet.size users))
+                        ]
                 )
                 (SeqDict.toList reactions)
             )
@@ -4538,7 +4600,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
             let
                 maybeReactions : Maybe (Element MessageViewMsg)
                 maybeReactions =
-                    reactionEmojiView currentUserId data.reactions
+                    reactionEmojiView currentUserId local.localUser.customEmojis LoopAFewTimesOnLoad data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -4554,6 +4616,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         editing.text
                         editingRichText
                         editing.attachedFiles
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         pingUser
                         allUsers
@@ -4584,7 +4647,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                     |> Dom.idToString
                     |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers allUsers
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4634,7 +4697,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Ui.none
                 , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
-                        previewThreadLastMessage local.localUser.timezone allUsers messageId thread
+                        previewThreadLastMessage local.localUser.timezone local.localUser.customEmojis allUsers messageId thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
@@ -4676,7 +4739,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView currentUserId data.reactions
+                    reactionEmojiView currentUserId local.localUser.customEmojis LoopAFewTimesOnLoad data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -4695,6 +4758,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         editing.text
                         editingRichText
                         editing.attachedFiles
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         pingUser
                         allUsers
@@ -4716,7 +4780,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 , Ui.spacing 4
                 , threadMessageHtmlId messageId |> Dom.idToString |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers allUsers
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -5030,6 +5094,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 (case highlight of
                     NoHighlight ->
@@ -5067,6 +5132,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 highlight
                 messageIndex
@@ -5088,6 +5154,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 highlight
                 messageIndex
@@ -5176,6 +5243,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 currentUserId
                 localUser.user
                 message2.reactions
+                localUser.customEmojis
                 isHovered
                 (userTextMessageContent
                     (Dom.id "threadSpoiler")
@@ -5199,6 +5267,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 currentUserId
                 localUser.user
                 reactions
+                localUser.customEmojis
                 isHovered
                 (Ui.row
                     []
@@ -5215,6 +5284,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 localUser.session.userId
                 localUser.user
                 SeqDict.empty
+                localUser.customEmojis
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
@@ -5239,6 +5309,19 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 isHovered
                 (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
+
+
+isHoveredToAnimationMode : IsHovered -> AnimationMode
+isHoveredToAnimationMode isHovered =
+    case isHovered of
+        IsNotHovered ->
+            Sticker.LoopAFewTimesOnLoad
+
+        IsHovered ->
+            Sticker.ResetAndLoopAFewTimes
+
+        IsHoveredButNoMenu ->
+            Sticker.ResetAndLoopAFewTimes
 
 
 userTextMessageContent :
@@ -5282,7 +5365,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers allUsers
+            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5309,17 +5392,9 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , users = allUsers
                     , attachedFiles = message2.attachedFiles
                     , domainWhitelist = localUser.user.domainWhitelist
+                    , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
-                    , animationMode =
-                        case isHovered of
-                            IsNotHovered ->
-                                Sticker.LoopAFewTimesOnLoad
-
-                            IsHovered ->
-                                Sticker.ResetAndLoopAFewTimes
-
-                            IsHoveredButNoMenu ->
-                                Sticker.ResetAndLoopAFewTimes
+                    , animationMode = isHoveredToAnimationMode isHovered
                     }
                     message2.embeds
                     message2.content
@@ -5403,15 +5478,17 @@ replyToHeaderAboveMessage :
     Bool
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers allUsers =
-    case maybeRepliedTo2 of
+replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+    case maybeRepliedTo of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
                 isMobile
                 repliedToIndex
                 (userTextMessagePreview
+                    customEmojis
                     allUsers
                     (case SeqDict.get repliedToIndex revealedSpoilers of
                         Just set ->
@@ -5446,11 +5523,12 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers allUsers =
 
 
 userTextMessagePreview :
-    SeqDict userId { a | name : PersonName }
+    SeqDict (Id CustomEmojiId) CustomEmojiData
+    -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessagePreview allUsers revealedSpoilers message =
+userTextMessagePreview customEmojis allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -5466,6 +5544,7 @@ userTextMessagePreview allUsers revealedSpoilers message =
                 { revealedSpoilers = revealedSpoilers
                 , users = allUsers
                 , attachedFiles = message.attachedFiles
+                , customEmojis = customEmojis
                 , domainWhitelist = SeqSet.empty
                 }
                 message.content
@@ -5538,22 +5617,23 @@ messagePaddingX =
 messageContainer :
     Bool
     -> Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> HighlightMessage
     -> Id ChannelMessageId
     -> Bool
     -> userId
     -> FrontendCurrentUser
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
     -> Maybe (FrontendGenericThread userId)
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
+messageContainer isThreadStarter timezone customEmojis allUsers highlight messageIndex canEdit currentUserId currentUser reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView currentUserId reactions
+            reactionEmojiView currentUserId customEmojis (isHoveredToAnimationMode isHovered) reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -5624,7 +5704,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser isThreadStarter canEdit |> Ui.inFront
+                        , MessageView.miniView currentUser isThreadStarter canEdit customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -5646,7 +5726,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ previewThreadLastMessage timezone allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone customEmojis allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -5661,15 +5741,16 @@ threadMessageContainer :
     -> Bool
     -> userId
     -> FrontendCurrentUser
-    -> SeqDict Emoji (NonemptySet userId)
+    -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions isHovered messageContent =
+threadMessageContainer highlight messageIndex canEdit currentUserId currentUser reactions customEmojis isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView currentUserId reactions
+            reactionEmojiView currentUserId customEmojis (isHoveredToAnimationMode isHovered) reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
@@ -5740,7 +5821,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView currentUser False canEdit |> Ui.inFront
+                        , MessageView.miniView currentUser False canEdit customEmojis |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -5763,11 +5844,12 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
 
 previewThreadLastMessage :
     Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
     -> FrontendGenericThread userId
     -> Element MessageViewMsg
-previewThreadLastMessage timezone allUsers messageId thread =
+previewThreadLastMessage timezone customEmojis allUsers messageId thread =
     let
         lastMessage =
             Array.Extra.last thread.messages
@@ -5824,6 +5906,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
                                         { revealedSpoilers = SeqSet.empty
                                         , users = allUsers
                                         , attachedFiles = data.attachedFiles
+                                        , customEmojis = customEmojis
                                         , domainWhitelist = SeqSet.empty
                                         }
                                         data.content

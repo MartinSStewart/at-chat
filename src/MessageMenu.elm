@@ -14,7 +14,6 @@ import Discord
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Emoji
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
@@ -22,7 +21,9 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
+import MessageView
 import MyUi
+import OneToOne
 import PersonName exposing (PersonName)
 import Quantity exposing (Quantity, Rate)
 import RichText exposing (RichText)
@@ -261,6 +262,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     edit.text
                                     richText
                                     edit.attachedFiles
+                                    local.localUser.customEmojis
                                     local.localUser.stickers
                                     loggedIn.textInputFocus
                                     allUsers
@@ -296,7 +298,16 @@ viewMobile offset extraOptions loggedIn local model =
                                             Nothing ->
                                                 Nothing
                                 in
-                                editView (RichText.discordCharsLeft richText) richText allUsers
+                                editView
+                                    (RichText.discordCharsLeft
+                                        -- Not providing a mapping between CustomEmojiId And Discord emoji IDs will make
+                                        -- the count slightly wrong but hopefully not enough to matter.
+                                        -- I don't think it's worth the added complexity to send the mapping to clients
+                                        OneToOne.empty
+                                        richText
+                                    )
+                                    richText
+                                    allUsers
                           )
                             |> Ui.map
                                 (EditMessage_MessageInputMsg
@@ -525,7 +536,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                                             , buttonHeight isMobile |> Ui.px |> Ui.height
                                             , Ui.Font.size 24
                                             ]
-                                            (Ui.text (Emoji.toString emoji))
+                                            (Ui.html (MessageView.reactionEmojiButtonContent local.localUser.customEmojis emoji))
                                     )
                     in
                     Ui.el

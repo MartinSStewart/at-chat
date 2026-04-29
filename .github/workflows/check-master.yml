@@ -46,6 +46,9 @@ jobs:
       - name: Tests
         run: npm run tests
 
+      - name: Review tests
+        run: npm run review-tests
+
       - name: End-to-end tests
         run: npm run end-to-end-tests
 

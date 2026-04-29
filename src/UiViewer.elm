@@ -77,6 +77,7 @@ main =
                     , users = SeqDict.empty
                     , attachedFiles = attachments
                     , stickers = stickers
+                    , customEmojis = SeqDict.empty
                     , animationMode = Sticker.LoopForever
                     }
                     Array.empty
@@ -171,6 +172,7 @@ stickersSection =
             , users = SeqDict.empty
             , attachedFiles = SeqDict.empty
             , stickers = stickers
+            , customEmojis = SeqDict.empty
             , animationMode = Sticker.LoopForever
             }
             Array.empty
@@ -186,6 +188,7 @@ stickersSection =
             123
             (richText |> RichText.toString False SeqDict.empty)
             (Just richText)
+            SeqDict.empty
             SeqDict.empty
             stickers
             Nothing
@@ -276,6 +279,7 @@ logExamples =
                 False
                 False
                 Time.utc
+                SeqDict.empty
                 { onPressCopyLink = ()
                 , onPressCopy = \_ -> ()
                 , onPressHide = ()
@@ -332,6 +336,7 @@ embedExamples whitelistedDomains =
                 , revealedSpoilers = SeqSet.empty
                 , users = SeqDict.empty
                 , attachedFiles = SeqDict.empty
+                , customEmojis = SeqDict.empty
                 , stickers = SeqDict.empty
                 , animationMode = Sticker.LoopForever
                 }

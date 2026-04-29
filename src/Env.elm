@@ -1,8 +1,5 @@
 module Env exposing (..)
 
-import EmailAddress exposing (EmailAddress)
-import Unsafe
-
 
 domain : String
 domain =
@@ -33,16 +30,6 @@ secretKey =
 postmarkServerToken_ : String
 postmarkServerToken_ =
     ""
-
-
-noReplyEmailAddress : EmailAddress
-noReplyEmailAddress =
-    Unsafe.emailAddress "no-reply@at-chat.app"
-
-
-adminEmail : EmailAddress
-adminEmail =
-    Unsafe.emailAddress "a@a.se"
 
 
 slackClientId : String

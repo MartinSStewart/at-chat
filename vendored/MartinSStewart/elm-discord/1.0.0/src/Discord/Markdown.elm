@@ -1,5 +1,6 @@
 module Discord.Markdown exposing
-    ( Markdown(..)
+    ( HeadingLevel(..)
+    , Markdown(..)
     , Quotable
     , bold
     , boldMarkdown
@@ -38,6 +39,14 @@ type Markdown a
     | Ping (Id UserId)
     | CustomEmoji String (Id CustomEmojiId)
     | Spoiler (List (Markdown a))
+    | Heading HeadingLevel (List (Markdown a))
+
+
+type HeadingLevel
+    = H1
+    | H2
+    | H3
+    | Small
 
 
 map : Markdown a -> Markdown b
@@ -75,6 +84,9 @@ map markdown =
 
         Spoiler a ->
             List.map map a |> Spoiler
+
+        Heading level a ->
+            Heading level (List.map map a)
 
 
 codeBlock : Maybe String -> String -> Markdown a
@@ -203,6 +215,22 @@ toStringHelper markdown =
 
         Spoiler content ->
             "||" ++ (List.map toStringHelper content |> String.concat) ++ "||"
+
+        Heading level markdown2 ->
+            (case level of
+                H1 ->
+                    "# "
+
+                H2 ->
+                    "## "
+
+                H3 ->
+                    "### "
+
+                Small ->
+                    "-# "
+            )
+                ++ toString markdown2
 
 
 escapeText : String -> String

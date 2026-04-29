@@ -31,6 +31,7 @@ import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
+import CustomEmoji
 import Discord
 import Duration exposing (Duration)
 import Editable
@@ -53,7 +54,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LocalUser, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -1383,11 +1384,11 @@ view isMobile2 version local adminData user model =
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
-            , logSection isMobile2 local.localUser.timezone user adminData model
+            , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , filesSection user adminData
-            , stickersSection local user
+            , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
             , exportSection user model
             ]
@@ -1449,8 +1450,8 @@ filesSection user adminData =
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-stickersSection : LocalState -> BackendUser -> Element Msg
-stickersSection local user =
+stickersAndEmojisSection : LocalState -> BackendUser -> Element Msg
+stickersAndEmojisSection local user =
     let
         stickers =
             local.localUser.stickers
@@ -1499,11 +1500,17 @@ stickersSection local user =
                 )
                 SeqDict.empty
                 stickers
+
+        customEmojis =
+            local.localUser.customEmojis
+
+        customEmojiCount =
+            SeqDict.size customEmojis
     in
     section
         8
         user.expandedSections
-        StickersSection
+        StickersAndEmojisSection
         [ Ui.text ("Sticker count: " ++ String.fromInt stickerCount)
         , Ui.column
             [ Ui.spacing 2 ]
@@ -1523,6 +1530,19 @@ stickersSection local user =
                     )
                     (SeqDict.toList urlTypeCounts)
             )
+        , Ui.text ("Custom emoji count: " ++ String.fromInt customEmojiCount)
+        , SeqDict.toList customEmojis
+            |> List.map
+                (\( _, customEmoji ) ->
+                    Ui.row
+                        [ Ui.spacing 6, Ui.width (Ui.px 300), Ui.contentCenterY ]
+                        [ CustomEmoji.viewHelper "32px" "0" customEmoji Sticker.LoopForever
+                            |> Ui.html
+                            |> Ui.el [ Ui.width Ui.shrink ]
+                        , Ui.text (CustomEmoji.emojiNameToString customEmoji.name)
+                        ]
+                )
+            |> Ui.row [ Ui.spacing 4, Ui.wrap ]
         ]
 
 
@@ -2788,8 +2808,8 @@ resetButton htmlId onPress =
         Icons.reset
 
 
-logSection : Bool -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
-logSection isMobile2 timezone user adminData model =
+logSection : Bool -> LocalUser -> BackendUser -> AdminData -> Model -> Element Msg
+logSection isMobile2 localUser user adminData model =
     let
         pageIndex : Int
         pageIndex =
@@ -2825,7 +2845,8 @@ logSection isMobile2 timezone user adminData model =
                     Log.view
                         isMobile2
                         log.isHidden
-                        timezone
+                        localUser.timezone
+                        localUser.customEmojis
                         { onPressCopyLink = PressedCopyLogLink logId
                         , onPressCopy = PressedCopyText
                         , onPressHide = PressedHideLog logId

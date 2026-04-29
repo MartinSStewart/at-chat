@@ -466,6 +466,26 @@ richTextToMessage previousText previousList nonempty =
                         Nothing ->
                             ( currentText, list )
 
+                RichText.Heading level _ nonempty2 ->
+                    richTextToMessage
+                        (currentText
+                            ++ (case level of
+                                    RichText.H1 ->
+                                        "\n# "
+
+                                    RichText.H2 ->
+                                        "\n## "
+
+                                    RichText.H3 ->
+                                        "\n### "
+
+                                    RichText.Small ->
+                                        "\n-# "
+                               )
+                        )
+                        list
+                        nonempty2
+
                 RichText.Hyperlink url ->
                     ( "", ImageUrlMessage (Url.toString url) :: TextMessage currentText :: list )
 
@@ -485,6 +505,9 @@ richTextToMessage previousText previousList nonempty =
                     ( currentText ++ "\\" ++ RichText.escapedCharToString char, list )
 
                 RichText.Sticker _ ->
+                    ( currentText, list )
+
+                RichText.CustomEmoji _ ->
                     ( currentText, list )
         )
         ( previousText, previousList )

@@ -105,6 +105,9 @@ jobs:
       - name: Tests (elm-test)
         run: yarn elm-test-rs --compiler node_modules/.bin/lamdera
 
+      - name: Tests (review elm-test)
+        run: cd review && yarn elm-test-rs --compiler ../node_modules/.bin/lamdera
+
       - name: Tests (end-to-end)
         run: yarn end-to-end-tests
 

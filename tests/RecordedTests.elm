@@ -5,6 +5,7 @@ import Backend
 import Bytes exposing (Bytes)
 import Codec
 import Coord
+import CustomEmoji
 import Dict
 import DiscordRecordedTests
 import Duration
@@ -13,7 +14,7 @@ import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), SkinTone(..))
+import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus

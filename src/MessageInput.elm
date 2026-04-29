@@ -4,6 +4,7 @@ module MessageInput exposing
     , NameSoFar(..)
     , NameSoFarData
     , TextInputFocus
+    , availableCustomEmojisAndStickers
     , disabledView
     , discordUserDropdownList
     , dropdownView
@@ -17,23 +18,24 @@ module MessageInput exposing
     )
 
 import Array
+import CustomEmoji exposing (CustomEmojiData)
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
-import Emoji exposing (CachedEmojiData, Emoji, SkinTone)
+import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
 import FileStatus exposing (FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
+import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, StickerId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (LocalState)
+import LocalState exposing (LocalState, LocalUser)
 import MembersAndOwner
 import MyUi
 import NonemptyDict
@@ -42,6 +44,7 @@ import Ports
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
@@ -81,6 +84,8 @@ type Msg
     | PressedUploadFile
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
+    | TypedPageUp
+    | TypedPageDown
 
 
 counterThreshold : number
@@ -121,6 +126,12 @@ isPress msg =
         OnPasteFiles _ ->
             False
 
+        TypedPageUp ->
+            False
+
+        TypedPageDown ->
+            False
+
 
 textarea :
     Bool
@@ -130,11 +141,12 @@ textarea :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Html Msg
-textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers textInputFocus users =
+textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers textInputFocus users =
     let
         keyDownNoDropdown : Html.Attribute Msg
         keyDownNoDropdown =
@@ -151,6 +163,12 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                             else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
                                 Json.Decode.succeed ( PressedSendMessage { charsLeft = charsLeft }, True )
 
+                            else if key == "PageUp" then
+                                Json.Decode.succeed ( TypedPageUp, True )
+
+                            else if key == "PageDown" then
+                                Json.Decode.succeed ( TypedPageDown, True )
+
                             else
                                 Json.Decode.fail ""
                         )
@@ -162,6 +180,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
         , Html.Attributes.style "min-height" "min-content"
         , Html.Attributes.style "width" "100%"
         , Html.Attributes.style "height" "fit-content"
+        , RichText.bigEmojiFont
         ]
         [ Html.textarea
             [ Html.Attributes.style "color" "rgba(255,0,0,1)"
@@ -214,6 +233,12 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                                                 Json.Decode.succeed
                                                     ( PressedDropdownItem dropdownIndex, True )
 
+                                            "PageUp" ->
+                                                Json.Decode.succeed ( TypedPageUp, True )
+
+                                            "PageDown" ->
+                                                Json.Decode.succeed ( TypedPageDown, True )
+
                                             _ ->
                                                 Json.Decode.fail ""
                                     )
@@ -253,6 +278,7 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                     RichText.textInputView
                         users
                         attachedFiles
+                        customEmojis
                         stickers
                         (Maybe.map .selection textInputFocus)
                         richText2
@@ -324,6 +350,7 @@ disabledTextarea placeholderText text attachedFiles local =
                     RichText.textInputView
                         users
                         attachedFiles
+                        local.localUser.customEmojis
                         local.localUser.stickers
                         Nothing
                         (RichText.fromNonemptyString users nonempty)
@@ -351,17 +378,18 @@ editView :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -426,17 +454,18 @@ view :
     -> String
     -> Maybe (Nonempty (RichText userId))
     -> SeqDict (Id FileId) a
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
             Dom.idToString htmlId
     in
-    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles stickers pingUser users
+    textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
@@ -664,17 +693,69 @@ maxDropdownUsers isMobile =
         10
 
 
-emojiDropdownList : Bool -> NameSoFarData -> CachedEmojiData -> List Emoji
-emojiDropdownList isMobile nameSoFar emojiData =
+emojiDropdownList :
+    Bool
+    -> NameSoFarData
+    -> SeqSet (Id CustomEmojiId)
+    -> SeqSet (Id StickerId)
+    -> LocalUser
+    -> CachedEmojiData
+    -> List EmojiOrSticker
+emojiDropdownList isMobile nameSoFar availableCustomEmojis availableStickers localUser emojiData =
     let
         substring =
             String.toLower nameSoFar.nameSoFar
     in
     if String.length substring > 2 then
-        Array.filter (\item -> String.contains substring item.shortName) emojiData.shortNames
-            |> Array.toList
-            |> List.map .emoji
+        let
+            unicodeEmojis : List ( Int, EmojiOrSticker )
+            unicodeEmojis =
+                Array.filter (\item -> String.contains substring item.shortName) emojiData.shortNames
+                    |> Array.toList
+                    |> List.map (\a -> ( String.length a.shortName, EmojiOrSticker_UnicodeEmoji a.emoji ))
+
+            customEmojis : List ( Int, EmojiOrSticker )
+            customEmojis =
+                List.filterMap
+                    (\customEmojiId ->
+                        case SeqDict.get customEmojiId localUser.customEmojis of
+                            Just customEmoji ->
+                                let
+                                    name =
+                                        CustomEmoji.emojiNameToString customEmoji.name
+                                in
+                                if String.contains substring (String.toLower name) then
+                                    Just ( String.length name, EmojiOrSticker_CustomEmoji customEmojiId )
+
+                                else
+                                    Nothing
+
+                            Nothing ->
+                                Nothing
+                    )
+                    (SeqSet.toList availableCustomEmojis)
+
+            stickers : List ( Int, EmojiOrSticker )
+            stickers =
+                List.filterMap
+                    (\stickerId ->
+                        case SeqDict.get stickerId localUser.stickers of
+                            Just sticker ->
+                                if String.contains substring (String.toLower sticker.name) then
+                                    Just ( String.length sticker.name, EmojiOrSticker_Sticker stickerId )
+
+                                else
+                                    Nothing
+
+                            Nothing ->
+                                Nothing
+                    )
+                    (SeqSet.toList availableStickers)
+        in
+        (unicodeEmojis ++ customEmojis ++ stickers)
+            |> List.sortBy Tuple.first
             |> List.take (maxDropdownUsers isMobile)
+            |> List.map Tuple.second
 
     else
         []
@@ -761,13 +842,43 @@ pressedArrowInDropdown isMobile nameSoFar guildOrDmId index maybePingUser emojiD
                 EmojiSoFar emojiSoFar ->
                     case emojiData of
                         Just emojiData2 ->
-                            emojiDropdownList isMobile emojiSoFar emojiData2 |> List.length |> helper
+                            let
+                                ( availableCustomEmojis, availableStickers ) =
+                                    availableCustomEmojisAndStickers guildOrDmId local
+                            in
+                            emojiDropdownList
+                                isMobile
+                                emojiSoFar
+                                availableCustomEmojis
+                                availableStickers
+                                local.localUser
+                                emojiData2
+                                |> List.length
+                                |> helper
 
                         Nothing ->
                             Nothing
 
         Nothing ->
             Nothing
+
+
+availableCustomEmojisAndStickers : AnyGuildOrDmId -> LocalState -> ( SeqSet (Id CustomEmojiId), SeqSet (Id StickerId) )
+availableCustomEmojisAndStickers guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId _ ->
+            ( local.localUser.user.availableCustomEmojis, local.localUser.user.availableStickers )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId _) ->
+            case SeqDict.get guildId local.discordGuilds of
+                Just guild ->
+                    LocalState.discordGuildAvailableStickersAndCustomEmojis local.localUser guild
+
+                Nothing ->
+                    ( SeqSet.empty, SeqSet.empty )
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ->
+            ( SeqSet.empty, SeqSet.empty )
 
 
 pressedDropdownItem :
@@ -824,12 +935,27 @@ pressedDropdownItem setFocusMsg isMobile nameSoFar guildOrDmId channelTextInputI
                 EmojiSoFar emojiSoFar ->
                     case emojiData of
                         Just emojiData2 ->
-                            case emojiDropdownList isMobile emojiSoFar emojiData2 |> List.Extra.getAt dropdownIndex of
-                                Just emoji ->
+                            let
+                                ( availableCustomEmojis, availableStickers ) =
+                                    availableCustomEmojisAndStickers guildOrDmId local
+                            in
+                            case
+                                emojiDropdownList isMobile emojiSoFar availableCustomEmojis availableStickers local.localUser emojiData2
+                                    |> List.Extra.getAt dropdownIndex
+                            of
+                                Just emojiOrSticker ->
                                     ( { start = emojiSoFar.index - 1
                                       , end = emojiSoFar.index + String.length emojiSoFar.nameSoFar
                                       }
-                                    , Emoji.emojiWithSkinTone local.localUser.user.emojiConfig.skinTone emoji emojiData2
+                                    , case emojiOrSticker of
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
+                                            Emoji.emojiWithSkinTone local.localUser.user.emojiConfig.skinTone emoji emojiData2
+
+                                        EmojiOrSticker_Sticker stickerId ->
+                                            Sticker.idToString stickerId
+
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            CustomEmoji.idToString customEmojiId
                                     )
                                         |> Just
 
@@ -867,7 +993,7 @@ dropdownView :
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element Msg
-dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dropdownButtonId dropdown =
+dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData local dropdownButtonId dropdown =
     case nameSoFar of
         NameSoFar nameSoFarData ->
             let
@@ -879,73 +1005,120 @@ dropdownView isMobile nameSoFar guildOrDmId skinTone emojiData localState dropdo
                                 (\index ( _, user ) ->
                                     dropdownButton
                                         isMobile
+                                        False
                                         dropdown
                                         dropdownButtonId
                                         index
                                         (Ui.text (PersonName.toString user.name))
                                 )
-                                (userDropdownList isMobile nameSoFarData guildOrDmId2 localState)
+                                (userDropdownList isMobile nameSoFarData guildOrDmId2 local)
 
                         DiscordGuildOrDmId guildOrDmId2 ->
                             List.indexedMap
                                 (\index ( _, user ) ->
                                     dropdownButton
                                         isMobile
+                                        False
                                         dropdown
                                         dropdownButtonId
                                         index
                                         (Ui.text (PersonName.toString user.name))
                                 )
-                                (discordUserDropdownList isMobile nameSoFarData guildOrDmId2 localState)
+                                (discordUserDropdownList isMobile nameSoFarData guildOrDmId2 local)
 
                 pingDropdownViewHeight : Int
                 pingDropdownViewHeight =
-                    List.length rows * dropdownButtonHeight isMobile
+                    List.length rows * dropdownButtonHeight isMobile False
             in
-            dropdownContainer dropdown pingDropdownViewHeight rows
+            dropdownContainer nameSoFar dropdown pingDropdownViewHeight rows
 
         EmojiSoFar emojiSoFar ->
             case emojiData of
                 Just emojiData2 ->
                     let
-                        rows =
-                            List.indexedMap
-                                (\index emoji ->
-                                    dropdownButton
-                                        isMobile
-                                        dropdown
-                                        dropdownButtonId
-                                        index
-                                        (Ui.row
-                                            [ Ui.spacing 8 ]
-                                            [ Ui.el
-                                                [ Ui.Font.size 24, Ui.width Ui.shrink ]
-                                                (Ui.text (Emoji.emojiWithSkinTone skinTone emoji emojiData2))
-                                            , case SeqDict.get emoji emojiData2.emojis of
-                                                Just emoji2 ->
+                        ( availableCustomEmojis, availableStickers ) =
+                            availableCustomEmojisAndStickers guildOrDmId local
+
+                        ( rows, _, height ) =
+                            List.foldl
+                                (\emojiOrSticker ( rows2, index, height2 ) ->
+                                    let
+                                        helper isLarge content =
+                                            ( dropdownButton
+                                                isMobile
+                                                isLarge
+                                                dropdown
+                                                dropdownButtonId
+                                                index
+                                                content
+                                                :: rows2
+                                            , index + 1
+                                            , height2 + dropdownButtonHeight isMobile isLarge
+                                            )
+                                    in
+                                    case emojiOrSticker of
+                                        EmojiOrSticker_UnicodeEmoji emoji ->
+                                            Ui.row
+                                                [ Ui.spacing 8 ]
+                                                [ Ui.el
+                                                    [ Ui.Font.size 24, Ui.width Ui.shrink ]
+                                                    (Ui.text (Emoji.emojiWithSkinTone skinTone emoji emojiData2))
+                                                , case SeqDict.get emoji emojiData2.emojis of
+                                                    Just emoji2 ->
+                                                        Ui.row
+                                                            [ Ui.spacing 8 ]
+                                                            (List.map (\shortName -> Ui.text (":" ++ shortName ++ ":")) emoji2.shortNames)
+
+                                                    Nothing ->
+                                                        Ui.none
+                                                ]
+                                                |> helper False
+
+                                        EmojiOrSticker_Sticker stickerId ->
+                                            case SeqDict.get stickerId local.localUser.stickers of
+                                                Just sticker ->
                                                     Ui.row
                                                         [ Ui.spacing 8 ]
-                                                        (List.map (\shortName -> Ui.text (":" ++ shortName ++ ":")) emoji2.shortNames)
+                                                        [ Sticker.viewHelper
+                                                            (String.fromInt (dropdownButtonHeight isMobile True) ++ "px")
+                                                            sticker
+                                                            Sticker.LoopForever
+                                                            |> Ui.html
+                                                        , Ui.text (":" ++ sticker.name ++ ":")
+                                                        ]
+                                                        |> helper True
 
                                                 Nothing ->
-                                                    Ui.none
-                                            ]
-                                        )
-                                )
-                                (emojiDropdownList isMobile emojiSoFar emojiData2)
+                                                    Ui.el [ Ui.Font.size 24, Ui.Font.italic ] (Ui.text "Sticker missing")
+                                                        |> helper False
 
-                        pingDropdownViewHeight : Int
-                        pingDropdownViewHeight =
-                            List.length rows * dropdownButtonHeight isMobile
+                                        EmojiOrSticker_CustomEmoji customEmojiId ->
+                                            case SeqDict.get customEmojiId local.localUser.customEmojis of
+                                                Just emoji ->
+                                                    Ui.row
+                                                        [ Ui.spacing 8 ]
+                                                        [ CustomEmoji.viewHelper "1.1em" "0" emoji Sticker.LoopForever
+                                                            |> Ui.html
+                                                            |> Ui.el [ Ui.Font.size 24, Ui.width Ui.shrink ]
+                                                        , Ui.text (":" ++ CustomEmoji.emojiNameToString emoji.name ++ ":")
+                                                        ]
+                                                        |> helper False
+
+                                                Nothing ->
+                                                    Ui.el [ Ui.Font.size 24, Ui.Font.italic ] (Ui.text "Emoji missing")
+                                                        |> helper False
+                                )
+                                ( [], 0, 0 )
+                                (emojiDropdownList isMobile emojiSoFar availableCustomEmojis availableStickers local.localUser emojiData2)
                     in
-                    dropdownContainer dropdown pingDropdownViewHeight rows
+                    dropdownContainer nameSoFar dropdown height (List.reverse rows)
 
                 Nothing ->
-                    dropdownContainer dropdown 40 [ Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Loading emojis...") ]
+                    dropdownContainer nameSoFar dropdown 40 [ Ui.el [ Ui.height (Ui.px 40) ] (Ui.text "Loading emojis...") ]
 
 
-dropdownContainer : MentionUserDropdown -> Int -> List (Element Msg) -> Element Msg
-dropdownContainer dropdown contentHeight content =
+dropdownContainer : NameSoFar -> MentionUserDropdown -> Int -> List (Element Msg) -> Element Msg
+dropdownContainer nameSoFar dropdown contentHeight content =
     let
         headerHeight : number
         headerHeight =
@@ -971,22 +1144,37 @@ dropdownContainer dropdown contentHeight content =
         ]
         [ Ui.el
             [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 0, Ui.height (Ui.px headerHeight) ]
-            (Ui.text "Mention a user:")
+            (Ui.text
+                (case nameSoFar of
+                    NameSoFar _ ->
+                        "Mention a user:"
+
+                    EmojiSoFar _ ->
+                        "Add a sticker or emoji"
+                )
+            )
         , Ui.column [] content
         ]
 
 
-dropdownButtonHeight : Bool -> number
-dropdownButtonHeight isMobile =
-    if isMobile then
+dropdownButtonHeight : Bool -> Bool -> number
+dropdownButtonHeight isMobile isLarge =
+    if isLarge then
+        if isMobile then
+            80
+
+        else
+            50
+
+    else if isMobile then
         50
 
     else
         30
 
 
-dropdownButton : Bool -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> Element Msg -> Element Msg
-dropdownButton isMobile dropdown dropdownButtonId index content =
+dropdownButton : Bool -> Bool -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> Element Msg -> Element Msg
+dropdownButton isMobile isLarge dropdown dropdownButtonId index content =
     MyUi.elButton
         (dropdownButtonId index)
         (PressedDropdownItem index)
@@ -995,7 +1183,7 @@ dropdownButton isMobile dropdown dropdownButtonId index content =
         , Ui.paddingXY 8 0
         , Ui.contentCenterY
         , MyUi.hover isMobile [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-        , Ui.height (Ui.px (dropdownButtonHeight isMobile))
+        , Ui.height (Ui.px (dropdownButtonHeight isMobile isLarge))
         , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
         , if dropdown.dropdownIndex == index then
             Ui.background MyUi.background3
