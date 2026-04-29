@@ -3241,7 +3241,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetEmojiSkinTone _ ->
                     False
 
-                Local_AddCustomEmojisToUser ids ->
+                Local_AddCustomEmojisToUser _ ->
                     False
 
         ChangeBroadcast localMsg ->
@@ -3592,6 +3592,7 @@ allAttackerLocalChanges =
     , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
+    , Local_AddCustomEmojisToUser
     ]
 
 

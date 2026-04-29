@@ -45,7 +45,7 @@ import MembersAndOwner exposing (IsMember(..))
 import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination

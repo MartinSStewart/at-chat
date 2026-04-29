@@ -681,7 +681,7 @@ button isMobile htmlId icon text msg =
 messageCustomEmojiIds : Message messageId userId -> List (Id CustomEmojiId)
 messageCustomEmojiIds message =
     let
-        reactionIds : SeqDict Emoji.EmojiOrCustomEmoji a -> List (Id CustomEmojiId)
+        reactionIds : SeqDict EmojiOrCustomEmoji a -> List (Id CustomEmojiId)
         reactionIds reactions =
             SeqDict.keys reactions
                 |> List.filterMap
