@@ -7,6 +7,7 @@ import Broadcast
 import Bytes exposing (Bytes)
 import Codec
 import Coord
+import CustomEmoji
 import Dict
 import Discord
 import Duration
@@ -3887,6 +3888,69 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             )
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "animated-image-player" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.tag "animated-image-player" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , startTest
+        "Message with new custom emoji"
+        startTime
+        normalConfig
+        [ linkDiscordAndLogin
+            sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ andThenWebsocket
+                    (\connection _ ->
+                        let
+                            customEmojiNamed : String -> T.Data FrontendModel BackendModel -> List CustomEmoji.CustomEmojiData
+                            customEmojiNamed name data =
+                                SeqDict.values data.backend.customEmojis
+                                    |> List.filter (\customEmoji -> CustomEmoji.emojiNameToString customEmoji.name == name)
+                        in
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.checkState
+                            100
+                            (\data ->
+                                if List.isEmpty (customEmojiNamed "newemoji" data) then
+                                    Ok ()
+
+                                else
+                                    Err "Backend already has the new custom emoji loaded before the message was sent"
+                            )
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-04-29T00:00:00.000000+00:00\",\"pinned\":false,\"nonce\":\"1500000000000000000\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1500000000000000001\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Hello <:newemoji:888159336168300599>\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at0232\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"161098476632014848\",\"global_name\":\"AT\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"3d7b1aa7b5149fe06971b6dedf682d82\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.text "Custom emoji failed to load" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.text "Hello" ])
+                        , T.checkState
+                            100
+                            (\data ->
+                                case customEmojiNamed "newemoji" data of
+                                    [ customEmoji ] ->
+                                        case customEmoji.url of
+                                            CustomEmoji.CustomEmojiInternal _ _ ->
+                                                Ok ()
+
+                                            CustomEmoji.CustomEmojiLoading ->
+                                                Err "Backend loaded the new custom emoji but it is still in the loading state"
+
+                                    [] ->
+                                        Err "Backend did not load the new custom emoji from the message"
+
+                                    _ ->
+                                        Err "Backend loaded more than one custom emoji called \"newemoji\""
+                            )
                         ]
                     )
                 ]
