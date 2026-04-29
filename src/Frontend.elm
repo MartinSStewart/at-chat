@@ -41,7 +41,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
 import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
-import MessageInput exposing (NameSoFar(..))
+import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
 import MyUi
@@ -59,6 +59,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordErr
 import Scroll
 import SeqDict exposing (SeqDict)
 import Sticker
+import String.Extra
 import String.Nonempty
 import TextEditor
 import Thread
@@ -2680,7 +2681,7 @@ updateLoaded msg model =
                                         }
                                         (Command.batch
                                             [ Process.sleep (Duration.seconds 1) |> Task.perform (\() -> DebouncedTyping)
-                                            , removePartialStickers MessageMenu.editMessageTextInputId text
+                                            , removePartialStickers loggedIn.textInputFocus MessageMenu.editMessageTextInputId text
                                             ]
                                         )
 
@@ -2988,7 +2989,7 @@ updateLoaded msg model =
                                 (Command.batch
                                     [ Process.sleep Pages.Guild.typingDebouncerDelay |> Task.perform (\() -> DebouncedTyping)
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                                    , removePartialStickers Pages.Guild.channelTextInputId text
+                                    , removePartialStickers loggedIn.textInputFocus Pages.Guild.channelTextInputId text
                                     ]
                                 )
                         )
@@ -3459,8 +3460,8 @@ updateLoaded msg model =
                 model
 
 
-removePartialStickers : HtmlId -> String -> Command FrontendOnly toMsg msg
-removePartialStickers htmlId text =
+removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg
+removePartialStickers textInputFocus htmlId text =
     case
         List.filterMap
             (\( range, maybeStickerId ) ->
@@ -3469,7 +3470,7 @@ removePartialStickers htmlId text =
                         Nothing
 
                     Nothing ->
-                        Ports.InsertText "" range |> Just
+                        Just range
             )
             (RichText.stringToStickersAndCustomEmojis text)
     of
@@ -3477,7 +3478,49 @@ removePartialStickers htmlId text =
             Command.none
 
         list ->
-            Ports.execCommand { htmlId = htmlId, commands = Ports.Undo :: list }
+            let
+                text2 : String
+                text2 =
+                    List.foldl (\range text3 -> String.Extra.replaceSlice "" range.start range.end text3) text list
+            in
+            Ports.execCommand
+                { htmlId = htmlId
+                , commands =
+                    [ Ports.Undo, Ports.InsertText text2 { start = 0, end = 999999 } ]
+                        ++ (case textInputFocus of
+                                Just textInputFocus2 ->
+                                    if textInputFocus2.htmlId == htmlId then
+                                        let
+                                            selection2 =
+                                                List.foldl
+                                                    (\range selection ->
+                                                        if range.end < selection.start then
+                                                            -- Not entirely sure why the -1 is needed.
+                                                            -- Maybe it's due to the current selection being out of date then the text changes by one character (since the user has pressed backspace)
+                                                            { start = selection.start - Range.rangeSize range - 1
+                                                            , end = selection.end - Range.rangeSize range - 1
+                                                            }
+
+                                                        else if range.start < selection.start then
+                                                            { start = selection.start - (range.start - selection.start) - 1
+                                                            , end = selection.end - (range.start - selection.start) - 1
+                                                            }
+
+                                                        else
+                                                            selection
+                                                    )
+                                                    textInputFocus2.selection
+                                                    list
+                                        in
+                                        [ Ports.SelectRange selection2 textInputFocus2.direction ]
+
+                                    else
+                                        []
+
+                                Nothing ->
+                                    []
+                           )
+                }
 
 
 loadOlderMessages : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe LocalChange
