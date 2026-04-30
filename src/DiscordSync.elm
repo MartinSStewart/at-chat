@@ -1887,6 +1887,16 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_ChannelPinsUpdate _ ->
                             ( model2, cmds )
+
+                        Discord.UserOutMsg_UserUpdate user ->
+                            ( { model2
+                                | discordUsers =
+                                    addDiscordUserData
+                                        (Discord.userToPartialUser user)
+                                        model2.discordUsers
+                              }
+                            , getUserAvatars model2.serverSecret model2.discordUsers [ user ] :: cmds
+                            )
                 )
                 ( { model
                     | discordUsers =
