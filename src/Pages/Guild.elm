@@ -3130,18 +3130,17 @@ voiceChatButton voiceChatId local =
             (Ui.row
                 [ Ui.spacing 2, Ui.centerY ]
                 [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-                , case hasJoined of
-                    True ->
-                        Ui.el
-                            [ Ui.width (Ui.px 8)
-                            , Ui.height (Ui.px 8)
-                            , Ui.background (Ui.rgb 40 190 80)
-                            , Ui.rounded 4
-                            ]
-                            Ui.none
-
-                    False ->
+                , if hasJoined then
+                    Ui.el
+                        [ Ui.width (Ui.px 8)
+                        , Ui.height (Ui.px 8)
+                        , Ui.background (Ui.rgb 40 190 80)
+                        , Ui.rounded 4
+                        ]
                         Ui.none
+
+                  else
+                    Ui.none
                 ]
             )
         ]

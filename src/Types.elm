@@ -71,7 +71,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, 
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)

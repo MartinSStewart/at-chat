@@ -5,21 +5,20 @@ import Backend
 import Bytes exposing (Bytes)
 import Codec
 import Coord
-import CustomEmoji
 import Dict
 import DiscordRecordedTests
 import Duration
-import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Dom as Dom
 import Effect.Browser.Events exposing (Visibility(..))
-import Effect.Lamdera as Lamdera exposing (SessionId)
-import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
-import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
+import Effect.Lamdera as Lamdera
+import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
+import EmailAddress
+import Emoji
 import Env
 import Expect
 import FileStatus
 import Frontend
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
@@ -27,21 +26,18 @@ import LoginForm
 import NonemptyDict
 import Pages.Home
 import PersonName
-import Range exposing (Range)
 import RateLimit
 import RecordedTestExtra
-import RichText exposing (Domain(..))
+import RichText
 import Route
-import SecretId exposing (SecretId(..))
+import SecretId
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
-import User
-import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
 import VisibleMessages
 
 

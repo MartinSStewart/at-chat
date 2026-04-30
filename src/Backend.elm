@@ -71,7 +71,7 @@ import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat exposing (LocalChange, RoomId(..), ServerChange(..))
+import VoiceChat exposing (RoomId(..), ServerChange(..))
 import WireHelper
 
 

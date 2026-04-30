@@ -1,11 +1,12 @@
 port module VoiceChat exposing
     ( ConnectionId
+    , Ice
     , LocalChange(..)
     , Model
     , RoomId(..)
+    , Sdp
     , ServerChange(..)
-    , Signal
-    , addSessionIdHash
+    , Signal(..)
     , audioNodes
     , changeUpdate
     , hasJoined
@@ -27,11 +28,8 @@ import Html.Attributes
 import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Encode
-import List.Nonempty exposing (Nonempty(..))
 import NonemptySet exposing (NonemptySet)
 import SeqDict exposing (SeqDict)
-import SeqSet
-import SessionIdHash exposing (SessionIdHash)
 
 
 type LocalChange
@@ -65,6 +63,8 @@ type RoomId
     = DmRoomId (Id UserId)
 
 
+{-| OpaqueVariants
+-}
 type Signal
     = OfferSignal Sdp
     | AnswerSignal Sdp

@@ -55,7 +55,12 @@ import Simplify
 config : List Rule
 config =
     [ ExposeAllRecordFields.rule |> defaultIgnore
-    , OpaqueTypes.rule |> Review.Rule.ignoreErrorsForFiles [ "tests/RecordedTests.elm" ]
+    , OpaqueTypes.rule
+        |> Review.Rule.ignoreErrorsForFiles
+            [ "tests/RecordedTests.elm"
+            , "src/RecordedTestExtra.elm"
+            , "src/DiscordRecordedTest.elm"
+            ]
     , RunUnsafeAtStartup.rule
     , NoStaleReferences.rule
         |> defaultIgnore

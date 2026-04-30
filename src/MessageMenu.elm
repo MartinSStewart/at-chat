@@ -704,10 +704,10 @@ messageCustomEmojiIds message =
         DeletedMessage _ ->
             []
 
-        CallStarted posix userId reactions ->
+        CallStarted _ _ reactions ->
             reactionIds reactions
 
-        CallEnded posix reactions ->
+        CallEnded _ reactions ->
             reactionIds reactions
 
 

@@ -1,7 +1,7 @@
-module RecordedTestExtra exposing (..)
+module RecordedTestExtra exposing (CustomRequest, adminEmail, allAttackerLocalChanges, allAttackerToBackendChanges, andThenWebsocket, attackerEmail, attackerShouldNotGetThisToFrontend, botTestGuild, botTestGuild_ChannelA, checkNoErrorLogs, checkNoNotification, checkNotification, chromeDesktop, clickSpoiler, connectTwoUsersAndJoinNewGuild, createThread, currentDiscordUserId, decodeCustomRequest, desktopWindow, discordUserAuth, domain, enableNotifications, firefoxDesktop, focusEvent, handleInternalRequests, handleLogin, handlePortToJs, hasExactText, hasNotExactText, hasNotText, hasText, infoEndpointResponse, inviteUser, inviteUserAndDmChat, isLogErrorEmail, isLoginEmail, isOp2, joeEmail, linkDiscordAndLogin, mobileWindow, noMissingMessages, regeneratedServerSecretValue, safariIphone, scrollToMiddle, scrollToTop, sessionId0, sessionId1, sessionId2, sessionIdAttacker, startTest, startTime, stringToJson, userEmail, writeMessage, writeMessageMobile)
 
 import AiChat exposing (AiModelName(..))
-import Array exposing (Array)
+import Array
 import Backend
 import Broadcast
 import Codec
@@ -9,7 +9,7 @@ import Dict
 import Discord
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
-import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
+import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
@@ -22,8 +22,10 @@ import ImageEditor
 import Json.Decode
 import Json.Encode
 import List.Extra
+import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
+import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
@@ -41,13 +43,14 @@ import Test.Html.Selector
 import TextEditor
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
+import VoiceChat
 
 
 domain : Url
@@ -1178,7 +1181,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_VoiceChatChange _ ->
                     True
 
-                Local_AddCustomEmojisToUser nonemptySet ->
+                Local_AddCustomEmojisToUser _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -1356,7 +1359,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_VoiceChatChange _ ->
                             True
 
-                        Types.Server_LinkedDiscordUserCustomEmojisLoaded seqDict ->
+                        Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -1531,6 +1534,16 @@ allAttackerLocalChanges =
     , Local_SetEmojiCategory (EmojiCategory Emoji.Components)
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
+    , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
+    , Local_VoiceChatChange (VoiceChat.Local_Join startTime (VoiceChat.DmRoomId normalUserId))
+    , Local_VoiceChatChange (VoiceChat.Local_Leave startTime)
+    , Local_VoiceChatChange
+        (VoiceChat.Local_Signal
+            { roomId = VoiceChat.DmRoomId normalUserId
+            , otherSession = ( normalUserId, Lamdera.clientIdFromString "clientId0" )
+            }
+            (VoiceChat.OfferSignal { sdp = "" })
+        )
     ]
 
 

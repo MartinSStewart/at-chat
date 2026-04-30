@@ -63,7 +63,7 @@ import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash exposing (SessionIdHash)
+import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
