@@ -537,6 +537,7 @@ type BackendMsg
     = SentLoginEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | UserConnected SessionId ClientId
     | UserDisconnected SessionId ClientId
+    | UserDisconnectedWithTime SessionId ClientId Time.Posix
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) Discord.Msg

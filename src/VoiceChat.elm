@@ -12,7 +12,6 @@ port module VoiceChat exposing
     , init
     , joinedUsers
     , leaveVoiceChatCmds
-    , localChangeUpdate
     , serverChangeCmd
     , voiceChatFromJs
     , voiceChatStart
@@ -216,19 +215,6 @@ addSessionIdHash otherUserId sessionIdHash dmVoiceChats =
                     NonemptySet.singleton sessionIdHash |> Just
         )
         dmVoiceChats
-
-
-localChangeUpdate : LocalChange -> Model -> Model
-localChangeUpdate change model =
-    case change of
-        Local_Join roomId ->
-            { model | currentRoom = Just roomId }
-
-        Local_Leave ->
-            { model | currentRoom = Nothing }
-
-        Local_Signal _ _ ->
-            model
 
 
 changeUpdate : ServerChange -> Model -> Model

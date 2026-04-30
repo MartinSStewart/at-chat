@@ -63,7 +63,7 @@ import Url exposing (Url)
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat
+import VoiceChat exposing (RoomId(..))
 
 
 pendingChangesText : LocalChange -> String
@@ -187,6 +187,7 @@ pendingChangesText localChange =
 
         Local_AddCustomEmojisToUser _ ->
             "Add custom emojis to user"
+
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
                 VoiceChat.Local_Join _ ->
@@ -1326,6 +1327,7 @@ isPressMsg msg =
 
         PageUpGotViewport _ ->
             False
+
         PressedVoiceChatButton _ ->
             True
 
@@ -2201,7 +2203,30 @@ changeUpdate localMsg local =
                     }
 
                 Local_VoiceChatChange voiceChatChange ->
-                    { local | calls = VoiceChat.localChangeUpdate voiceChatChange local.calls }
+                    let
+                        calls =
+                            local.calls
+                    in
+                    case voiceChatChange of
+                        VoiceChat.Local_Join roomId ->
+                            case roomId of
+                                DmRoomId otherUserId ->
+                                    { local
+                                        | calls = { calls | currentRoom = Just roomId }
+                                        , dmChannels =
+                                            SeqDict.updateIfExists
+                                                otherUserId
+                                                (\dmChannel -> dmChannel)
+                                                local.dmChannels
+                                    }
+
+                        VoiceChat.Local_Leave ->
+                            { local
+                                | calls = { calls | currentRoom = Nothing }
+                            }
+
+                        VoiceChat.Local_Signal _ _ ->
+                            local
 
         ServerChange serverChange ->
             case serverChange of
@@ -3239,6 +3264,7 @@ changeUpdate localMsg local =
                                 , user = User.addNewCustomEmojis newCustomEmojis localUser.user
                             }
                     }
+
                 Server_VoiceChatChange voiceChatFrontendMsg ->
                     { local | calls = VoiceChat.changeUpdate voiceChatFrontendMsg local.calls }
 

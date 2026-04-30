@@ -303,7 +303,10 @@ update msg model =
             )
 
         UserDisconnected sessionId clientId ->
-            disconnectClient sessionId clientId model
+            ( model, Task.perform (UserDisconnectedWithTime sessionId clientId) Time.now )
+
+        UserDisconnectedWithTime sessionId clientId time ->
+            disconnectClient time sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
             let
@@ -1804,8 +1807,8 @@ attachmentsUploadedHelper model message results =
         message.attachments
 
 
-disconnectClient : SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
-disconnectClient sessionId clientId model =
+disconnectClient : Time.Posix -> SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
+disconnectClient time sessionId clientId model =
     case ( Pages.Admin.disconnectClient sessionId clientId model.connections, SeqDict.get sessionId model.sessions ) of
         ( Ok ( removedConnection, connections ), Just session ) ->
             let
@@ -1813,6 +1816,29 @@ disconnectClient sessionId clientId model =
                     { model
                         | sessions = SeqDict.insert sessionId (UserSession.setCurrentlyViewing Nothing session) model.sessions
                         , connections = connections
+                        , dmChannels =
+                            case removedConnection.call of
+                                Just (DmRoomId otherUserId) ->
+                                    let
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds session.userId otherUserId
+                                    in
+                                    if voiceChatRoomHasOtherMembers dmChannelId clientId model then
+                                        model.dmChannels
+
+                                    else
+                                        SeqDict.updateIfExists
+                                            dmChannelId
+                                            (\dmChannel ->
+                                                LocalState.createChannelMessageBackend
+                                                    (CallEnded time SeqDict.empty)
+                                                    dmChannel
+                                                    |> Tuple.second
+                                            )
+                                            model.dmChannels
+
+                                Nothing ->
+                                    model.dmChannels
                     }
             in
             ( model2
@@ -4774,6 +4800,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                 sessionId
                 (\session _ ->
                     let
+                        maybeRoomId : Maybe RoomId
                         maybeRoomId =
                             case SeqDict.get sessionId model.connections of
                                 Just connections ->
@@ -4798,21 +4825,26 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                             (\connection -> { connection | call = Nothing })
                                         )
                                         model.connections
+                                , dmChannels =
+                                    case roomId of
+                                        DmRoomId otherUserId ->
+                                            let
+                                                dmChannelId =
+                                                    DmChannel.channelIdFromUserIds session.userId otherUserId
+                                            in
+                                            if voiceChatRoomHasOtherMembers dmChannelId clientId model then
+                                                model.dmChannels
 
-                                --, dmChannels =
-                                --    case voiceChatParticipants2 of
-                                --        Just _ ->
-                                --            model.dmChannels
-                                --
-                                --        Nothing ->
-                                --            SeqDict.insert
-                                --                dmChannelId
-                                --                (LocalState.createChannelMessageBackend
-                                --                    (CallEnded time SeqDict.empty)
-                                --                    dmChannel
-                                --                    |> Tuple.second
-                                --                )
-                                --                model.dmChannels
+                                            else
+                                                SeqDict.updateIfExists
+                                                    dmChannelId
+                                                    (\dmChannel ->
+                                                        LocalState.createChannelMessageBackend
+                                                            (CallEnded time SeqDict.empty)
+                                                            dmChannel
+                                                            |> Tuple.second
+                                                    )
+                                                    model.dmChannels
                               }
                             , Command.batch
                                 [ Lamdera.sendToFrontend
@@ -4864,6 +4896,32 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                 ]
                             )
                         )
+
+
+voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool
+voiceChatRoomHasOtherMembers dmChannelId clientId model =
+    SeqDict.filter
+        (\sessionId2 connections ->
+            case SeqDict.get sessionId2 model.sessions of
+                Just otherSession ->
+                    NonemptyDict.any
+                        (\otherClientId connection ->
+                            case connection.call of
+                                Just (DmRoomId otherUserId2) ->
+                                    (DmChannel.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
+                                        && (clientId /= otherClientId)
+
+                                Nothing ->
+                                    False
+                        )
+                        connections
+
+                Nothing ->
+                    False
+        )
+        model.connections
+        |> SeqDict.isEmpty
+        |> not
 
 
 threadRouteToDiscordMessageId :
@@ -5535,7 +5593,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 Just ( sessionId, _ ) ->
                     let
                         ( model2, cmds ) =
-                            disconnectClient sessionId disconnectClientId model
+                            disconnectClient time sessionId disconnectClientId model
                     in
                     ( model2
                     , Command.batch [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId, cmds ]
