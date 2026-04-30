@@ -1884,6 +1884,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_GuildRoleUpdate _ ->
                             ( model2, cmds )
+
+                        Discord.UserOutMsg_ChannelPinsUpdate _ ->
+                            ( model2, cmds )
                 )
                 ( { model
                     | discordUsers =

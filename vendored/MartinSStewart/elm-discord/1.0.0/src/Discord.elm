@@ -5154,6 +5154,9 @@ decodeDispatchUserEvent eventName =
         "GUILD_ROLE_UPDATE" ->
             JD.field "d" decodeGuildRoleUpdate |> JD.map DispatchUser_GuildRoleUpdate
 
+        "CHANNEL_PINS_UPDATE" ->
+            JD.field "d" decodeChannelPinsUpdate |> JD.map DispatchUser_ChannelPinsUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5468,6 +5471,7 @@ type OpDispatchUserEvent
     | DispatchUser_GuildCreate GatewayGuild
     | DispatchUser_ChannelUpdate Channel
     | DispatchUser_GuildRoleUpdate GuildRoleUpdate
+    | DispatchUser_ChannelPinsUpdate ChannelPinsUpdate
 
 
 type alias ContentInventoryInboxStale =
@@ -5752,6 +5756,19 @@ decodeGuildRoleUpdate =
         |> JD.andMap (JD.field "guild_id" decodeId)
         |> JD.andMap (JD.at [ "role", "id" ] decodeId)
         |> JD.andMap (JD.at [ "role", "name" ] JD.string)
+
+
+type alias ChannelPinsUpdate =
+    { guildId : OptionalData (Id GuildId)
+    , channelId : Id ChannelId
+    }
+
+
+decodeChannelPinsUpdate : JD.Decoder ChannelPinsUpdate
+decodeChannelPinsUpdate =
+    JD.succeed ChannelPinsUpdate
+        |> JD.andMap (decodeOptionalData "guild_id" decodeId)
+        |> JD.andMap (JD.field "channel_id" decodeId)
 
 
 {-| <https://docs.discord.food/topics/gateway#gateway-capabilities>
@@ -6154,6 +6171,7 @@ type UserOutMsg connection
     | UserOutMsg_JoinedOrCreatedGuild GatewayGuild
     | UserOutMsg_ChannelUpdated Channel
     | UserOutMsg_GuildRoleUpdate GuildRoleUpdate
+    | UserOutMsg_ChannelPinsUpdate ChannelPinsUpdate
 
 
 type alias Presence =
@@ -6559,6 +6577,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildRoleUpdate guildRoleUpdate ->
                             ( model, [ UserOutMsg_GuildRoleUpdate guildRoleUpdate ] )
+
+                        DispatchUser_ChannelPinsUpdate channelPinsUpdate ->
+                            ( model, [ UserOutMsg_ChannelPinsUpdate channelPinsUpdate ] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
