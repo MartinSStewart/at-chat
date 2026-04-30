@@ -5151,6 +5151,9 @@ decodeDispatchUserEvent eventName =
         "CHANNEL_UPDATE" ->
             JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelUpdate
 
+        "GUILD_ROLE_UPDATE" ->
+            JD.field "d" decodeGuildRoleUpdate |> JD.map DispatchUser_GuildRoleUpdate
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5464,6 +5467,7 @@ type OpDispatchUserEvent
     | DispatchUser_StateUpdate
     | DispatchUser_GuildCreate GatewayGuild
     | DispatchUser_ChannelUpdate Channel
+    | DispatchUser_GuildRoleUpdate GuildRoleUpdate
 
 
 type alias ContentInventoryInboxStale =
@@ -5733,6 +5737,21 @@ decodeGuildMemberUpdate =
         |> JD.andMap (decodeOptionalData "deaf" JD.bool)
         |> JD.andMap (decodeOptionalData "mute" JD.bool)
         |> JD.andMap (decodeOptionalData "pending" JD.bool)
+
+
+type alias GuildRoleUpdate =
+    { guildId : Id GuildId
+    , roleId : Id RoleId
+    , roleName : String
+    }
+
+
+decodeGuildRoleUpdate : JD.Decoder GuildRoleUpdate
+decodeGuildRoleUpdate =
+    JD.succeed GuildRoleUpdate
+        |> JD.andMap (JD.field "guild_id" decodeId)
+        |> JD.andMap (JD.at [ "role", "id" ] decodeId)
+        |> JD.andMap (JD.at [ "role", "name" ] JD.string)
 
 
 {-| <https://docs.discord.food/topics/gateway#gateway-capabilities>
@@ -6134,6 +6153,7 @@ type UserOutMsg connection
     | UserOutMsg_VoiceStateUpdate VoiceStateUpdate
     | UserOutMsg_JoinedOrCreatedGuild GatewayGuild
     | UserOutMsg_ChannelUpdated Channel
+    | UserOutMsg_GuildRoleUpdate GuildRoleUpdate
 
 
 type alias Presence =
@@ -6536,6 +6556,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_ChannelUpdate channel ->
                             ( model, [ UserOutMsg_ChannelUpdated channel ] )
+
+                        DispatchUser_GuildRoleUpdate guildRoleUpdate ->
+                            ( model, [ UserOutMsg_GuildRoleUpdate guildRoleUpdate ] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
