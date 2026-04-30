@@ -1,11 +1,8 @@
-module Effect.Websocket exposing
-    ( Connection, SendError(..), close, createHandle, listen, sendString, CloseEventCode(..)
-    , connectionToInternal, internalToConnection
-    )
+module Effect.Websocket exposing (Connection, SendError(..), close, createHandle, listen, sendString, CloseEventCode(..), connectionToInternal, internalToConnection)
 
 {-|
 
-@docs Connection, SendError, close, createHandle, listen, sendString, CloseEventCode
+@docs Connection, SendError, close, createHandle, listen, sendString, CloseEventCode, connectionToInternal, internalToConnection
 
 -}
 

@@ -1,12 +1,11 @@
 module Effect.Test exposing
     ( start, testGroup, Config, connectFrontend, FrontendApp, BackendApp, HttpRequest, HttpResponse(..), RequestedBy(..), PortToJs, FileData, FileUpload(..), MultipleFilesUpload(..), uploadBytesFile, uploadStringFile, Data, FileContents(..)
-    , FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
+    , FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, WebsocketState, EndToEndTest, Action, HttpBody(..), HttpPart(..), DelayInMs, KeyEvent, KeyOptions(..), PointerEvent, PointerOptions(..)
     , checkState, checkBackend, toTest, toSnapshots
     , fakeNavigationKey, viewer, Msg, Model, viewerWith, ViewerWith, startViewer, addStringFile, addStringFiles, addBytesFile, addBytesFiles, addTexture, addTextureWithOptions, addTextures, addTexturesWithOptions
     , startHeadless, HeadlessMsg
     , Button(..), WheelOptions(..), DeltaMode(..), CurrentTimeline, EventFrontend, EventType, FileLoadError, FileLoadErrorType, MouseEvent, OverlayPosition, TestError, Touch, TouchEvent, Latency
     , configForApplication, configForDocument, configForElement, configForSandbox
-    , WebsocketState, websocketSendString
     )
 
 {-|
@@ -19,7 +18,7 @@ module Effect.Test exposing
 
 ## Control the tests
 
-@docs FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, EndToEndTest, Action, HttpBody, HttpPart, DelayInMs, KeyEvent, KeyOptions, PointerEvent, PointerOptions
+@docs FrontendActions, backendUpdate, fastForward, group, collapsableGroup, andThen, websocketSendString, WebsocketState, EndToEndTest, Action, HttpBody, HttpPart, DelayInMs, KeyEvent, KeyOptions, PointerEvent, PointerOptions
 
 
 ## Check the current state
@@ -425,6 +424,7 @@ type alias State toBackend frontendMsg frontendModel toFrontend backendMsg backe
     }
 
 
+{-| -}
 type alias WebsocketState =
     { createdAt : Time.Posix, closedAt : Maybe Time.Posix, dataSent : Array { data : String, sentAt : Time.Posix } }
 
@@ -604,6 +604,15 @@ type EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg back
 
 
 {-| Group together multiple end to end tests so they are easier to find.
+
+    import Effect.Test
+
+    Effect.Test.testGroup
+        "Login tests"
+        [ Effect.Test.start "Login via homepage" ...
+        , Effect.Test.start "Login via promotional link" ...
+        ]
+
 -}
 testGroup : String -> List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 testGroup =
@@ -840,53 +849,58 @@ testErrorToString error =
 
 
 {-| -}
-toTest : EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Test
-toTest instructions =
-    let
-        state =
-            instructionsToState instructions
-    in
-    Test.test state.testName
-        (\() ->
-            case state.testErrors of
-                firstError :: _ ->
-                    testErrorToString firstError |> Expect.fail
+toTest : EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> Test
+toTest endToEndTestGroup =
+    case endToEndTestGroup of
+        EndToEndTestGroup name group2 ->
+            Test.describe name (List.map toTest group2)
 
-                [] ->
+        EndToEndTest instructions ->
+            Test.test (getTestName instructions)
+                (\() ->
                     let
-                        duplicates =
-                            gatherEqualsBy .name state.snapshots
-                                |> List.filterMap
-                                    (\( first, rest ) ->
-                                        if List.isEmpty rest then
-                                            Nothing
-
-                                        else
-                                            Just ( first.name, List.length rest + 1 )
-                                    )
+                        state =
+                            instructionsToState instructions
                     in
-                    case duplicates of
+                    case state.testErrors of
+                        firstError :: _ ->
+                            testErrorToString firstError |> Expect.fail
+
                         [] ->
-                            Expect.pass
+                            let
+                                duplicates =
+                                    gatherEqualsBy .name state.snapshots
+                                        |> List.filterMap
+                                            (\( first, rest ) ->
+                                                if List.isEmpty rest then
+                                                    Nothing
 
-                        ( name, count ) :: [] ->
-                            "A snapshot named \""
-                                ++ name
-                                ++ "\" appears "
-                                ++ String.fromInt count
-                                ++ " times. Make sure snapshot names are unique!"
-                                |> Expect.fail
+                                                else
+                                                    Just ( first.name, List.length rest + 1 )
+                                            )
+                            in
+                            case duplicates of
+                                [] ->
+                                    Expect.pass
 
-                        rest ->
-                            "These snapshot names appear multiple times:"
-                                ++ String.concat
-                                    (List.map
-                                        (\( name, count ) -> "\n" ++ name ++ " (" ++ String.fromInt count ++ " times)")
-                                        rest
-                                    )
-                                ++ " Make sure snapshot names are unique!"
-                                |> Expect.fail
-        )
+                                ( name, count ) :: [] ->
+                                    "A snapshot named \""
+                                        ++ name
+                                        ++ "\" appears "
+                                        ++ String.fromInt count
+                                        ++ " times. Make sure snapshot names are unique!"
+                                        |> Expect.fail
+
+                                rest ->
+                                    "These snapshot names appear multiple times:"
+                                        ++ String.concat
+                                            (List.map
+                                                (\( name, count ) -> "\n" ++ name ++ " (" ++ String.fromInt count ++ " times)")
+                                                rest
+                                            )
+                                        ++ " Make sure snapshot names are unique!"
+                                        |> Expect.fail
+                )
 
 
 {-| Copied from elm-community/list-extra
@@ -936,23 +950,38 @@ gatherWith testFn list =
 This can be used with Effect.Snapshot.uploadSnapshots to perform visual regression testing.
 -}
 toSnapshots :
-    EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> List (Snapshot frontendMsg)
-toSnapshots instructions =
-    let
-        state =
-            instructionsToState instructions
-    in
-    state
-        |> .snapshots
-        |> List.map
-            (\{ name, body, width, height } ->
-                { name = state.testName ++ ": " ++ name
-                , body = body
-                , widths = List.Nonempty.fromElement width
-                , minimumHeight = Just height
-                }
-            )
+toSnapshots endToEndTestGroup =
+    toSnapshotsHelper "" endToEndTestGroup
+
+
+{-| Get all snapshots from a test.
+This can be used with Effect.Snapshot.uploadSnapshots to perform visual regression testing.
+-}
+toSnapshotsHelper :
+    String
+    -> EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> List (Snapshot frontendMsg)
+toSnapshotsHelper path endToEndTestGroup =
+    case endToEndTestGroup of
+        EndToEndTestGroup name group2 ->
+            List.concatMap (toSnapshotsHelper (path ++ name ++ "/")) group2
+
+        EndToEndTest instructions ->
+            let
+                state =
+                    instructionsToState instructions
+            in
+            List.map
+                (\{ name, body, width, height } ->
+                    { name = path ++ state.testName ++ ": " ++ name
+                    , body = body
+                    , widths = List.Nonempty.fromElement width
+                    , minimumHeight = Just height
+                    }
+                )
+                state.snapshots
 
 
 {-| -}
@@ -1654,7 +1683,7 @@ getWebsocketOnData sub =
         Effect.Internal.SubBatch batch ->
             List.foldl (\sub2 list -> getWebsocketOnData sub2 ++ list) [] batch
 
-        Effect.Internal.WebsocketListen connection onData onClose ->
+        Effect.Internal.WebsocketListen _ onData _ ->
             [ onData ]
 
         _ ->
@@ -1668,7 +1697,7 @@ getWebsocketOnClose sub =
         Effect.Internal.SubBatch batch ->
             List.foldl (\sub2 list -> getWebsocketOnClose sub2 ++ list) [] batch
 
-        Effect.Internal.WebsocketListen connection onData onClose ->
+        Effect.Internal.WebsocketListen _ _ onClose ->
             [ onClose ]
 
         _ ->
@@ -5918,7 +5947,7 @@ isSkippable eventType =
         CollapsableGroupEnd _ ->
             True
 
-        WebsocketSendStringEvent maybeClientId connection string ->
+        WebsocketSendStringEvent _ _ _ ->
             True
 
 
@@ -6207,7 +6236,7 @@ checkCachedElmValueHelper event state =
                 CollapsableGroupEnd _ ->
                     Nothing
 
-                WebsocketSendStringEvent maybeClientId connection string ->
+                WebsocketSendStringEvent _ _ _ ->
                     Nothing
     }
 
@@ -6362,20 +6391,34 @@ overviewHelper :
         , testResults : List (Result TestError ())
         , elements : List (Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
         }
-overviewHelper initialIndex testResults_ tests =
+overviewHelper initialIndex testResults tests =
     List.foldl
-        (\testGroup2 { index, testResults, elements } ->
+        (\testGroup2 state ->
             case testGroup2 of
                 EndToEndTest test2 ->
-                    { index = index + 1
-                    , testResults = List.drop 1 testResults
-                    , elements = testResultRow index test2 testResults :: elements
-                    }
+                    case state.testResults of
+                        head :: rest ->
+                            { index = state.index + 1
+                            , testResults = rest
+                            , elements = testResultRow state.index test2 (Just head) :: state.elements
+                            }
+
+                        [] ->
+                            { index = state.index + 1
+                            , testResults = []
+                            , elements =
+                                testResultRow state.index test2 Nothing :: state.elements
+                            }
 
                 EndToEndTestGroup name testGroups ->
                     let
+                        data :
+                            { index : Int
+                            , testResults : List (Result TestError ())
+                            , elements : List (Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
+                            }
                         data =
-                            overviewHelper index testResults_ testGroups
+                            overviewHelper state.index state.testResults testGroups
                     in
                     { index = data.index
                     , testResults = data.testResults
@@ -6396,31 +6439,31 @@ overviewHelper initialIndex testResults_ tests =
                                     :: List.reverse data.elements
                                 )
                             ]
-                            :: elements
+                            :: state.elements
                     }
         )
-        { index = initialIndex, testResults = testResults_, elements = [] }
+        { index = initialIndex, testResults = testResults, elements = [] }
         tests
 
 
 testResultRow :
     Int
     -> EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> List (Result TestError ())
+    -> Maybe (Result TestError ())
     -> Html (Msg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
-testResultRow index test testResults =
+testResultRow index test testResult =
     Html.div
         [ Html.Attributes.style "padding-bottom" "4px" ]
         [ button (PressedViewTest index) (getTestName test)
-        , case testResults of
-            (Ok ()) :: _ ->
+        , case testResult of
+            Just (Ok ()) ->
                 Html.span
                     [ Html.Attributes.style "color" "rgb(0, 200, 0)"
                     , Html.Attributes.style "padding" "4px"
                     ]
                     [ Html.text "Passed" ]
 
-            (Err head) :: _ ->
+            Just (Err head) ->
                 let
                     error =
                         testErrorToString head
@@ -6432,7 +6475,7 @@ testResultRow index test testResults =
                     ]
                     [ Html.text error ]
 
-            [] ->
+            Nothing ->
                 Html.text ""
         ]
 
@@ -6873,7 +6916,7 @@ currentStepText stepIndex currentStep testView_ =
                 CollapsableGroupEnd name ->
                     "Collapsable group end: " ++ name
 
-                WebsocketSendStringEvent maybeClientId (Websocket.Connection _ url) string ->
+                WebsocketSendStringEvent _ (Websocket.Connection _ url) _ ->
                     "Websocket sent data from " ++ url
     in
     Html.div
@@ -7084,7 +7127,7 @@ eventToArrows timelines collapsedRanges2 adjustedColumnIndex event rowIndex =
         CollapsableGroupEnd _ ->
             []
 
-        WebsocketSendStringEvent maybeClientId connection string ->
+        WebsocketSendStringEvent _ _ _ ->
             []
 
 
@@ -7823,7 +7866,7 @@ eventIcon timelines testView2 event collapsedRanges2 adjustedColumIndex columnIn
                 []
             ]
 
-        WebsocketSendStringEvent maybeClientId connection string ->
+        WebsocketSendStringEvent _ _ _ ->
             [ circleHelper "e2e-big-circle" ]
     )
         ++ (if noErrors then
@@ -8786,7 +8829,7 @@ startViewer viewerWith2 =
 {-| Msg type for a headless end to end test runner.
 -}
 type HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    = HeadlessMsg (Result FileLoadError (List (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)))
+    = HeadlessMsg (Result FileLoadError (List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)))
 
 
 {-| Create a headless test runner.
@@ -8805,7 +8848,7 @@ type HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backe
 -}
 startHeadless :
     (Json.Encode.Value -> Cmd (HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
-    -> ViewerWith (List (EndToEndTestHelper toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
+    -> ViewerWith (List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel))
     -> Program () () (HeadlessMsg toBackend frontendMsg frontendModel toFrontend backendMsg backendModel)
 startHeadless outputResults viewerWith2 =
     Platform.worker
@@ -8825,29 +8868,38 @@ headlessUpdate outputResults (HeadlessMsg result) () =
     case result of
         Ok tests ->
             let
-                errors : List String
-                errors =
-                    List.filterMap
-                        (\test ->
-                            let
-                                state : State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-                                state =
-                                    instructionsToState test
-                            in
-                            case state.testErrors of
-                                [] ->
-                                    Nothing
+                errors : String -> List (EndToEndTest toBackend frontendMsg frontendModel toFrontend backendMsg backendModel) -> List String
+                errors path tests2 =
+                    List.concatMap
+                        (\group2 ->
+                            case group2 of
+                                EndToEndTest test ->
+                                    let
+                                        state : State toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+                                        state =
+                                            instructionsToState test
+                                    in
+                                    case state.testErrors of
+                                        [] ->
+                                            []
 
-                                firstError :: _ ->
-                                    " - " ++ state.testName ++ ": " ++ testErrorToString firstError |> Just
+                                        firstError :: _ ->
+                                            [ " - " ++ path ++ state.testName ++ ": " ++ testErrorToString firstError ]
+
+                                EndToEndTestGroup name endToEndTests ->
+                                    errors (path ++ name ++ "/") endToEndTests
                         )
-                        tests
+                        tests2
+
+                errors2 : List String
+                errors2 =
+                    errors "" tests
             in
-            if List.isEmpty errors then
+            if List.isEmpty errors2 then
                 ( (), outputResults Json.Encode.null )
 
             else
-                ( (), "The following tests failed:\n" ++ String.join "\n" errors |> Json.Encode.string |> outputResults )
+                ( (), "The following tests failed:\n" ++ String.join "\n" errors2 |> Json.Encode.string |> outputResults )
 
         Err error ->
             ( ()
