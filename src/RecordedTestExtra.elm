@@ -2,6 +2,7 @@ module RecordedTestExtra exposing (..)
 
 import AiChat exposing (AiModelName(..))
 import Array exposing (Array)
+import Backend
 import Broadcast
 import Codec
 import Dict
@@ -11,7 +12,7 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..), RequestedBy(..))
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Category(..), SkinTone(..))
+import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
@@ -266,7 +267,7 @@ startTime =
 
 adminEmail : EmailAddress
 adminEmail =
-    Env.adminEmail
+    Backend.adminUser.email
 
 
 userEmail : EmailAddress
@@ -1177,6 +1178,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_VoiceChatChange _ ->
                     True
 
+                Local_AddCustomEmojisToUser nonemptySet ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -1352,6 +1356,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_VoiceChatChange _ ->
                             True
 
+                        Types.Server_LinkedDiscordUserCustomEmojisLoaded seqDict ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 
@@ -1450,7 +1457,7 @@ allAttackerLocalChanges =
             NoThreadWithMaybeMessage (Just (Id.fromInt 0))
 
         emoji =
-            Emoji.UnicodeEmoji "👍"
+            EmojiOrCustomEmoji_Emoji (Emoji.UnicodeEmoji "👍")
 
         discordDmData : DiscordGuildOrDmId_DmData
         discordDmData =
@@ -1547,7 +1554,7 @@ checkNoErrorLogs =
     T.checkState
         100
         (\data ->
-            case List.filterMap (isLogErrorEmail Env.adminEmail) data.httpRequests of
+            case List.filterMap (isLogErrorEmail adminEmail) data.httpRequests of
                 [] ->
                     Ok ()
 

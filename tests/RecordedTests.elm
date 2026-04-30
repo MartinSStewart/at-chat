@@ -1268,7 +1268,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         , T.checkState
             (Duration.hours 4.01 |> Duration.inMilliseconds)
             (\data ->
-                case List.filterMap (RecordedTestExtra.isLogErrorEmail Env.adminEmail) data.httpRequests of
+                case List.filterMap (RecordedTestExtra.isLogErrorEmail RecordedTestExtra.adminEmail) data.httpRequests of
                     [ "LoginsRateLimited" ] ->
                         Ok ()
 

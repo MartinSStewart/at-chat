@@ -704,6 +704,12 @@ messageCustomEmojiIds message =
         DeletedMessage _ ->
             []
 
+        CallStarted posix userId reactions ->
+            reactionIds reactions
+
+        CallEnded posix reactions ->
+            reactionIds reactions
+
 
 buttonHeight : Bool -> number
 buttonHeight isMobile =

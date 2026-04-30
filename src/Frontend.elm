@@ -58,7 +58,6 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SessionIdHash exposing (SessionIdHash)
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -105,7 +104,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (LocalChange(..), RoomId)
+import VoiceChat exposing (RoomId)
 
 
 app :
@@ -3451,7 +3450,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
-                        (Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                        (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
                         loggedIn
                         Command.none
                 )
@@ -4210,14 +4209,14 @@ pressedVoiceChatButton roomId model =
             if VoiceChat.hasJoined roomId local.calls then
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_VoiceChatChange Local_Leave |> Just)
+                    (Local_VoiceChatChange VoiceChat.Local_Leave |> Just)
                     loggedIn
                     (VoiceChat.leaveVoiceChatCmds local.calls)
 
             else
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_Join roomId |> Local_VoiceChatChange |> Just)
+                    (VoiceChat.Local_Join roomId |> Local_VoiceChatChange |> Just)
                     loggedIn
                     (case SeqDict.get roomId local.calls.voiceChats of
                         Just nonempty ->

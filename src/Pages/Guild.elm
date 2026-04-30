@@ -3147,7 +3147,6 @@ voiceChatButton voiceChatId local =
         ]
 
 
-
 emojiSelector :
     Bool
     -> SeqSet (Id CustomEmojiId)
@@ -5170,6 +5169,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 highlight
                 messageIndex
@@ -5191,6 +5191,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
             messageContainer
                 isThreadStarter
                 localUser.timezone
+                localUser.customEmojis
                 allUsers
                 highlight
                 messageIndex
@@ -5296,6 +5297,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 currentUserId
                 localUser.user
                 reactions
+                localUser.customEmojis
                 isHovered
                 (Ui.row [] [ callStarted userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
@@ -5307,6 +5309,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 currentUserId
                 localUser.user
                 reactions
+                localUser.customEmojis
                 isHovered
                 (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
 
@@ -5482,7 +5485,7 @@ replyToHeaderAboveMessage :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
 replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
-    case maybeRepliedTo of
+    case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
                 isMobile

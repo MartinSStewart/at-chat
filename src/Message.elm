@@ -39,8 +39,8 @@ type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage Time.Posix
-    | CallStarted Time.Posix userId (SeqDict Emoji (NonemptySet userId))
-    | CallEnded Time.Posix (SeqDict Emoji (NonemptySet userId))
+    | CallStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | CallEnded Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 maxEmbeds : number
@@ -258,8 +258,8 @@ type MessageNoReply userId
     = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
     | UserJoinedMessage_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
-    | CallStarted_NoReply Time.Posix userId (SeqDict Emoji (NonemptySet userId))
-    | CallEnded_NoReply Time.Posix (SeqDict Emoji (NonemptySet userId))
+    | CallStarted_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | CallEnded_NoReply Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 type alias UserTextMessageDataNoReply userId =
@@ -310,7 +310,7 @@ addReactionEmoji userId emoji message =
             CallEnded time (addReactionEmojiHelper userId emoji reactions)
 
 
-addReactionEmojiHelper : userId -> Emoji -> SeqDict Emoji (NonemptySet userId) -> SeqDict Emoji (NonemptySet userId)
+addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 addReactionEmojiHelper userId emoji reactions =
     SeqDict.update
         emoji
@@ -346,7 +346,7 @@ removeReactionEmoji userId emoji message =
             CallEnded time (removeReactionEmojiHelper userId emoji reactions)
 
 
-removeReactionEmojiHelper : userId -> Emoji -> SeqDict Emoji (NonemptySet userId) -> SeqDict Emoji (NonemptySet userId)
+removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 removeReactionEmojiHelper userId emoji reactions =
     SeqDict.update
         emoji
