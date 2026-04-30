@@ -1806,30 +1806,47 @@ attachmentsUploadedHelper model message results =
 
 disconnectClient : SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
 disconnectClient sessionId clientId model =
-    let
-        model2 : BackendModel
-        model2 =
-            Pages.Admin.disconnectClient sessionId clientId model
-    in
-    case SeqDict.get sessionId model2.sessions of
-        Just session ->
-            ( { model2
-                | sessions =
-                    SeqDict.insert
-                        sessionId
-                        (UserSession.setCurrentlyViewing Nothing session)
-                        model2.sessions
-              }
-            , Broadcast.toUser
-                Nothing
-                Nothing
-                session.userId
-                (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
-                model2
+    case ( Pages.Admin.disconnectClient sessionId clientId model.connections, SeqDict.get sessionId model.sessions ) of
+        ( Ok ( removedConnection, connections ), Just session ) ->
+            let
+                model2 =
+                    { model
+                        | sessions = SeqDict.insert sessionId (UserSession.setCurrentlyViewing Nothing session) model.sessions
+                        , connections = connections
+                    }
+            in
+            ( model2
+            , Command.batch
+                [ Broadcast.toUser
+                    Nothing
+                    Nothing
+                    session.userId
+                    (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
+                    model2
+                , case removedConnection.call of
+                    Just (DmRoomId otherUserId) ->
+                        Broadcast.toDmChannel
+                            session.userId
+                            otherUserId
+                            (\otherUserId2 ->
+                                Server_Left
+                                    { roomId = DmRoomId otherUserId2
+                                    , otherSession = ( session.userId, clientId )
+                                    }
+                                    |> Server_VoiceChatChange
+                            )
+                            model2
+
+                    Nothing ->
+                        Command.none
+                ]
             )
 
-        Nothing ->
-            ( model2, Command.none )
+        ( Ok ( _, connections ), Nothing ) ->
+            ( { model | connections = connections }, Command.none )
+
+        _ ->
+            ( model, Command.none )
 
 
 

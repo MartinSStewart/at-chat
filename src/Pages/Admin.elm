@@ -525,7 +525,12 @@ updateAdmin changedBy change adminData local =
         DisconnectClient sessionIdHash clientId ->
             { local
                 | adminData =
-                    IsAdmin (disconnectClient sessionIdHash clientId adminData)
+                    case disconnectClient sessionIdHash clientId adminData.connections of
+                        Ok ( _, connections ) ->
+                            IsAdmin { adminData | connections = connections }
+
+                        Err () ->
+                            IsAdmin adminData
             }
 
         RegenerateServerSecret time ->
@@ -549,21 +554,29 @@ updateAdmin changedBy change adminData local =
             }
 
 
-disconnectClient : sessionId -> id -> { b | connections : SeqDict sessionId (NonemptyDict id v) } -> { b | connections : SeqDict sessionId (NonemptyDict id v) }
-disconnectClient sessionId clientId adminData =
-    { adminData
-        | connections =
-            SeqDict.update
-                sessionId
-                (Maybe.andThen
-                    (\value ->
-                        NonemptyDict.toSeqDict value
-                            |> SeqDict.remove clientId
-                            |> NonemptyDict.fromSeqDict
+disconnectClient :
+    sessionId
+    -> id
+    -> SeqDict sessionId (NonemptyDict id v)
+    -> Result () ( v, SeqDict sessionId (NonemptyDict id v) )
+disconnectClient sessionId clientId connections =
+    case SeqDict.get sessionId connections of
+        Just clientIds ->
+            case NonemptyDict.get clientId clientIds of
+                Just connection ->
+                    ( connection
+                    , SeqDict.update
+                        sessionId
+                        (\_ -> NonemptyDict.toSeqDict clientIds |> SeqDict.remove clientId |> NonemptyDict.fromSeqDict)
+                        connections
                     )
-                )
-                adminData.connections
-    }
+                        |> Ok
+
+                Nothing ->
+                    Err ()
+
+        Nothing ->
+            Err ()
 
 
 expandGuild : Id GuildId -> BackendUser -> BackendUser

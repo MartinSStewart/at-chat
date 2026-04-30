@@ -692,7 +692,7 @@ toDmChannel :
     -> Id UserId
     -> (Id UserId -> ServerChange)
     -> BackendModel
-    -> Command BackendOnly ToFrontend BackendMsg
+    -> Command BackendOnly ToFrontend msg
 toDmChannel userId otherUserId serverMsg model =
     if userId == otherUserId then
         toUser Nothing Nothing userId (serverMsg otherUserId |> ServerChange) model
