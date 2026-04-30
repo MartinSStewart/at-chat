@@ -428,6 +428,7 @@ type FrontendMsg
     | UserScrolled AnyGuildOrDmId ThreadRoute ScrollPosition
     | PressedBody
     | MessageMenu_PressedDeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
+    | MessageMenu_PressedAddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
@@ -816,4 +817,5 @@ type LocalChange
     | Local_SetDomainWhitelist Bool Domain
     | Local_SetEmojiCategory Emoji.Category
     | Local_SetEmojiSkinTone (Maybe SkinTone)
+    | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange VoiceChat.LocalChange

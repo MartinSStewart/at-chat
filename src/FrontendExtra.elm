@@ -35,6 +35,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -184,6 +185,8 @@ pendingChangesText localChange =
         Local_SetEmojiSkinTone _ ->
             "Selected emoji skin tone"
 
+        Local_AddCustomEmojisToUser _ ->
+            "Add custom emojis to user"
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
                 VoiceChat.Local_Join _ ->
@@ -1136,6 +1139,9 @@ isPressMsg msg =
             True
 
         MessageMenu_PressedDeleteMessage _ _ ->
+            True
+
+        MessageMenu_PressedAddCustomEmojisToUser _ ->
             True
 
         ScrolledToMessage ->
@@ -2173,6 +2179,26 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     { local | localUser = { localUser | user = User.setEmojiSkinTone maybeSkinTone localUser.user } }
+
+                Local_AddCustomEmojisToUser customEmojiIds ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        user =
+                            localUser.user
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user =
+                                    { user
+                                        | availableCustomEmojis =
+                                            SeqSet.union (NonemptySet.toSeqSet customEmojiIds) user.availableCustomEmojis
+                                    }
+                            }
+                    }
 
                 Local_VoiceChatChange voiceChatChange ->
                     { local | calls = VoiceChat.localChangeUpdate voiceChatChange local.calls }

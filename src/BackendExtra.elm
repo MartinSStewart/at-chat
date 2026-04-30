@@ -1312,6 +1312,9 @@ toBackendLog toBackend =
                 Local_SetEmojiSkinTone _ ->
                     ToBackendLog_Local_SetEmojiSkinTone
 
+                Local_AddCustomEmojisToUser _ ->
+                    ToBackendLog_Local_AddCustomEmojisToUser
+
                 Local_VoiceChatChange _ ->
                     ToBackendLog_Local_VoiceChatChange
 

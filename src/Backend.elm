@@ -46,7 +46,7 @@ import Message exposing (ChangeAttachments(..), Message(..))
 import MyUi
 import NonemptyDict
 import NonemptySet
-import OneToOne
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import PersonName
@@ -56,7 +56,7 @@ import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Slack
 import Sticker exposing (StickerData, StickerUrl(..))
 import String.Nonempty exposing (NonemptyString)
@@ -4518,6 +4518,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     NonemptyDict.insert
                                         session.userId
                                         (User.setEmojiSkinTone maybeSkinTone user)
+                                        model.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
+                Local_AddCustomEmojisToUser customEmojiIds ->
+                    asUser
+                        model
+                        sessionId
+                        (\session user ->
+                            let
+                                validIds : SeqSet (Id CustomEmojiId)
+                                validIds =
+                                    SeqSet.filter
+                                        (\id -> SeqDict.member id model.customEmojis)
+                                        (NonemptySet.toSeqSet customEmojiIds)
+                            in
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        session.userId
+                                        { user | availableCustomEmojis = SeqSet.union validIds user.availableCustomEmojis }
                                         model.users
                               }
                             , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)

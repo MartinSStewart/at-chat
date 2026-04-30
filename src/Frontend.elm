@@ -1670,6 +1670,17 @@ updateLoaded msg model =
                 )
                 model
 
+        MessageMenu_PressedAddCustomEmojisToUser customEmojiIds ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Just (Local_AddCustomEmojisToUser customEmojiIds))
+                        (MessageMenu.close model loggedIn)
+                        Command.none
+                )
+                model
+
         ScrolledToMessage ->
             ( model, Command.none )
 
