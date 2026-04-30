@@ -188,7 +188,6 @@ stickersSection =
             123
             (richText |> RichText.toString False SeqDict.empty)
             (Just richText)
-            False
             SeqDict.empty
             SeqDict.empty
             stickers

@@ -25,7 +25,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
 import Emoji exposing (CachedEmojiData, EmojiOrSticker(..), SkinTone)
-import FileStatus exposing (FileId)
+import FileStatus exposing (FileId, FileStatus)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -454,14 +454,13 @@ view :
     -> Int
     -> String
     -> Maybe (Nonempty (RichText userId))
-    -> Bool
-    -> SeqDict (Id FileId) a
+    -> SeqDict (Id FileId) FileStatus
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles customEmojis stickers pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -502,7 +501,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background
-                        (if charsLeft < 0 || attachmentsUploading then
+                        (if charsLeft < 0 || FileStatus.hasUploadingFile attachedFiles then
                             MyUi.disabledButtonBackground
 
                          else
