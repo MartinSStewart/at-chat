@@ -28,6 +28,7 @@ import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
+import Game
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -326,6 +327,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
+            , gameModel = Game.init
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
@@ -1822,6 +1824,11 @@ updateLoaded msg model =
             in
             ( { model | aiChatModel = aiChatModel2 }
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
+            )
+
+        GameMsg gameMsg ->
+            ( { model | gameModel = Game.update gameMsg model.gameModel }
+            , Command.none
             )
 
         UserNameEditableMsg editableMsg ->
@@ -5800,6 +5807,11 @@ view model =
                                     local.textEditor
                                     |> Ui.map TextEditorMsg
                             )
+
+                    GameRoute ->
+                        Game.view loaded.gameModel
+                            |> Ui.map GameMsg
+                            |> FrontendExtra.layout loaded []
 
                     DiscordDmRoute routeData ->
                         requiresLogin

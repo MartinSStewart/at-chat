@@ -40,6 +40,7 @@ type Route
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
+    | GameRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
 
 
@@ -303,6 +304,9 @@ decode url =
         [ "text-editor" ] ->
             TextEditorRoute
 
+        [ "game" ] ->
+            GameRoute
+
         [ "link-discord" ] ->
             case Dict.get linkDiscordQueryParam url2.queryParameters of
                 Just [ data ] ->
@@ -461,6 +465,9 @@ encode route =
                 TextEditorRoute ->
                     ( [ "text-editor" ], [] )
 
+                GameRoute ->
+                    ( [ "game" ], [] )
+
                 LinkDiscord _ ->
                     ( [ linkDiscordPath ], [] )
     in
@@ -522,6 +529,9 @@ requiresLogin route =
             False
 
         TextEditorRoute ->
+            False
+
+        GameRoute ->
             False
 
         DiscordDmRoute _ ->

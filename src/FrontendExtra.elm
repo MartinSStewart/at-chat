@@ -930,6 +930,9 @@ routeRequest previousRoute newRoute model =
         TextEditorRoute ->
             ( model2, Command.none )
 
+        GameRoute ->
+            ( model2, Command.none )
+
         LinkDiscord result ->
             ( model2
             , case ( model2.loginStatus, result ) of
@@ -1171,6 +1174,9 @@ isPressMsg msg =
 
         AiChatMsg aiChatMsg ->
             AiChat.isPressMsg aiChatMsg
+
+        GameMsg _ ->
+            True
 
         UserNameEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg

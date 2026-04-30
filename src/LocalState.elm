@@ -2462,6 +2462,9 @@ routeToViewing route local =
         TextEditorRoute ->
             StopViewingChannel
 
+        GameRoute ->
+            StopViewingChannel
+
         LinkDiscord _ ->
             StopViewingChannel
 
