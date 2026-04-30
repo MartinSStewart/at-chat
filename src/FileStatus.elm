@@ -21,6 +21,7 @@ module FileStatus exposing
     , fileHash
     , fileUrl
     , gifContent
+    , hasUploadingFile
     , imageHasMetadata
     , imageInfoView
     , imageMaxHeight
@@ -743,6 +744,23 @@ onlyUploadedFiles dict =
                     Nothing
         )
         dict
+
+
+hasUploadingFile : SeqDict (Id FileId) FileStatus -> Bool
+hasUploadingFile dict =
+    SeqDict.toList dict
+        |> List.any
+            (\( _, status ) ->
+                case status of
+                    FileUploading _ _ _ ->
+                        True
+
+                    FileUploaded _ ->
+                        False
+
+                    FileError _ _ _ _ ->
+                        False
+            )
 
 
 {-| List found here <https://mimetype.io/all-types>. Keep list in sync with rust-server/src/main.rs

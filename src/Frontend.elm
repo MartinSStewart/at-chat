@@ -2736,7 +2736,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.editMessage of
                                 Just edit ->
-                                    if charsLeft < 0 then
+                                    if charsLeft < 0 || FileStatus.hasUploadingFile edit.attachedFiles then
                                         ( loggedIn, Command.none )
 
                                     else
@@ -3054,6 +3054,15 @@ updateLoaded msg model =
                                         safeToSend : Bool
                                         safeToSend =
                                             (charsLeft >= 0)
+                                                && (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                        Just dict ->
+                                                            NonemptyDict.toSeqDict dict
+                                                                |> FileStatus.hasUploadingFile
+                                                                |> not
+
+                                                        Nothing ->
+                                                            True
+                                                   )
                                                 && (case guildOrDmId of
                                                         GuildOrDmId _ ->
                                                             True

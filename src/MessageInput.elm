@@ -377,13 +377,14 @@ editView :
     -> Int
     -> String
     -> Maybe (Nonempty (RichText userId))
+    -> Bool
     -> SeqDict (Id FileId) a
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
+editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -425,7 +426,7 @@ editView htmlId height roundTopCorners isMobileKeyboard channelTextInputId place
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background
-                        (if charsLeft < 0 then
+                        (if charsLeft < 0 || attachmentsUploading then
                             MyUi.disabledButtonBackground
 
                          else
@@ -453,13 +454,14 @@ view :
     -> Int
     -> String
     -> Maybe (Nonempty (RichText userId))
+    -> Bool
     -> SeqDict (Id FileId) a
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict (Id StickerId) StickerData
     -> Maybe TextInputFocus
     -> SeqDict userId { b | name : PersonName }
     -> Element Msg
-view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachedFiles customEmojis stickers pingUser users =
+view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText charsLeft text richText attachmentsUploading attachedFiles customEmojis stickers pingUser users =
     let
         htmlIdPrefix : String
         htmlIdPrefix =
@@ -500,7 +502,7 @@ view htmlId roundTopCorners isMobileKeyboard channelTextInputId placeholderText 
                     , Ui.paddingXY 4 0
                     , Ui.height (Ui.px 38)
                     , Ui.background
-                        (if charsLeft < 0 then
+                        (if charsLeft < 0 || attachmentsUploading then
                             MyUi.disabledButtonBackground
 
                          else

@@ -3460,6 +3460,14 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 (case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
+                            |> FileStatus.hasUploadingFile
+
+                    Nothing ->
+                        False
+                )
+                (case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
 
                     Nothing ->
                         SeqDict.empty
@@ -3685,6 +3693,14 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         (RichText.discordCharsLeft OneToOne.empty draftRichText)
                         draft
                         draftRichText
+                        (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                            Just attachedFiles ->
+                                NonemptyDict.toSeqDict attachedFiles
+                                    |> FileStatus.hasUploadingFile
+
+                            Nothing ->
+                                False
+                        )
                         (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                             Just attachedFiles ->
                                 NonemptyDict.toSeqDict attachedFiles
@@ -4002,6 +4018,14 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
+                            |> FileStatus.hasUploadingFile
+
+                    Nothing ->
+                        False
+                )
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
 
                     Nothing ->
                         SeqDict.empty
@@ -4212,6 +4236,14 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 (RichText.discordCharsLeft OneToOne.empty draftRichText)
                 draft
                 draftRichText
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
+                            |> FileStatus.hasUploadingFile
+
+                    Nothing ->
+                        False
+                )
                 (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                     Just attachedFiles ->
                         NonemptyDict.toSeqDict attachedFiles
@@ -4613,6 +4645,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         charsLeft
                         editing.text
                         editingRichText
+                        (FileStatus.hasUploadingFile editing.attachedFiles)
                         editing.attachedFiles
                         local.localUser.customEmojis
                         local.localUser.stickers
@@ -4755,6 +4788,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         charsLeft
                         editing.text
                         editingRichText
+                        (FileStatus.hasUploadingFile editing.attachedFiles)
                         editing.attachedFiles
                         local.localUser.customEmojis
                         local.localUser.stickers

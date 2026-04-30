@@ -15,6 +15,7 @@ import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import FileStatus
 import Html exposing (Html)
 import Icons
 import Id exposing (AnyGuildOrDmId(..), CustomEmojiId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRouteWithMessage(..), UserId)
@@ -264,6 +265,7 @@ viewMobile offset extraOptions loggedIn local model =
                                     charsLeft
                                     edit.text
                                     richText
+                                    (FileStatus.hasUploadingFile edit.attachedFiles)
                                     edit.attachedFiles
                                     local.localUser.customEmojis
                                     local.localUser.stickers
