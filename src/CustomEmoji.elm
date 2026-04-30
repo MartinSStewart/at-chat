@@ -77,7 +77,7 @@ view emojiSize yOffset customEmojiId customEmojis2 animationMode =
                 , Html.Attributes.style "background-color" "gray"
                 , Html.Attributes.style "transform" ("translate(" ++ yOffset ++ ")")
                 ]
-                [ Html.text "Custom emoji failed to load" ]
+                []
 
 
 viewHelper : String -> String -> { a | url : CustomEmojiUrl, isAnimated : Bool } -> Sticker.AnimationMode -> Html msg
