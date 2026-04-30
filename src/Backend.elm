@@ -71,7 +71,7 @@ import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat exposing (RoomId(..), ServerChange(..))
+import VoiceChat
 import WireHelper
 
 
@@ -1818,7 +1818,7 @@ disconnectClient time sessionId clientId model =
                         , connections = connections
                         , dmChannels =
                             case removedConnection.call of
-                                Just (DmRoomId otherUserId) ->
+                                Just (VoiceChat.DmRoomId otherUserId) ->
                                     let
                                         dmChannelId =
                                             DmChannel.channelIdFromUserIds session.userId otherUserId
@@ -1850,14 +1850,14 @@ disconnectClient time sessionId clientId model =
                     (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
                     model2
                 , case removedConnection.call of
-                    Just (DmRoomId otherUserId) ->
+                    Just (VoiceChat.DmRoomId otherUserId) ->
                         Broadcast.toDmChannel
                             session.userId
                             otherUserId
                             (\otherUserId2 ->
-                                Server_Left
+                                VoiceChat.Server_Left
                                     time
-                                    { roomId = DmRoomId otherUserId2
+                                    { roomId = VoiceChat.DmRoomId otherUserId2
                                     , otherSession = ( session.userId, clientId )
                                     }
                                     |> Server_VoiceChatChange
@@ -4750,7 +4750,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
         VoiceChat.Local_Join _ voiceChatId ->
             case voiceChatId of
-                DmRoomId otherUserId ->
+                VoiceChat.DmRoomId otherUserId ->
                     asDmUser
                         model
                         sessionId
@@ -4762,7 +4762,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
 
         VoiceChat.Local_Signal connectionId signal ->
             case connectionId.roomId of
-                DmRoomId otherUserId ->
+                VoiceChat.DmRoomId otherUserId ->
                     asDmUser
                         model
                         sessionId
@@ -4775,8 +4775,8 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     Nothing
                                     Nothing
                                     otherUserId
-                                    (Server_SignalReceived
-                                        { roomId = DmRoomId session.userId, otherSession = ( session.userId, clientId ) }
+                                    (VoiceChat.Server_SignalReceived
+                                        { roomId = VoiceChat.DmRoomId session.userId, otherSession = ( session.userId, clientId ) }
                                         signal
                                         |> Server_VoiceChatChange
                                         |> ServerChange
@@ -4798,7 +4798,7 @@ leaveVoice :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 leaveVoice sessionId clientId time changeId model session _ =
     let
-        maybeRoomId : Maybe RoomId
+        maybeRoomId : Maybe VoiceChat.RoomId
         maybeRoomId =
             case SeqDict.get sessionId model.connections of
                 Just connections ->
@@ -4841,7 +4841,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                 model.connections
         , dmChannels =
             case roomId of
-                DmRoomId otherUserId ->
+                VoiceChat.DmRoomId otherUserId ->
                     let
                         dmChannelId =
                             DmChannel.channelIdFromUserIds session.userId otherUserId
@@ -4863,15 +4863,15 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                 [ LocalChangeResponse changeId (Local_VoiceChatChange (VoiceChat.Local_Leave time))
                     |> Lamdera.sendToFrontend clientId
                 , case roomId of
-                    DmRoomId otherUserId ->
+                    VoiceChat.DmRoomId otherUserId ->
                         Broadcast.toDmChannelExcludingOne
                             clientId
                             session.userId
                             otherUserId
                             (\otherUserId2 ->
-                                Server_Left
+                                VoiceChat.Server_Left
                                     time
-                                    { roomId = DmRoomId otherUserId2
+                                    { roomId = VoiceChat.DmRoomId otherUserId2
                                     , otherSession = ( session.userId, clientId )
                                     }
                                     |> Server_VoiceChatChange
@@ -4881,14 +4881,14 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
 
         Nothing ->
             case roomId of
-                DmRoomId otherUserId ->
+                VoiceChat.DmRoomId otherUserId ->
                     Broadcast.toDmChannel
                         session.userId
                         otherUserId
                         (\otherUserId2 ->
-                            Server_Left
+                            VoiceChat.Server_Left
                                 time
-                                { roomId = DmRoomId otherUserId2
+                                { roomId = VoiceChat.DmRoomId otherUserId2
                                 , otherSession = ( session.userId, clientId )
                                 }
                                 |> Server_VoiceChatChange
@@ -4916,9 +4916,9 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
             case NonemptyDict.get clientId connections of
                 Just connection ->
                     let
-                        voiceChatId : RoomId
+                        voiceChatId : VoiceChat.RoomId
                         voiceChatId =
-                            DmRoomId otherUserId
+                            VoiceChat.DmRoomId otherUserId
 
                         ( model2, cmd ) =
                             case connection.call of
@@ -4954,9 +4954,9 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                             session.userId
                             otherUserId
                             (\otherUserId2 ->
-                                Server_Joined
+                                VoiceChat.Server_Joined
                                     time
-                                    { roomId = DmRoomId otherUserId2
+                                    { roomId = VoiceChat.DmRoomId otherUserId2
                                     , otherSession = ( session.userId, clientId )
                                     }
                                     |> Server_VoiceChatChange
@@ -4982,7 +4982,7 @@ voiceChatRoomHasOtherMembers dmChannelId clientId model =
                     NonemptyDict.any
                         (\otherClientId connection ->
                             case connection.call of
-                                Just (DmRoomId otherUserId2) ->
+                                Just (VoiceChat.DmRoomId otherUserId2) ->
                                     (DmChannel.channelIdFromUserIds otherUserId2 otherSession.userId == dmChannelId)
                                         && (clientId /= otherClientId)
 
