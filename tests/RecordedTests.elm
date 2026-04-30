@@ -1190,6 +1190,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.voiceChatTest normalConfig
     , RecordedTestExtra.startTest "Logins are rate limited"
         RecordedTestExtra.startTime
         normalConfig

@@ -1,4 +1,61 @@
-module RecordedTestExtra exposing (CustomRequest, adminEmail, allAttackerLocalChanges, allAttackerToBackendChanges, andThenWebsocket, attackerEmail, attackerShouldNotGetThisToFrontend, botTestGuild, botTestGuild_ChannelA, checkNoErrorLogs, checkNoNotification, checkNotification, chromeDesktop, clickSpoiler, connectTwoUsersAndJoinNewGuild, createThread, currentDiscordUserId, decodeCustomRequest, desktopWindow, discordUserAuth, domain, enableNotifications, firefoxDesktop, focusEvent, handleInternalRequests, handleLogin, handlePortToJs, hasExactText, hasNotExactText, hasNotText, hasText, infoEndpointResponse, inviteUser, inviteUserAndDmChat, isLogErrorEmail, isLoginEmail, isOp2, joeEmail, linkDiscordAndLogin, mobileWindow, noMissingMessages, regeneratedServerSecretValue, safariIphone, scrollToMiddle, scrollToTop, sessionId0, sessionId1, sessionId2, sessionIdAttacker, startTest, startTime, stringToJson, userEmail, writeMessage, writeMessageMobile)
+module RecordedTestExtra exposing
+    ( CustomRequest
+    , adminEmail
+    , allAttackerLocalChanges
+    , allAttackerToBackendChanges
+    , andThenWebsocket
+    , attackerEmail
+    , attackerShouldNotGetThisToFrontend
+    , botTestGuild
+    , botTestGuild_ChannelA
+    , checkNoErrorLogs
+    , checkNoNotification
+    , checkNotification
+    , chromeDesktop
+    , clickSpoiler
+    , connectTwoUsersAndJoinNewGuild
+    , createThread
+    , currentDiscordUserId
+    , decodeCustomRequest
+    , desktopWindow
+    , discordUserAuth
+    , domain
+    , enableNotifications
+    , firefoxDesktop
+    , focusEvent
+    , handleInternalRequests
+    , handleLogin
+    , handlePortToJs
+    , hasExactText
+    , hasNotExactText
+    , hasNotText
+    , hasText
+    , infoEndpointResponse
+    , inviteUser
+    , inviteUserAndDmChat
+    , isLogErrorEmail
+    , isLoginEmail
+    , isOp2
+    , joeEmail
+    , linkDiscordAndLogin
+    , mobileWindow
+    , noMissingMessages
+    , regeneratedServerSecretValue
+    , safariIphone
+    , scrollToMiddle
+    , scrollToTop
+    , sessionId0
+    , sessionId1
+    , sessionId2
+    , sessionIdAttacker
+    , startTest
+    , startTime
+    , stringToJson
+    , userEmail
+    , voiceChatTest
+    , writeMessage
+    , writeMessageMobile
+    )
 
 import AiChat exposing (AiModelName(..))
 import Array
@@ -339,6 +396,28 @@ checkNotification body =
                 [] ->
                     Err ("Notification not found for \"" ++ body ++ "\"")
         )
+
+
+voiceChatTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+voiceChatTest normalConfig =
+    startTest
+        "Hop between voice calls"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            desktopWindow
+            (\admin user ->
+                [ admin.click 100 (Dom.id "guild_openDm_0")
+                , user.click 100 (Dom.id "guild_openDm_0")
+                , admin.click 100 (Dom.id "guild_voiceChat")
+                , admin.navigateBack 100
+                , admin.click 100 (Dom.id "guild_openDm_1")
+                , admin.click 100 (Dom.id "guild_voiceChat")
+                ]
+            )
+        ]
 
 
 checkNoNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel

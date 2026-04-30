@@ -2211,31 +2211,21 @@ changeUpdate localMsg local =
                     in
                     case voiceChatChange of
                         VoiceChat.Local_Join time roomId ->
-                            let
-                                local2 : LocalState
-                                local2 =
-                                    case calls.currentRoom of
-                                        Just _ ->
-                                            leaveCall time local
-
-                                        Nothing ->
-                                            local
-                            in
                             case roomId of
                                 DmRoomId otherUserId ->
-                                    { local2
+                                    { local
                                         | calls = { calls | currentRoom = Just roomId }
                                         , dmChannels =
                                             if SeqDict.member roomId calls.voiceChats then
-                                                local2.dmChannels
+                                                local.dmChannels
 
                                             else
                                                 SeqDict.updateIfExists
                                                     otherUserId
                                                     (LocalState.createChannelMessageFrontend
-                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                        (CallStarted time local.localUser.session.userId SeqDict.empty)
                                                     )
-                                                    local2.dmChannels
+                                                    local.dmChannels
                                     }
 
                         VoiceChat.Local_Leave time ->
@@ -3288,27 +3278,7 @@ changeUpdate localMsg local =
                     in
                     case voiceChatChange of
                         VoiceChat.Server_Joined time { roomId, otherSession } ->
-                            let
-                                local2 : LocalState
-                                local2 =
-                                    case
-                                        List.Extra.findMap
-                                            (\( roomId2, connections ) ->
-                                                if NonemptySet.member otherSession connections then
-                                                    Just { roomId = roomId2, otherSession = otherSession }
-
-                                                else
-                                                    Nothing
-                                            )
-                                            (SeqDict.toList calls.voiceChats)
-                                    of
-                                        Just connectionId ->
-                                            otherUserLeaveCall time connectionId local
-
-                                        Nothing ->
-                                            local
-                            in
-                            { local2
+                            { local
                                 | calls =
                                     { calls
                                         | voiceChats = VoiceChat.addSessionIdHash roomId otherSession calls.voiceChats
@@ -3323,10 +3293,10 @@ changeUpdate localMsg local =
                                                         (LocalState.createChannelMessageFrontend
                                                             (CallStarted time (Tuple.first otherSession) SeqDict.empty)
                                                         )
-                                                        local2.dmChannels
+                                                        local.dmChannels
 
                                                 _ ->
-                                                    local2.dmChannels
+                                                    local.dmChannels
                             }
 
                         VoiceChat.Server_Left time connectionId ->
