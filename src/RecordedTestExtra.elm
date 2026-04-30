@@ -1182,7 +1182,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                     True
 
                 Local_AddCustomEmojisToUser _ ->
-                    True
+                    False
 
         ChangeBroadcast localMsg ->
             case localMsg of
