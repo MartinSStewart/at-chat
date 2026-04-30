@@ -4747,7 +4747,7 @@ handleVoiceChatToBackend :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
-        VoiceChat.Local_Join voiceChatId ->
+        VoiceChat.Local_Join _ voiceChatId ->
             case voiceChatId of
                 DmRoomId otherUserId ->
                     asDmUser
@@ -4775,9 +4775,10 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                         model.dmChannels
                               }
                             , Command.batch
-                                [ Lamdera.sendToFrontend
-                                    clientId
-                                    (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                [ LocalChangeResponse
+                                    changeId
+                                    (Local_VoiceChatChange (VoiceChat.Local_Join time voiceChatId))
+                                    |> Lamdera.sendToFrontend clientId
                                 , Broadcast.toDmChannelExcludingOne
                                     clientId
                                     session.userId
@@ -4794,7 +4795,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                             )
                         )
 
-        VoiceChat.Local_Leave ->
+        VoiceChat.Local_Leave _ ->
             asUser
                 model
                 sessionId
@@ -4847,9 +4848,8 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                                     model.dmChannels
                               }
                             , Command.batch
-                                [ Lamdera.sendToFrontend
-                                    clientId
-                                    (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                [ LocalChangeResponse changeId (Local_VoiceChatChange (VoiceChat.Local_Leave time))
+                                    |> Lamdera.sendToFrontend clientId
                                 , case roomId of
                                     DmRoomId otherUserId ->
                                         Broadcast.toDmChannelExcludingOne

@@ -190,10 +190,10 @@ pendingChangesText localChange =
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
-                VoiceChat.Local_Join _ ->
+                VoiceChat.Local_Join _ _ ->
                     "Joined voice chat"
 
-                VoiceChat.Local_Leave ->
+                VoiceChat.Local_Leave _ ->
                     "Left voice chat"
 
                 VoiceChat.Local_Signal _ _ ->
@@ -2204,26 +2204,41 @@ changeUpdate localMsg local =
 
                 Local_VoiceChatChange voiceChatChange ->
                     let
+                        calls : VoiceChat.Model
                         calls =
                             local.calls
                     in
                     case voiceChatChange of
-                        VoiceChat.Local_Join roomId ->
+                        VoiceChat.Local_Join time roomId ->
+                            let
+                                local2 : LocalState
+                                local2 =
+                                    case calls.currentRoom of
+                                        Just _ ->
+                                            leaveCall time local
+
+                                        Nothing ->
+                                            local
+                            in
                             case roomId of
                                 DmRoomId otherUserId ->
-                                    { local
+                                    { local2
                                         | calls = { calls | currentRoom = Just roomId }
                                         , dmChannels =
-                                            SeqDict.updateIfExists
-                                                otherUserId
-                                                (\dmChannel -> dmChannel)
-                                                local.dmChannels
+                                            if SeqDict.member roomId calls.voiceChats then
+                                                local2.dmChannels
+
+                                            else
+                                                SeqDict.updateIfExists
+                                                    otherUserId
+                                                    (LocalState.createChannelMessageFrontend
+                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                    )
+                                                    local2.dmChannels
                                     }
 
-                        VoiceChat.Local_Leave ->
-                            { local
-                                | calls = { calls | currentRoom = Nothing }
-                            }
+                        VoiceChat.Local_Leave time ->
+                            leaveCall time local
 
                         VoiceChat.Local_Signal _ _ ->
                             local
@@ -3267,6 +3282,35 @@ changeUpdate localMsg local =
 
                 Server_VoiceChatChange voiceChatFrontendMsg ->
                     { local | calls = VoiceChat.changeUpdate voiceChatFrontendMsg local.calls }
+
+
+leaveCall : Time.Posix -> LocalState -> LocalState
+leaveCall time local =
+    let
+        calls =
+            local.calls
+    in
+    case calls.currentRoom of
+        Just roomId ->
+            case roomId of
+                DmRoomId otherUserId ->
+                    { local
+                        | calls = { calls | currentRoom = Nothing }
+                        , dmChannels =
+                            if SeqDict.member roomId calls.voiceChats then
+                                local.dmChannels
+
+                            else
+                                SeqDict.updateIfExists
+                                    otherUserId
+                                    (LocalState.createChannelMessageFrontend
+                                        (CallEnded time SeqDict.empty)
+                                    )
+                                    local.dmChannels
+                    }
+
+        Nothing ->
+            local
 
 
 guildSendMessage :

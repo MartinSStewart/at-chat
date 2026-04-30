@@ -21,6 +21,7 @@ import Codec exposing (Codec)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Effect.Time as Time
 import Html exposing (Html)
 import Html.Attributes
 import Id exposing (Id, UserId)
@@ -34,8 +35,8 @@ import SessionIdHash exposing (SessionIdHash)
 
 
 type LocalChange
-    = Local_Join RoomId
-    | Local_Leave
+    = Local_Join Time.Posix RoomId
+    | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
 
 

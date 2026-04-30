@@ -4209,14 +4209,14 @@ pressedVoiceChatButton roomId model =
             if VoiceChat.hasJoined roomId local.calls then
                 FrontendExtra.handleLocalChange
                     model.time
-                    (Local_VoiceChatChange VoiceChat.Local_Leave |> Just)
+                    (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
                     loggedIn
                     (VoiceChat.leaveVoiceChatCmds local.calls)
 
             else
                 FrontendExtra.handleLocalChange
                     model.time
-                    (VoiceChat.Local_Join roomId |> Local_VoiceChatChange |> Just)
+                    (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
                     loggedIn
                     (case SeqDict.get roomId local.calls.voiceChats of
                         Just nonempty ->
