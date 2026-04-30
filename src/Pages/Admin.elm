@@ -54,7 +54,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LocalUser, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LocalUser, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -217,7 +217,7 @@ type alias InitAdminData =
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
-    , connections : SeqDict SessionIdHash (NonemptyDict ClientId LastRequest)
+    , connections : SeqDict SessionIdHash (NonemptyDict ClientId ConnectionData)
     , filesCount : Int
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
@@ -1415,11 +1415,11 @@ connectionsSection timezone user adminData =
                             , Ui.column
                                 [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
                                 (List.map
-                                    (\( clientId, lastRequest ) ->
+                                    (\( clientId, data ) ->
                                         Ui.row
                                             [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
                                             [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
-                                            , (case lastRequest of
+                                            , (case data.lastRequest of
                                                 LastRequest time ->
                                                     Ui.text ("Last request: " ++ MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone)
 

@@ -19,7 +19,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Select
 import Effect.Http as Http
-import Effect.Lamdera as Lamdera
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
@@ -65,7 +65,34 @@ import TextEditor
 import Thread
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types
+    exposing
+        ( AdminStatusLoginData(..)
+        , ChannelSidebarMode(..)
+        , Drag(..)
+        , EmojiSelector(..)
+        , FrontendModel(..)
+        , FrontendMsg(..)
+        , GuildChannelNameHover(..)
+        , InitialLoadRequest(..)
+        , LoadStatus(..)
+        , LoadedFrontend
+        , LoadingFrontend
+        , LocalChange(..)
+        , LocalMsg(..)
+        , LoggedIn2
+        , LoginData
+        , LoginResult(..)
+        , LoginStatus(..)
+        , MessageHover(..)
+        , MessageHoverMobileMode(..)
+        , RevealedSpoilers
+        , ScrollPosition(..)
+        , ServerChange(..)
+        , ToBackend(..)
+        , ToFrontend(..)
+        , UserOptionsModel
+        )
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -77,6 +104,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
+import VoiceChat exposing (RoomId)
 
 
 app :
@@ -128,6 +156,7 @@ subscriptions model =
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
+        , VoiceChat.voiceChatFromJs GotVoiceChatSignalFromJs
         , case model of
             Loading _ ->
                 Subscription.none
@@ -444,6 +473,7 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
+    , calls = VoiceChat.init loginData.voiceChatPeers
     }
 
 
@@ -3199,6 +3229,12 @@ updateLoaded msg model =
                                                                             DeletedMessage_NoReply _ ->
                                                                                 Nothing
 
+                                                                            CallStarted_NoReply _ _ _ ->
+                                                                                Nothing
+
+                                                                            CallEnded_NoReply _ _ ->
+                                                                                Nothing
+
                                                                     MessageUnloaded_NoReply ->
                                                                         Nothing
                                                             )
@@ -3283,6 +3319,12 @@ updateLoaded msg model =
                                                                                 Nothing
 
                                                                             DeletedMessage_NoReply _ ->
+                                                                                Nothing
+
+                                                                            CallStarted_NoReply _ _ _ ->
+                                                                                Nothing
+
+                                                                            CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->
@@ -3399,6 +3441,20 @@ updateLoaded msg model =
 
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
+
+        PressedVoiceChatButton otherUserId ->
+            pressedVoiceChatButton otherUserId model
+
+        GotVoiceChatSignalFromJs connectionId signal ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
 
         PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
             FrontendExtra.updateLoggedIn
@@ -4135,6 +4191,47 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
               }
             , Command.none
             )
+
+
+pressedVoiceChatButton : RoomId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedVoiceChatButton roomId model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
+                clientId : ClientId
+                clientId =
+                    local.localUser.session.clientId
+            in
+            if VoiceChat.hasJoined roomId local.calls then
+                FrontendExtra.handleLocalChange
+                    model.time
+                    (Local_VoiceChatChange VoiceChat.Local_Leave |> Just)
+                    loggedIn
+                    (VoiceChat.leaveVoiceChatCmds local.calls)
+
+            else
+                FrontendExtra.handleLocalChange
+                    model.time
+                    (VoiceChat.Local_Join roomId |> Local_VoiceChatChange |> Just)
+                    loggedIn
+                    (case SeqDict.get roomId local.calls.voiceChats of
+                        Just nonempty ->
+                            List.map
+                                (\otherSession ->
+                                    VoiceChat.voiceChatStart clientId { roomId = roomId, otherSession = otherSession }
+                                )
+                                (NonemptySet.toList nonempty)
+                                |> Command.batch
+
+                        Nothing ->
+                            Command.none
+                    )
+        )
+        model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5374,6 +5471,11 @@ updateLoadedFromBackend msg model =
                                 Server_DiscordAddReactionDmEmoji _ _ _ _ ->
                                     ( loggedIn2, Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition )
 
+                                Server_VoiceChatChange voiceChatChange ->
+                                    ( loggedIn2
+                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.clientId
+                                    )
+
                                 _ ->
                                     ( loggedIn2, Command.none )
 
@@ -5541,6 +5643,7 @@ view model =
 
                                       else
                                         Ui.noAttr
+                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.behindContent
                                     ]
                                     (page loggedIn local)
 

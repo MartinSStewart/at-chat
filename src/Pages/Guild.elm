@@ -66,7 +66,20 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types
+    exposing
+        ( Drag(..)
+        , EditMessage
+        , EmojiSelector(..)
+        , FrontendMsg(..)
+        , GuildChannelNameHover(..)
+        , LoadedFrontend
+        , LoggedIn2
+        , MessageHover(..)
+        , NewChannelForm
+        , NewGuildForm
+        , ScrollPosition(..)
+        )
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -79,6 +92,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
+import VoiceChat exposing (RoomId(..))
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -1888,41 +1902,13 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex channel.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( repliedToIndex, message2 )
-
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
+                        maybeRepliedTo2 : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
+                        maybeRepliedTo2 =
+                            maybeRepliedTo message channel
 
                         date : Date
                         date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
+                            Message.createdAt message |> Date.fromPosix local.localUser.timezone
                     in
                     ( index - 1
                     , Just date
@@ -1942,7 +1928,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         local.localUser.session.userId
                                         (LocalState.allUsers local.localUser)
                                         local.localUser
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         messageId
                                         message
@@ -1970,7 +1956,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                         guildOrDmId
                                         threadRoute2
                                         message
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
                                         charsLeft
@@ -1984,7 +1970,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                             Nothing ->
                                 case SeqDict.get threadId channel.threads of
                                     Nothing ->
-                                        case maybeRepliedTo of
+                                        case maybeRepliedTo2 of
                                             Just _ ->
                                                 messageView
                                                     isMobile
@@ -1997,7 +1983,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser.session.userId
                                                     (LocalState.allUsers local.localUser)
                                                     local.localUser
-                                                    maybeRepliedTo
+                                                    maybeRepliedTo2
                                                     Nothing
                                                     messageId
                                                     message
@@ -2014,7 +2000,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Just thread ->
-                                        case maybeRepliedTo of
+                                        case maybeRepliedTo2 of
                                             Just _ ->
                                                 messageView
                                                     isMobile
@@ -2027,7 +2013,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                                                     local.localUser.session.userId
                                                     (LocalState.allUsers local.localUser)
                                                     local.localUser
-                                                    maybeRepliedTo
+                                                    maybeRepliedTo2
                                                     (Just thread)
                                                     messageId
                                                     message
@@ -2054,6 +2040,35 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
         ( Array.length channel.messages - 1, Nothing, [] )
         (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
+
+
+maybeRepliedTo : Message messageId userId -> { a | messages : Array (MessageState messageId userId) } -> Maybe ( Id messageId, Message messageId userId )
+maybeRepliedTo message channel =
+    case message of
+        UserTextMessage data ->
+            case data.repliedTo of
+                Just repliedToIndex ->
+                    case DmChannel.getArray repliedToIndex channel.messages of
+                        Just (MessageLoaded message2) ->
+                            Just ( repliedToIndex, message2 )
+
+                        _ ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+
+        UserJoinedMessage _ _ _ ->
+            Nothing
+
+        DeletedMessage _ ->
+            Nothing
+
+        CallStarted _ _ _ ->
+            Nothing
+
+        CallEnded _ _ ->
+            Nothing
 
 
 discordConversationViewHelper :
@@ -2170,41 +2185,12 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex channel.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( repliedToIndex, message2 )
-
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
+                        maybeRepliedTo2 =
+                            maybeRepliedTo message channel
 
                         date : Date
                         date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
+                            Message.createdAt message |> Date.fromPosix local.localUser.timezone
                     in
                     ( index - 1
                     , Just date
@@ -2224,7 +2210,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         currentDiscordUserId
                                         (LocalState.allDiscordUsers local.localUser)
                                         local.localUser
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         messageId
                                         message
@@ -2249,7 +2235,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                         guildOrDmId
                                         threadRoute2
                                         message
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         (SeqDict.get threadId channel.threads)
                                         revealedSpoilers
                                         (RichText.discordCharsLeft OneToOne.empty editRichText)
@@ -2263,7 +2249,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                             Nothing ->
                                 case SeqDict.get threadId channel.threads of
                                     Nothing ->
-                                        case maybeRepliedTo of
+                                        case maybeRepliedTo2 of
                                             Just _ ->
                                                 messageView
                                                     isMobile
@@ -2276,7 +2262,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     currentDiscordUserId
                                                     (LocalState.allDiscordUsers local.localUser)
                                                     local.localUser
-                                                    maybeRepliedTo
+                                                    maybeRepliedTo2
                                                     Nothing
                                                     messageId
                                                     message
@@ -2294,7 +2280,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
 
                                     Just thread ->
-                                        case maybeRepliedTo of
+                                        case maybeRepliedTo2 of
                                             Just _ ->
                                                 messageView
                                                     isMobile
@@ -2307,7 +2293,7 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                                     currentDiscordUserId
                                                     (LocalState.allDiscordUsers local.localUser)
                                                     local.localUser
-                                                    maybeRepliedTo
+                                                    maybeRepliedTo2
                                                     (Just thread)
                                                     messageId
                                                     message
@@ -2497,41 +2483,13 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex thread.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( Id.changeType repliedToIndex, message2 )
-
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
+                        maybeRepliedTo2 : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
+                        maybeRepliedTo2 =
+                            maybeRepliedTo message thread
 
                         date : Date
                         date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
+                            Message.createdAt message |> Date.fromPosix local.localUser.timezone
                     in
                     ( index - 1
                     , Just date
@@ -2550,7 +2508,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         (LocalState.allUsers local.localUser)
                                         local.localUser.session.userId
                                         local.localUser
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         messageId
                                         message
                                         |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -2575,7 +2533,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         threadId
                                         (Id.fromInt index)
                                         message
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         revealedSpoilers
                                         (RichText.maxLength - String.length editing.text)
                                         editing
@@ -2586,7 +2544,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                         local
 
                             Nothing ->
-                                case maybeRepliedTo of
+                                case maybeRepliedTo2 of
                                     Just _ ->
                                         threadMessageView
                                             isMobile
@@ -2598,7 +2556,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                                             (LocalState.allUsers local.localUser)
                                             local.localUser.session.userId
                                             local.localUser
-                                            maybeRepliedTo
+                                            maybeRepliedTo2
                                             messageId
                                             message
                                             |> Ui.map (MessageViewMsg (GuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -2729,41 +2687,13 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
-                        maybeRepliedTo =
-                            case message of
-                                UserTextMessage data ->
-                                    case data.repliedTo of
-                                        Just repliedToIndex ->
-                                            case DmChannel.getArray repliedToIndex thread.messages of
-                                                Just (MessageLoaded message2) ->
-                                                    Just ( Id.changeType repliedToIndex, message2 )
-
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                UserJoinedMessage _ _ _ ->
-                                    Nothing
-
-                                DeletedMessage _ ->
-                                    Nothing
+                        maybeRepliedTo2 : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
+                        maybeRepliedTo2 =
+                            maybeRepliedTo message thread
 
                         date : Date
                         date =
-                            (case message of
-                                UserTextMessage data ->
-                                    data.createdAt
-
-                                UserJoinedMessage posix _ _ ->
-                                    posix
-
-                                DeletedMessage posix ->
-                                    posix
-                            )
-                                |> Date.fromPosix local.localUser.timezone
+                            Message.createdAt message |> Date.fromPosix local.localUser.timezone
                     in
                     ( index - 1
                     , Just date
@@ -2782,7 +2712,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         (LocalState.allDiscordUsers local.localUser)
                                         currentDiscordUserId
                                         local.localUser
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         messageId
                                         message
                                         |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -2807,7 +2737,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         threadId
                                         (Id.fromInt index)
                                         message
-                                        maybeRepliedTo
+                                        maybeRepliedTo2
                                         revealedSpoilers
                                         (RichText.discordCharsLeft OneToOne.empty editRichText)
                                         editing
@@ -2818,7 +2748,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                         local
 
                             Nothing ->
-                                case maybeRepliedTo of
+                                case maybeRepliedTo2 of
                                     Just _ ->
                                         threadMessageView
                                             isMobile
@@ -2830,7 +2760,7 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                                             (LocalState.allDiscordUsers local.localUser)
                                             currentDiscordUserId
                                             local.localUser
-                                            maybeRepliedTo
+                                            maybeRepliedTo2
                                             messageId
                                             message
                                             |> Ui.map (MessageViewMsg (DiscordGuildOrDmId guildOrDmIdNoThread) threadRoute2)
@@ -3105,8 +3035,8 @@ showFilesButton =
         (Ui.html Icons.document)
 
 
-privateChatWithYourself : List (Element FrontendMsg)
-privateChatWithYourself =
+privateChatWithYourself : LocalState -> List (Element FrontendMsg)
+privateChatWithYourself local =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -3114,12 +3044,12 @@ privateChatWithYourself =
         , Ui.clipWithEllipsis
         ]
         (Ui.text "Private chat with yourself")
-    , showFilesButton
+    , voiceChatButton (DmRoomId local.localUser.session.userId) local
     ]
 
 
-privateChatWith : String -> List (Element FrontendMsg)
-privateChatWith name =
+privateChatWith : Id UserId -> LocalState -> String -> List (Element FrontendMsg)
+privateChatWith otherUserId local name =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -3128,8 +3058,93 @@ privateChatWith name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
-    , showFilesButton
+    , voiceChatButton (DmRoomId otherUserId) local
     ]
+
+
+discordPrivateChatWith : String -> List (Element FrontendMsg)
+discordPrivateChatWith name =
+    [ Ui.el
+        [ Ui.Font.color MyUi.font3
+        , Ui.width Ui.shrink
+        , MyUi.prewrap
+        , Ui.clipWithEllipsis
+        ]
+        (Ui.text "Private chat with ")
+    , Ui.text name
+    ]
+
+
+voiceChatButton : RoomId -> LocalState -> Element FrontendMsg
+voiceChatButton voiceChatId local =
+    let
+        hasJoined =
+            VoiceChat.hasJoined voiceChatId local.calls
+
+        joined : Element msg
+        joined =
+            VoiceChat.joinedUsers voiceChatId local.calls
+                |> SeqDict.toList
+                |> List.map
+                    (\( userId, clientIds ) ->
+                        let
+                            count =
+                                NonemptySet.size clientIds
+                        in
+                        Ui.el
+                            [ if count > 1 then
+                                Ui.el
+                                    [ Ui.alignRight
+                                    , Ui.alignBottom
+                                    , Ui.background MyUi.background3
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.border 1
+                                    , Ui.rounded 4
+                                    ]
+                                    (Icons.numbers 20 (String.fromInt count) |> Html.div [] |> Ui.html)
+                                    |> Ui.inFront
+
+                              else
+                                Ui.noAttr
+                            ]
+                            (case LocalState.getUser userId local.localUser of
+                                Just user ->
+                                    User.profileImage user.icon
+
+                                Nothing ->
+                                    User.profileImage Nothing
+                            )
+                    )
+                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
+    in
+    Ui.row
+        [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
+        [ joined
+        , MyUi.elButton
+            (Dom.id "guild_voiceChat")
+            (PressedVoiceChatButton voiceChatId)
+            [ Ui.width (Ui.px 44)
+            , Ui.paddingXY 4 0
+            , Ui.height Ui.fill
+            ]
+            (Ui.row
+                [ Ui.spacing 2, Ui.centerY ]
+                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+                , case hasJoined of
+                    True ->
+                        Ui.el
+                            [ Ui.width (Ui.px 8)
+                            , Ui.height (Ui.px 8)
+                            , Ui.background (Ui.rgb 40 190 80)
+                            , Ui.rounded 4
+                            ]
+                            Ui.none
+
+                    False ->
+                        Ui.none
+                ]
+            )
+        ]
 
 
 emojiSelector :
@@ -3306,10 +3321,10 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
-                            privateChatWith name
+                            privateChatWith otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3403,13 +3418,19 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) data.createdBy allUsers
+                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just data.createdBy) allUsers
 
                                 UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) userId allUsers
+                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just userId) allUsers
 
                                 DeletedMessage _ ->
                                     Ui.none
+
+                                CallStarted _ userId _ ->
+                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just userId) allUsers
+
+                                CallEnded _ _ ->
+                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) Nothing allUsers
 
                         _ ->
                             Ui.none
@@ -3531,10 +3552,10 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if chattingWithYourself data local then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
-                            privateChatWith name
+                            discordPrivateChatWith name
                         )
 
                 DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3623,13 +3644,19 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) data.createdBy allUsers
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just data.createdBy) allUsers
 
                                 UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) userId allUsers
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
 
                                 DeletedMessage _ ->
                                     Ui.none
+
+                                CallStarted _ userId _ ->
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
+
+                                CallEnded _ _ ->
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
 
                         _ ->
                             Ui.none
@@ -3822,10 +3849,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
-                            privateChatWith name
+                            privateChatWith otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3939,13 +3966,19 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) data.createdBy allUsers
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just data.createdBy) allUsers
 
                                 UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) userId allUsers
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
 
                                 DeletedMessage _ ->
                                     Ui.none
+
+                                CallStarted _ userId _ ->
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
+
+                                CallEnded _ _ ->
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
 
                         _ ->
                             Ui.none
@@ -4046,10 +4079,10 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if chattingWithYourself data local then
-                            privateChatWithYourself
+                            privateChatWithYourself local
 
                          else
-                            privateChatWith name
+                            discordPrivateChatWith name
                         )
 
                 DiscordGuildOrDmId_Guild _ _ _ ->
@@ -4146,13 +4179,19 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         Just (MessageLoaded message) ->
                             case message of
                                 UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) data.createdBy allUsers
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just data.createdBy) allUsers
 
                                 UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) userId allUsers
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
 
                                 DeletedMessage _ ->
                                     Ui.none
+
+                                CallStarted _ userId _ ->
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
+
+                                CallEnded _ _ ->
+                                    replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
 
                         _ ->
                             Ui.none
@@ -4424,7 +4463,7 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
             Ui.none
 
 
-replyToHeader : msg -> userId -> SeqDict userId { a | name : PersonName } -> Element msg
+replyToHeader : msg -> Maybe userId -> SeqDict userId { a | name : PersonName } -> Element msg
 replyToHeader onPress userId allUsers =
     Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font2
@@ -4447,7 +4486,12 @@ replyToHeader onPress userId allUsers =
             (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
         ]
         [ Ui.text "Reply to "
-        , Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId allUsers))
+        , case userId of
+            Just userId2 ->
+                Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId2 allUsers))
+
+            Nothing ->
+                Ui.text "message"
         ]
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
 
@@ -4549,7 +4593,7 @@ messageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg
-messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
+messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo2 maybeThread revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4602,7 +4646,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                     |> Dom.idToString
                     |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers local.localUser.customEmojis allUsers
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4666,6 +4710,12 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         DeletedMessage _ ->
             Ui.none
 
+        CallStarted _ _ _ ->
+            Ui.none
+
+        CallEnded _ _ ->
+            Ui.none
+
 
 threadMessageEditingView :
     Bool
@@ -4683,7 +4733,7 @@ threadMessageEditingView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalState
     -> Element FrontendMsg
-threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
+threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo2 revealedSpoilers charsLeft editing editingRichText pingUser currentUserId allUsers local =
     case message of
         UserTextMessage data ->
             let
@@ -4729,7 +4779,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 , Ui.spacing 4
                 , threadMessageHtmlId messageId |> Dom.idToString |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers local.localUser.customEmojis allUsers
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4783,6 +4833,12 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
             Ui.none
 
         DeletedMessage _ ->
+            Ui.none
+
+        CallStarted _ _ _ ->
+            Ui.none
+
+        CallEnded _ _ ->
             Ui.none
 
 
@@ -5031,7 +5087,7 @@ messageView :
     -> Id ChannelMessageId
     -> Message ChannelMessageId userId
     -> Element MessageViewMsg
-messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo maybeThreadStarter messageIndex message =
+messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageIndex message =
     case message of
         UserTextMessage data ->
             messageContainer
@@ -5062,7 +5118,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     containerWidth
                     isBeingEdited
                     isMobile
-                    maybeRepliedTo
+                    maybeRepliedTo2
                     localUser
                     revealedSpoilers
                     allUsers
@@ -5109,6 +5165,50 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
+        CallStarted time userId reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageIndex
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    []
+                    [ callStarted userId allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    , messageIdView messageIndex
+                    ]
+                )
+
+        CallEnded time reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageIndex
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    []
+                    [ callEnded
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    , messageIdView messageIndex
+                    ]
+                )
+
 
 threadMessageView :
     Bool
@@ -5124,7 +5224,7 @@ threadMessageView :
     -> Id ThreadMessageId
     -> Message ThreadMessageId userId
     -> Element MessageViewMsg
-threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo messageIndex message =
+threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageIndex message =
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
@@ -5151,7 +5251,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     containerWidth
                     isBeingEdited
                     isMobile
-                    maybeRepliedTo
+                    maybeRepliedTo2
                     localUser
                     revealedSpoilers
                     allUsers
@@ -5189,6 +5289,30 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
 
+        CallStarted time userId reactions ->
+            threadMessageContainer
+                highlight
+                messageIndex
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row [] [ callStarted userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+
+        CallEnded time reactions ->
+            threadMessageContainer
+                highlight
+                messageIndex
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
+
 
 isHoveredToAnimationMode : IsHovered -> AnimationMode
 isHoveredToAnimationMode isHovered =
@@ -5216,7 +5340,7 @@ userTextMessageContent :
     -> Id messageId
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo localUser revealedSpoilers allUsers isHovered messageIndex message2 =
+userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageIndex message2 =
     Ui.row
         []
         [ Ui.el
@@ -5224,7 +5348,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 { left = 0
                 , right = profileImagePaddingRight
                 , top =
-                    case maybeRepliedTo of
+                    case maybeRepliedTo2 of
                         Just _ ->
                             24
 
@@ -5244,7 +5368,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers localUser.customEmojis allUsers
+            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5360,8 +5484,8 @@ replyToHeaderAboveMessage :
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers customEmojis allUsers =
-    case maybeRepliedTo of
+replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+    case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
                 isMobile
@@ -5390,6 +5514,12 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers customEmojis 
                     [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
                     (Ui.text LocalState.messageDeleted)
                 )
+
+        Just ( repliedToIndex, CallStarted _ userId _ ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId allUsers)
+
+        Just ( repliedToIndex, CallEnded _ _ ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex callEnded
 
         Nothing ->
             Ui.none
@@ -5459,13 +5589,27 @@ userJoinedContent : userId -> SeqDict userId { a | name : PersonName } -> Elemen
 userJoinedContent userId allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
+        [ User.toString userId allUsers |> Ui.text |> Ui.el [ Ui.Font.bold ]
+        , Ui.el [] (Ui.text " joined!")
+        ]
+
+
+callStarted : userId -> SeqDict userId { a | name : PersonName } -> Element msg
+callStarted userId allUsers =
+    Ui.Prose.paragraph
+        [ Ui.paddingXY 0 4 ]
         [ User.toString userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
         , Ui.el
             []
-            (Ui.text " joined!")
+            (Ui.text " started a call")
         ]
+
+
+callEnded : Element msg
+callEnded =
+    Ui.Prose.paragraph [ Ui.paddingXY 0 4 ] [ Ui.el [] (Ui.text "Call ended") ]
 
 
 messagePaddingX : number
@@ -5746,15 +5890,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
             , Html.div [ Html.Attributes.style "flex-grow" "1" ] []
             , case lastMessage of
                 Just (MessageLoaded message) ->
-                    case message of
-                        UserTextMessage data ->
-                            messageTimestamp data.createdAt timezone
-
-                        UserJoinedMessage joinedAt _ _ ->
-                            messageTimestamp joinedAt timezone
-
-                        DeletedMessage createdAt ->
-                            messageTimestamp createdAt timezone
+                    messageTimestamp (Message.createdAt message) timezone
 
                 _ ->
                     Html.text ""
@@ -5791,6 +5927,17 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                     [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3) ]
                                     [ Html.text LocalState.messageDeleted ]
                                 ]
+
+                            CallStarted _ userId _ ->
+                                [ Html.span
+                                    []
+                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    , Html.text " started a call"
+                                    ]
+                                ]
+
+                            CallEnded _ _ ->
+                                [ Html.text "Call ended" ]
 
                     _ ->
                         []
@@ -6872,6 +7019,12 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
 
+                                CallStarted _ _ _ ->
+                                    "Call started"
+
+                                CallEnded _ _ ->
+                                    "Call ended"
+
                         MessageUnloaded ->
                             ""
     in
@@ -6983,6 +7136,12 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
                                 DeletedMessage _ ->
                                     LocalState.messageDeleted
+
+                                CallStarted _ _ _ ->
+                                    "Call started"
+
+                                CallEnded _ _ ->
+                                    "Call ended"
 
                         MessageUnloaded ->
                             ""

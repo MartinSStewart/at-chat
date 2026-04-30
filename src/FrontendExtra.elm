@@ -63,6 +63,7 @@ import Url exposing (Url)
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import VoiceChat
 
 
 pendingChangesText : LocalChange -> String
@@ -186,6 +187,16 @@ pendingChangesText localChange =
 
         Local_AddCustomEmojisToUser _ ->
             "Add custom emojis to user"
+        Local_VoiceChatChange voiceChatChange ->
+            case voiceChatChange of
+                VoiceChat.Local_Join _ ->
+                    "Joined voice chat"
+
+                VoiceChat.Local_Leave ->
+                    "Left voice chat"
+
+                VoiceChat.Local_Signal _ _ ->
+                    "Voice chat state change"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -1315,6 +1326,11 @@ isPressMsg msg =
 
         PageUpGotViewport _ ->
             False
+        PressedVoiceChatButton _ ->
+            True
+
+        GotVoiceChatSignalFromJs _ _ ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -2183,6 +2199,9 @@ changeUpdate localMsg local =
                                     }
                             }
                     }
+
+                Local_VoiceChatChange voiceChatChange ->
+                    { local | calls = VoiceChat.localChangeUpdate voiceChatChange local.calls }
 
         ServerChange serverChange ->
             case serverChange of
@@ -3220,6 +3239,8 @@ changeUpdate localMsg local =
                                 , user = User.addNewCustomEmojis newCustomEmojis localUser.user
                             }
                     }
+                Server_VoiceChatChange voiceChatFrontendMsg ->
+                    { local | calls = VoiceChat.changeUpdate voiceChatFrontendMsg local.calls }
 
 
 guildSendMessage :

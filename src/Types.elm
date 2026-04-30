@@ -71,7 +71,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, 
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LastRequest, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -107,6 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
+import VoiceChat exposing (ConnectionId, RoomId)
 
 
 type FrontendModel
@@ -288,7 +289,7 @@ type EmojiSelector
 type alias BackendModel =
     { users : NonemptyDict (Id UserId) BackendUser
     , sessions : SeqDict SessionId UserSession
-    , connections : SeqDict SessionId (NonemptyDict ClientId LastRequest)
+    , connections : SeqDict SessionId (NonemptyDict ClientId ConnectionData)
     , secretCounter : Int
     , pendingLogins : SeqDict SessionId LoginTokenData
     , logs : Array { time : Time.Posix, log : Log, isHidden : Bool }
@@ -485,6 +486,8 @@ type FrontendMsg
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
+    | PressedVoiceChatButton RoomId
+    | GotVoiceChatSignalFromJs ConnectionId VoiceChat.Signal
 
 
 type ScrollPosition
@@ -689,6 +692,7 @@ type alias LoginData =
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , voiceChatPeers : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
     }
 
 
@@ -774,6 +778,7 @@ type ServerChange
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
+    | Server_VoiceChatChange VoiceChat.ServerChange
 
 
 type LocalChange
@@ -813,3 +818,4 @@ type LocalChange
     | Local_SetEmojiCategory Emoji.Category
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
+    | Local_VoiceChatChange VoiceChat.LocalChange

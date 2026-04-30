@@ -39,6 +39,8 @@ type Message messageId userId
     = UserTextMessage (UserTextMessageData messageId userId)
     | UserJoinedMessage Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage Time.Posix
+    | CallStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | CallEnded Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 maxEmbeds : number
@@ -223,6 +225,12 @@ addEmbed ( url, result ) message =
         DeletedMessage _ ->
             message
 
+        CallStarted _ _ _ ->
+            message
+
+        CallEnded _ _ ->
+            message
+
 
 type MessageState messageId userId
     = MessageLoaded (Message messageId userId)
@@ -250,6 +258,8 @@ type MessageNoReply userId
     = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
     | UserJoinedMessage_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
+    | CallStarted_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | CallEnded_NoReply Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 type alias UserTextMessageDataNoReply userId =
@@ -274,95 +284,83 @@ createdAt message =
         DeletedMessage time ->
             time
 
+        CallStarted time _ _ ->
+            time
+
+        CallEnded time _ ->
+            time
+
 
 addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
-            { message2
-                | reactions =
-                    SeqDict.update
-                        emoji
-                        (\maybeSet ->
-                            (case maybeSet of
-                                Just nonempty ->
-                                    NonemptySet.insert userId nonempty
-
-                                Nothing ->
-                                    NonemptySet.singleton userId
-                            )
-                                |> Just
-                        )
-                        message2.reactions
-            }
-                |> UserTextMessage
+            { message2 | reactions = addReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
 
         UserJoinedMessage time userJoined reactions ->
-            UserJoinedMessage
-                time
-                userJoined
-                (SeqDict.update
-                    emoji
-                    (\maybeSet ->
-                        (case maybeSet of
-                            Just nonempty ->
-                                NonemptySet.insert userId nonempty
-
-                            Nothing ->
-                                NonemptySet.singleton userId
-                        )
-                            |> Just
-                    )
-                    reactions
-                )
+            UserJoinedMessage time userJoined (addReactionEmojiHelper userId emoji reactions)
 
         DeletedMessage _ ->
             message
+
+        CallStarted time startedBy reactions ->
+            CallStarted time startedBy (addReactionEmojiHelper userId emoji reactions)
+
+        CallEnded time reactions ->
+            CallEnded time (addReactionEmojiHelper userId emoji reactions)
+
+
+addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+addReactionEmojiHelper userId emoji reactions =
+    SeqDict.update
+        emoji
+        (\maybeSet ->
+            (case maybeSet of
+                Just nonempty ->
+                    NonemptySet.insert userId nonempty
+
+                Nothing ->
+                    NonemptySet.singleton userId
+            )
+                |> Just
+        )
+        reactions
 
 
 removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
-            { message2
-                | reactions =
-                    SeqDict.update
-                        emoji
-                        (\maybeSet ->
-                            case maybeSet of
-                                Just nonempty ->
-                                    NonemptySet.toSeqSet nonempty
-                                        |> SeqSet.remove userId
-                                        |> NonemptySet.fromSeqSet
-
-                                Nothing ->
-                                    Nothing
-                        )
-                        message2.reactions
-            }
-                |> UserTextMessage
+            { message2 | reactions = removeReactionEmojiHelper userId emoji message2.reactions } |> UserTextMessage
 
         UserJoinedMessage time userJoined reactions ->
-            UserJoinedMessage
-                time
-                userJoined
-                (SeqDict.update
-                    emoji
-                    (\maybeSet ->
-                        case maybeSet of
-                            Just nonempty ->
-                                NonemptySet.toSeqSet nonempty
-                                    |> SeqSet.remove userId
-                                    |> NonemptySet.fromSeqSet
-
-                            Nothing ->
-                                Nothing
-                    )
-                    reactions
-                )
+            UserJoinedMessage time userJoined (removeReactionEmojiHelper userId emoji reactions)
 
         DeletedMessage _ ->
             message
+
+        CallStarted time startedBy reactions ->
+            CallStarted time startedBy (removeReactionEmojiHelper userId emoji reactions)
+
+        CallEnded time reactions ->
+            CallEnded time (removeReactionEmojiHelper userId emoji reactions)
+
+
+removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
+removeReactionEmojiHelper userId emoji reactions =
+    SeqDict.update
+        emoji
+        (\maybeSet ->
+            case maybeSet of
+                Just nonempty ->
+                    NonemptySet.toSeqSet nonempty
+                        |> SeqSet.remove userId
+                        |> NonemptySet.fromSeqSet
+
+                Nothing ->
+                    Nothing
+        )
+        reactions
 
 
 reactionEmojis : Message messageId userId -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -376,3 +374,9 @@ reactionEmojis message =
 
         DeletedMessage _ ->
             SeqDict.empty
+
+        CallStarted _ _ reactions ->
+            reactions
+
+        CallEnded _ reactions ->
+            reactions

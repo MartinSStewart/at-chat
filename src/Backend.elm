@@ -71,6 +71,7 @@ import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import VoiceChat exposing (LocalChange, RoomId(..), ServerChange(..))
 import WireHelper
 
 
@@ -287,12 +288,14 @@ update msg model =
                     SeqDict.update
                         sessionId
                         (\maybeValue ->
-                            case maybeValue of
+                            (case maybeValue of
                                 Just value ->
-                                    NonemptyDict.insert clientId NoRequestsMade value |> Just
+                                    NonemptyDict.insert clientId { lastRequest = NoRequestsMade, call = Nothing } value
 
                                 Nothing ->
-                                    NonemptyDict.singleton clientId NoRequestsMade |> Just
+                                    NonemptyDict.singleton clientId { lastRequest = NoRequestsMade, call = Nothing }
+                            )
+                                |> Just
                         )
                         model.connections
               }
@@ -317,7 +320,10 @@ update msg model =
                     | connections =
                         SeqDict.updateIfExists
                             sessionId
-                            (NonemptyDict.updateIfExists clientId (\_ -> LastRequest time))
+                            (NonemptyDict.updateIfExists
+                                clientId
+                                (\data -> { lastRequest = LastRequest time, call = data.call })
+                            )
                             model.connections
                 }
                 |> (\( model2, cmds ) ->
@@ -988,6 +994,12 @@ update msg model =
                                                                     members
 
                                                                 DeletedMessage _ ->
+                                                                    members
+
+                                                                CallStarted _ _ _ ->
+                                                                    members
+
+                                                                CallEnded _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -1918,6 +1930,12 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         DeletedMessage _ ->
                             "Message deleted"
 
+                        CallStarted _ _ _ ->
+                            "Call started"
+
+                        CallEnded _ _ ->
+                            "Call ended"
+
                 Nothing ->
                     "Thread"
         , autoArchiveDuration = Missing
@@ -1941,7 +1959,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 cmd =
                     case Broadcast.getUserFromSessionId sessionId model of
                         Just ( session, user ) ->
-                            BackendExtra.getLoginData sessionId session user requestMessagesFor model
+                            BackendExtra.getLoginData sessionId clientId session user requestMessagesFor model
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
@@ -1994,6 +2012,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             session =
                                 UserSession.init
                                     sessionId
+                                    clientId
                                     userId
                                     (case requestMessagesFor of
                                         InitialLoadRequested_None ->
@@ -2020,7 +2039,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 }
                         in
                         ( model3
-                        , BackendExtra.getLoginData sessionId session newUser requestMessagesFor model3
+                        , BackendExtra.getLoginData sessionId clientId session newUser requestMessagesFor model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -2048,6 +2067,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         session =
                                             UserSession.init
                                                 sessionId
+                                                clientId
                                                 pendingLogin.userId
                                                 (case requestMessagesFor of
                                                     InitialLoadRequested_None ->
@@ -2066,7 +2086,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                                       }
                                     , Command.batch
-                                        [ BackendExtra.getLoginData sessionId session user requestMessagesFor model
+                                        [ BackendExtra.getLoginData sessionId clientId session user requestMessagesFor model
                                             |> LoginSuccess
                                             |> LoginWithTokenResponse
                                             |> Lamdera.sendToFrontends sessionId
@@ -4527,6 +4547,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_VoiceChatChange voiceChatLocalChange ->
+                    handleVoiceChatToBackend time changeId clientId sessionId voiceChatLocalChange model
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model
@@ -4551,7 +4574,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             ( model
             , case Broadcast.getUserFromSessionId sessionId model of
                 Just ( userId, user ) ->
-                    BackendExtra.getLoginData sessionId userId user requestMessagesFor model
+                    BackendExtra.getLoginData sessionId clientId userId user requestMessagesFor model
                         |> Ok
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId
@@ -4669,6 +4692,161 @@ emojiOrCustomEmojiToDiscord customEmojis emoji =
 
                 Nothing ->
                     Err ()
+
+
+handleVoiceChatToBackend :
+    Time.Posix
+    -> ChangeId
+    -> ClientId
+    -> SessionId
+    -> VoiceChat.LocalChange
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
+    case voiceMsg of
+        VoiceChat.Local_Join voiceChatId ->
+            case voiceChatId of
+                DmRoomId otherUserId ->
+                    asDmUser
+                        model
+                        sessionId
+                        { otherUserId = otherUserId }
+                        (\session _ _ dmChannelId dmChannel ->
+                            ( { model
+                                | connections =
+                                    SeqDict.updateIfExists
+                                        sessionId
+                                        (NonemptyDict.updateIfExists
+                                            clientId
+                                            (\connection -> { connection | call = Just voiceChatId })
+                                        )
+                                        model.connections
+                                , dmChannels =
+                                    SeqDict.insert
+                                        dmChannelId
+                                        (LocalState.createChannelMessageBackend
+                                            (CallStarted time session.userId SeqDict.empty)
+                                            dmChannel
+                                            |> Tuple.second
+                                        )
+                                        model.dmChannels
+                              }
+                            , Command.batch
+                                [ Lamdera.sendToFrontend
+                                    clientId
+                                    (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                , Broadcast.toDmChannelExcludingOne
+                                    clientId
+                                    session.userId
+                                    otherUserId
+                                    (\otherUserId2 ->
+                                        Server_Joined
+                                            { roomId = DmRoomId otherUserId2
+                                            , otherSession = ( session.userId, clientId )
+                                            }
+                                            |> Server_VoiceChatChange
+                                    )
+                                    model
+                                ]
+                            )
+                        )
+
+        VoiceChat.Local_Leave ->
+            asUser
+                model
+                sessionId
+                (\session _ ->
+                    let
+                        maybeRoomId =
+                            case SeqDict.get sessionId model.connections of
+                                Just connections ->
+                                    case NonemptyDict.get clientId connections of
+                                        Just connection ->
+                                            connection.call
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+                    in
+                    case maybeRoomId of
+                        Just roomId ->
+                            ( { model
+                                | connections =
+                                    SeqDict.updateIfExists
+                                        sessionId
+                                        (NonemptyDict.updateIfExists
+                                            clientId
+                                            (\connection -> { connection | call = Nothing })
+                                        )
+                                        model.connections
+
+                                --, dmChannels =
+                                --    case voiceChatParticipants2 of
+                                --        Just _ ->
+                                --            model.dmChannels
+                                --
+                                --        Nothing ->
+                                --            SeqDict.insert
+                                --                dmChannelId
+                                --                (LocalState.createChannelMessageBackend
+                                --                    (CallEnded time SeqDict.empty)
+                                --                    dmChannel
+                                --                    |> Tuple.second
+                                --                )
+                                --                model.dmChannels
+                              }
+                            , Command.batch
+                                [ Lamdera.sendToFrontend
+                                    clientId
+                                    (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                , case roomId of
+                                    DmRoomId otherUserId ->
+                                        Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            otherUserId
+                                            (\otherUserId2 ->
+                                                Server_Left
+                                                    { roomId = DmRoomId otherUserId2
+                                                    , otherSession = ( session.userId, clientId )
+                                                    }
+                                                    |> Server_VoiceChatChange
+                                            )
+                                            model
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
+
+        VoiceChat.Local_Signal connectionId signal ->
+            case connectionId.roomId of
+                DmRoomId otherUserId ->
+                    asDmUser
+                        model
+                        sessionId
+                        { otherUserId = otherUserId }
+                        (\session _ _ _ _ ->
+                            ( model
+                            , Command.batch
+                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
+                                , Broadcast.toUser
+                                    Nothing
+                                    Nothing
+                                    otherUserId
+                                    (Server_SignalReceived
+                                        { roomId = DmRoomId session.userId, otherSession = ( session.userId, clientId ) }
+                                        signal
+                                        |> Server_VoiceChatChange
+                                        |> ServerChange
+                                    )
+                                    model
+                                ]
+                            )
+                        )
 
 
 threadRouteToDiscordMessageId :

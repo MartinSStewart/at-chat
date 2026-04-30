@@ -60,6 +60,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetEmojiCategory
     | ToBackendLog_Local_SetEmojiSkinTone
     | ToBackendLog_Local_AddCustomEmojisToUser
+    | ToBackendLog_Local_VoiceChatChange
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -217,3 +218,6 @@ toBackendLogToString log =
 
         ToBackendLog_Local_AddCustomEmojisToUser ->
             "Local_AddCustomEmojisToUser"
+
+        ToBackendLog_Local_VoiceChatChange ->
+            "Local_VoiceChatChange"

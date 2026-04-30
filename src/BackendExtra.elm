@@ -52,6 +52,7 @@ import LoginForm
 import MembersAndOwner
 import Message
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
 import PersonName
@@ -62,7 +63,7 @@ import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import SessionIdHash
+import SessionIdHash exposing (SessionIdHash)
 import String.Nonempty exposing (NonemptyString(..))
 import Thread
 import ToBackendLog exposing (ToBackendLog(..))
@@ -72,6 +73,7 @@ import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUs
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
 import VisibleMessages
+import VoiceChat exposing (RoomId(..))
 
 
 addLogWithCmd :
@@ -285,6 +287,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 session =
                                     UserSession.init
                                         sessionId
+                                        clientId
                                         pendingLogin.userId
                                         (case requestMessagesFor of
                                             InitialLoadRequested_None ->
@@ -303,7 +306,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
                             , Command.batch
-                                [ getLoginData sessionId session user requestMessagesFor model
+                                [ getLoginData sessionId clientId session user requestMessagesFor model
                                     |> LoginSuccess
                                     |> LoginWithTokenResponse
                                     |> Lamdera.sendToFrontends sessionId
@@ -425,12 +428,13 @@ validateAttachedFiles uploadedFiles dict =
 
 getLoginData :
     SessionId
+    -> ClientId
     -> UserSession
     -> BackendUser
     -> InitialLoadRequest
     -> BackendModel
     -> LoginData
-getLoginData sessionId session user requestMessagesFor model =
+getLoginData sessionId clientId session user requestMessagesFor model =
     let
         ( otherDiscordUsers, linkedDiscordUsers ) =
             getLinkedDiscordUsersAndOtherUsers session.userId model
@@ -563,6 +567,48 @@ getLoginData sessionId session user requestMessagesFor model =
     , textEditor = model.textEditor
     , stickers = model.stickers
     , customEmojis = model.customEmojis
+    , voiceChatPeers =
+        SeqDict.foldl
+            (\otherSessionId connections dict ->
+                case SeqDict.get otherSessionId model.sessions of
+                    Just otherSession ->
+                        NonemptyDict.foldl
+                            (\otherClientId data dict2 ->
+                                case ( data.call, otherClientId == clientId ) of
+                                    ( Just roomId, False ) ->
+                                        case roomId of
+                                            DmRoomId dmingWith ->
+                                                if dmingWith == session.userId then
+                                                    SeqDict.update
+                                                        roomId
+                                                        (\maybe ->
+                                                            (case maybe of
+                                                                Just nonempty ->
+                                                                    NonemptySet.insert
+                                                                        ( otherSession.userId, otherClientId )
+                                                                        nonempty
+
+                                                                Nothing ->
+                                                                    NonemptySet.singleton ( otherSession.userId, otherClientId )
+                                                            )
+                                                                |> Just
+                                                        )
+                                                        dict2
+
+                                                else
+                                                    dict2
+
+                                    _ ->
+                                        dict2
+                            )
+                            dict
+                            connections
+
+                    Nothing ->
+                        dict
+            )
+            SeqDict.empty
+            model.connections
     }
 
 
@@ -1268,6 +1314,9 @@ toBackendLog toBackend =
 
                 Local_AddCustomEmojisToUser _ ->
                     ToBackendLog_Local_AddCustomEmojisToUser
+
+                Local_VoiceChatChange _ ->
+                    ToBackendLog_Local_VoiceChatChange
 
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
