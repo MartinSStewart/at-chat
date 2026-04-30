@@ -18,7 +18,7 @@ import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
-import DmChannel exposing (DiscordDmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -1856,6 +1856,7 @@ disconnectClient time sessionId clientId model =
                             otherUserId
                             (\otherUserId2 ->
                                 Server_Left
+                                    time
                                     { roomId = DmRoomId otherUserId2
                                     , otherSession = ( session.userId, clientId )
                                     }
@@ -4754,46 +4755,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                         model
                         sessionId
                         { otherUserId = otherUserId }
-                        (\session _ _ dmChannelId dmChannel ->
-                            ( { model
-                                | connections =
-                                    SeqDict.updateIfExists
-                                        sessionId
-                                        (NonemptyDict.updateIfExists
-                                            clientId
-                                            (\connection -> { connection | call = Just voiceChatId })
-                                        )
-                                        model.connections
-                                , dmChannels =
-                                    SeqDict.insert
-                                        dmChannelId
-                                        (LocalState.createChannelMessageBackend
-                                            (CallStarted time session.userId SeqDict.empty)
-                                            dmChannel
-                                            |> Tuple.second
-                                        )
-                                        model.dmChannels
-                              }
-                            , Command.batch
-                                [ LocalChangeResponse
-                                    changeId
-                                    (Local_VoiceChatChange (VoiceChat.Local_Join time voiceChatId))
-                                    |> Lamdera.sendToFrontend clientId
-                                , Broadcast.toDmChannelExcludingOne
-                                    clientId
-                                    session.userId
-                                    otherUserId
-                                    (\otherUserId2 ->
-                                        Server_Joined
-                                            { roomId = DmRoomId otherUserId2
-                                            , otherSession = ( session.userId, clientId )
-                                            }
-                                            |> Server_VoiceChatChange
-                                    )
-                                    model
-                                ]
-                            )
-                        )
+                        (joinDmVoiceChat sessionId clientId time changeId otherUserId model)
 
         VoiceChat.Local_Leave _ ->
             asUser
@@ -4826,26 +4788,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                             (\connection -> { connection | call = Nothing })
                                         )
                                         model.connections
-                                , dmChannels =
-                                    case roomId of
-                                        DmRoomId otherUserId ->
-                                            let
-                                                dmChannelId =
-                                                    DmChannel.channelIdFromUserIds session.userId otherUserId
-                                            in
-                                            if voiceChatRoomHasOtherMembers dmChannelId clientId model then
-                                                model.dmChannels
-
-                                            else
-                                                SeqDict.updateIfExists
-                                                    dmChannelId
-                                                    (\dmChannel ->
-                                                        LocalState.createChannelMessageBackend
-                                                            (CallEnded time SeqDict.empty)
-                                                            dmChannel
-                                                            |> Tuple.second
-                                                    )
-                                                    model.dmChannels
+                                , dmChannels = leaveVoiceChat clientId time roomId session model
                               }
                             , Command.batch
                                 [ LocalChangeResponse changeId (Local_VoiceChatChange (VoiceChat.Local_Leave time))
@@ -4858,6 +4801,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                             otherUserId
                                             (\otherUserId2 ->
                                                 Server_Left
+                                                    time
                                                     { roomId = DmRoomId otherUserId2
                                                     , otherSession = ( session.userId, clientId )
                                                     }
@@ -4896,6 +4840,102 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                 ]
                             )
                         )
+
+
+leaveVoiceChat : ClientId -> Time.Posix -> RoomId -> UserSession -> BackendModel -> SeqDict DmChannelId DmChannel
+leaveVoiceChat clientId time roomId session model =
+    case roomId of
+        DmRoomId otherUserId ->
+            let
+                dmChannelId =
+                    DmChannel.channelIdFromUserIds session.userId otherUserId
+            in
+            if voiceChatRoomHasOtherMembers dmChannelId clientId model then
+                model.dmChannels
+
+            else
+                SeqDict.updateIfExists
+                    dmChannelId
+                    (\dmChannel ->
+                        LocalState.createChannelMessageBackend (CallEnded time SeqDict.empty) dmChannel |> Tuple.second
+                    )
+                    model.dmChannels
+
+
+joinDmVoiceChat :
+    SessionId
+    -> ClientId
+    -> Time.Posix
+    -> ChangeId
+    -> Id UserId
+    -> BackendModel
+    -> UserSession
+    -> BackendUser
+    -> BackendUser
+    -> DmChannelId
+    -> DmChannel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ dmChannelId dmChannel =
+    case SeqDict.get sessionId model.connections of
+        Just connections ->
+            case NonemptyDict.get clientId connections of
+                Just connection ->
+                    let
+                        voiceChatId : RoomId
+                        voiceChatId =
+                            DmRoomId otherUserId
+
+                        dmChannels2 : SeqDict DmChannelId DmChannel
+                        dmChannels2 =
+                            case connection.call of
+                                Just oldVoiceChatId ->
+                                    leaveVoiceChat clientId time oldVoiceChatId session model
+
+                                Nothing ->
+                                    model.dmChannels
+                    in
+                    ( { model
+                        | connections =
+                            SeqDict.insert
+                                sessionId
+                                (NonemptyDict.insert clientId { connection | call = Just voiceChatId } connections)
+                                model.connections
+                        , dmChannels =
+                            SeqDict.insert
+                                dmChannelId
+                                (LocalState.createChannelMessageBackend
+                                    (CallStarted time session.userId SeqDict.empty)
+                                    dmChannel
+                                    |> Tuple.second
+                                )
+                                dmChannels2
+                      }
+                    , Command.batch
+                        [ LocalChangeResponse
+                            changeId
+                            (Local_VoiceChatChange (VoiceChat.Local_Join time voiceChatId))
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toDmChannelExcludingOne
+                            clientId
+                            session.userId
+                            otherUserId
+                            (\otherUserId2 ->
+                                Server_Joined
+                                    time
+                                    { roomId = DmRoomId otherUserId2
+                                    , otherSession = ( session.userId, clientId )
+                                    }
+                                    |> Server_VoiceChatChange
+                            )
+                            model
+                        ]
+                    )
+
+                Nothing ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Nothing ->
+            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool
@@ -5831,7 +5871,7 @@ asDmUser :
     BackendModel
     -> SessionId
     -> { otherUserId : Id UserId }
-    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel.DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendUser -> DmChannelId -> DmChannel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asDmUser model sessionId { otherUserId } func =
     case SeqDict.get sessionId model.sessions of

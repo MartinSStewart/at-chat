@@ -24,6 +24,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
+import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -35,7 +36,7 @@ import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict
-import NonemptySet
+import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
@@ -3280,8 +3281,97 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_VoiceChatChange voiceChatFrontendMsg ->
-                    { local | calls = VoiceChat.changeUpdate voiceChatFrontendMsg local.calls }
+                Server_VoiceChatChange voiceChatChange ->
+                    let
+                        calls =
+                            local.calls
+                    in
+                    case voiceChatChange of
+                        VoiceChat.Server_Joined time { roomId, otherSession } ->
+                            let
+                                local2 : LocalState
+                                local2 =
+                                    case
+                                        List.Extra.findMap
+                                            (\( roomId2, connections ) ->
+                                                if NonemptySet.member otherSession connections then
+                                                    Just { roomId = roomId2, otherSession = otherSession }
+
+                                                else
+                                                    Nothing
+                                            )
+                                            (SeqDict.toList calls.voiceChats)
+                                    of
+                                        Just connectionId ->
+                                            otherUserLeaveCall time connectionId local
+
+                                        Nothing ->
+                                            local
+                            in
+                            { local2
+                                | calls =
+                                    { calls
+                                        | voiceChats = VoiceChat.addSessionIdHash roomId otherSession calls.voiceChats
+                                    }
+                                , dmChannels =
+                                    case roomId of
+                                        DmRoomId otherUserId ->
+                                            case ( calls.currentRoom == Just roomId, SeqDict.member roomId calls.voiceChats ) of
+                                                ( False, False ) ->
+                                                    SeqDict.updateIfExists
+                                                        otherUserId
+                                                        (LocalState.createChannelMessageFrontend
+                                                            (CallStarted time (Tuple.first otherSession) SeqDict.empty)
+                                                        )
+                                                        local2.dmChannels
+
+                                                _ ->
+                                                    local2.dmChannels
+                            }
+
+                        VoiceChat.Server_Left time connectionId ->
+                            otherUserLeaveCall time connectionId local
+
+                        VoiceChat.Server_SignalReceived _ _ ->
+                            local
+
+
+otherUserLeaveCall : Time.Posix -> VoiceChat.ConnectionId -> LocalState -> LocalState
+otherUserLeaveCall time { roomId, otherSession } local =
+    let
+        calls =
+            local.calls
+    in
+    case SeqDict.get roomId calls.voiceChats of
+        Just dmVoiceChat ->
+            let
+                voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, Lamdera.ClientId ))
+                voiceChats =
+                    SeqDict.update
+                        roomId
+                        (\_ -> NonemptySet.remove otherSession dmVoiceChat |> NonemptySet.fromSeqSet)
+                        calls.voiceChats
+            in
+            { local
+                | calls = { calls | voiceChats = voiceChats }
+                , dmChannels =
+                    case roomId of
+                        DmRoomId otherUserId ->
+                            case ( calls.currentRoom == Just roomId, SeqDict.member roomId voiceChats ) of
+                                ( False, False ) ->
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (LocalState.createChannelMessageFrontend
+                                            (CallEnded time SeqDict.empty)
+                                        )
+                                        local.dmChannels
+
+                                _ ->
+                                    local.dmChannels
+            }
+
+        Nothing ->
+            local
 
 
 leaveCall : Time.Posix -> LocalState -> LocalState

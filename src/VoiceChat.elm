@@ -7,8 +7,8 @@ port module VoiceChat exposing
     , Sdp
     , ServerChange(..)
     , Signal(..)
+    , addSessionIdHash
     , audioNodes
-    , changeUpdate
     , hasJoined
     , init
     , joinedUsers
@@ -39,8 +39,8 @@ type LocalChange
 
 
 type ServerChange
-    = Server_Joined ConnectionId
-    | Server_Left ConnectionId
+    = Server_Joined Time.Posix ConnectionId
+    | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
 
 
@@ -189,10 +189,10 @@ joinedUsers roomId model =
 serverChangeCmd : ServerChange -> ClientId -> Command FrontendOnly toBackend msg
 serverChangeCmd change clientId =
     case change of
-        Server_Joined connectionId ->
+        Server_Joined _ connectionId ->
             voiceChatStart clientId connectionId
 
-        Server_Left connectionId ->
+        Server_Left _ connectionId ->
             voiceChatStop connectionId
 
         Server_SignalReceived connectionId signal ->
@@ -216,33 +216,6 @@ addSessionIdHash otherUserId sessionIdHash dmVoiceChats =
                     NonemptySet.singleton sessionIdHash |> Just
         )
         dmVoiceChats
-
-
-changeUpdate : ServerChange -> Model -> Model
-changeUpdate change model =
-    case change of
-        Server_Joined connectionId ->
-            { model
-                | voiceChats =
-                    addSessionIdHash connectionId.roomId connectionId.otherSession model.voiceChats
-            }
-
-        Server_Left { roomId, otherSession } ->
-            case SeqDict.get roomId model.voiceChats of
-                Just dmVoiceChat ->
-                    { model
-                        | voiceChats =
-                            SeqDict.update
-                                roomId
-                                (\_ -> NonemptySet.remove otherSession dmVoiceChat |> NonemptySet.fromSeqSet)
-                                model.voiceChats
-                    }
-
-                Nothing ->
-                    model
-
-        Server_SignalReceived _ _ ->
-            model
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
