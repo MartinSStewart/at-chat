@@ -137,17 +137,15 @@ init =
     , autoAdvance = True
     , showGhostTrails = True
     , level = level1
-    , startFrame = NonemptyDict.fromNonemptyList (Nonempty ( Coord.xy 1 1, Player ) [ ( Coord.xy 4 6, Box ) ])
+    , startFrame = NonemptyDict.fromNonemptyList (Nonempty ( Coord.xy 1 1, Player ) [])
     }
 
 
 level1 =
     { horizontalWalls =
         SeqDict.fromList
-            [ ( Coord.xy 1 2, Wall )
-            , ( Coord.xy 3 1, TimePortal 5 )
-            ]
-    , verticalWalls = SeqDict.fromList [ ( Coord.xy 3 0, Wall ), ( Coord.xy 3 2, TimePortal 5 ) ]
+            []
+    , verticalWalls = SeqDict.fromList []
     , exit = Coord.xy 2 4
     }
 
@@ -562,7 +560,43 @@ toolIcon : Tool -> Element msg
 toolIcon tool =
     case tool of
         PlaceShape shape ->
-            shapeIcon (Ui.rgb 255 255 255) shape
+            let
+                color =
+                    Ui.rgb 255 255 255
+            in
+            case shape of
+                Player ->
+                    Ui.el
+                        [ Ui.Font.size 28
+                        , Ui.Font.center
+                        , MyUi.htmlStyle "user-select" "none"
+                        , MyUi.htmlStyle "-webkit-user-select" "none"
+                        , Ui.centerY
+                        , Ui.Font.color color
+                        , MyUi.noPointerEvents
+                        ]
+                        (Ui.text "☺")
+
+                Box ->
+                    Ui.el
+                        [ Ui.Font.size 28
+                        , Ui.Font.center
+                        , MyUi.htmlStyle "user-select" "none"
+                        , MyUi.htmlStyle "-webkit-user-select" "none"
+                        , Ui.centerY
+                        , Ui.Font.color color
+                        , MyUi.noPointerEvents
+                        ]
+                        (Ui.text "■")
+
+                LargeBox ->
+                    Ui.el
+                        [ Ui.width (Ui.px cellSize)
+                        , Ui.height (Ui.px cellSize)
+                        , Ui.background color
+                        , MyUi.noPointerEvents
+                        ]
+                        Ui.none
 
         PlaceWall ->
             Ui.el
