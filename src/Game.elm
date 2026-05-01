@@ -2,6 +2,7 @@ module Game exposing (Model, Msg, Shape(..), init, update, view)
 
 import Array exposing (Array)
 import Effect.Browser.Dom as Dom
+import Html
 import Html.Attributes
 import Html.Events
 import Json.Decode
@@ -32,6 +33,8 @@ type alias Model =
     , frames : Array Frame
     , currentFrame : Int
     , autoAdvance : Bool
+    , horizontalWalls : SeqSet CellPos
+    , verticalWalls : SeqSet ( Int, Int )
     }
 
 
@@ -55,6 +58,10 @@ init =
     , frames = Array.fromList [ SeqDict.empty ]
     , currentFrame = 0
     , autoAdvance = False
+    , horizontalWalls =
+        SeqSet.fromList [ ( 1, 2 ), ( 3, 1 ), ( 5, 4 ), ( 0, 3 ) ]
+    , verticalWalls =
+        SeqSet.fromList [ ( 2, 1 ), ( 4, 3 ), ( 1, 5 ), ( 3, 0 ) ]
     }
 
 
@@ -136,12 +143,94 @@ view model =
         , palette model.selectedShape
         , autoAdvanceToggle model.autoAdvance
         , timeControls model
-        , grid
+        , gridWithWalls model
+        ]
+
+
+cellSize : Int
+cellSize =
+    48
+
+
+gridGap : Int
+gridGap =
+    4
+
+
+gridStride : Int
+gridStride =
+    cellSize + gridGap
+
+
+gridPixelSize : Int
+gridPixelSize =
+    gridSize * cellSize + (gridSize - 1) * gridGap
+
+
+wallThickness : Int
+wallThickness =
+    4
+
+
+gridWithWalls : Model -> Element Msg
+gridWithWalls model =
+    Ui.el
+        [ Ui.width (Ui.px gridPixelSize)
+        , Ui.height (Ui.px gridPixelSize)
+        , Ui.inFront (wallsLayer model)
+        ]
+        (grid
             { previous = getFrame (model.currentFrame - 1) model.frames
             , current = currentFrameData model
             , next = getFrame (model.currentFrame + 1) model.frames
             }
+        )
+
+
+wallsLayer : Model -> Element msg
+wallsLayer model =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "inset" "0"
+        , Html.Attributes.style "pointer-events" "none"
         ]
+        ((SeqSet.toList model.horizontalWalls |> List.map horizontalWallView)
+            ++ (SeqSet.toList model.verticalWalls |> List.map verticalWallView)
+        )
+        |> Ui.html
+
+
+horizontalWallView : CellPos -> Html.Html msg
+horizontalWallView ( col, row ) =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (px (col * gridStride))
+        , Html.Attributes.style "top" (px (row * gridStride - wallThickness // 2))
+        , Html.Attributes.style "width" (px cellSize)
+        , Html.Attributes.style "height" (px wallThickness)
+        , Html.Attributes.style "background-color" "rgb(255,180,60)"
+        , Html.Attributes.style "border-radius" "2px"
+        ]
+        []
+
+
+verticalWallView : ( Int, Int ) -> Html.Html msg
+verticalWallView ( col, row ) =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (px (col * gridStride - wallThickness // 2))
+        , Html.Attributes.style "top" (px (row * gridStride))
+        , Html.Attributes.style "width" (px wallThickness)
+        , Html.Attributes.style "height" (px cellSize)
+        , Html.Attributes.style "background-color" "rgb(255,180,60)"
+        , Html.Attributes.style "border-radius" "2px"
+        ]
+        []
+
+
+px : Int -> String
+px n =
+    String.fromInt n ++ "px"
 
 
 palette : Shape -> Element Msg
