@@ -2,9 +2,6 @@ module Game exposing (Model, Msg, Shape(..), init, update, view)
 
 import Array exposing (Array)
 import Effect.Browser.Dom as Dom
-import Html
-import Html.Attributes
-import Html.Events
 import MyUi
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -208,24 +205,57 @@ stepButton htmlId msg label =
 
 slider : Model -> Element Msg
 slider model =
-    let
-        maxIndex : Int
-        maxIndex =
-            max 0 (Array.length model.frames - 1)
-    in
-    Html.input
-        [ Html.Attributes.type_ "range"
-        , Html.Attributes.min "0"
-        , Html.Attributes.max (String.fromInt maxIndex)
-        , Html.Attributes.value (String.fromInt model.currentFrame)
-        , Html.Attributes.style "width" "100%"
-        , Dom.idToAttribute sliderId
-        , Html.Events.onInput
-            (\str -> String.toInt str |> Maybe.withDefault model.currentFrame |> SliderChanged)
+    Ui.row
+        [ Ui.spacing 2
+        , Ui.width Ui.fill
+        , Ui.height (Ui.px 24)
+        , Ui.id (Dom.idToString sliderId)
         ]
-        []
-        |> Ui.html
-        |> Ui.el [ Ui.width Ui.fill ]
+        (Array.toList model.frames
+            |> List.indexedMap (sliderSegment model.currentFrame)
+        )
+
+
+sliderSegment : Int -> Int -> Frame -> Element Msg
+sliderSegment currentIndex index frame =
+    let
+        isCurrent : Bool
+        isCurrent =
+            index == currentIndex
+
+        isEmpty : Bool
+        isEmpty =
+            SeqDict.isEmpty frame
+    in
+    Ui.el
+        [ Ui.Input.button (SliderChanged index)
+        , Ui.id (Dom.idToString (segmentId index))
+        , Ui.background
+            (if isEmpty then
+                Ui.rgb 90 90 100
+
+             else
+                Ui.rgb 40 40 50
+            )
+        , Ui.height Ui.fill
+        , Ui.width Ui.fill
+        , Ui.rounded 2
+        , Ui.border
+            (if isCurrent then
+                2
+
+             else
+                1
+            )
+        , Ui.borderColor
+            (if isCurrent then
+                Ui.rgb 100 200 255
+
+             else
+                MyUi.buttonBorder
+            )
+        ]
+        Ui.none
 
 
 grid :
@@ -340,6 +370,11 @@ stepForwardId =
 sliderId : Dom.HtmlId
 sliderId =
     Dom.id "game_slider"
+
+
+segmentId : Int -> Dom.HtmlId
+segmentId index =
+    Dom.id ("game_slider_segment_" ++ String.fromInt index)
 
 
 shapeToString : Shape -> String
