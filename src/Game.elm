@@ -70,7 +70,12 @@ type alias Model =
     , frames : SeqDict (Id FrameId) Frame
     , currentFrame : Id FrameId
     , autoAdvance : Bool
-    , horizontalWalls : SeqSet (Coord HorizontalWallPos)
+    , level : Level
+    }
+
+
+type alias Level =
+    { horizontalWalls : SeqSet (Coord HorizontalWallPos)
     , verticalWalls : SeqSet (Coord VerticalWallPos)
     , start : Coord GridPos
     , exit : Coord GridPos
@@ -97,10 +102,12 @@ init =
     , frames = SeqDict.empty
     , currentFrame = Id.fromInt 0
     , autoAdvance = True
-    , horizontalWalls = SeqSet.fromList [ Coord.xy 1 2, Coord.xy 3 1, Coord.xy 5 4, Coord.xy 0 3 ]
-    , verticalWalls = SeqSet.fromList [ Coord.xy 3 0 ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
-    , start = Coord.xy 1 1
-    , exit = Coord.xy 2 4
+    , level =
+        { horizontalWalls = SeqSet.fromList [ Coord.xy 1 2, Coord.xy 3 1, Coord.xy 5 4, Coord.xy 0 3 ]
+        , verticalWalls = SeqSet.fromList [ Coord.xy 3 0 ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
+        , start = Coord.xy 1 1
+        , exit = Coord.xy 2 4
+        }
     }
 
 
@@ -206,10 +213,10 @@ gridWithWalls model =
     Ui.el
         [ Ui.width (Ui.px gridPixelSize)
         , Ui.height (Ui.px gridPixelSize)
-        , Ui.inFront (markersLayer model)
-        , Ui.inFront (wallsLayer model)
+        , Ui.inFront (wallsLayer model.level)
         ]
         (grid
+            model.level
             { previous = SeqDict.get (Id.decrement model.currentFrame) model.frames
             , current = currentFrameData model
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
@@ -217,48 +224,15 @@ gridWithWalls model =
         )
 
 
-markersLayer : Model -> Element msg
-markersLayer model =
+wallsLayer : Level -> Element msg
+wallsLayer level =
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "inset" "0"
         , Html.Attributes.style "pointer-events" "none"
         ]
-        [ markerView model.start "S" "rgba(80,200,120,0.35)" "rgb(150,255,180)"
-        , markerView model.exit "E" "rgba(220,140,60,0.35)" "rgb(255,210,140)"
-        ]
-        |> Ui.html
-
-
-markerView : Coord GridPos -> String -> String -> String -> Html.Html msg
-markerView coord letter fillColor textColor =
-    Html.div
-        [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride))
-        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride))
-        , Html.Attributes.style "width" (px cellSize)
-        , Html.Attributes.style "height" (px cellSize)
-        , Html.Attributes.style "background-color" fillColor
-        , Html.Attributes.style "border-radius" "2px"
-        , Html.Attributes.style "display" "flex"
-        , Html.Attributes.style "align-items" "center"
-        , Html.Attributes.style "justify-content" "center"
-        , Html.Attributes.style "color" textColor
-        , Html.Attributes.style "font-weight" "700"
-        , Html.Attributes.style "font-size" "22px"
-        ]
-        [ Html.text letter ]
-
-
-wallsLayer : Model -> Element msg
-wallsLayer model =
-    Html.div
-        [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "inset" "0"
-        , Html.Attributes.style "pointer-events" "none"
-        ]
-        ((SeqSet.toList model.horizontalWalls |> List.map horizontalWallView)
-            ++ (SeqSet.toList model.verticalWalls |> List.map verticalWallView)
+        ((SeqSet.toList level.horizontalWalls |> List.map horizontalWallView)
+            ++ (SeqSet.toList level.verticalWalls |> List.map verticalWallView)
         )
         |> Ui.html
 
@@ -334,7 +308,7 @@ paletteButton selected shape =
         , Ui.contentCenterX
         , Ui.contentCenterY
         ]
-        (shapeIcon shape)
+        (shapeIcon (Ui.rgb 255 255 255) shape)
 
 
 autoAdvanceToggle : Bool -> Element Msg
@@ -510,7 +484,7 @@ frameHasError : Model -> Id FrameId -> Maybe Frame -> Bool
 frameHasError model frameId maybeFrame =
     case ( SeqDict.get (Id.decrement frameId) model.frames, maybeFrame ) of
         ( Just frame, Just next2 ) ->
-            solve model frame next2 == Err ()
+            solve model.level frame next2 == Err ()
 
         ( Just _, Nothing ) ->
             True
@@ -522,34 +496,30 @@ frameHasError model frameId maybeFrame =
             False
 
 
-grid :
-    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
-    -> Element Msg
-grid frames =
+grid : Level -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element Msg
+grid level frames =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (gridRow frames) (List.range 0 (gridSize - 1)))
+        (List.map (gridRow level frames) (List.range 0 (gridSize - 1)))
 
 
-gridRow :
-    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
-    -> Int
-    -> Element Msg
-gridRow frames row =
+gridRow : Level -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Int -> Element Msg
+gridRow level frames row =
     Ui.row [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (\col -> gridCell frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+        (List.map (\col -> gridCell level frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
 
 
 gridCell :
-    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
+    Level
+    -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
     -> Coord GridPos
     -> Element Msg
-gridCell frames pos =
+gridCell level frames pos =
     let
         ghostAttrs : List (Ui.Attribute Msg)
         ghostAttrs =
-            [ cellShape pos frames.current |> Maybe.map (\s -> Ui.behindContent (shapeIcon s))
-            , cellShape pos frames.previous |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostPreviousColor))
-            , cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostNextColor))
+            [ cellShape pos frames.current |> Maybe.map (\s -> Ui.behindContent (shapeIcon (Ui.rgb 255 255 255) s))
+            , cellShape pos frames.previous |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostPreviousColor s))
+            , cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostNextColor s))
             ]
                 |> List.filterMap identity
                 |> List.take 1
@@ -565,14 +535,52 @@ gridCell frames pos =
          , Ui.id (Dom.idToString (cellId pos))
          , Ui.width (Ui.px 48)
          , Ui.height (Ui.px 48)
-         , Ui.borderColor MyUi.buttonBorder
+         , Ui.borderColor
+            (if level.start == pos then
+                startColor
+
+             else if level.exit == pos then
+                endColor
+
+             else
+                MyUi.buttonBorder
+            )
          , Ui.border 1
-         , Ui.background MyUi.background1
+         , Ui.background
+            (if level.start == pos then
+                startColor
+
+             else if level.exit == pos then
+                endColor
+
+             else
+                MyUi.background1
+            )
          , Ui.rounded 2
+         , Ui.contentCenterX
+         , Ui.contentCenterY
+         , Ui.Font.bold
+         , Ui.Font.color (Ui.rgba 255 255 255 0.5)
          ]
             ++ ghostAttrs
         )
-        Ui.none
+        (if level.start == pos then
+            Ui.text "S"
+
+         else if level.exit == pos then
+            Ui.text "E"
+
+         else
+            Ui.none
+        )
+
+
+startColor =
+    Ui.rgba 80 200 120 0.35
+
+
+endColor =
+    Ui.rgba 220 140 60 0.35
 
 
 cellShape : Coord GridPos -> Maybe Frame -> Maybe PlayerOrBox
@@ -587,25 +595,12 @@ cellShape pos frame =
 
 ghostPreviousColor : Ui.Color
 ghostPreviousColor =
-    Ui.rgb 255 110 110
+    Ui.rgba 255 110 110 0.5
 
 
 ghostNextColor : Ui.Color
 ghostNextColor =
-    Ui.rgb 110 180 255
-
-
-ghostShape : PlayerOrBox -> Ui.Color -> Element msg
-ghostShape shape color =
-    Ui.el
-        [ Ui.opacity 0.3
-        , Ui.Font.color color
-        , Ui.width Ui.fill
-        , Ui.height Ui.fill
-        , Ui.contentCenterX
-        , Ui.contentCenterY
-        ]
-        (shapeIcon shape)
+    Ui.rgba 110 180 255 0.5
 
 
 paletteId : PlayerOrBox -> Dom.HtmlId
@@ -648,8 +643,8 @@ shapeToString shape =
             "square"
 
 
-shapeIcon : PlayerOrBox -> Element msg
-shapeIcon shape =
+shapeIcon : Ui.Color -> PlayerOrBox -> Element msg
+shapeIcon color shape =
     let
         glyph : String
         glyph =
@@ -666,6 +661,7 @@ shapeIcon shape =
         , MyUi.htmlStyle "user-select" "none"
         , MyUi.htmlStyle "-webkit-user-select" "none"
         , Ui.centerY
+        , Ui.Font.color color
         ]
         (Ui.text glyph)
 
@@ -694,23 +690,23 @@ allMoves =
     [ NoMove, Left, Right, Up, Down ]
 
 
-moveIntersectsWall : Model -> Coord GridPos -> Move -> Bool
-moveIntersectsWall model pos move =
+moveIntersectsWall : Level -> Coord GridPos -> Move -> Bool
+moveIntersectsWall level pos move =
     case move of
         NoMove ->
             False
 
         Left ->
-            SeqSet.member (Coord.changeUnit pos) model.verticalWalls
+            SeqSet.member (Coord.changeUnit pos) level.verticalWalls
 
         Right ->
-            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos + 1) (Coord.yRaw pos))) model.verticalWalls
+            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos + 1) (Coord.yRaw pos))) level.verticalWalls
 
         Up ->
-            SeqSet.member (Coord.changeUnit pos) model.horizontalWalls
+            SeqSet.member (Coord.changeUnit pos) level.horizontalWalls
 
         Down ->
-            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos) (Coord.yRaw pos + 1))) model.horizontalWalls
+            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos) (Coord.yRaw pos + 1))) level.horizontalWalls
 
 
 {-| Apply a set of player moves to the starting frame and return the resulting grid.
@@ -724,8 +720,8 @@ The key rule: a player CAN move into a cell currently occupied by another
 player, provided that other player is also moving away this turn.
 
 -}
-applyMoves : Model -> Frame -> SeqDict (Coord GridPos) Move -> Maybe Frame
-applyMoves model frame moves =
+applyMoves : Level -> Frame -> SeqDict (Coord GridPos) Move -> Maybe Frame
+applyMoves level frame moves =
     let
         players : List ( Coord GridPos, Move )
         players =
@@ -865,7 +861,7 @@ applyMoves model frame moves =
         noWallIntersections : Bool
         noWallIntersections =
             List.all
-                (\( pos, move ) -> moveIntersectsWall model pos move |> not)
+                (\( pos, move ) -> moveIntersectsWall level pos move |> not)
                 players
     in
     if
@@ -897,8 +893,8 @@ applyMoves model frame moves =
 assignment already produces an inconsistency, and check the full result
 against `nextFrame`.
 -}
-solve : Model -> Frame -> Frame -> Result () (NonemptyDict (Coord GridPos) Move)
-solve model frame nextFrame =
+solve : Level -> Frame -> Frame -> Result () (NonemptyDict (Coord GridPos) Move)
+solve level frame nextFrame =
     let
         playerPositions : List (Coord GridPos)
         playerPositions =
@@ -916,7 +912,7 @@ solve model frame nextFrame =
         go remaining assigned =
             case remaining of
                 [] ->
-                    case applyMoves model frame assigned of
+                    case applyMoves level frame assigned of
                         Just result ->
                             if NonemptyDict.unorderedEquals result nextFrame then
                                 NonemptyDict.fromSeqDict assigned
