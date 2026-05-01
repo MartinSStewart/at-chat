@@ -5,7 +5,7 @@ module NonemptyDict exposing
     , updateIfExists
     , keys, values, fromNonemptyList, toNonemptyList, toList, fromList
     , map, toSeqDict, fromSeqDict
-    , all, any, foldl, foldr, head, insert, merge, remove, updateOrInsert
+    , all, any, foldl, foldr, head, insert, merge, remove, unorderedEquals, updateOrInsert
     )
 
 {-| A dictionary mapping unique keys to values.
@@ -253,3 +253,8 @@ merge :
     -> result
 merge left both right dict1 dict2 result =
     SeqDict.merge left both right (toSeqDict dict1) (toSeqDict dict2) result
+
+
+unorderedEquals : NonemptyDict id v -> NonemptyDict id v -> Bool
+unorderedEquals a b =
+    SeqDict.unorderedEquals (toSeqDict a) (toSeqDict b)

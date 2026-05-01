@@ -12,6 +12,8 @@
 * Don't send message while attachments are still loading
 * Message stickers and message custom emojis gets added to a user's available emojis on the frontend when it shouldn't
   do that
+* Hide spoilers in notifications
+* Removing attachments from messages to Discord should also remove surrounding modifiers
 
 Requested features:
 
