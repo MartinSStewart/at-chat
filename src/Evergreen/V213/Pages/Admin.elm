@@ -1,0 +1,230 @@
+module Evergreen.V213.Pages.Admin exposing (..)
+
+import Array
+import Bytes
+import Effect.File
+import Effect.Http
+import Effect.Lamdera
+import Effect.Time
+import Evergreen.V213.Discord
+import Evergreen.V213.Editable
+import Evergreen.V213.Id
+import Evergreen.V213.LocalState
+import Evergreen.V213.NonemptyDict
+import Evergreen.V213.Pagination
+import Evergreen.V213.Postmark
+import Evergreen.V213.SessionIdHash
+import Evergreen.V213.Slack
+import Evergreen.V213.Table
+import Evergreen.V213.ToBackendLog
+import Evergreen.V213.User
+import Evergreen.V213.UserSession
+import SeqDict
+import SeqSet
+
+
+type alias InitAdminData =
+    { users : Evergreen.V213.NonemptyDict.NonemptyDict (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId) Evergreen.V213.User.BackendUser
+    , emailNotificationsEnabled : Bool
+    , twoFactorAuthentication : SeqDict.SeqDict (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId) Effect.Time.Posix
+    , privateVapidKey : Evergreen.V213.LocalState.PrivateVapidKey
+    , slackClientSecret : Maybe Evergreen.V213.Slack.ClientSecret
+    , openRouterKey : Maybe String
+    , postmarkApiKey : Evergreen.V213.Postmark.ApiKey
+    , discordDmChannels : SeqDict.SeqDict (Evergreen.V213.Discord.Id Evergreen.V213.Discord.PrivateChannelId) Evergreen.V213.LocalState.AdminData_DiscordDmChannel
+    , discordUsers : SeqDict.SeqDict (Evergreen.V213.Discord.Id Evergreen.V213.Discord.UserId) Evergreen.V213.LocalState.DiscordUserData_ForAdmin
+    , discordGuilds : SeqDict.SeqDict (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId) Evergreen.V213.LocalState.AdminData_DiscordGuild
+    , guilds : SeqDict.SeqDict (Evergreen.V213.Id.Id Evergreen.V213.Id.GuildId) Evergreen.V213.LocalState.AdminData_Guild
+    , loadingDiscordChannels : SeqDict.SeqDict (Evergreen.V213.Discord.Id Evergreen.V213.Discord.UserId) (Evergreen.V213.LocalState.LoadingDiscordChannel Int)
+    , signupsEnabled : Bool
+    , logs : Evergreen.V213.Pagination.Pagination Evergreen.V213.LocalState.LogWithTime
+    , connections : SeqDict.SeqDict Evergreen.V213.SessionIdHash.SessionIdHash (Evergreen.V213.NonemptyDict.NonemptyDict Effect.Lamdera.ClientId Evergreen.V213.LocalState.ConnectionData)
+    , filesCount : Int
+    , toBackendLogs : Array.Array Evergreen.V213.ToBackendLog.ToBackendLogData
+    , vulnerabilityChecks : String
+    , serverSecretRegeneratedAt : Maybe Effect.Time.Posix
+    }
+
+
+type alias EditedBackendUser =
+    { name : String
+    , email : String
+    , isAdmin : Bool
+    , createdAt : Effect.Time.Posix
+    }
+
+
+type AdminChange
+    = ChangeUsers
+        { time : Effect.Time.Posix
+        , changedUsers : SeqDict.SeqDict (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId) EditedBackendUser
+        , newUsers : Array.Array EditedBackendUser
+        , deletedUsers : SeqSet.SeqSet (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId)
+        }
+    | ExpandSection Evergreen.V213.User.AdminUiSection
+    | CollapseSection Evergreen.V213.User.AdminUiSection
+    | LogPageChanged (Evergreen.V213.Id.Id Evergreen.V213.Pagination.PageId) (Evergreen.V213.UserSession.ToBeFilledInByBackend (Array.Array Evergreen.V213.LocalState.LogWithTime))
+    | SetEmailNotificationsEnabled Bool
+    | SetSignupsEnabled Bool
+    | SetPrivateVapidKey Evergreen.V213.LocalState.PrivateVapidKey
+    | SetPublicVapidKey String
+    | SetSlackClientSecret (Maybe Evergreen.V213.Slack.ClientSecret)
+    | SetOpenRouterKey (Maybe String)
+    | SetPostmarkKey Evergreen.V213.Postmark.ApiKey
+    | DeleteDiscordDmChannel (Evergreen.V213.Discord.Id Evergreen.V213.Discord.PrivateChannelId)
+    | DeleteDiscordGuild (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId)
+    | DeleteGuild (Evergreen.V213.Id.Id Evergreen.V213.Id.GuildId)
+    | StartReloadingDiscordGuildChannel Effect.Time.Posix (Evergreen.V213.Discord.Id Evergreen.V213.Discord.UserId) (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId) (Evergreen.V213.Discord.Id Evergreen.V213.Discord.ChannelId)
+    | StartReloadingDiscordDmChannel Effect.Time.Posix (Evergreen.V213.Discord.Id Evergreen.V213.Discord.UserId) (Evergreen.V213.Discord.Id Evergreen.V213.Discord.PrivateChannelId)
+    | ExpandGuild (Evergreen.V213.Id.Id Evergreen.V213.Id.GuildId)
+    | CollapseGuild (Evergreen.V213.Id.Id Evergreen.V213.Id.GuildId)
+    | ExpandDiscordGuild (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId)
+    | CollapseDiscordGuild (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId)
+    | HideLog (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    | UnhideLog (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    | DisconnectClient Evergreen.V213.SessionIdHash.SessionIdHash Effect.Lamdera.ClientId
+    | RegenerateServerSecret (Evergreen.V213.UserSession.ToBeFilledInByBackend (Result Effect.Http.Error Effect.Time.Posix))
+
+
+type UserTableId
+    = ExistingUserId (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId)
+    | NewUserId Int
+
+
+type UserColumn
+    = NameColumn
+    | EmailAddressColumn
+
+
+type alias EditingCell =
+    { userId : UserTableId
+    , column : UserColumn
+    , text : String
+    }
+
+
+type alias UserTable =
+    { table : Evergreen.V213.Table.Model
+    , changedUsers : SeqDict.SeqDict (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId) EditedBackendUser
+    , editingCell : Maybe EditingCell
+    , newUsers : Array.Array EditedBackendUser
+    , deletedUsers : SeqSet.SeqSet (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId)
+    }
+
+
+type UsersChangeError
+    = EmailAddressesAreNotUnique
+    | InvalidChangesToUser
+    | ChangesAppliedToNonExistentUser (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId)
+    | CantRemoveAdminRoleFromYourself
+    | CantDeleteYourself
+    | InvalidNewUser
+
+
+type ImportBackendStatus
+    = NotImportingBackend
+    | ImportBackendFailed
+    | ImportingBackend
+    | ImportedBackendSuccessfully
+
+
+type ExportProgress
+    = ExportStarting
+    | ExportingGuilds
+        { encoded : Int
+        , total : Int
+        }
+    | ExportingDmChannels
+        { encoded : Int
+        , total : Int
+        }
+    | ExportingDiscordGuilds
+        { encoded : Int
+        , total : Int
+        }
+    | ExportingDiscordDmChannels
+        { encoded : Int
+        , total : Int
+        }
+    | ExportingFinalStep Bytes.Bytes
+
+
+type alias Model =
+    { highlightLog : Maybe (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    , copiedLogLink : Maybe (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    , userTable : UserTable
+    , submitError : Maybe UsersChangeError
+    , slackClientSecret : Evergreen.V213.Editable.Model
+    , publicVapidKey : Evergreen.V213.Editable.Model
+    , privateVapidKey : Evergreen.V213.Editable.Model
+    , openRouterKey : Evergreen.V213.Editable.Model
+    , postmarkKey : Evergreen.V213.Editable.Model
+    , importBackendStatus : ImportBackendStatus
+    , showHiddenLogs : Bool
+    , exportProgress : Maybe ExportProgress
+    }
+
+
+type ExportSubset
+    = ExportSubset
+    | ExportAll
+
+
+type ToFrontend
+    = ImportBackendResponse (Result () ())
+    | ExportBackendProgress ExportSubset ExportProgress
+
+
+type Msg
+    = PressedLogPage (Evergreen.V213.Id.Id Evergreen.V213.Pagination.PageId)
+    | PressedCopyLogLink (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    | PressedCollapseSection Evergreen.V213.User.AdminUiSection
+    | DoublePressedCollapseSection Evergreen.V213.User.AdminUiSection
+    | PressedExpandSection Evergreen.V213.User.AdminUiSection
+    | PressedEditCell UserTableId UserColumn
+    | TypedEditCell String
+    | EditCellLostFocus UserTableId UserColumn
+    | FocusedOnEditCell
+    | EnterKeyInEditCell UserTableId UserColumn
+    | PressedSaveUserChanges
+    | TabKeyInEditCell Bool
+    | PressedResetUserChanges
+    | EscapeKeyInEditCell
+    | PressedAddUserRow
+    | PressedDeleteUser UserTableId
+    | PressedResetUser (Evergreen.V213.Id.Id Evergreen.V213.Id.UserId)
+    | ScrolledToSection
+    | UserTableMsg Evergreen.V213.Table.Msg
+    | ToggledEmailNotifications Bool
+    | ToggledSignupsEnabled Bool
+    | ToggleIsAdmin UserTableId Bool
+    | PressedDeleteDiscordDmChannel (Evergreen.V213.Discord.Id Evergreen.V213.Discord.PrivateChannelId)
+    | PressedDeleteDiscordGuild (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId)
+    | PressedExpandDiscordGuild (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId)
+    | PressedExpandGuild (Evergreen.V213.Id.Id Evergreen.V213.Id.GuildId)
+    | PressedDeleteGuild (Evergreen.V213.Id.Id Evergreen.V213.Id.GuildId)
+    | SlackClientSecretEditableMsg (Evergreen.V213.Editable.Msg (Maybe Evergreen.V213.Slack.ClientSecret))
+    | PublicVapidKeyEditableMsg (Evergreen.V213.Editable.Msg String)
+    | PrivateVapidKeyEditableMsg (Evergreen.V213.Editable.Msg Evergreen.V213.LocalState.PrivateVapidKey)
+    | OpenRouterKeyEditableMsg (Evergreen.V213.Editable.Msg (Maybe String))
+    | PostmarkKeyEditableMsg (Evergreen.V213.Editable.Msg Evergreen.V213.Postmark.ApiKey)
+    | PressedHomepageLink
+    | PressedReloadDiscordChannel (Evergreen.V213.Discord.Id Evergreen.V213.Discord.UserId) (Evergreen.V213.Discord.Id Evergreen.V213.Discord.GuildId) (Evergreen.V213.Discord.Id Evergreen.V213.Discord.ChannelId)
+    | PressedReloadDiscordDmChannel (Evergreen.V213.Discord.Id Evergreen.V213.Discord.UserId) (Evergreen.V213.Discord.Id Evergreen.V213.Discord.PrivateChannelId)
+    | PressedCopyText String
+    | TypedInReadOnlyTextInput
+    | PressedExportBackend
+    | PressedExportSubsetBackend
+    | PressedImportBackend
+    | ImportBackendFileSelected Effect.File.File
+    | GotImportBackendFileContent Bytes.Bytes
+    | PressedHideLog (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    | PressedUnhideLog (Evergreen.V213.Id.Id Evergreen.V213.Pagination.ItemId)
+    | PressedShowHiddenLogs Bool
+    | PressedDisconnectClient Evergreen.V213.SessionIdHash.SessionIdHash Effect.Lamdera.ClientId
+    | PressedRegenerateServerSecret
+
+
+type ToBackend
+    = ExportBackendRequest ExportSubset
+    | ImportBackendRequest Bytes.Bytes
