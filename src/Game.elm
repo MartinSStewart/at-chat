@@ -183,6 +183,7 @@ gridWithWalls model =
     Ui.el
         [ Ui.width (Ui.px gridPixelSize)
         , Ui.height (Ui.px gridPixelSize)
+        , Ui.inFront (markersLayer model)
         , Ui.inFront (wallsLayer model)
         ]
         (grid
@@ -191,6 +192,39 @@ gridWithWalls model =
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
             }
         )
+
+
+markersLayer : Model -> Element msg
+markersLayer model =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "inset" "0"
+        , Html.Attributes.style "pointer-events" "none"
+        ]
+        [ markerView model.start "S" "rgba(80,200,120,0.35)" "rgb(150,255,180)"
+        , markerView model.exit "E" "rgba(220,140,60,0.35)" "rgb(255,210,140)"
+        ]
+        |> Ui.html
+
+
+markerView : Coord GridPos -> String -> String -> String -> Html.Html msg
+markerView coord letter fillColor textColor =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride))
+        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride))
+        , Html.Attributes.style "width" (px cellSize)
+        , Html.Attributes.style "height" (px cellSize)
+        , Html.Attributes.style "background-color" fillColor
+        , Html.Attributes.style "border-radius" "2px"
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "align-items" "center"
+        , Html.Attributes.style "justify-content" "center"
+        , Html.Attributes.style "color" textColor
+        , Html.Attributes.style "font-weight" "700"
+        , Html.Attributes.style "font-size" "22px"
+        ]
+        [ Html.text letter ]
 
 
 wallsLayer : Model -> Element msg
