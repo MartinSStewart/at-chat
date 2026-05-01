@@ -86,6 +86,7 @@ type alias Model =
     , frames : SeqDict (Id FrameId) Frame
     , currentFrame : Id FrameId
     , autoAdvance : Bool
+    , showGhostTrails : Bool
     , level : Level
     , startFrame : Frame
     }
@@ -107,6 +108,7 @@ type Msg
     | PressedStepForward
     | SliderChanged (Id FrameId)
     | ToggledAutoAdvance
+    | ToggledGhostTrails
 
 
 keyDown : String -> Model -> Model
@@ -133,6 +135,7 @@ init =
     , frames = SeqDict.empty
     , currentFrame = Id.fromInt 0
     , autoAdvance = True
+    , showGhostTrails = True
     , level = level1
     , startFrame = NonemptyDict.fromNonemptyList (Nonempty ( Coord.xy 1 1, Player ) [ ( Coord.xy 4 6, Box ) ])
     }
@@ -247,6 +250,9 @@ update msg model =
         ToggledAutoAdvance ->
             { model | autoAdvance = not model.autoAdvance }
 
+        ToggledGhostTrails ->
+            { model | showGhostTrails = not model.showGhostTrails }
+
 
 toolToWallType : Model -> Maybe WallOrTimePortal
 toolToWallType model =
@@ -304,7 +310,8 @@ view model =
         ]
         [ Ui.el [ Ui.Font.size 24, Ui.Font.weight 600 ] (Ui.text "Game")
         , palette model.selectedTool
-        , autoAdvanceToggle model.autoAdvance
+        , checkboxToggle ToggledAutoAdvance autoAdvanceId model.autoAdvance "Auto-advance on placement (or shift+click)"
+        , checkboxToggle ToggledGhostTrails ghostTrailsId model.showGhostTrails "Show ghost trails"
         , timeControls model
         , gridWithWalls model
         ]
@@ -369,6 +376,7 @@ gridWithWalls model =
         , Ui.behindContent (gridBackground model.level)
         ]
         (grid
+            model.showGhostTrails
             { previous = getFrame (Id.decrement model.currentFrame) model
             , current = SeqDict.get model.currentFrame model.frames
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
@@ -593,11 +601,11 @@ toolIcon tool =
                 (Ui.text "E")
 
 
-autoAdvanceToggle : Bool -> Element Msg
-autoAdvanceToggle isOn =
+checkboxToggle : Msg -> Dom.HtmlId -> Bool -> String -> Element Msg
+checkboxToggle msg htmlId isOn label =
     Ui.row
-        [ Ui.Input.button ToggledAutoAdvance
-        , Ui.id (Dom.idToString autoAdvanceId)
+        [ Ui.Input.button msg
+        , Ui.id (Dom.idToString htmlId)
         , Ui.spacing 8
         , Ui.width Ui.shrink
         , Ui.contentCenterY
@@ -626,13 +634,18 @@ autoAdvanceToggle isOn =
              else
                 Ui.none
             )
-        , Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink ] (Ui.text "Auto-advance on placement (or shift+click)")
+        , Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink ] (Ui.text label)
         ]
 
 
 autoAdvanceId : Dom.HtmlId
 autoAdvanceId =
     Dom.id "game_auto_advance"
+
+
+ghostTrailsId : Dom.HtmlId
+ghostTrailsId =
+    Dom.id "game_ghost_trails"
 
 
 timeControls : Model -> Element Msg
@@ -778,31 +791,40 @@ frameHasError model frameId =
             False
 
 
-grid : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element Msg
-grid frames =
+grid : Bool -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element Msg
+grid showGhostTrails frames =
     Ui.column
         [ Ui.spacing 4, Ui.width Ui.shrink, MyUi.noPointerEvents ]
         (List.map
             (\row ->
                 Ui.row
                     [ Ui.spacing 4, Ui.width Ui.shrink ]
-                    (List.map (\col -> gridCell frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+                    (List.map (\col -> gridCell showGhostTrails frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
             )
             (List.range 0 (gridSize - 1))
         )
 
 
 gridCell :
-    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
+    Bool
+    -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
     -> Coord GridPos
     -> Element Msg
-gridCell frames pos =
+gridCell showGhostTrails frames pos =
     let
         ghostAttrs : List (Ui.Attribute Msg)
         ghostAttrs =
             [ cellShape pos frames.current |> Maybe.map (\s -> Ui.behindContent (shapeIcon (Ui.rgb 255 255 255) s))
-            , cellShape pos frames.previous |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostPreviousColor s))
-            , cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostNextColor s))
+            , if showGhostTrails then
+                cellShape pos frames.previous |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostPreviousColor s))
+
+              else
+                Nothing
+            , if showGhostTrails then
+                cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostNextColor s))
+
+              else
+                Nothing
             ]
                 |> List.filterMap identity
     in
