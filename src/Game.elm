@@ -134,10 +134,8 @@ level1 =
         SeqDict.fromList
             [ ( Coord.xy 1 2, Wall )
             , ( Coord.xy 3 1, TimePortal 5 )
-            , ( Coord.xy 5 4, Wall )
-            , ( Coord.xy 0 3, Wall )
             ]
-    , verticalWalls = SeqDict.fromList [ ( Coord.xy 3 0, Wall ), ( Coord.xy 3 2, TimePortal 5 ) ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
+    , verticalWalls = SeqDict.fromList [ ( Coord.xy 3 0, Wall ), ( Coord.xy 3 2, TimePortal 5 ) ]
     , exit = Coord.xy 2 4
     }
 
