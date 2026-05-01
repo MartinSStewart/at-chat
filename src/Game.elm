@@ -420,7 +420,7 @@ foldFramesHelper foldFunc index endIndex model state =
 
 slider : Model -> Element Msg
 slider model =
-    foldFrames (\frameId frame list -> sliderSegment model.currentFrame frameId frame :: list) [] model
+    foldFrames (\frameId frame list -> sliderSegment model frameId frame :: list) [] model
         |> List.reverse
         |> Ui.row
             [ Ui.spacing 2
@@ -430,22 +430,29 @@ slider model =
             ]
 
 
-sliderSegment : Id FrameId -> Id FrameId -> Maybe Frame -> Element Msg
-sliderSegment currentIndex index frame =
+sliderSegment : Model -> Id FrameId -> Maybe Frame -> Element Msg
+sliderSegment model index frame =
     let
         isCurrent : Bool
         isCurrent =
-            index == currentIndex
+            index == model.currentFrame
 
         isEmpty : Bool
         isEmpty =
             frame == Nothing
+
+        hasError : Bool
+        hasError =
+            frameHasError model index frame
     in
     Ui.el
         [ Ui.Input.button (SliderChanged index)
         , Ui.id (Dom.idToString (segmentId index))
         , Ui.background
-            (if isEmpty then
+            (if hasError then
+                Ui.rgb 180 50 50
+
+             else if isEmpty then
                 Ui.rgb 90 90 100
 
              else
@@ -470,6 +477,69 @@ sliderSegment currentIndex index frame =
             )
         ]
         Ui.none
+
+
+frameHasError : Model -> Id FrameId -> Maybe Frame -> Bool
+frameHasError model frameId maybeFrame =
+    case maybeFrame of
+        Just frame ->
+            let
+                prev : Maybe Frame
+                prev =
+                    SeqDict.get (Id.decrement frameId) model.frames
+
+                next : Maybe Frame
+                next =
+                    SeqDict.get (Id.increment frameId) model.frames
+            in
+            NonemptyDict.any
+                (\pos shape ->
+                    case shape of
+                        Player ->
+                            not (linkedToFrame pos prev model.start)
+                                || not (linkedToFrame pos next model.exit)
+
+                        Block ->
+                            False
+                )
+                frame
+
+        Nothing ->
+            False
+
+
+linkedToFrame : Coord GridPos -> Maybe Frame -> Coord GridPos -> Bool
+linkedToFrame pos otherFrame anchorPos =
+    if pos == anchorPos then
+        True
+
+    else
+        case otherFrame of
+            Just frame ->
+                List.any
+                    (\p -> NonemptyDict.get p frame == Just Player)
+                    (pos :: adjacentPositions pos)
+
+            Nothing ->
+                False
+
+
+adjacentPositions : Coord GridPos -> List (Coord GridPos)
+adjacentPositions coord =
+    let
+        x : Int
+        x =
+            Coord.xRaw coord
+
+        y : Int
+        y =
+            Coord.yRaw coord
+    in
+    [ Coord.xy (x - 1) y
+    , Coord.xy (x + 1) y
+    , Coord.xy x (y - 1)
+    , Coord.xy x (y + 1)
+    ]
 
 
 grid :
