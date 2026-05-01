@@ -202,18 +202,22 @@ wallThickness =
 
 gridWithWalls : Model -> Element Msg
 gridWithWalls model =
-    Ui.el
-        [ Ui.width (Ui.px gridPixelSize)
-        , Ui.height (Ui.px gridPixelSize)
-        , Ui.inFront (markersLayer model)
-        , Ui.inFront (wallsLayer model)
-        ]
-        (grid
+    let
+        framesData : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
+        framesData =
             { previous = SeqDict.get (Id.decrement model.currentFrame) model.frames
             , current = currentFrameData model
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
             }
-        )
+    in
+    Ui.el
+        [ Ui.width (Ui.px gridPixelSize)
+        , Ui.height (Ui.px gridPixelSize)
+        , Ui.inFront (markersLayer model)
+        , Ui.inFront (animationLayer framesData)
+        , Ui.inFront (wallsLayer model)
+        ]
+        (grid framesData)
 
 
 markersLayer : Model -> Element msg
@@ -540,14 +544,14 @@ gridCell :
     -> Element Msg
 gridCell frames pos =
     let
-        ghostAttrs : List (Ui.Attribute Msg)
-        ghostAttrs =
-            [ cellShape pos frames.current |> Maybe.map (\s -> Ui.behindContent (shapeIcon s))
-            , cellShape pos frames.previous |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostPreviousColor))
-            , cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostNextColor))
-            ]
-                |> List.filterMap identity
-                |> List.take 1
+        currentShapeAttr : List (Ui.Attribute Msg)
+        currentShapeAttr =
+            case cellShape pos frames.current of
+                Just shape ->
+                    [ Ui.behindContent (shapeIcon shape) ]
+
+                Nothing ->
+                    []
     in
     Ui.el
         ([ Ui.htmlAttribute
@@ -565,7 +569,7 @@ gridCell frames pos =
          , Ui.background MyUi.background1
          , Ui.rounded 2
          ]
-            ++ ghostAttrs
+            ++ currentShapeAttr
         )
         Ui.none
 
@@ -580,27 +584,178 @@ cellShape pos frame =
             Nothing
 
 
-ghostPreviousColor : Ui.Color
-ghostPreviousColor =
-    Ui.rgb 255 110 110
+type alias EntityMove =
+    { from : Coord GridPos
+    , to : Coord GridPos
+    , kind : PlayerOrBox
+    }
 
 
-ghostNextColor : Ui.Color
-ghostNextColor =
-    Ui.rgb 110 180 255
+ghostPreviousColorCss : String
+ghostPreviousColorCss =
+    "rgb(255,110,110)"
 
 
-ghostShape : PlayerOrBox -> Ui.Color -> Element msg
-ghostShape shape color =
-    Ui.el
-        [ Ui.opacity 0.3
-        , Ui.Font.color color
-        , Ui.width Ui.fill
-        , Ui.height Ui.fill
-        , Ui.contentCenterX
-        , Ui.contentCenterY
+ghostCurrentColorCss : String
+ghostCurrentColorCss =
+    "rgb(255,255,255)"
+
+
+ghostNextColorCss : String
+ghostNextColorCss =
+    "rgb(110,180,255)"
+
+
+entityMovesBetween : Frame -> Frame -> List EntityMove
+entityMovesBetween frameA frameB =
+    case solve frameA frameB of
+        Ok moves ->
+            let
+                playerMoves : List ( Coord GridPos, Move )
+                playerMoves =
+                    NonemptyDict.toList moves
+
+                playerEntries : List EntityMove
+                playerEntries =
+                    List.map
+                        (\( pos, m ) -> { from = pos, to = offset m pos, kind = Player })
+                        playerMoves
+
+                blockEntries : List EntityMove
+                blockEntries =
+                    NonemptyDict.toList frameA
+                        |> List.filterMap
+                            (\( pos, kind ) ->
+                                case kind of
+                                    Block ->
+                                        case
+                                            playerMoves
+                                                |> List.filter (\( pPos, m ) -> m /= NoMove && offset m pPos == pos)
+                                                |> List.head
+                                        of
+                                            Just ( _, m ) ->
+                                                Just { from = pos, to = offset m pos, kind = Block }
+
+                                            Nothing ->
+                                                Just { from = pos, to = pos, kind = Block }
+
+                                    Player ->
+                                        Nothing
+                            )
+            in
+            playerEntries ++ blockEntries
+
+        Err () ->
+            NonemptyDict.toList frameA
+                |> List.map (\( pos, kind ) -> { from = pos, to = pos, kind = kind })
+
+
+animationLayer : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element msg
+animationLayer frames =
+    let
+        prevToCurrent : List EntityMove
+        prevToCurrent =
+            case ( frames.previous, frames.current ) of
+                ( Just p, Just c ) ->
+                    entityMovesBetween p c
+
+                _ ->
+                    []
+
+        currentToNext : List EntityMove
+        currentToNext =
+            case ( frames.current, frames.next ) of
+                ( Just c, Just n ) ->
+                    entityMovesBetween c n
+
+                _ ->
+                    []
+    in
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "inset" "0"
+        , Html.Attributes.style "pointer-events" "none"
         ]
-        (shapeIcon shape)
+        (animationStyleNode
+            :: List.map
+                (animatedGhost { fromColor = ghostPreviousColorCss, toColor = ghostCurrentColorCss })
+                prevToCurrent
+            ++ List.map
+                (animatedGhost { fromColor = ghostCurrentColorCss, toColor = ghostNextColorCss })
+                currentToNext
+        )
+        |> Ui.html
+
+
+animationStyleNode : Html.Html msg
+animationStyleNode =
+    Html.node "style"
+        []
+        [ Html.text """
+@keyframes game-entity-move {
+  from { left: var(--from-x); top: var(--from-y); color: var(--from-color); }
+  to { left: var(--to-x); top: var(--to-y); color: var(--to-color); }
+}
+""" ]
+
+
+animatedGhost : { fromColor : String, toColor : String } -> EntityMove -> Html.Html msg
+animatedGhost colors entity =
+    let
+        fromX : String
+        fromX =
+            px (Coord.xRaw entity.from * gridStride)
+
+        fromY : String
+        fromY =
+            px (Coord.yRaw entity.from * gridStride)
+
+        toX : String
+        toX =
+            px (Coord.xRaw entity.to * gridStride)
+
+        toY : String
+        toY =
+            px (Coord.yRaw entity.to * gridStride)
+
+        glyph : String
+        glyph =
+            case entity.kind of
+                Player ->
+                    "☺"
+
+                Block ->
+                    "■"
+
+        styleStr : String
+        styleStr =
+            String.join "; "
+                [ "position: absolute"
+                , "width: " ++ px cellSize
+                , "height: " ++ px cellSize
+                , "display: flex"
+                , "align-items: center"
+                , "justify-content: center"
+                , "font-size: 28px"
+                , "user-select: none"
+                , "-webkit-user-select: none"
+                , "opacity: 0.55"
+                , "pointer-events: none"
+                , "--from-x: " ++ fromX
+                , "--from-y: " ++ fromY
+                , "--to-x: " ++ toX
+                , "--to-y: " ++ toY
+                , "--from-color: " ++ colors.fromColor
+                , "--to-color: " ++ colors.toColor
+                , "left: var(--from-x)"
+                , "top: var(--from-y)"
+                , "color: var(--from-color)"
+                , "animation: game-entity-move 1.6s ease-in-out infinite alternate"
+                ]
+    in
+    Html.div
+        [ Html.Attributes.attribute "style" styleStr ]
+        [ Html.text glyph ]
 
 
 paletteId : PlayerOrBox -> Dom.HtmlId
