@@ -503,65 +503,18 @@ sliderSegment model index frame =
 
 frameHasError : Model -> Id FrameId -> Maybe Frame -> Bool
 frameHasError model frameId maybeFrame =
-    case maybeFrame of
-        Just frame ->
-            let
-                prev : Maybe Frame
-                prev =
-                    SeqDict.get (Id.decrement frameId) model.frames
+    case ( maybeFrame, SeqDict.get (Id.increment frameId) model.frames ) of
+        ( Just frame, Just next2 ) ->
+            solve frame next2 == Err ()
 
-                next : Maybe Frame
-                next =
-                    SeqDict.get (Id.increment frameId) model.frames
-            in
-            NonemptyDict.any
-                (\pos shape ->
-                    case shape of
-                        Player ->
-                            not (linkedToFrame pos prev model.start)
-                                || not (linkedToFrame pos next model.exit)
+        ( Just _, Nothing ) ->
+            True
 
-                        Block ->
-                            False
-                )
-                frame
+        ( Nothing, Just _ ) ->
+            True
 
-        Nothing ->
+        ( Nothing, Nothing ) ->
             False
-
-
-linkedToFrame : Coord GridPos -> Maybe Frame -> Coord GridPos -> Bool
-linkedToFrame pos otherFrame anchorPos =
-    if pos == anchorPos then
-        True
-
-    else
-        case otherFrame of
-            Just frame ->
-                List.any
-                    (\p -> NonemptyDict.get p frame == Just Player)
-                    (pos :: adjacentPositions pos)
-
-            Nothing ->
-                False
-
-
-adjacentPositions : Coord GridPos -> List (Coord GridPos)
-adjacentPositions coord =
-    let
-        x : Int
-        x =
-            Coord.xRaw coord
-
-        y : Int
-        y =
-            Coord.yRaw coord
-    in
-    [ Coord.xy (x - 1) y
-    , Coord.xy (x + 1) y
-    , Coord.xy x (y - 1)
-    , Coord.xy x (y + 1)
-    ]
 
 
 grid :
