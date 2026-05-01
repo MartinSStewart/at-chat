@@ -11,6 +11,7 @@ module Game exposing
     , WallOrTimePortal(..)
     , findNextMove
     , init
+    , keyDown
     , update
     , view
     )
@@ -99,6 +100,19 @@ type Msg
     | ToggledAutoAdvance
 
 
+keyDown : String -> Model -> Model
+keyDown key model =
+    case key of
+        "ArrowLeft" ->
+            stepBackward model
+
+        "ArrowRight" ->
+            stepForward model
+
+        _ ->
+            model
+
+
 gridSize : Int
 gridSize =
     8
@@ -166,16 +180,26 @@ update msg model =
             }
 
         PressedStepBackward ->
-            { model | currentFrame = Id.decrement model.currentFrame }
+            stepBackward model
 
         PressedStepForward ->
-            { model | currentFrame = Id.increment model.currentFrame }
+            stepForward model
 
         SliderChanged index ->
             { model | currentFrame = index }
 
         ToggledAutoAdvance ->
             { model | autoAdvance = not model.autoAdvance }
+
+
+stepForward : Model -> Model
+stepForward model =
+    { model | currentFrame = Id.increment model.currentFrame }
+
+
+stepBackward : Model -> Model
+stepBackward model =
+    { model | currentFrame = Id.decrement model.currentFrame }
 
 
 view : Model -> Element Msg

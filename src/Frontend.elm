@@ -1054,115 +1054,120 @@ updateLoaded msg model =
             ( model, Command.none )
 
         KeyDown key ->
-            case key of
-                "Escape" ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                loggedIn2 =
-                                    MessageMenu.close model loggedIn
+            case model.route of
+                GameRoute ->
+                    ( { model | gameModel = Game.keyDown key model.gameModel }, Command.none )
 
-                                isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
-                                isPingUserDropdownOpen =
-                                    case loggedIn2.textInputFocus of
-                                        Just textInputFocus ->
-                                            if textInputFocus.htmlId == Emoji.searchInputId then
-                                                ( { loggedIn2
-                                                    | emojiSelector = Emoji.setSearch "" loggedIn2.emojiSelector
-                                                  }
-                                                , Dom.blur Emoji.searchInputId
-                                                    |> Task.attempt
-                                                        (\result ->
-                                                            let
-                                                                _ =
-                                                                    Debug.log "result" result
-                                                            in
-                                                            RemoveFocus
-                                                        )
-                                                )
-                                                    |> Just
+                _ ->
+                    case key of
+                        "Escape" ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    let
+                                        loggedIn2 =
+                                            MessageMenu.close model loggedIn
 
-                                            else
-                                                case textInputFocus.dropdown of
-                                                    Just _ ->
+                                        isPingUserDropdownOpen : Maybe ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
+                                        isPingUserDropdownOpen =
+                                            case loggedIn2.textInputFocus of
+                                                Just textInputFocus ->
+                                                    if textInputFocus.htmlId == Emoji.searchInputId then
                                                         ( { loggedIn2
-                                                            | textInputFocus = Just { textInputFocus | dropdown = Nothing }
-                                                            , previousTextInputFocus = loggedIn2.textInputFocus
-                                                            , showEmojiSelector = EmojiSelectorHidden
+                                                            | emojiSelector = Emoji.setSearch "" loggedIn2.emojiSelector
                                                           }
-                                                        , Command.none
+                                                        , Dom.blur Emoji.searchInputId
+                                                            |> Task.attempt
+                                                                (\result ->
+                                                                    let
+                                                                        _ =
+                                                                            Debug.log "result" result
+                                                                    in
+                                                                    RemoveFocus
+                                                                )
                                                         )
                                                             |> Just
 
-                                                    Nothing ->
-                                                        Nothing
-
-                                        Nothing ->
-                                            Nothing
-                            in
-                            case isPingUserDropdownOpen of
-                                Just a ->
-                                    a
-
-                                Nothing ->
-                                    case loggedIn2.showEmojiSelector of
-                                        EmojiSelectorHidden ->
-                                            case Route.toGuildOrDmId model.route of
-                                                Just ( guildOrDmId, threadRoute ) ->
-                                                    FrontendExtra.handleLocalChange
-                                                        model.time
-                                                        (case
-                                                            LocalState.guildOrDmIdToMessagesCount
-                                                                guildOrDmId
-                                                                threadRoute
-                                                                (Local.model loggedIn2.localState)
-                                                         of
-                                                            Just messages ->
-                                                                Local_SetLastViewed
-                                                                    guildOrDmId
-                                                                    (case threadRoute of
-                                                                        ViewThread threadId ->
-                                                                            ViewThreadWithMessage
-                                                                                threadId
-                                                                                (messages - 1 |> Id.fromInt)
-
-                                                                        NoThread ->
-                                                                            NoThreadWithMessage
-                                                                                (messages - 1 |> Id.fromInt)
-                                                                    )
+                                                    else
+                                                        case textInputFocus.dropdown of
+                                                            Just _ ->
+                                                                ( { loggedIn2
+                                                                    | textInputFocus = Just { textInputFocus | dropdown = Nothing }
+                                                                    , previousTextInputFocus = loggedIn2.textInputFocus
+                                                                    , showEmojiSelector = EmojiSelectorHidden
+                                                                  }
+                                                                , Command.none
+                                                                )
                                                                     |> Just
 
                                                             Nothing ->
                                                                 Nothing
-                                                        )
-                                                        (if
-                                                            SeqDict.member ( guildOrDmId, threadRoute ) loggedIn2.editMessage
-                                                                || SeqDict.member ( guildOrDmId, NoThread ) loggedIn2.editMessage
-                                                         then
-                                                            { loggedIn2
-                                                                | editMessage =
-                                                                    SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
-                                                                        |> SeqDict.remove ( guildOrDmId, NoThread )
-                                                            }
-
-                                                         else
-                                                            { loggedIn2
-                                                                | replyTo =
-                                                                    SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.replyTo
-                                                            }
-                                                        )
-                                                        (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
 
                                                 Nothing ->
-                                                    ( loggedIn2, Command.none )
+                                                    Nothing
+                                    in
+                                    case isPingUserDropdownOpen of
+                                        Just a ->
+                                            a
 
-                                        _ ->
-                                            ( { loggedIn2 | showEmojiSelector = EmojiSelectorHidden }, Command.none )
-                        )
-                        model
+                                        Nothing ->
+                                            case loggedIn2.showEmojiSelector of
+                                                EmojiSelectorHidden ->
+                                                    case Route.toGuildOrDmId model.route of
+                                                        Just ( guildOrDmId, threadRoute ) ->
+                                                            FrontendExtra.handleLocalChange
+                                                                model.time
+                                                                (case
+                                                                    LocalState.guildOrDmIdToMessagesCount
+                                                                        guildOrDmId
+                                                                        threadRoute
+                                                                        (Local.model loggedIn2.localState)
+                                                                 of
+                                                                    Just messages ->
+                                                                        Local_SetLastViewed
+                                                                            guildOrDmId
+                                                                            (case threadRoute of
+                                                                                ViewThread threadId ->
+                                                                                    ViewThreadWithMessage
+                                                                                        threadId
+                                                                                        (messages - 1 |> Id.fromInt)
 
-                _ ->
-                    ( model, Command.none )
+                                                                                NoThread ->
+                                                                                    NoThreadWithMessage
+                                                                                        (messages - 1 |> Id.fromInt)
+                                                                            )
+                                                                            |> Just
+
+                                                                    Nothing ->
+                                                                        Nothing
+                                                                )
+                                                                (if
+                                                                    SeqDict.member ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                                                        || SeqDict.member ( guildOrDmId, NoThread ) loggedIn2.editMessage
+                                                                 then
+                                                                    { loggedIn2
+                                                                        | editMessage =
+                                                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.editMessage
+                                                                                |> SeqDict.remove ( guildOrDmId, NoThread )
+                                                                    }
+
+                                                                 else
+                                                                    { loggedIn2
+                                                                        | replyTo =
+                                                                            SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn2.replyTo
+                                                                    }
+                                                                )
+                                                                (FrontendExtra.setFocus model Pages.Guild.channelTextInputId)
+
+                                                        Nothing ->
+                                                            ( loggedIn2, Command.none )
+
+                                                _ ->
+                                                    ( { loggedIn2 | showEmojiSelector = EmojiSelectorHidden }, Command.none )
+                                )
+                                model
+
+                        _ ->
+                            ( model, Command.none )
 
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
             showReactionEmojiSelector guildOrDmId threadRoute model
