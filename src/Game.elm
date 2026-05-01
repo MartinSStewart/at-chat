@@ -50,6 +50,7 @@ type Tool
     = PlaceShape PlayerOrBox
     | PlaceWall
     | PlaceTimePortal
+    | PlaceExit
 
 
 type GridPos
@@ -187,6 +188,14 @@ update msg model =
                                 model.currentFrame
                     }
 
+                PlaceExit ->
+                    let
+                        level : Level
+                        level =
+                            model.level
+                    in
+                    { model | level = { level | exit = pos } }
+
                 _ ->
                     model
 
@@ -250,6 +259,9 @@ toolToWallType model =
 
         PlaceTimePortal ->
             Just (TimePortal (Id.toInt model.currentFrame))
+
+        PlaceExit ->
+            Nothing
 
 
 toggleWall : Coord pos -> WallOrTimePortal -> SeqDict (Coord pos) WallOrTimePortal -> SeqDict (Coord pos) WallOrTimePortal
@@ -499,6 +511,7 @@ palette selected =
             , PlaceShape LargeBox
             , PlaceWall
             , PlaceTimePortal
+            , PlaceExit
             ]
         )
 
@@ -566,6 +579,18 @@ toolIcon tool =
                 , MyUi.noPointerEvents
                 ]
                 Ui.none
+
+        PlaceExit ->
+            Ui.el
+                [ Ui.Font.size 24
+                , Ui.Font.bold
+                , Ui.Font.color (Ui.rgb 220 140 60)
+                , Ui.Font.center
+                , Ui.centerX
+                , Ui.centerY
+                , MyUi.noPointerEvents
+                ]
+                (Ui.text "E")
 
 
 autoAdvanceToggle : Bool -> Element Msg
@@ -898,6 +923,9 @@ toolToString tool =
 
         PlaceTimePortal ->
             "time-portal"
+
+        PlaceExit ->
+            "exit"
 
 
 cellId : Coord GridPos -> Dom.HtmlId
