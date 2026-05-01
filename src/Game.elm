@@ -1,4 +1,4 @@
-module Game exposing (Model, Msg, Shape(..), init, update, view)
+module Game exposing (Model, Msg, PlayerOrBox(..), init, update, view)
 
 import Coord exposing (Coord)
 import Effect.Browser.Dom as Dom
@@ -17,7 +17,7 @@ import Ui.Font
 import Ui.Input
 
 
-type Shape
+type PlayerOrBox
     = Player
     | Block
 
@@ -39,11 +39,19 @@ type FrameId
 
 
 type alias Frame =
-    NonemptyDict (Coord GridPos) Shape
+    NonemptyDict (Coord GridPos) PlayerOrBox
+
+
+type Move
+    = Left
+    | Right
+    | Up
+    | Down
+    | NoMove
 
 
 type alias Model =
-    { selectedShape : Shape
+    { selectedShape : PlayerOrBox
     , frames : SeqDict (Id FrameId) Frame
     , currentFrame : Id FrameId
     , autoAdvance : Bool
@@ -55,7 +63,7 @@ type alias Model =
 
 
 type Msg
-    = SelectedShape Shape
+    = SelectedShape PlayerOrBox
     | ClickedCell (Coord GridPos) Bool
     | PressedStepBackward
     | PressedStepForward
@@ -273,14 +281,14 @@ px n =
     String.fromInt n ++ "px"
 
 
-palette : Shape -> Element Msg
+palette : PlayerOrBox -> Element Msg
 palette selected =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
         (List.map (paletteButton selected) [ Player, Block ])
 
 
-paletteButton : Shape -> Shape -> Element Msg
+paletteButton : PlayerOrBox -> PlayerOrBox -> Element Msg
 paletteButton selected shape =
     let
         isSelected : Bool
@@ -595,7 +603,7 @@ gridCell frames pos =
         Ui.none
 
 
-cellShape : Coord GridPos -> Maybe Frame -> Maybe Shape
+cellShape : Coord GridPos -> Maybe Frame -> Maybe PlayerOrBox
 cellShape pos frame =
     case frame of
         Just frame2 ->
@@ -615,7 +623,7 @@ ghostNextColor =
     Ui.rgb 110 180 255
 
 
-ghostShape : Shape -> Ui.Color -> Element msg
+ghostShape : PlayerOrBox -> Ui.Color -> Element msg
 ghostShape shape color =
     Ui.el
         [ Ui.opacity 0.3
@@ -628,7 +636,7 @@ ghostShape shape color =
         (shapeIcon shape)
 
 
-paletteId : Shape -> Dom.HtmlId
+paletteId : PlayerOrBox -> Dom.HtmlId
 paletteId shape =
     Dom.id ("game_palette_" ++ shapeToString shape)
 
@@ -658,7 +666,7 @@ segmentId index =
     Dom.id ("game_slider_segment_" ++ Id.toString index)
 
 
-shapeToString : Shape -> String
+shapeToString : PlayerOrBox -> String
 shapeToString shape =
     case shape of
         Player ->
@@ -668,7 +676,7 @@ shapeToString shape =
             "square"
 
 
-shapeIcon : Shape -> Element msg
+shapeIcon : PlayerOrBox -> Element msg
 shapeIcon shape =
     let
         glyph : String
@@ -688,3 +696,284 @@ shapeIcon shape =
         , Ui.centerY
         ]
         (Ui.text glyph)
+
+
+type alias Pos =
+    ( Int, Int )
+
+
+type alias Grid =
+    SeqDict Pos PlayerOrBox
+
+
+offset : Move -> Pos -> Pos
+offset move ( x, y ) =
+    case move of
+        Left ->
+            ( x - 1, y )
+
+        Right ->
+            ( x + 1, y )
+
+        Up ->
+            ( x, y - 1 )
+
+        Down ->
+            ( x, y + 1 )
+
+        NoMove ->
+            ( x, y )
+
+
+allMoves : List Move
+allMoves =
+    [ NoMove, Left, Right, Up, Down ]
+
+
+{-| Apply a set of player moves to the starting frame and return the resulting grid.
+A player's move is "push" if the destination contains a block; the block then
+moves one further cell in the same direction.
+
+Returns Nothing if the moves are physically inconsistent (e.g. two players or
+two blocks land on the same cell, a push target is occupied, etc).
+
+The key rule: a player CAN move into a cell currently occupied by another
+player, provided that other player is also moving away this turn.
+
+-}
+applyMoves : Grid -> SeqDict Pos Move -> Maybe Grid
+applyMoves frame moves =
+    let
+        players : List ( Pos, Move )
+        players =
+            SeqDict.toList moves
+
+        -- Where each player ends up.
+        playerDest : Pos -> Move -> Pos
+        playerDest pos move =
+            offset move pos
+
+        -- For each player that pushes, figure out the block's source and dest.
+        -- A push happens when the player's destination cell contains a Block in `frame`.
+        pushes : List { from : Pos, to : Pos, dir : Move }
+        pushes =
+            players
+                |> List.filterMap
+                    (\( pos, move ) ->
+                        if move == NoMove then
+                            Nothing
+
+                        else
+                            let
+                                dest =
+                                    playerDest pos move
+                            in
+                            case SeqDict.get dest frame of
+                                Just Block ->
+                                    Just
+                                        { from = dest
+                                        , to = offset move dest
+                                        , dir = move
+                                        }
+
+                                _ ->
+                                    Nothing
+                    )
+
+        pushedBlockSources : List Pos
+        pushedBlockSources =
+            List.map .from pushes
+
+        -- Blocks that didn't get pushed stay where they are.
+        stationaryBlocks : List Pos
+        stationaryBlocks =
+            frame
+                |> SeqDict.toList
+                |> List.filterMap
+                    (\( pos, kind ) ->
+                        if kind == Block && not (List.member pos pushedBlockSources) then
+                            Just pos
+
+                        else
+                            Nothing
+                    )
+
+        -- Final block positions.
+        finalBlockPositions : List Pos
+        finalBlockPositions =
+            stationaryBlocks ++ List.map .to pushes
+
+        -- Final player positions.
+        finalPlayerPositions : List Pos
+        finalPlayerPositions =
+            List.map (\( pos, move ) -> playerDest pos move) players
+
+        -- Validation: each push target must be a cell that ends up empty
+        -- (no stationary block there, no other block pushed there).
+        -- Also two pushes can't target the same cell.
+        noDuplicates : List Pos -> Bool
+        noDuplicates xs =
+            List.length xs == List.length (dedup xs)
+
+        -- A pushed block's destination must not coincide with any final player
+        -- position (you can't push a block into a cell a player is moving to)
+        -- and must not collide with another block.
+        pushTargetsValid : Bool
+        pushTargetsValid =
+            List.all
+                (\push ->
+                    -- Target must be in-bounds-ish (we don't track bounds here;
+                    -- callers can constrain via the grid). Target must not be
+                    -- occupied by a stationary block.
+                    not (List.member push.to stationaryBlocks)
+                        -- And not occupied by any final player position.
+                        && not (List.member push.to finalPlayerPositions)
+                )
+                pushes
+
+        -- Two players can't end up on the same cell.
+        playersDistinct : Bool
+        playersDistinct =
+            noDuplicates finalPlayerPositions
+
+        -- Two blocks can't end up on the same cell.
+        blocksDistinct : Bool
+        blocksDistinct =
+            noDuplicates finalBlockPositions
+
+        -- A block can't end up where a player ends up.
+        noPlayerBlockOverlap : Bool
+        noPlayerBlockOverlap =
+            List.all (\bp -> not (List.member bp finalPlayerPositions)) finalBlockPositions
+
+        -- Movement legality: when a player moves into a cell, that cell in
+        -- `frame` must be either empty, a Block they push (handled above), or
+        -- a Player that is itself moving away this turn.
+        movementLegal : Bool
+        movementLegal =
+            List.all
+                (\( pos, move ) ->
+                    if move == NoMove then
+                        True
+
+                    else
+                        let
+                            dest =
+                                playerDest pos move
+                        in
+                        case SeqDict.get dest frame of
+                            Nothing ->
+                                True
+
+                            Just Block ->
+                                -- Push: legality of the push is checked above.
+                                True
+
+                            Just Player ->
+                                -- Allowed only if the other player is moving away.
+                                case SeqDict.get dest moves of
+                                    Just otherMove ->
+                                        otherMove /= NoMove
+
+                                    Nothing ->
+                                        False
+                )
+                players
+    in
+    if
+        movementLegal
+            && pushTargetsValid
+            && playersDistinct
+            && blocksDistinct
+            && noPlayerBlockOverlap
+    then
+        let
+            playerDict =
+                finalPlayerPositions
+                    |> List.map (\p -> ( p, Player ))
+                    |> SeqDict.fromList
+
+            blockDict =
+                finalBlockPositions
+                    |> List.map (\p -> ( p, Block ))
+                    |> SeqDict.fromList
+        in
+        Just (SeqDict.union playerDict blockDict)
+
+    else
+        Nothing
+
+
+dedup : List comparable -> List comparable
+dedup xs =
+    xs
+        |> List.foldl
+            (\x acc ->
+                if List.member x acc then
+                    acc
+
+                else
+                    x :: acc
+            )
+            []
+        |> List.reverse
+
+
+{-| Backtracking search: assign a Move to each player, prune when partial
+assignment already produces an inconsistency, and check the full result
+against `nextFrame`.
+-}
+solve : Grid -> Grid -> Result () (SeqDict Pos Move)
+solve frame nextFrame =
+    let
+        playerPositions : List Pos
+        playerPositions =
+            frame
+                |> SeqDict.toList
+                |> List.filterMap
+                    (\( pos, kind ) ->
+                        if kind == Player then
+                            Just pos
+
+                        else
+                            Nothing
+                    )
+
+        go : List Pos -> SeqDict Pos Move -> Maybe (SeqDict Pos Move)
+        go remaining assigned =
+            case remaining of
+                [] ->
+                    case applyMoves frame assigned of
+                        Just result ->
+                            if result == nextFrame then
+                                Just assigned
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
+
+                pos :: rest ->
+                    tryMoves pos rest assigned allMoves
+
+        tryMoves : Pos -> List Pos -> SeqDict Pos Move -> List Move -> Maybe (SeqDict Pos Move)
+        tryMoves pos rest assigned moves =
+            case moves of
+                [] ->
+                    Nothing
+
+                m :: ms ->
+                    case go rest (SeqDict.insert pos m assigned) of
+                        Just result ->
+                            Just result
+
+                        Nothing ->
+                            tryMoves pos rest assigned ms
+    in
+    case go playerPositions SeqDict.empty of
+        Just assignment ->
+            Ok assignment
+
+        Nothing ->
+            Err ()
