@@ -1,12 +1,15 @@
 module Game exposing (Model, Msg, Shape(..), init, update, view)
 
-import Array exposing (Array)
+import Coord exposing (Coord)
 import Effect.Browser.Dom as Dom
 import Html
 import Html.Attributes
 import Html.Events
+import Id exposing (Id)
 import Json.Decode
+import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import NonemptyDict exposing (NonemptyDict)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -15,35 +18,48 @@ import Ui.Input
 
 
 type Shape
-    = Circle
-    | Square
-    | Triangle
+    = Player
+    | Block
 
 
-type alias CellPos =
-    ( Int, Int )
+type GridPos
+    = CellPos Never
+
+
+type HorizontalWallPos
+    = HorizontalWallPos Never
+
+
+type VerticalWallPos
+    = VerticalWallPos Never
+
+
+type FrameId
+    = FrameId Never
 
 
 type alias Frame =
-    SeqDict CellPos (SeqSet Shape)
+    NonemptyDict (Coord GridPos) Shape
 
 
 type alias Model =
     { selectedShape : Shape
-    , frames : Array Frame
-    , currentFrame : Int
+    , frames : SeqDict (Id FrameId) Frame
+    , currentFrame : Id FrameId
     , autoAdvance : Bool
-    , horizontalWalls : SeqSet CellPos
-    , verticalWalls : SeqSet ( Int, Int )
+    , horizontalWalls : SeqSet (Coord HorizontalWallPos)
+    , verticalWalls : SeqSet (Coord VerticalWallPos)
+    , start : Coord GridPos
+    , exit : Coord GridPos
     }
 
 
 type Msg
     = SelectedShape Shape
-    | ClickedCell CellPos Bool
+    | ClickedCell (Coord GridPos) Bool
     | PressedStepBackward
     | PressedStepForward
-    | SliderChanged Int
+    | SliderChanged (Id FrameId)
     | ToggledAutoAdvance
 
 
@@ -54,25 +70,20 @@ gridSize =
 
 init : Model
 init =
-    { selectedShape = Circle
-    , frames = Array.fromList [ SeqDict.empty ]
-    , currentFrame = 0
+    { selectedShape = Player
+    , frames = SeqDict.empty
+    , currentFrame = Id.fromInt 0
     , autoAdvance = False
-    , horizontalWalls =
-        SeqSet.fromList [ ( 1, 2 ), ( 3, 1 ), ( 5, 4 ), ( 0, 3 ) ]
-    , verticalWalls =
-        SeqSet.fromList [ ( 2, 1 ), ( 4, 3 ), ( 1, 5 ), ( 3, 0 ) ]
+    , horizontalWalls = SeqSet.fromList [ Coord.xy 1 2, Coord.xy 3 1, Coord.xy 5 4, Coord.xy 0 3 ]
+    , verticalWalls = SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
+    , start = Coord.xy 1 1
+    , exit = Coord.xy 2 4
     }
 
 
-getFrame : Int -> Array Frame -> Maybe Frame
-getFrame index frames =
-    Array.get index frames
-
-
-currentFrameData : Model -> Frame
+currentFrameData : Model -> Maybe Frame
 currentFrameData model =
-    getFrame model.currentFrame model.frames |> Maybe.withDefault SeqDict.empty
+    SeqDict.get model.currentFrame model.frames
 
 
 update : Msg -> Model -> Model
@@ -82,52 +93,47 @@ update msg model =
             { model | selectedShape = shape }
 
         ClickedCell pos shiftHeld ->
-            let
-                frame : Frame
-                frame =
-                    SeqDict.insert pos (SeqSet.singleton model.selectedShape) (currentFrameData model)
+            { model
+                | frames =
+                    SeqDict.update
+                        model.currentFrame
+                        (\maybe ->
+                            case maybe of
+                                Just frame2 ->
+                                    case NonemptyDict.get pos frame2 of
+                                        Just shape ->
+                                            if shape == model.selectedShape then
+                                                NonemptyDict.remove pos frame2 |> NonemptyDict.fromSeqDict
 
-                placed : Model
-                placed =
-                    { model | frames = Array.set model.currentFrame frame model.frames }
-            in
-            if model.autoAdvance || shiftHeld then
-                advanceFrame placed
+                                            else
+                                                NonemptyDict.insert pos model.selectedShape frame2 |> Just
 
-            else
-                placed
+                                        Nothing ->
+                                            NonemptyDict.insert pos model.selectedShape frame2 |> Just
+
+                                Nothing ->
+                                    NonemptyDict.singleton pos model.selectedShape |> Just
+                        )
+                        model.frames
+                , currentFrame =
+                    if model.autoAdvance || shiftHeld then
+                        Id.increment model.currentFrame
+
+                    else
+                        model.currentFrame
+            }
 
         PressedStepBackward ->
-            { model | currentFrame = max 0 (model.currentFrame - 1) }
+            { model | currentFrame = Id.decrement model.currentFrame }
 
         PressedStepForward ->
-            advanceFrame model
+            { model | currentFrame = Id.increment model.currentFrame }
 
         SliderChanged index ->
-            { model
-                | currentFrame =
-                    clamp 0 (Array.length model.frames - 1) index
-            }
+            { model | currentFrame = index }
 
         ToggledAutoAdvance ->
             { model | autoAdvance = not model.autoAdvance }
-
-
-advanceFrame : Model -> Model
-advanceFrame model =
-    let
-        next : Int
-        next =
-            model.currentFrame + 1
-    in
-    if next >= Array.length model.frames then
-        { model
-            | frames = Array.push SeqDict.empty model.frames
-            , currentFrame = next
-        }
-
-    else
-        { model | currentFrame = next }
 
 
 view : Model -> Element Msg
@@ -180,9 +186,9 @@ gridWithWalls model =
         , Ui.inFront (wallsLayer model)
         ]
         (grid
-            { previous = getFrame (model.currentFrame - 1) model.frames
+            { previous = SeqDict.get (Id.decrement model.currentFrame) model.frames
             , current = currentFrameData model
-            , next = getFrame (model.currentFrame + 1) model.frames
+            , next = SeqDict.get (Id.increment model.currentFrame) model.frames
             }
         )
 
@@ -200,12 +206,12 @@ wallsLayer model =
         |> Ui.html
 
 
-horizontalWallView : CellPos -> Html.Html msg
-horizontalWallView ( col, row ) =
+horizontalWallView : Coord HorizontalWallPos -> Html.Html msg
+horizontalWallView coord =
     Html.div
         [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (px (col * gridStride))
-        , Html.Attributes.style "top" (px (row * gridStride - wallThickness // 2))
+        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride))
+        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride - wallThickness // 2))
         , Html.Attributes.style "width" (px cellSize)
         , Html.Attributes.style "height" (px wallThickness)
         , Html.Attributes.style "background-color" "rgb(255,180,60)"
@@ -214,12 +220,12 @@ horizontalWallView ( col, row ) =
         []
 
 
-verticalWallView : ( Int, Int ) -> Html.Html msg
-verticalWallView ( col, row ) =
+verticalWallView : Coord VerticalWallPos -> Html.Html msg
+verticalWallView coord =
     Html.div
         [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (px (col * gridStride - wallThickness // 2))
-        , Html.Attributes.style "top" (px (row * gridStride))
+        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride - wallThickness // 2))
+        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride))
         , Html.Attributes.style "width" (px wallThickness)
         , Html.Attributes.style "height" (px cellSize)
         , Html.Attributes.style "background-color" "rgb(255,180,60)"
@@ -237,7 +243,7 @@ palette : Shape -> Element Msg
 palette selected =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        (List.map (paletteButton selected) [ Circle, Square, Triangle ])
+        (List.map (paletteButton selected) [ Player, Block ])
 
 
 paletteButton : Shape -> Shape -> Element Msg
@@ -317,16 +323,9 @@ autoAdvanceId =
 timeControls : Model -> Element Msg
 timeControls model =
     let
-        frameCount : Int
-        frameCount =
-            Array.length model.frames
-
         label : String
         label =
-            "Frame "
-                ++ String.fromInt (model.currentFrame + 1)
-                ++ " / "
-                ++ String.fromInt frameCount
+            "Frame " ++ Id.toString model.currentFrame
     in
     Ui.column [ Ui.spacing 8, Ui.width Ui.fill ]
         [ Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentCenterY, Ui.centerX ]
@@ -351,24 +350,53 @@ stepButton htmlId msg label =
         , Ui.rounded 4
         , Ui.contentCenterX
         , Ui.contentCenterY
+        , Ui.Font.size 18
+        , Ui.Font.bold
         ]
-        (Ui.el [ Ui.Font.size 18, Ui.Font.weight 700 ] (Ui.text label))
+        (Ui.text label)
+
+
+foldFrames : (Id FrameId -> Maybe Frame -> a -> a) -> a -> Model -> a
+foldFrames foldFunc startValue model =
+    let
+        list =
+            Nonempty model.currentFrame (SeqDict.keys model.frames)
+    in
+    foldFramesHelper
+        foldFunc
+        (List.Nonempty.foldl1 Id.minimum list |> Id.toInt)
+        (List.Nonempty.foldl1 Id.maximum list |> Id.toInt)
+        model
+        startValue
+
+
+foldFramesHelper : (Id FrameId -> Maybe Frame -> a -> a) -> Int -> Int -> Model -> a -> a
+foldFramesHelper foldFunc index endIndex model state =
+    if index > endIndex then
+        state
+
+    else
+        foldFramesHelper
+            foldFunc
+            (index + 1)
+            endIndex
+            model
+            (foldFunc (Id.fromInt index) (SeqDict.get (Id.fromInt index) model.frames) state)
 
 
 slider : Model -> Element Msg
 slider model =
-    Ui.row
-        [ Ui.spacing 2
-        , Ui.width Ui.fill
-        , Ui.height (Ui.px 24)
-        , Ui.id (Dom.idToString sliderId)
-        ]
-        (Array.toList model.frames
-            |> List.indexedMap (sliderSegment model.currentFrame)
-        )
+    foldFrames (\frameId frame list -> sliderSegment model.currentFrame frameId frame :: list) [] model
+        |> List.reverse
+        |> Ui.row
+            [ Ui.spacing 2
+            , Ui.width Ui.fill
+            , Ui.height (Ui.px 24)
+            , Ui.id (Dom.idToString sliderId)
+            ]
 
 
-sliderSegment : Int -> Int -> Frame -> Element Msg
+sliderSegment : Id FrameId -> Id FrameId -> Maybe Frame -> Element Msg
 sliderSegment currentIndex index frame =
     let
         isCurrent : Bool
@@ -377,7 +405,7 @@ sliderSegment currentIndex index frame =
 
         isEmpty : Bool
         isEmpty =
-            SeqDict.isEmpty frame
+            frame == Nothing
     in
     Ui.el
         [ Ui.Input.button (SliderChanged index)
@@ -411,7 +439,7 @@ sliderSegment currentIndex index frame =
 
 
 grid :
-    { previous : Maybe Frame, current : Frame, next : Maybe Frame }
+    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
     -> Element Msg
 grid frames =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
@@ -419,33 +447,28 @@ grid frames =
 
 
 gridRow :
-    { previous : Maybe Frame, current : Frame, next : Maybe Frame }
+    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
     -> Int
     -> Element Msg
 gridRow frames row =
     Ui.row [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (\col -> gridCell frames ( col, row )) (List.range 0 (gridSize - 1)))
+        (List.map (\col -> gridCell frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
 
 
 gridCell :
-    { previous : Maybe Frame, current : Frame, next : Maybe Frame }
-    -> CellPos
+    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
+    -> Coord GridPos
     -> Element Msg
 gridCell frames pos =
     let
-        ( col, row ) =
-            pos
-
         ghostAttrs : List (Ui.Attribute Msg)
         ghostAttrs =
-            List.filterMap identity
-                [ frames.previous
-                    |> Maybe.andThen (cellShape pos)
-                    |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostPreviousColor))
-                , frames.next
-                    |> Maybe.andThen (cellShape pos)
-                    |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostNextColor))
-                ]
+            [ cellShape pos frames.current |> Maybe.map (\s -> Ui.behindContent (shapeIcon s))
+            , cellShape pos frames.previous |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostPreviousColor))
+            , cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (ghostShape s ghostNextColor))
+            ]
+                |> List.filterMap identity
+                |> List.take 1
     in
     Ui.el
         ([ Ui.htmlAttribute
@@ -455,31 +478,27 @@ gridCell frames pos =
                 )
             )
          , Ui.htmlAttribute (Html.Attributes.style "cursor" "pointer")
-         , Ui.id (Dom.idToString (cellId col row))
+         , Ui.id (Dom.idToString (cellId pos))
          , Ui.width (Ui.px 48)
          , Ui.height (Ui.px 48)
          , Ui.borderColor MyUi.buttonBorder
          , Ui.border 1
          , Ui.background MyUi.background1
          , Ui.rounded 2
-         , Ui.contentCenterX
-         , Ui.contentCenterY
          ]
             ++ ghostAttrs
         )
-        (case cellShape pos frames.current of
-            Just shape ->
-                shapeIcon shape
-
-            Nothing ->
-                Ui.none
-        )
+        Ui.none
 
 
-cellShape : CellPos -> Frame -> Maybe Shape
+cellShape : Coord GridPos -> Maybe Frame -> Maybe Shape
 cellShape pos frame =
-    SeqDict.get pos frame
-        |> Maybe.andThen (\set -> SeqSet.toList set |> List.head)
+    case frame of
+        Just frame2 ->
+            NonemptyDict.get pos frame2
+
+        Nothing ->
+            Nothing
 
 
 ghostPreviousColor : Ui.Color
@@ -510,9 +529,9 @@ paletteId shape =
     Dom.id ("game_palette_" ++ shapeToString shape)
 
 
-cellId : Int -> Int -> Dom.HtmlId
-cellId col row =
-    Dom.id ("game_cell_" ++ String.fromInt col ++ "_" ++ String.fromInt row)
+cellId : Coord GridPos -> Dom.HtmlId
+cellId coord =
+    Dom.id ("game_cell_" ++ String.fromInt (Coord.xRaw coord) ++ "_" ++ String.fromInt (Coord.yRaw coord))
 
 
 stepBackId : Dom.HtmlId
@@ -530,22 +549,19 @@ sliderId =
     Dom.id "game_slider"
 
 
-segmentId : Int -> Dom.HtmlId
+segmentId : Id FrameId -> Dom.HtmlId
 segmentId index =
-    Dom.id ("game_slider_segment_" ++ String.fromInt index)
+    Dom.id ("game_slider_segment_" ++ Id.toString index)
 
 
 shapeToString : Shape -> String
 shapeToString shape =
     case shape of
-        Circle ->
+        Player ->
             "circle"
 
-        Square ->
+        Block ->
             "square"
-
-        Triangle ->
-            "triangle"
 
 
 shapeIcon : Shape -> Element msg
@@ -554,13 +570,17 @@ shapeIcon shape =
         glyph : String
         glyph =
             case shape of
-                Circle ->
-                    "●"
+                Player ->
+                    "☺"
 
-                Square ->
+                Block ->
                     "■"
-
-                Triangle ->
-                    "▲"
     in
-    Ui.el [ Ui.Font.size 28, Ui.Font.center ] (Ui.text glyph)
+    Ui.el
+        [ Ui.Font.size 28
+        , Ui.Font.center
+        , MyUi.htmlStyle "user-select" "none"
+        , MyUi.htmlStyle "-webkit-user-select" "none"
+        , Ui.centerY
+        ]
+        (Ui.text glyph)

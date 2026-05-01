@@ -16,8 +16,12 @@ module Id exposing
     , ThreadRouteWithMessage(..)
     , UserId(..)
     , changeType
+    , decrement
     , fromInt
     , fromString
+    , increment
+    , maximum
+    , minimum
     , nextId
     , threadRouteToMessageId
     , threadRouteWithMessage
@@ -131,6 +135,26 @@ type CustomEmojiId
 
 type Id a
     = Id Int
+
+
+increment : Id a -> Id a
+increment (Id id) =
+    Id (id + 1)
+
+
+decrement : Id a -> Id a
+decrement (Id id) =
+    Id (id - 1)
+
+
+minimum : Id a -> Id a -> Id a
+minimum (Id a) (Id b) =
+    min a b |> Id
+
+
+maximum : Id a -> Id a -> Id a
+maximum (Id a) (Id b) =
+    max a b |> Id
 
 
 nextId : SeqDict (Id a) b -> Id a
