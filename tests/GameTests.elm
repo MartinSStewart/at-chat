@@ -22,8 +22,8 @@ tests =
             [ ( Coord.xy 0 0, Right ), ( Coord.xy 1 1, Left ) ]
         , solveTest
             "Square with box"
-            [ ( Coord.xy 0 0, Player ), ( Coord.xy 1 1, Player ), ( Coord.xy 1 0, Block ) ]
-            [ ( Coord.xy 1 0, Player ), ( Coord.xy 0 1, Player ), ( Coord.xy 1 -1, Block ) ]
+            [ ( Coord.xy 0 0, Player ), ( Coord.xy 1 1, Player ), ( Coord.xy 1 0, Box ) ]
+            [ ( Coord.xy 1 0, Player ), ( Coord.xy 0 1, Player ), ( Coord.xy 1 -1, Box ) ]
             [ ( Coord.xy 0 0, Down ), ( Coord.xy 1 1, Up ) ]
         , solveTest
             "Conga line"

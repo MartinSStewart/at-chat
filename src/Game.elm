@@ -36,8 +36,8 @@ import Ui.Input
 
 type PlayerOrBox
     = Player
-    | Block
-    | DoubleBlock
+    | Box
+    | LargeBox
 
 
 type WallOrTimePortal
@@ -79,13 +79,13 @@ type alias Model =
     , currentFrame : Id FrameId
     , autoAdvance : Bool
     , level : Level
+    , startFrame : Frame
     }
 
 
 type alias Level =
     { horizontalWalls : SeqDict (Coord HorizontalWallPos) WallOrTimePortal
     , verticalWalls : SeqDict (Coord VerticalWallPos) WallOrTimePortal
-    , start : Coord GridPos
     , exit : Coord GridPos
     }
 
@@ -111,6 +111,7 @@ init =
     , currentFrame = Id.fromInt 0
     , autoAdvance = True
     , level = level1
+    , startFrame = NonemptyDict.fromNonemptyList (Nonempty ( Coord.xy 1 1, Player ) [ ( Coord.xy 4 6, Box ) ])
     }
 
 
@@ -123,14 +124,8 @@ level1 =
             , ( Coord.xy 0 3, Wall )
             ]
     , verticalWalls = SeqDict.fromList [ ( Coord.xy 3 0, Wall ), ( Coord.xy 3 2, TimePortal 5 ) ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
-    , start = Coord.xy 1 1
     , exit = Coord.xy 2 4
     }
-
-
-currentFrameData : Model -> Maybe Frame
-currentFrameData model =
-    SeqDict.get model.currentFrame model.frames
 
 
 update : Msg -> Model -> Model
@@ -230,6 +225,25 @@ wallThickness wallType =
             6
 
 
+getFrame : Id FrameId -> Model -> Maybe Frame
+getFrame frameId model =
+    case SeqDict.keys model.frames |> List.Nonempty.fromList of
+        Just nonempty ->
+            let
+                earlierFrame : Id FrameId
+                earlierFrame =
+                    List.Nonempty.foldl1 Id.minimum nonempty
+            in
+            if Id.toInt earlierFrame > Id.toInt frameId then
+                Just model.startFrame
+
+            else
+                SeqDict.get frameId model.frames
+
+        Nothing ->
+            Just model.startFrame
+
+
 gridWithWalls : Model -> Element Msg
 gridWithWalls model =
     Ui.el
@@ -239,8 +253,8 @@ gridWithWalls model =
         , Ui.behindContent (gridBackground model.level)
         ]
         (grid
-            { previous = SeqDict.get (Id.decrement model.currentFrame) model.frames
-            , current = currentFrameData model
+            { previous = getFrame (Id.decrement model.currentFrame) model
+            , current = SeqDict.get model.currentFrame model.frames
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
             }
         )
@@ -305,7 +319,7 @@ palette : PlayerOrBox -> Element Msg
 palette selected =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        (List.map (paletteButton selected) [ Player, Block, DoubleBlock ])
+        (List.map (paletteButton selected) [ Player, Box, LargeBox ])
 
 
 paletteButton : PlayerOrBox -> PlayerOrBox -> Element Msg
@@ -461,11 +475,11 @@ slider model =
 
 
 sliderSegment : Model -> Id FrameId -> Maybe Frame -> Element Msg
-sliderSegment model index frame =
+sliderSegment model frameId frame =
     let
         isCurrent : Bool
         isCurrent =
-            index == model.currentFrame
+            frameId == model.currentFrame
 
         isEmpty : Bool
         isEmpty =
@@ -473,11 +487,11 @@ sliderSegment model index frame =
 
         hasError : Bool
         hasError =
-            frameHasError model index frame
+            frameHasError model frameId
     in
     Ui.el
-        [ Ui.Input.button (SliderChanged index)
-        , Ui.id (Dom.idToString (segmentId index))
+        [ Ui.Input.button (SliderChanged frameId)
+        , Ui.id (Dom.idToString (segmentId frameId))
         , Ui.background
             (if isEmpty then
                 Ui.rgb 90 90 100
@@ -511,9 +525,9 @@ sliderSegment model index frame =
         Ui.none
 
 
-frameHasError : Model -> Id FrameId -> Maybe Frame -> Bool
-frameHasError model frameId maybeFrame =
-    case ( SeqDict.get (Id.decrement frameId) model.frames, maybeFrame ) of
+frameHasError : Model -> Id FrameId -> Bool
+frameHasError model frameId =
+    case ( getFrame (Id.decrement frameId) model, getFrame frameId model ) of
         ( Just frame, Just next2 ) ->
             findNextMove model.level frame next2 == Err ()
 
@@ -530,14 +544,15 @@ frameHasError model frameId maybeFrame =
 grid : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element Msg
 grid frames =
     Ui.column
-        [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (gridRow frames) (List.range 0 (gridSize - 1)))
-
-
-gridRow : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Int -> Element Msg
-gridRow frames row =
-    Ui.row [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (\col -> gridCell frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+        [ Ui.spacing 4, Ui.width Ui.shrink, MyUi.noPointerEvents ]
+        (List.map
+            (\row ->
+                Ui.row
+                    [ Ui.spacing 4, Ui.width Ui.shrink ]
+                    (List.map (\col -> gridCell frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+            )
+            (List.range 0 (gridSize - 1))
+        )
 
 
 gridCell :
@@ -575,13 +590,14 @@ gridBackground : Level -> Element Msg
 gridBackground level =
     Ui.column
         [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (gridRowBackground level) (List.range 0 (gridSize - 1)))
-
-
-gridRowBackground : Level -> Int -> Element Msg
-gridRowBackground level row =
-    Ui.row [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (\col -> gridCellBackground level (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+        (List.map
+            (\row ->
+                Ui.row
+                    [ Ui.spacing 4, Ui.width Ui.shrink ]
+                    (List.map (\col -> gridCellBackground level (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+            )
+            (List.range 0 (gridSize - 1))
+        )
 
 
 gridCellBackground :
@@ -601,10 +617,7 @@ gridCellBackground level pos =
         , Ui.width (Ui.px 48)
         , Ui.height (Ui.px 48)
         , Ui.borderColor
-            (if level.start == pos then
-                startColor
-
-             else if level.exit == pos then
+            (if level.exit == pos then
                 endColor
 
              else
@@ -612,10 +625,7 @@ gridCellBackground level pos =
             )
         , Ui.border 1
         , Ui.background
-            (if level.start == pos then
-                startColor
-
-             else if level.exit == pos then
+            (if level.exit == pos then
                 endColor
 
              else
@@ -627,10 +637,7 @@ gridCellBackground level pos =
         , Ui.Font.bold
         , Ui.Font.color (Ui.rgba 255 255 255 0.5)
         ]
-        (if level.start == pos then
-            Ui.text "S"
-
-         else if level.exit == pos then
+        (if level.exit == pos then
             Ui.text "E"
 
          else
@@ -638,10 +645,7 @@ gridCellBackground level pos =
         )
 
 
-startColor =
-    Ui.rgba 80 200 120 0.35
-
-
+endColor : Ui.Color
 endColor =
     Ui.rgba 220 140 60 0.35
 
@@ -658,12 +662,12 @@ cellShape pos frame =
 
 ghostPreviousColor : Ui.Color
 ghostPreviousColor =
-    Ui.rgba 255 110 110 0.4
+    Ui.rgb 120 50 50
 
 
 ghostNextColor : Ui.Color
 ghostNextColor =
-    Ui.rgba 110 180 255 0.4
+    Ui.rgb 50 90 120
 
 
 paletteId : PlayerOrBox -> Dom.HtmlId
@@ -702,10 +706,10 @@ shapeToString shape =
         Player ->
             "player"
 
-        Block ->
+        Box ->
             "block"
 
-        DoubleBlock ->
+        LargeBox ->
             "double-block"
 
 
@@ -720,10 +724,11 @@ shapeIcon color shape =
                 , MyUi.htmlStyle "-webkit-user-select" "none"
                 , Ui.centerY
                 , Ui.Font.color color
+                , MyUi.noPointerEvents
                 ]
                 (Ui.text "☺")
 
-        Block ->
+        Box ->
             Ui.el
                 [ Ui.Font.size 28
                 , Ui.Font.center
@@ -731,10 +736,11 @@ shapeIcon color shape =
                 , MyUi.htmlStyle "-webkit-user-select" "none"
                 , Ui.centerY
                 , Ui.Font.color color
+                , MyUi.noPointerEvents
                 ]
                 (Ui.text "■")
 
-        DoubleBlock ->
+        LargeBox ->
             Ui.el
                 [ Ui.width (Ui.px (cellSize * 2))
                 , Ui.height (Ui.px (cellSize * 2))
@@ -826,7 +832,7 @@ applyMoves level frame moves =
                                     playerDest pos move
                             in
                             case NonemptyDict.get dest frame of
-                                Just Block ->
+                                Just Box ->
                                     Just
                                         { from = dest
                                         , to = offset move dest
@@ -847,7 +853,7 @@ applyMoves level frame moves =
             NonemptyDict.toList frame
                 |> List.filterMap
                     (\( pos, kind ) ->
-                        if kind == Block && not (List.member pos pushedBlockSources) then
+                        if kind == Box && not (List.member pos pushedBlockSources) then
                             Just pos
 
                         else
@@ -921,11 +927,11 @@ applyMoves level frame moves =
                             Nothing ->
                                 True
 
-                            Just Block ->
+                            Just Box ->
                                 -- Push: legality of the push is checked above.
                                 True
 
-                            Just DoubleBlock ->
+                            Just LargeBox ->
                                 False
 
                             Just Player ->
@@ -961,7 +967,7 @@ applyMoves level frame moves =
 
             blockDict =
                 finalBlockPositions
-                    |> List.map (\p -> ( p, Block ))
+                    |> List.map (\p -> ( p, Box ))
                     |> SeqDict.fromList
         in
         SeqDict.union playerDict blockDict |> NonemptyDict.fromSeqDict
