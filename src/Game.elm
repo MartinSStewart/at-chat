@@ -2,6 +2,9 @@ module Game exposing (Model, Msg, Shape(..), init, update, view)
 
 import Array exposing (Array)
 import Effect.Browser.Dom as Dom
+import Html.Attributes
+import Html.Events
+import Json.Decode
 import MyUi
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -28,15 +31,17 @@ type alias Model =
     { selectedShape : Shape
     , frames : Array Frame
     , currentFrame : Int
+    , autoAdvance : Bool
     }
 
 
 type Msg
     = SelectedShape Shape
-    | ClickedCell CellPos
+    | ClickedCell CellPos Bool
     | PressedStepBackward
     | PressedStepForward
     | SliderChanged Int
+    | ToggledAutoAdvance
 
 
 gridSize : Int
@@ -49,6 +54,7 @@ init =
     { selectedShape = Circle
     , frames = Array.fromList [ SeqDict.empty ]
     , currentFrame = 0
+    , autoAdvance = False
     }
 
 
@@ -68,37 +74,53 @@ update msg model =
         SelectedShape shape ->
             { model | selectedShape = shape }
 
-        ClickedCell pos ->
+        ClickedCell pos shiftHeld ->
             let
                 frame : Frame
                 frame =
                     SeqDict.insert pos (SeqSet.singleton model.selectedShape) (currentFrameData model)
+
+                placed : Model
+                placed =
+                    { model | frames = Array.set model.currentFrame frame model.frames }
             in
-            { model | frames = Array.set model.currentFrame frame model.frames }
+            if model.autoAdvance || shiftHeld then
+                advanceFrame placed
+
+            else
+                placed
 
         PressedStepBackward ->
             { model | currentFrame = max 0 (model.currentFrame - 1) }
 
         PressedStepForward ->
-            let
-                next : Int
-                next =
-                    model.currentFrame + 1
-            in
-            if next >= Array.length model.frames then
-                { model
-                    | frames = Array.push SeqDict.empty model.frames
-                    , currentFrame = next
-                }
-
-            else
-                { model | currentFrame = next }
+            advanceFrame model
 
         SliderChanged index ->
             { model
                 | currentFrame =
                     clamp 0 (Array.length model.frames - 1) index
             }
+
+        ToggledAutoAdvance ->
+            { model | autoAdvance = not model.autoAdvance }
+
+
+advanceFrame : Model -> Model
+advanceFrame model =
+    let
+        next : Int
+        next =
+            model.currentFrame + 1
+    in
+    if next >= Array.length model.frames then
+        { model
+            | frames = Array.push SeqDict.empty model.frames
+            , currentFrame = next
+        }
+
+    else
+        { model | currentFrame = next }
 
 
 view : Model -> Element Msg
@@ -112,6 +134,7 @@ view model =
         ]
         [ Ui.el [ Ui.Font.size 24, Ui.Font.weight 600 ] (Ui.text "Game")
         , palette model.selectedShape
+        , autoAdvanceToggle model.autoAdvance
         , timeControls model
         , grid
             { previous = getFrame (model.currentFrame - 1) model.frames
@@ -160,6 +183,46 @@ paletteButton selected shape =
         , Ui.contentCenterY
         ]
         (shapeIcon shape)
+
+
+autoAdvanceToggle : Bool -> Element Msg
+autoAdvanceToggle isOn =
+    Ui.row
+        [ Ui.Input.button ToggledAutoAdvance
+        , Ui.id (Dom.idToString autoAdvanceId)
+        , Ui.spacing 8
+        , Ui.width Ui.shrink
+        , Ui.contentCenterY
+        ]
+        [ Ui.el
+            [ Ui.width (Ui.px 22)
+            , Ui.height (Ui.px 22)
+            , Ui.background
+                (if isOn then
+                    Ui.rgb 100 200 255
+
+                 else
+                    MyUi.buttonBackground
+                )
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.border 1
+            , Ui.rounded 3
+            , Ui.contentCenterX
+            , Ui.contentCenterY
+            ]
+            (if isOn then
+                Ui.el [ Ui.Font.size 16, Ui.Font.weight 700 ] (Ui.text "✓")
+
+             else
+                Ui.none
+            )
+        , Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink ] (Ui.text "Auto-advance on placement (or shift+click)")
+        ]
+
+
+autoAdvanceId : Dom.HtmlId
+autoAdvanceId =
+    Dom.id "game_auto_advance"
 
 
 timeControls : Model -> Element Msg
@@ -296,7 +359,13 @@ gridCell frames pos =
                 ]
     in
     Ui.el
-        ([ Ui.Input.button (ClickedCell pos)
+        ([ Ui.htmlAttribute
+            (Html.Events.on "click"
+                (Json.Decode.field "shiftKey" Json.Decode.bool
+                    |> Json.Decode.map (ClickedCell pos)
+                )
+            )
+         , Ui.htmlAttribute (Html.Attributes.style "cursor" "pointer")
          , Ui.id (Dom.idToString (cellId col row))
          , Ui.width (Ui.px 48)
          , Ui.height (Ui.px 48)
