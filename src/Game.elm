@@ -46,6 +46,12 @@ type WallOrTimePortal
     | TimePortal Int
 
 
+type Tool
+    = PlaceShape PlayerOrBox
+    | PlaceWall
+    | PlaceTimePortal
+
+
 type GridPos
     = CellPos Never
 
@@ -75,7 +81,7 @@ type Move
 
 
 type alias Model =
-    { selectedShape : PlayerOrBox
+    { selectedTool : Tool
     , frames : SeqDict (Id FrameId) Frame
     , currentFrame : Id FrameId
     , autoAdvance : Bool
@@ -92,8 +98,10 @@ type alias Level =
 
 
 type Msg
-    = SelectedShape PlayerOrBox
+    = SelectedTool Tool
     | ClickedCell (Coord GridPos) Bool
+    | ClickedHorizontalWall (Coord HorizontalWallPos)
+    | ClickedVerticalWall (Coord VerticalWallPos)
     | PressedStepBackward
     | PressedStepForward
     | SliderChanged (Id FrameId)
@@ -120,7 +128,7 @@ gridSize =
 
 init : Model
 init =
-    { selectedShape = Player
+    { selectedTool = PlaceShape Player
     , frames = SeqDict.empty
     , currentFrame = Id.fromInt 0
     , autoAdvance = True
@@ -143,39 +151,80 @@ level1 =
 update : Msg -> Model -> Model
 update msg model =
     case msg of
-        SelectedShape shape ->
-            { model | selectedShape = shape }
+        SelectedTool tool ->
+            { model | selectedTool = tool }
 
         ClickedCell pos shiftHeld ->
-            { model
-                | frames =
-                    SeqDict.update
-                        model.currentFrame
-                        (\maybe ->
-                            case maybe of
-                                Just frame2 ->
-                                    case NonemptyDict.get pos frame2 of
-                                        Just shape ->
-                                            if shape == model.selectedShape then
-                                                NonemptyDict.remove pos frame2 |> NonemptyDict.fromSeqDict
+            case model.selectedTool of
+                PlaceShape shape ->
+                    { model
+                        | frames =
+                            SeqDict.update
+                                model.currentFrame
+                                (\maybe ->
+                                    case maybe of
+                                        Just frame2 ->
+                                            case NonemptyDict.get pos frame2 of
+                                                Just existing ->
+                                                    if existing == shape then
+                                                        NonemptyDict.remove pos frame2 |> NonemptyDict.fromSeqDict
 
-                                            else
-                                                NonemptyDict.insert pos model.selectedShape frame2 |> Just
+                                                    else
+                                                        NonemptyDict.insert pos shape frame2 |> Just
+
+                                                Nothing ->
+                                                    NonemptyDict.insert pos shape frame2 |> Just
 
                                         Nothing ->
-                                            NonemptyDict.insert pos model.selectedShape frame2 |> Just
+                                            NonemptyDict.singleton pos shape |> Just
+                                )
+                                model.frames
+                        , currentFrame =
+                            if model.autoAdvance || shiftHeld then
+                                Id.increment model.currentFrame
 
-                                Nothing ->
-                                    NonemptyDict.singleton pos model.selectedShape |> Just
-                        )
-                        model.frames
-                , currentFrame =
-                    if model.autoAdvance || shiftHeld then
-                        Id.increment model.currentFrame
+                            else
+                                model.currentFrame
+                    }
 
-                    else
-                        model.currentFrame
-            }
+                _ ->
+                    model
+
+        ClickedHorizontalWall coord ->
+            case toolToWallType model of
+                Just wallType ->
+                    let
+                        level : Level
+                        level =
+                            model.level
+                    in
+                    { model
+                        | level =
+                            { level
+                                | horizontalWalls = toggleWall coord wallType level.horizontalWalls
+                            }
+                    }
+
+                Nothing ->
+                    model
+
+        ClickedVerticalWall coord ->
+            case toolToWallType model of
+                Just wallType ->
+                    let
+                        level : Level
+                        level =
+                            model.level
+                    in
+                    { model
+                        | level =
+                            { level
+                                | verticalWalls = toggleWall coord wallType level.verticalWalls
+                            }
+                    }
+
+                Nothing ->
+                    model
 
         PressedStepBackward ->
             stepBackward model
@@ -188,6 +237,38 @@ update msg model =
 
         ToggledAutoAdvance ->
             { model | autoAdvance = not model.autoAdvance }
+
+
+toolToWallType : Model -> Maybe WallOrTimePortal
+toolToWallType model =
+    case model.selectedTool of
+        PlaceShape _ ->
+            Nothing
+
+        PlaceWall ->
+            Just Wall
+
+        PlaceTimePortal ->
+            Just (TimePortal (Id.toInt model.currentFrame))
+
+
+toggleWall : Coord pos -> WallOrTimePortal -> SeqDict (Coord pos) WallOrTimePortal -> SeqDict (Coord pos) WallOrTimePortal
+toggleWall coord wallType walls =
+    SeqDict.update
+        coord
+        (\maybe ->
+            case maybe of
+                Just existing ->
+                    if existing == wallType then
+                        Nothing
+
+                    else
+                        Just wallType
+
+                Nothing ->
+                    Just wallType
+        )
+        walls
 
 
 stepForward : Model -> Model
@@ -210,7 +291,7 @@ view model =
         , Ui.contentCenterY
         ]
         [ Ui.el [ Ui.Font.size 24, Ui.Font.weight 600 ] (Ui.text "Game")
-        , palette model.selectedShape
+        , palette model.selectedTool
         , autoAdvanceToggle model.autoAdvance
         , timeControls model
         , gridWithWalls model
@@ -272,6 +353,7 @@ gridWithWalls model =
         [ Ui.width (Ui.px gridPixelSize)
         , Ui.height (Ui.px gridPixelSize)
         , Ui.inFront (wallsLayer model.level)
+        , Ui.inFront (wallClickLayer model.selectedTool)
         , Ui.behindContent (gridBackground model.level)
         ]
         (grid
@@ -280,6 +362,76 @@ gridWithWalls model =
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
             }
         )
+
+
+wallClickLayer : Tool -> Element Msg
+wallClickLayer tool =
+    case tool of
+        PlaceShape _ ->
+            Ui.none
+
+        _ ->
+            let
+                horizontalStrips : List (Html.Html Msg)
+                horizontalStrips =
+                    List.range 1 (gridSize - 1)
+                        |> List.concatMap
+                            (\row ->
+                                List.range 0 (gridSize - 1)
+                                    |> List.map (\col -> horizontalWallClickStrip (Coord.xy col row))
+                            )
+
+                verticalStrips : List (Html.Html Msg)
+                verticalStrips =
+                    List.range 1 (gridSize - 1)
+                        |> List.concatMap
+                            (\col ->
+                                List.range 0 (gridSize - 1)
+                                    |> List.map (\row -> verticalWallClickStrip (Coord.xy col row))
+                            )
+            in
+            Html.div
+                [ Html.Attributes.style "position" "absolute"
+                , Html.Attributes.style "inset" "0"
+                , Html.Attributes.style "pointer-events" "none"
+                ]
+                (horizontalStrips ++ verticalStrips)
+                |> Ui.html
+
+
+wallClickHitSize : Int
+wallClickHitSize =
+    16
+
+
+horizontalWallClickStrip : Coord HorizontalWallPos -> Html.Html Msg
+horizontalWallClickStrip coord =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride))
+        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride - wallClickHitSize // 2))
+        , Html.Attributes.style "width" (px cellSize)
+        , Html.Attributes.style "height" (px wallClickHitSize)
+        , Html.Attributes.style "cursor" "pointer"
+        , Html.Attributes.style "pointer-events" "auto"
+        , Html.Events.onClick (ClickedHorizontalWall coord)
+        ]
+        []
+
+
+verticalWallClickStrip : Coord VerticalWallPos -> Html.Html Msg
+verticalWallClickStrip coord =
+    Html.div
+        [ Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride - wallClickHitSize // 2))
+        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride))
+        , Html.Attributes.style "width" (px wallClickHitSize)
+        , Html.Attributes.style "height" (px cellSize)
+        , Html.Attributes.style "cursor" "pointer"
+        , Html.Attributes.style "pointer-events" "auto"
+        , Html.Events.onClick (ClickedVerticalWall coord)
+        ]
+        []
 
 
 wallsLayer : Level -> Element msg
@@ -337,23 +489,30 @@ px n =
     String.fromInt n ++ "px"
 
 
-palette : PlayerOrBox -> Element Msg
+palette : Tool -> Element Msg
 palette selected =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        (List.map (paletteButton selected) [ Player, Box, LargeBox ])
+        (List.map (paletteButton selected)
+            [ PlaceShape Player
+            , PlaceShape Box
+            , PlaceShape LargeBox
+            , PlaceWall
+            , PlaceTimePortal
+            ]
+        )
 
 
-paletteButton : PlayerOrBox -> PlayerOrBox -> Element Msg
-paletteButton selected shape =
+paletteButton : Tool -> Tool -> Element Msg
+paletteButton selected tool =
     let
         isSelected : Bool
         isSelected =
-            shape == selected
+            tool == selected
     in
     Ui.el
-        [ Ui.Input.button (SelectedShape shape)
-        , Ui.id (Dom.idToString (paletteId shape))
+        [ Ui.Input.button (SelectedTool tool)
+        , Ui.id (Dom.idToString (paletteId tool))
         , Ui.width (Ui.px 56)
         , Ui.height (Ui.px 56)
         , Ui.borderColor
@@ -375,7 +534,38 @@ paletteButton selected shape =
         , Ui.contentCenterX
         , Ui.contentCenterY
         ]
-        (shapeIcon (Ui.rgb 255 255 255) shape)
+        (toolIcon tool)
+
+
+toolIcon : Tool -> Element msg
+toolIcon tool =
+    case tool of
+        PlaceShape shape ->
+            shapeIcon (Ui.rgb 255 255 255) shape
+
+        PlaceWall ->
+            Ui.el
+                [ Ui.width (Ui.px 32)
+                , Ui.height (Ui.px 6)
+                , Ui.background (Ui.rgb 255 180 60)
+                , Ui.rounded 2
+                , Ui.centerY
+                , Ui.centerX
+                , MyUi.noPointerEvents
+                ]
+                Ui.none
+
+        PlaceTimePortal ->
+            Ui.el
+                [ Ui.width (Ui.px 32)
+                , Ui.height (Ui.px 8)
+                , Ui.background (Ui.rgb 255 0 160)
+                , Ui.rounded 2
+                , Ui.centerY
+                , Ui.centerX
+                , MyUi.noPointerEvents
+                ]
+                Ui.none
 
 
 autoAdvanceToggle : Bool -> Element Msg
@@ -692,9 +882,22 @@ ghostNextColor =
     Ui.rgb 50 90 120
 
 
-paletteId : PlayerOrBox -> Dom.HtmlId
-paletteId shape =
-    Dom.id ("game_palette_" ++ shapeToString shape)
+paletteId : Tool -> Dom.HtmlId
+paletteId tool =
+    Dom.id ("game_palette_" ++ toolToString tool)
+
+
+toolToString : Tool -> String
+toolToString tool =
+    case tool of
+        PlaceShape shape ->
+            shapeToString shape
+
+        PlaceWall ->
+            "wall"
+
+        PlaceTimePortal ->
+            "time-portal"
 
 
 cellId : Coord GridPos -> Dom.HtmlId
