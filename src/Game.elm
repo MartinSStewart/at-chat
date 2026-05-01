@@ -2,13 +2,15 @@ module Game exposing
     ( FrameId
     , GridPos
     , HorizontalWallPos
+    , Level
     , Model
     , Move(..)
     , Msg
     , PlayerOrBox(..)
     , VerticalWallPos
+    , WallOrTimePortal(..)
+    , findNextMove
     , init
-    , solve
     , update
     , view
     )
@@ -35,6 +37,12 @@ import Ui.Input
 type PlayerOrBox
     = Player
     | Block
+    | DoubleBlock
+
+
+type WallOrTimePortal
+    = Wall
+    | TimePortal Int
 
 
 type GridPos
@@ -75,8 +83,8 @@ type alias Model =
 
 
 type alias Level =
-    { horizontalWalls : SeqSet (Coord HorizontalWallPos)
-    , verticalWalls : SeqSet (Coord VerticalWallPos)
+    { horizontalWalls : SeqDict (Coord HorizontalWallPos) WallOrTimePortal
+    , verticalWalls : SeqDict (Coord VerticalWallPos) WallOrTimePortal
     , start : Coord GridPos
     , exit : Coord GridPos
     }
@@ -93,7 +101,7 @@ type Msg
 
 gridSize : Int
 gridSize =
-    6
+    8
 
 
 init : Model
@@ -102,12 +110,21 @@ init =
     , frames = SeqDict.empty
     , currentFrame = Id.fromInt 0
     , autoAdvance = True
-    , level =
-        { horizontalWalls = SeqSet.fromList [ Coord.xy 1 2, Coord.xy 3 1, Coord.xy 5 4, Coord.xy 0 3 ]
-        , verticalWalls = SeqSet.fromList [ Coord.xy 3 0 ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
-        , start = Coord.xy 1 1
-        , exit = Coord.xy 2 4
-        }
+    , level = level1
+    }
+
+
+level1 =
+    { horizontalWalls =
+        SeqDict.fromList
+            [ ( Coord.xy 1 2, Wall )
+            , ( Coord.xy 3 1, TimePortal 5 )
+            , ( Coord.xy 5 4, Wall )
+            , ( Coord.xy 0 3, Wall )
+            ]
+    , verticalWalls = SeqDict.fromList [ ( Coord.xy 3 0, Wall ), ( Coord.xy 3 2, TimePortal 5 ) ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
+    , start = Coord.xy 1 1
+    , exit = Coord.xy 2 4
     }
 
 
@@ -203,9 +220,14 @@ gridPixelSize =
     gridSize * cellSize + (gridSize - 1) * gridGap
 
 
-wallThickness : Int
-wallThickness =
-    4
+wallThickness : WallOrTimePortal -> Int
+wallThickness wallType =
+    case wallType of
+        Wall ->
+            4
+
+        TimePortal _ ->
+            6
 
 
 gridWithWalls : Model -> Element Msg
@@ -214,9 +236,9 @@ gridWithWalls model =
         [ Ui.width (Ui.px gridPixelSize)
         , Ui.height (Ui.px gridPixelSize)
         , Ui.inFront (wallsLayer model.level)
+        , Ui.behindContent (gridBackground model.level)
         ]
         (grid
-            model.level
             { previous = SeqDict.get (Id.decrement model.currentFrame) model.frames
             , current = currentFrameData model
             , next = SeqDict.get (Id.increment model.currentFrame) model.frames
@@ -231,35 +253,44 @@ wallsLayer level =
         , Html.Attributes.style "inset" "0"
         , Html.Attributes.style "pointer-events" "none"
         ]
-        ((SeqSet.toList level.horizontalWalls |> List.map horizontalWallView)
-            ++ (SeqSet.toList level.verticalWalls |> List.map verticalWallView)
+        ((SeqDict.toList level.horizontalWalls |> List.map horizontalWallView)
+            ++ (SeqDict.toList level.verticalWalls |> List.map verticalWallView)
         )
         |> Ui.html
 
 
-horizontalWallView : Coord HorizontalWallPos -> Html.Html msg
-horizontalWallView coord =
+horizontalWallView : ( Coord HorizontalWallPos, WallOrTimePortal ) -> Html.Html msg
+horizontalWallView ( coord, wallType ) =
     Html.div
         [ Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride))
-        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride - wallThickness // 2))
+        , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride - wallThickness wallType // 2))
         , Html.Attributes.style "width" (px cellSize)
-        , Html.Attributes.style "height" (px wallThickness)
-        , Html.Attributes.style "background-color" "rgb(255,180,60)"
+        , Html.Attributes.style "height" (px (wallThickness wallType))
+        , Html.Attributes.style "background-color" (wallTypeColor wallType)
         , Html.Attributes.style "border-radius" "2px"
         ]
         []
 
 
-verticalWallView : Coord VerticalWallPos -> Html.Html msg
-verticalWallView coord =
+wallTypeColor wallType =
+    case wallType of
+        Wall ->
+            "rgb(255,180,60)"
+
+        TimePortal _ ->
+            "rgb(255,0,160)"
+
+
+verticalWallView : ( Coord VerticalWallPos, WallOrTimePortal ) -> Html.Html msg
+verticalWallView ( coord, wallType ) =
     Html.div
         [ Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride - wallThickness // 2))
+        , Html.Attributes.style "left" (px (Coord.xRaw coord * gridStride - wallThickness wallType // 2))
         , Html.Attributes.style "top" (px (Coord.yRaw coord * gridStride))
-        , Html.Attributes.style "width" (px wallThickness)
+        , Html.Attributes.style "width" (px (wallThickness wallType))
         , Html.Attributes.style "height" (px cellSize)
-        , Html.Attributes.style "background-color" "rgb(255,180,60)"
+        , Html.Attributes.style "background-color" (wallTypeColor wallType)
         , Html.Attributes.style "border-radius" "2px"
         ]
         []
@@ -274,7 +305,7 @@ palette : PlayerOrBox -> Element Msg
 palette selected =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        (List.map (paletteButton selected) [ Player, Block ])
+        (List.map (paletteButton selected) [ Player, Block, DoubleBlock ])
 
 
 paletteButton : PlayerOrBox -> PlayerOrBox -> Element Msg
@@ -484,7 +515,7 @@ frameHasError : Model -> Id FrameId -> Maybe Frame -> Bool
 frameHasError model frameId maybeFrame =
     case ( SeqDict.get (Id.decrement frameId) model.frames, maybeFrame ) of
         ( Just frame, Just next2 ) ->
-            solve model.level frame next2 == Err ()
+            findNextMove model.level frame next2 == Err ()
 
         ( Just _, Nothing ) ->
             True
@@ -496,24 +527,24 @@ frameHasError model frameId maybeFrame =
             False
 
 
-grid : Level -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element Msg
-grid level frames =
-    Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (gridRow level frames) (List.range 0 (gridSize - 1)))
+grid : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Element Msg
+grid frames =
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        (List.map (gridRow frames) (List.range 0 (gridSize - 1)))
 
 
-gridRow : Level -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Int -> Element Msg
-gridRow level frames row =
+gridRow : { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame } -> Int -> Element Msg
+gridRow frames row =
     Ui.row [ Ui.spacing 4, Ui.width Ui.shrink ]
-        (List.map (\col -> gridCell level frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+        (List.map (\col -> gridCell frames (Coord.xy col row)) (List.range 0 (gridSize - 1)))
 
 
 gridCell :
-    Level
-    -> { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
+    { previous : Maybe Frame, current : Maybe Frame, next : Maybe Frame }
     -> Coord GridPos
     -> Element Msg
-gridCell level frames pos =
+gridCell frames pos =
     let
         ghostAttrs : List (Ui.Attribute Msg)
         ghostAttrs =
@@ -522,20 +553,54 @@ gridCell level frames pos =
             , cellShape pos frames.next |> Maybe.map (\s -> Ui.behindContent (shapeIcon ghostNextColor s))
             ]
                 |> List.filterMap identity
-                |> List.take 1
     in
     Ui.el
-        ([ Ui.htmlAttribute
+        ([ Ui.id (Dom.idToString (cellId pos))
+         , Ui.width (Ui.px 48)
+         , Ui.height (Ui.px 48)
+         , Ui.border 1
+         , Ui.borderColor (Ui.rgba 0 0 0 0)
+         , Ui.rounded 2
+         , Ui.contentCenterX
+         , Ui.contentCenterY
+         , Ui.Font.bold
+         , Ui.Font.color (Ui.rgba 255 255 255 0.5)
+         ]
+            ++ ghostAttrs
+        )
+        Ui.none
+
+
+gridBackground : Level -> Element Msg
+gridBackground level =
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        (List.map (gridRowBackground level) (List.range 0 (gridSize - 1)))
+
+
+gridRowBackground : Level -> Int -> Element Msg
+gridRowBackground level row =
+    Ui.row [ Ui.spacing 4, Ui.width Ui.shrink ]
+        (List.map (\col -> gridCellBackground level (Coord.xy col row)) (List.range 0 (gridSize - 1)))
+
+
+gridCellBackground :
+    Level
+    -> Coord GridPos
+    -> Element Msg
+gridCellBackground level pos =
+    Ui.el
+        [ Ui.htmlAttribute
             (Html.Events.on "click"
                 (Json.Decode.field "shiftKey" Json.Decode.bool
                     |> Json.Decode.map (ClickedCell pos)
                 )
             )
-         , Ui.htmlAttribute (Html.Attributes.style "cursor" "pointer")
-         , Ui.id (Dom.idToString (cellId pos))
-         , Ui.width (Ui.px 48)
-         , Ui.height (Ui.px 48)
-         , Ui.borderColor
+        , Ui.htmlAttribute (Html.Attributes.style "cursor" "pointer")
+        , Ui.id (Dom.idToString (cellId pos))
+        , Ui.width (Ui.px 48)
+        , Ui.height (Ui.px 48)
+        , Ui.borderColor
             (if level.start == pos then
                 startColor
 
@@ -545,8 +610,8 @@ gridCell level frames pos =
              else
                 MyUi.buttonBorder
             )
-         , Ui.border 1
-         , Ui.background
+        , Ui.border 1
+        , Ui.background
             (if level.start == pos then
                 startColor
 
@@ -556,14 +621,12 @@ gridCell level frames pos =
              else
                 MyUi.background1
             )
-         , Ui.rounded 2
-         , Ui.contentCenterX
-         , Ui.contentCenterY
-         , Ui.Font.bold
-         , Ui.Font.color (Ui.rgba 255 255 255 0.5)
-         ]
-            ++ ghostAttrs
-        )
+        , Ui.rounded 2
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.Font.bold
+        , Ui.Font.color (Ui.rgba 255 255 255 0.5)
+        ]
         (if level.start == pos then
             Ui.text "S"
 
@@ -595,12 +658,12 @@ cellShape pos frame =
 
 ghostPreviousColor : Ui.Color
 ghostPreviousColor =
-    Ui.rgba 255 110 110 0.5
+    Ui.rgba 255 110 110 0.4
 
 
 ghostNextColor : Ui.Color
 ghostNextColor =
-    Ui.rgba 110 180 255 0.5
+    Ui.rgba 110 180 255 0.4
 
 
 paletteId : PlayerOrBox -> Dom.HtmlId
@@ -637,33 +700,48 @@ shapeToString : PlayerOrBox -> String
 shapeToString shape =
     case shape of
         Player ->
-            "circle"
+            "player"
 
         Block ->
-            "square"
+            "block"
+
+        DoubleBlock ->
+            "double-block"
 
 
 shapeIcon : Ui.Color -> PlayerOrBox -> Element msg
 shapeIcon color shape =
-    let
-        glyph : String
-        glyph =
-            case shape of
-                Player ->
-                    "☺"
+    case shape of
+        Player ->
+            Ui.el
+                [ Ui.Font.size 28
+                , Ui.Font.center
+                , MyUi.htmlStyle "user-select" "none"
+                , MyUi.htmlStyle "-webkit-user-select" "none"
+                , Ui.centerY
+                , Ui.Font.color color
+                ]
+                (Ui.text "☺")
 
-                Block ->
-                    "■"
-    in
-    Ui.el
-        [ Ui.Font.size 28
-        , Ui.Font.center
-        , MyUi.htmlStyle "user-select" "none"
-        , MyUi.htmlStyle "-webkit-user-select" "none"
-        , Ui.centerY
-        , Ui.Font.color color
-        ]
-        (Ui.text glyph)
+        Block ->
+            Ui.el
+                [ Ui.Font.size 28
+                , Ui.Font.center
+                , MyUi.htmlStyle "user-select" "none"
+                , MyUi.htmlStyle "-webkit-user-select" "none"
+                , Ui.centerY
+                , Ui.Font.color color
+                ]
+                (Ui.text "■")
+
+        DoubleBlock ->
+            Ui.el
+                [ Ui.width (Ui.px (cellSize * 2))
+                , Ui.height (Ui.px (cellSize * 2))
+                , Ui.background color
+                , MyUi.noPointerEvents
+                ]
+                Ui.none
 
 
 offset : Move -> Coord GridPos -> Coord GridPos
@@ -697,16 +775,16 @@ moveIntersectsWall level pos move =
             False
 
         Left ->
-            SeqSet.member (Coord.changeUnit pos) level.verticalWalls
+            SeqDict.get (Coord.changeUnit pos) level.verticalWalls == Just Wall
 
         Right ->
-            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos + 1) (Coord.yRaw pos))) level.verticalWalls
+            SeqDict.get (Coord.changeUnit (Coord.xy (Coord.xRaw pos + 1) (Coord.yRaw pos))) level.verticalWalls == Just Wall
 
         Up ->
-            SeqSet.member (Coord.changeUnit pos) level.horizontalWalls
+            SeqDict.get (Coord.changeUnit pos) level.horizontalWalls == Just Wall
 
         Down ->
-            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos) (Coord.yRaw pos + 1))) level.horizontalWalls
+            SeqDict.get (Coord.changeUnit (Coord.xy (Coord.xRaw pos) (Coord.yRaw pos + 1))) level.horizontalWalls == Just Wall
 
 
 {-| Apply a set of player moves to the starting frame and return the resulting grid.
@@ -847,6 +925,9 @@ applyMoves level frame moves =
                                 -- Push: legality of the push is checked above.
                                 True
 
+                            Just DoubleBlock ->
+                                False
+
                             Just Player ->
                                 -- Allowed only if the other player is moving away.
                                 case SeqDict.get dest moves of
@@ -893,8 +974,8 @@ applyMoves level frame moves =
 assignment already produces an inconsistency, and check the full result
 against `nextFrame`.
 -}
-solve : Level -> Frame -> Frame -> Result () (NonemptyDict (Coord GridPos) Move)
-solve level frame nextFrame =
+findNextMove : Level -> Frame -> Frame -> Result () (NonemptyDict (Coord GridPos) Move)
+findNextMove level frame nextFrame =
     let
         playerPositions : List (Coord GridPos)
         playerPositions =
