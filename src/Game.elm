@@ -18,6 +18,7 @@ import Effect.Browser.Dom as Dom
 import Html
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (Id)
 import Json.Decode
 import List.Nonempty exposing (Nonempty(..))
@@ -95,9 +96,9 @@ init =
     { selectedShape = Player
     , frames = SeqDict.empty
     , currentFrame = Id.fromInt 0
-    , autoAdvance = False
+    , autoAdvance = True
     , horizontalWalls = SeqSet.fromList [ Coord.xy 1 2, Coord.xy 3 1, Coord.xy 5 4, Coord.xy 0 3 ]
-    , verticalWalls = SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
+    , verticalWalls = SeqSet.fromList [ Coord.xy 3 0 ] -- SeqSet.fromList [ Coord.xy 2 1, Coord.xy 4 3, Coord.xy 1 5, Coord.xy 3 0 ]
     , start = Coord.xy 1 1
     , exit = Coord.xy 2 4
     }
@@ -360,9 +361,11 @@ autoAdvanceToggle isOn =
             , Ui.rounded 3
             , Ui.contentCenterX
             , Ui.contentCenterY
+            , Ui.Font.size 16
+            , Ui.Font.bold
             ]
             (if isOn then
-                Ui.el [ Ui.Font.size 16, Ui.Font.weight 700 ] (Ui.text "✓")
+                Ui.text "✓"
 
              else
                 Ui.none
@@ -471,10 +474,7 @@ sliderSegment model index frame =
         [ Ui.Input.button (SliderChanged index)
         , Ui.id (Dom.idToString (segmentId index))
         , Ui.background
-            (if hasError then
-                Ui.rgb 180 50 50
-
-             else if isEmpty then
+            (if isEmpty then
                 Ui.rgb 90 90 100
 
              else
@@ -483,13 +483,7 @@ sliderSegment model index frame =
         , Ui.height Ui.fill
         , Ui.width Ui.fill
         , Ui.rounded 2
-        , Ui.border
-            (if isCurrent then
-                2
-
-             else
-                1
-            )
+        , Ui.border 1
         , Ui.borderColor
             (if isCurrent then
                 Ui.rgb 100 200 255
@@ -497,15 +491,26 @@ sliderSegment model index frame =
              else
                 MyUi.buttonBorder
             )
+        , if hasError then
+            Ui.inFront
+                (Ui.el
+                    [ Ui.Font.color (Ui.rgb 180 50 50)
+                    , Ui.move { x = -13, y = 0, z = 0 }
+                    ]
+                    (Icons.warning 24 |> Ui.html)
+                )
+
+          else
+            Ui.noAttr
         ]
         Ui.none
 
 
 frameHasError : Model -> Id FrameId -> Maybe Frame -> Bool
 frameHasError model frameId maybeFrame =
-    case ( maybeFrame, SeqDict.get (Id.increment frameId) model.frames ) of
+    case ( SeqDict.get (Id.decrement frameId) model.frames, maybeFrame ) of
         ( Just frame, Just next2 ) ->
-            solve frame next2 == Err ()
+            solve model frame next2 == Err ()
 
         ( Just _, Nothing ) ->
             True
@@ -689,6 +694,25 @@ allMoves =
     [ NoMove, Left, Right, Up, Down ]
 
 
+moveIntersectsWall : Model -> Coord GridPos -> Move -> Bool
+moveIntersectsWall model pos move =
+    case move of
+        NoMove ->
+            False
+
+        Left ->
+            SeqSet.member (Coord.changeUnit pos) model.verticalWalls
+
+        Right ->
+            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos + 1) (Coord.yRaw pos))) model.verticalWalls
+
+        Up ->
+            SeqSet.member (Coord.changeUnit pos) model.horizontalWalls
+
+        Down ->
+            SeqSet.member (Coord.changeUnit (Coord.xy (Coord.xRaw pos) (Coord.yRaw pos + 1))) model.horizontalWalls
+
+
 {-| Apply a set of player moves to the starting frame and return the resulting grid.
 A player's move is "push" if the destination contains a block; the block then
 moves one further cell in the same direction.
@@ -700,8 +724,8 @@ The key rule: a player CAN move into a cell currently occupied by another
 player, provided that other player is also moving away this turn.
 
 -}
-applyMoves : Frame -> SeqDict (Coord GridPos) Move -> Maybe Frame
-applyMoves frame moves =
+applyMoves : Model -> Frame -> SeqDict (Coord GridPos) Move -> Maybe Frame
+applyMoves model frame moves =
     let
         players : List ( Coord GridPos, Move )
         players =
@@ -837,9 +861,16 @@ applyMoves frame moves =
                                         False
                 )
                 players
+
+        noWallIntersections : Bool
+        noWallIntersections =
+            List.all
+                (\( pos, move ) -> moveIntersectsWall model pos move |> not)
+                players
     in
     if
-        movementLegal
+        noWallIntersections
+            && movementLegal
             && pushTargetsValid
             && playersDistinct
             && blocksDistinct
@@ -866,8 +897,8 @@ applyMoves frame moves =
 assignment already produces an inconsistency, and check the full result
 against `nextFrame`.
 -}
-solve : Frame -> Frame -> Result () (NonemptyDict (Coord GridPos) Move)
-solve frame nextFrame =
+solve : Model -> Frame -> Frame -> Result () (NonemptyDict (Coord GridPos) Move)
+solve model frame nextFrame =
     let
         playerPositions : List (Coord GridPos)
         playerPositions =
@@ -885,7 +916,7 @@ solve frame nextFrame =
         go remaining assigned =
             case remaining of
                 [] ->
-                    case applyMoves frame assigned of
+                    case applyMoves model frame assigned of
                         Just result ->
                             if NonemptyDict.unorderedEquals result nextFrame then
                                 NonemptyDict.fromSeqDict assigned
