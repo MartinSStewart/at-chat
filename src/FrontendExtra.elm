@@ -2210,21 +2210,33 @@ changeUpdate localMsg local =
                     in
                     case voiceChatChange of
                         VoiceChat.Local_Join time roomId ->
+                            let
+                                local2 =
+                                    case local.calls.currentRoom of
+                                        Just _ ->
+                                            leaveCall time local
+
+                                        Nothing ->
+                                            local
+                            in
                             case roomId of
                                 DmRoomId otherUserId ->
-                                    { local
+                                    { local2
                                         | calls = { calls | currentRoom = Just roomId }
                                         , dmChannels =
                                             if SeqDict.member roomId calls.voiceChats then
-                                                local.dmChannels
+                                                local2.dmChannels
 
                                             else
-                                                SeqDict.updateIfExists
+                                                SeqDict.update
                                                     otherUserId
-                                                    (LocalState.createChannelMessageFrontend
-                                                        (CallStarted time local.localUser.session.userId SeqDict.empty)
+                                                    (\maybe ->
+                                                        Maybe.withDefault DmChannel.frontendInit maybe
+                                                            |> LocalState.createChannelMessageFrontend
+                                                                (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                            |> Just
                                                     )
-                                                    local.dmChannels
+                                                    local2.dmChannels
                                     }
 
                         VoiceChat.Local_Leave time ->
@@ -3287,10 +3299,13 @@ changeUpdate localMsg local =
                                         DmRoomId otherUserId ->
                                             case ( calls.currentRoom == Just roomId, SeqDict.member roomId calls.voiceChats ) of
                                                 ( False, False ) ->
-                                                    SeqDict.updateIfExists
+                                                    SeqDict.update
                                                         otherUserId
-                                                        (LocalState.createChannelMessageFrontend
-                                                            (CallStarted time (Tuple.first otherSession) SeqDict.empty)
+                                                        (\maybe ->
+                                                            Maybe.withDefault DmChannel.frontendInit maybe
+                                                                |> LocalState.createChannelMessageFrontend
+                                                                    (CallStarted time (Tuple.first otherSession) SeqDict.empty)
+                                                                |> Just
                                                         )
                                                         local.dmChannels
 
@@ -3328,10 +3343,12 @@ otherUserLeaveCall time { roomId, otherSession } local =
                         DmRoomId otherUserId ->
                             case ( calls.currentRoom == Just roomId, SeqDict.member roomId voiceChats ) of
                                 ( False, False ) ->
-                                    SeqDict.updateIfExists
+                                    SeqDict.update
                                         otherUserId
-                                        (LocalState.createChannelMessageFrontend
-                                            (CallEnded time SeqDict.empty)
+                                        (\maybe ->
+                                            Maybe.withDefault DmChannel.frontendInit maybe
+                                                |> LocalState.createChannelMessageFrontend (CallEnded time SeqDict.empty)
+                                                |> Just
                                         )
                                         local.dmChannels
 
@@ -3360,10 +3377,12 @@ leaveCall time local =
                                 local.dmChannels
 
                             else
-                                SeqDict.updateIfExists
+                                SeqDict.update
                                     otherUserId
-                                    (LocalState.createChannelMessageFrontend
-                                        (CallEnded time SeqDict.empty)
+                                    (\maybe ->
+                                        Maybe.withDefault DmChannel.frontendInit maybe
+                                            |> LocalState.createChannelMessageFrontend (CallEnded time SeqDict.empty)
+                                            |> Just
                                     )
                                     local.dmChannels
                     }

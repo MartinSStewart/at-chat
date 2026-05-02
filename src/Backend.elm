@@ -4850,50 +4850,40 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                         model.dmChannels
 
                     else
-                        SeqDict.updateIfExists
+                        SeqDict.update
                             dmChannelId
-                            (\dmChannel ->
-                                LocalState.createChannelMessageBackend (CallEnded time SeqDict.empty) dmChannel |> Tuple.second
+                            (\maybe ->
+                                Maybe.withDefault DmChannel.backendInit maybe
+                                    |> LocalState.createChannelMessageBackend (CallEnded time SeqDict.empty)
+                                    |> Tuple.second
+                                    |> Just
                             )
                             model.dmChannels
       }
-    , case maybeChangeId of
-        Just changeId ->
-            Command.batch
-                [ LocalChangeResponse changeId (Local_VoiceChatChange (VoiceChat.Local_Leave time))
+    , Command.batch
+        [ case maybeChangeId of
+            Just changeId ->
+                LocalChangeResponse changeId (Local_VoiceChatChange (VoiceChat.Local_Leave time))
                     |> Lamdera.sendToFrontend clientId
-                , case roomId of
-                    VoiceChat.DmRoomId otherUserId ->
-                        Broadcast.toDmChannelExcludingOne
-                            clientId
-                            session.userId
-                            otherUserId
-                            (\otherUserId2 ->
-                                VoiceChat.Server_Left
-                                    time
-                                    { roomId = VoiceChat.DmRoomId otherUserId2
-                                    , otherSession = ( session.userId, clientId )
-                                    }
-                                    |> Server_VoiceChatChange
-                            )
-                            model
-                ]
 
-        Nothing ->
-            case roomId of
-                VoiceChat.DmRoomId otherUserId ->
-                    Broadcast.toDmChannel
-                        session.userId
-                        otherUserId
-                        (\otherUserId2 ->
-                            VoiceChat.Server_Left
-                                time
-                                { roomId = VoiceChat.DmRoomId otherUserId2
-                                , otherSession = ( session.userId, clientId )
-                                }
-                                |> Server_VoiceChatChange
-                        )
-                        model
+            Nothing ->
+                Command.none
+        , case roomId of
+            VoiceChat.DmRoomId otherUserId ->
+                Broadcast.toDmChannelExcludingOne
+                    clientId
+                    session.userId
+                    otherUserId
+                    (\otherUserId2 ->
+                        VoiceChat.Server_Left
+                            time
+                            { roomId = VoiceChat.DmRoomId otherUserId2
+                            , otherSession = ( session.userId, clientId )
+                            }
+                            |> Server_VoiceChatChange
+                    )
+                    model
+        ]
     )
 
 
