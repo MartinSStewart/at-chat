@@ -970,10 +970,6 @@ charCodeCodec =
                                 Char.fromCode code2 |> String.fromChar
 
                             Err error ->
-                                let
-                                    _ =
-                                        Debug.log "error" error
-                                in
                                 "?"
                     )
                 |> String.concat

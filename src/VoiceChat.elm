@@ -267,25 +267,20 @@ voiceChatDeliverSignal connectionId signal =
         )
 
 
-voiceChatFromJs : (ConnectionId -> Signal -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs : (Result String ( ConnectionId, Signal ) -> msg) -> Subscription FrontendOnly msg
 voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
         (\json ->
             Json.Decode.decodeValue
-                (Json.Decode.map2 (\peerUserId signal -> msg peerUserId (Debug.log "signal" signal))
+                (Json.Decode.map2 Tuple.pair
                     (Json.Decode.field "peerUserId" (Codec.decoder connectionIdCodec))
                     (Json.Decode.field "signal" (Codec.decoder signalCodec))
                 )
                 json
-                |> Result.withDefault
-                    (msg
-                        { roomId = DmRoomId (Id.fromInt 0)
-                        , otherSession = ( Id.fromInt 0, Lamdera.clientIdFromString "" )
-                        }
-                        (OfferSignal { sdp = "" })
-                    )
+                |> Result.mapError Json.Decode.errorToString
+                |> msg
         )
 
 

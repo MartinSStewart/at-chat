@@ -2978,7 +2978,7 @@ updateLoaded msg model =
                                 ( Just ( guildOrDmId, threadRoute ), True ) ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (loadOlderMessages guildOrDmId threadRoute (Local.model loggedIn.localState) |> Debug.log "abc")
+                                        (loadOlderMessages guildOrDmId threadRoute (Local.model loggedIn.localState))
                                         loggedIn
                                         Command.none
 
@@ -3454,16 +3454,25 @@ updateLoaded msg model =
         PressedVoiceChatButton otherUserId ->
             pressedVoiceChatButton otherUserId model
 
-        GotVoiceChatSignalFromJs connectionId signal ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    FrontendExtra.handleLocalChange
-                        model.time
-                        (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
-                        loggedIn
-                        Command.none
-                )
-                model
+        GotVoiceChatSignalFromJs result ->
+            case result of
+                Ok ( connectionId, signal ) ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "voice chat port didn't decode" error
+                    in
+                    ( model, Command.none )
 
         PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
             FrontendExtra.updateLoggedIn

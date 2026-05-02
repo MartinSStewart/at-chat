@@ -487,7 +487,7 @@ type FrontendMsg
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | PressedVoiceChatButton RoomId
-    | GotVoiceChatSignalFromJs ConnectionId VoiceChat.Signal
+    | GotVoiceChatSignalFromJs (Result String ( ConnectionId, VoiceChat.Signal ))
 
 
 type ScrollPosition

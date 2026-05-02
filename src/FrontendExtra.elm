@@ -1331,7 +1331,7 @@ isPressMsg msg =
         PressedVoiceChatButton _ ->
             True
 
-        GotVoiceChatSignalFromJs _ _ ->
+        GotVoiceChatSignalFromJs _ ->
             False
 
 
