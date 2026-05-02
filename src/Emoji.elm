@@ -969,7 +969,7 @@ charCodeCodec =
                             Ok code2 ->
                                 Char.fromCode code2 |> String.fromChar
 
-                            Err error ->
+                            Err _ ->
                                 "?"
                     )
                 |> String.concat
