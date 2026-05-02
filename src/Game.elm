@@ -112,6 +112,10 @@ type Msg
     | ToggledAutoAdvance
     | ToggledGhostTrails
     | PressedClearInputs
+    | PressedDeleteFrame
+    | PressedInsertEmptyFrame
+    | PressedInsertCopyOfPrevious
+    | PressedInsertCopyOfNext
 
 
 keyDown : String -> Model -> Model
@@ -279,6 +283,92 @@ update msg model =
 
         PressedClearInputs ->
             { model | frames = SeqDict.empty }
+
+        PressedDeleteFrame ->
+            { model | frames = deleteFrameAt model.currentFrame model.frames }
+
+        PressedInsertEmptyFrame ->
+            { model | frames = insertFrameAt model.currentFrame Nothing model.frames }
+
+        PressedInsertCopyOfPrevious ->
+            { model
+                | frames =
+                    insertFrameAt
+                        model.currentFrame
+                        (getFrame (Id.decrement model.currentFrame) model)
+                        model.frames
+            }
+
+        PressedInsertCopyOfNext ->
+            { model
+                | frames =
+                    insertFrameAt
+                        model.currentFrame
+                        (getFrame (Id.increment model.currentFrame) model)
+                        model.frames
+            }
+
+
+deleteFrameAt : Id FrameId -> SeqDict (Id FrameId) Frame -> SeqDict (Id FrameId) Frame
+deleteFrameAt frameId frames =
+    let
+        threshold : Int
+        threshold =
+            Id.toInt frameId
+    in
+    frames
+        |> SeqDict.toList
+        |> List.filterMap
+            (\( id, frame ) ->
+                let
+                    n : Int
+                    n =
+                        Id.toInt id
+                in
+                if n == threshold then
+                    Nothing
+
+                else if n > threshold then
+                    Just ( Id.fromInt (n - 1), frame )
+
+                else
+                    Just ( id, frame )
+            )
+        |> SeqDict.fromList
+
+
+insertFrameAt : Id FrameId -> Maybe Frame -> SeqDict (Id FrameId) Frame -> SeqDict (Id FrameId) Frame
+insertFrameAt frameId maybeFrame frames =
+    let
+        threshold : Int
+        threshold =
+            Id.toInt frameId
+
+        shifted : SeqDict (Id FrameId) Frame
+        shifted =
+            frames
+                |> SeqDict.toList
+                |> List.map
+                    (\( id, frame ) ->
+                        let
+                            n : Int
+                            n =
+                                Id.toInt id
+                        in
+                        if n >= threshold then
+                            ( Id.fromInt (n + 1), frame )
+
+                        else
+                            ( id, frame )
+                    )
+                |> SeqDict.fromList
+    in
+    case maybeFrame of
+        Just frame ->
+            SeqDict.insert frameId frame shifted
+
+        Nothing ->
+            shifted
 
 
 toolToWallType : Model -> Maybe WallOrTimePortal
@@ -742,7 +832,58 @@ timeControls model =
             , stepButton stepForwardId PressedStepForward ">"
             ]
         , slider model
+        , frameActions
         ]
+
+
+frameActions : Element Msg
+frameActions =
+    Ui.row
+        [ Ui.spacing 8, Ui.width Ui.shrink, Ui.centerX ]
+        [ frameActionButton deleteFrameId PressedDeleteFrame "Delete frame"
+        , frameActionButton insertEmptyFrameId PressedInsertEmptyFrame "Insert empty"
+        , frameActionButton insertCopyPreviousId PressedInsertCopyOfPrevious "Insert copy of previous"
+        , frameActionButton insertCopyNextId PressedInsertCopyOfNext "Insert copy of next"
+        ]
+
+
+frameActionButton : Dom.HtmlId -> Msg -> String -> Element Msg
+frameActionButton htmlId msg label =
+    Ui.el
+        [ Ui.Input.button msg
+        , Ui.id (Dom.idToString htmlId)
+        , Ui.width Ui.shrink
+        , Ui.height (Ui.px 32)
+        , Ui.paddingXY 10 0
+        , Ui.background MyUi.buttonBackground
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.border 1
+        , Ui.rounded 4
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.Font.size 13
+        ]
+        (Ui.text label)
+
+
+deleteFrameId : Dom.HtmlId
+deleteFrameId =
+    Dom.id "game_delete_frame"
+
+
+insertEmptyFrameId : Dom.HtmlId
+insertEmptyFrameId =
+    Dom.id "game_insert_empty_frame"
+
+
+insertCopyPreviousId : Dom.HtmlId
+insertCopyPreviousId =
+    Dom.id "game_insert_copy_previous"
+
+
+insertCopyNextId : Dom.HtmlId
+insertCopyNextId =
+    Dom.id "game_insert_copy_next"
 
 
 stepButton : Dom.HtmlId -> Msg -> String -> Element Msg
