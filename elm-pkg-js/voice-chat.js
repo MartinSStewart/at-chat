@@ -3,7 +3,13 @@ exports.init = async function init(app) {
     const pendingSignals = {};
 
     async function startConnection(peerUserId, shouldOffer) {
-        stopConnection(peerUserId);
+        // If a connection is already live, leave it alone. Tearing it down here
+        // would generate fresh ICE credentials on our side while the peer keeps
+        // theirs, which is exactly what produces "Unknown ufrag" errors.
+        if (connections[peerUserId]) {
+            console.warn("Voice chat: start ignored, connection already exists for", peerUserId);
+            return;
+        }
 
         let localStream;
         try {
@@ -12,24 +18,37 @@ exports.init = async function init(app) {
             console.error("Voice chat: failed to get microphone", e);
             return;
         }
-        console.log(localStream);
 
         const pc = new RTCPeerConnection({
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
         });
 
+        const remoteAudio = document.getElementById(peerUserId);
+
+        const conn = {
+            pc: pc,
+            localStream: localStream,
+            remoteAudio: remoteAudio,
+            // The peer that doesn't initially offer is the "polite" one and yields
+            // when both peers offer simultaneously (perfect negotiation pattern).
+            polite: !shouldOffer,
+            makingOffer: false,
+            ignoreOffer: false,
+            remoteDescriptionSet: false,
+            queuedIceCandidates: [],
+            signalChain: Promise.resolve()
+        };
+        connections[peerUserId] = conn;
+
         localStream.getTracks().forEach(function (track) {
             pc.addTrack(track, localStream);
         });
-
-        const remoteAudio = document.getElementById(peerUserId);
 
         pc.ontrack = function (event) {
             console.log("Voice chat: ontrack", peerUserId, event.streams);
             if (event.streams && event.streams[0]) {
                 remoteAudio.srcObject = event.streams[0];
             } else {
-                // Fallback: build a stream from the single track.
                 const stream = new MediaStream();
                 stream.addTrack(event.track);
                 remoteAudio.srcObject = stream;
@@ -58,25 +77,21 @@ exports.init = async function init(app) {
             }
         };
 
-        const conn = {
-            pc: pc,
-            localStream: localStream,
-            remoteAudio: remoteAudio,
-            remoteDescriptionSet: false,
-            queuedIceCandidates: [],
-            signalChain: Promise.resolve()
-        };
-        connections[peerUserId] = conn;
-
+        // Process any signals that arrived before this connection was created.
         const pending = pendingSignals[peerUserId] || [];
-        pendingSignals[peerUserId] = [];
+        delete pendingSignals[peerUserId];
         for (let i = 0; i < pending.length; i++) {
             await handleSignalInternal(conn, peerUserId, pending[i]);
         }
 
-        if (shouldOffer) {
+        if (shouldOffer && pc.signalingState === "stable") {
             try {
+                conn.makingOffer = true;
                 const offer = await pc.createOffer();
+                // Re-check state: the peer may have raced an offer in while we awaited.
+                if (pc.signalingState !== "stable") {
+                    return;
+                }
                 await pc.setLocalDescription(offer);
                 app.ports.voice_chat_from_js.send({
                     peerUserId: peerUserId,
@@ -84,6 +99,8 @@ exports.init = async function init(app) {
                 });
             } catch (e) {
                 console.error("Voice chat: failed to create offer", e);
+            } finally {
+                conn.makingOffer = false;
             }
         }
     }
@@ -111,30 +128,57 @@ exports.init = async function init(app) {
             try {
                 await conn.pc.addIceCandidate(queued[i]);
             } catch (e) {
-                console.error("Voice chat: failed to add queued ICE candidate", peerUserId, e);
+                if (!conn.ignoreOffer) {
+                    // Stale candidates (e.g., ufrag mismatch after a glare/restart)
+                    // are non-fatal — log at debug level and move on.
+                    console.debug("Voice chat: queued ICE candidate ignored", peerUserId, e.message || e);
+                }
             }
         }
     }
 
     async function handleSignalInternal(conn, peerUserId, signal) {
+        const pc = conn.pc;
         try {
             if (signal.tag === "offer") {
-                await conn.pc.setRemoteDescription({ type: "offer", sdp: signal.args[0].sdp });
+                // Perfect negotiation glare handling: if we're already offering or
+                // not in a state to accept a remote offer, the impolite peer ignores
+                // the incoming offer and the polite peer rolls back to accept it.
+                const offerCollision = conn.makingOffer || pc.signalingState !== "stable";
+                conn.ignoreOffer = !conn.polite && offerCollision;
+                if (conn.ignoreOffer) {
+                    console.log("Voice chat: ignoring colliding offer (impolite)", peerUserId);
+                    return;
+                }
+                await pc.setRemoteDescription({ type: "offer", sdp: signal.args[0].sdp });
                 conn.remoteDescriptionSet = true;
                 await drainQueuedIceCandidates(conn, peerUserId);
-                const answer = await conn.pc.createAnswer();
-                await conn.pc.setLocalDescription(answer);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
                 app.ports.voice_chat_from_js.send({
                     peerUserId: peerUserId,
                     signal: { tag: "answer", args: [ answer ] }
                 });
             } else if (signal.tag === "answer") {
-                await conn.pc.setRemoteDescription({ type: "answer", sdp: signal.args[0].sdp });
+                if (pc.signalingState !== "have-local-offer") {
+                    // We didn't send an offer (or already received the answer for it).
+                    // Either way, applying this answer would throw "Cannot set remote
+                    // answer in state ...". Skip it.
+                    console.log("Voice chat: ignoring answer in state", pc.signalingState, peerUserId);
+                    return;
+                }
+                await pc.setRemoteDescription({ type: "answer", sdp: signal.args[0].sdp });
                 conn.remoteDescriptionSet = true;
                 await drainQueuedIceCandidates(conn, peerUserId);
             } else if (signal.tag === "ice") {
                 if (conn.remoteDescriptionSet) {
-                    await conn.pc.addIceCandidate(signal.args[0]);
+                    try {
+                        await pc.addIceCandidate(signal.args[0]);
+                    } catch (e) {
+                        if (!conn.ignoreOffer) {
+                            console.debug("Voice chat: ICE candidate ignored", peerUserId, e.message || e);
+                        }
+                    }
                 } else {
                     conn.queuedIceCandidates.push(signal.args[0]);
                 }
