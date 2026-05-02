@@ -51,6 +51,7 @@ type Tool
     | PlaceWall
     | PlaceTimePortal
     | PlaceExit
+    | PlacePressurePlate
 
 
 type GridPos
@@ -96,6 +97,7 @@ type alias Level =
     { horizontalWalls : SeqDict (Coord HorizontalWallPos) WallOrTimePortal
     , verticalWalls : SeqDict (Coord VerticalWallPos) WallOrTimePortal
     , exit : Coord GridPos
+    , pressurePlates : SeqSet (Coord GridPos)
     }
 
 
@@ -109,6 +111,7 @@ type Msg
     | SliderChanged (Id FrameId)
     | ToggledAutoAdvance
     | ToggledGhostTrails
+    | PressedClearInputs
 
 
 keyDown : String -> Model -> Model
@@ -134,19 +137,21 @@ init =
     { selectedTool = PlaceShape Player
     , frames = SeqDict.empty
     , currentFrame = Id.fromInt 0
-    , autoAdvance = True
+    , autoAdvance = False
     , showGhostTrails = True
     , level = level1
     , startFrame = NonemptyDict.fromNonemptyList (Nonempty ( Coord.xy 1 1, Player ) [])
     }
 
 
+level1 : Level
 level1 =
     { horizontalWalls =
         SeqDict.fromList
             []
     , verticalWalls = SeqDict.fromList []
     , exit = Coord.xy 2 4
+    , pressurePlates = SeqSet.empty
     }
 
 
@@ -197,8 +202,29 @@ update msg model =
                     in
                     { model | level = { level | exit = pos } }
 
-                _ ->
+                PlaceWall ->
                     model
+
+                PlaceTimePortal ->
+                    model
+
+                PlacePressurePlate ->
+                    let
+                        level : Level
+                        level =
+                            model.level
+                    in
+                    { model
+                        | level =
+                            { level
+                                | pressurePlates =
+                                    if SeqSet.member pos level.pressurePlates then
+                                        SeqSet.remove pos level.pressurePlates
+
+                                    else
+                                        SeqSet.insert pos level.pressurePlates
+                            }
+                    }
 
         ClickedHorizontalWall coord ->
             case toolToWallType model of
@@ -251,6 +277,9 @@ update msg model =
         ToggledGhostTrails ->
             { model | showGhostTrails = not model.showGhostTrails }
 
+        PressedClearInputs ->
+            { model | frames = SeqDict.empty }
+
 
 toolToWallType : Model -> Maybe WallOrTimePortal
 toolToWallType model =
@@ -265,6 +294,9 @@ toolToWallType model =
             Just (TimePortal (Id.toInt model.currentFrame))
 
         PlaceExit ->
+            Nothing
+
+        PlacePressurePlate ->
             Nothing
 
 
@@ -310,6 +342,7 @@ view model =
         , palette model.selectedTool
         , checkboxToggle ToggledAutoAdvance autoAdvanceId model.autoAdvance "Auto-advance on placement (or shift+click)"
         , checkboxToggle ToggledGhostTrails ghostTrailsId model.showGhostTrails "Show ghost trails"
+        , MyUi.simpleButton (Dom.id "game_clearInputs") PressedClearInputs (Ui.text "Clear")
         , timeControls model
         , gridWithWalls model
         ]
@@ -518,6 +551,7 @@ palette selected =
             , PlaceWall
             , PlaceTimePortal
             , PlaceExit
+            , PlacePressurePlate
             ]
         )
 
@@ -633,6 +667,18 @@ toolIcon tool =
                 , MyUi.noPointerEvents
                 ]
                 (Ui.text "E")
+
+        PlacePressurePlate ->
+            Ui.el
+                [ Ui.Font.size 24
+                , Ui.Font.bold
+                , Ui.Font.color (Ui.rgb 220 140 60)
+                , Ui.Font.center
+                , Ui.centerX
+                , Ui.centerY
+                , MyUi.noPointerEvents
+                ]
+                (Ui.text "B")
 
 
 checkboxToggle : Msg -> Dom.HtmlId -> Bool -> String -> Element Msg
@@ -921,6 +967,9 @@ gridCellBackground level pos =
             (if level.exit == pos then
                 endColor
 
+             else if SeqSet.member pos level.pressurePlates then
+                pressurePlateColor
+
              else
                 MyUi.background1
             )
@@ -936,6 +985,11 @@ gridCellBackground level pos =
          else
             Ui.none
         )
+
+
+pressurePlateColor : Ui.Color
+pressurePlateColor =
+    Ui.rgba 202 251 51 0.35
 
 
 endColor : Ui.Color
@@ -982,6 +1036,9 @@ toolToString tool =
 
         PlaceExit ->
             "exit"
+
+        PlacePressurePlate ->
+            "pressure-plate"
 
 
 cellId : Coord GridPos -> Dom.HtmlId
