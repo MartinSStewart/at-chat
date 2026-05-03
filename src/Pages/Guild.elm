@@ -3092,20 +3092,18 @@ voiceChatButton voiceChatId local =
                                 NonemptySet.size clientIds
                         in
                         Ui.el
-                            [ if count > 1 then
-                                Ui.el
-                                    [ Ui.alignRight
-                                    , Ui.alignBottom
-                                    , Ui.background MyUi.background3
-                                    , Ui.borderColor MyUi.border1
-                                    , Ui.border 1
-                                    , Ui.rounded 4
-                                    ]
-                                    (Icons.numbers 20 (String.fromInt count) |> Html.div [] |> Ui.html)
-                                    |> Ui.inFront
+                            [ case ( count > 1, OneOrGreater.fromInt count ) of
+                                ( True, Just count2 ) ->
+                                    GuildIcon.notificationHelper
+                                        MyUi.background1
+                                        MyUi.white
+                                        MyUi.border1
+                                        2
+                                        -2
+                                        count2
 
-                              else
-                                Ui.noAttr
+                                _ ->
+                                    Ui.noAttr
                             ]
                             (case LocalState.getUser userId local.localUser of
                                 Just user ->
