@@ -5491,7 +5491,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
-                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.clientId
+                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.clientId local.calls
                                     )
 
                                 _ ->

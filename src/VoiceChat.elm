@@ -186,11 +186,20 @@ joinedUsers roomId model =
             SeqDict.empty
 
 
-serverChangeCmd : ServerChange -> ClientId -> Command FrontendOnly toBackend msg
-serverChangeCmd change clientId =
+serverChangeCmd : ServerChange -> ClientId -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd change clientId model =
     case change of
         Server_Joined _ connectionId ->
-            voiceChatStart clientId connectionId
+            case model.currentRoom of
+                Just roomId ->
+                    if roomId == connectionId.roomId then
+                        voiceChatStart clientId connectionId
+
+                    else
+                        Command.none
+
+                Nothing ->
+                    Command.none
 
         Server_Left _ connectionId ->
             voiceChatStop connectionId
