@@ -3,6 +3,7 @@ port module VoiceChat exposing
     , ConnectionId
     , Ice
     , LocalChange(..)
+    , MediaDevicesStatus(..)
     , Model
     , RoomId(..)
     , Sdp
@@ -50,7 +51,15 @@ type ServerChange
 
 
 type alias Model =
-    { currentRoom : Maybe RoomId, voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) }
+    { currentRoom : Maybe RoomId
+    , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    }
+
+
+type MediaDevicesStatus
+    = MediaDevicesNotLoaded
+    | HasMediaDevices (List MediaDevices)
+    | FailedToGetMediaDevices String
 
 
 init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Model
@@ -362,21 +371,70 @@ voiceChatDeliverSignal connectionId signal =
 type VoiceChatSubscription
     = GotSignal ConnectionId Signal
     | GotMediaStreamTracks (List Track)
+    | GotUserMediaDevices (List MediaDevices)
+    | GotUserMediaDevicesError String
 
 
 voiceChatSubscriptionCodec : Codec VoiceChatSubscription
 voiceChatSubscriptionCodec =
     Codec.custom
-        (\aEncoder bEncoder value ->
+        (\aEncoder bEncoder cEncoder dDecoder value ->
             case value of
                 GotSignal a b ->
                     aEncoder a b
 
                 GotMediaStreamTracks videoTracks ->
                     bEncoder videoTracks
+
+                GotUserMediaDevices mediaDevices ->
+                    cEncoder mediaDevices
+
+                GotUserMediaDevicesError string ->
+                    dDecoder string
         )
         |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
         |> Codec.variant1 "got-tracks" GotMediaStreamTracks (Codec.list trackCodec)
+        |> Codec.variant1 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec)
+        |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
+        |> Codec.buildCustom
+
+
+type alias MediaDevices =
+    { deviceId : String
+    , groupId : String
+    , kind : DeviceKind
+    , label : String
+    }
+
+
+type DeviceKind
+    = AudioInput
+    | VideoInput
+
+
+mediaDevicesCodec : Codec MediaDevices
+mediaDevicesCodec =
+    Codec.object MediaDevices
+        |> Codec.field "deviceId" .deviceId Codec.string
+        |> Codec.field "groupId" .groupId Codec.string
+        |> Codec.field "kind" .kind deviceKindCodec
+        |> Codec.field "label" .label Codec.string
+        |> Codec.buildObject
+
+
+deviceKindCodec : Codec DeviceKind
+deviceKindCodec =
+    Codec.custom
+        (\audioInputEncoder videoInputEncoder value ->
+            case value of
+                AudioInput ->
+                    audioInputEncoder
+
+                VideoInput ->
+                    videoInputEncoder
+        )
+        |> Codec.variant0 "audioinput" AudioInput
+        |> Codec.variant0 "videoinput" VideoInput
         |> Codec.buildCustom
 
 

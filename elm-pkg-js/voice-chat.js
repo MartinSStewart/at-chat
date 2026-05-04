@@ -7,9 +7,11 @@ exports.init = async function init(app) {
 
         let localStream;
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            localStream = await getDevices();
+            let devices = await navigator.mediaDevices.enumerateDevices();
+            app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices ] });
         } catch (e) {
-            console.error("Voice chat: failed to get microphone", e);
+            app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
             return;
         }
         console.log(localStream);
@@ -23,17 +25,17 @@ exports.init = async function init(app) {
         localStream.getTracks().forEach(function (track) {
             pc.addTrack(track, localStream);
 
-            let settings = track.getSettings();
-            if (settings.channelCount) {
-                videoTracks.push({ tag: "audio" , args: [ settings ] });
-            }
-            else {
-                videoTracks.push({ tag: "video" , args: [ settings ] });
-            }
-            console.log(settings);
+//            let settings = track.getSettings();
+//            if (settings.channelCount) {
+//                videoTracks.push({ tag: "audio" , args: [ settings ] });
+//            }
+//            else {
+//                videoTracks.push({ tag: "video" , args: [ settings ] });
+//            }
+//            console.log(settings);
         });
 
-        app.ports.voice_chat_from_js.send( { tag: "got-tracks" , args: [ videoTracks ] });
+        //app.ports.voice_chat_from_js.send( { tag: "got-tracks" , args: [ videoTracks ] });
 
         //const remoteAudio = document.getElementById(peerUserId);
         const remoteVideo = document.getElementById(peerUserId + " video");
@@ -124,6 +126,7 @@ exports.init = async function init(app) {
             conn.remoteAudio.srcObject = null;
         }
         delete connections[peerUserId];
+        delete pendingSignals[peerUserId];
     }
 
     async function drainQueuedIceCandidates(conn, peerUserId) {
@@ -184,18 +187,30 @@ exports.init = async function init(app) {
             await startConnection(msg.peerUserId, msg.shouldOffer);
         } else if (msg.kind === "stop") {
             stopConnection(msg.peerUserId);
-            delete pendingSignals[msg.peerUserId];
         } else if (msg.kind === "signal") {
             await handleSignal(msg.peerUserId, msg.signal);
         } else if (msg.kind === "get-media-devices") {
-            let localStream;
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                let stream = await getDevices();
+                let devices = await navigator.mediaDevices.enumerateDevices();
+                console.log(devices);
+
+                stream.getTracks().forEach(track => track.stop());
+
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices", args: [ devices ] });
+
             } catch (e) {
-                console.error("Voice chat: failed to get microphone", e);
-                return;
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error", args: [ e.toString() ] });
             }
-            console.log(localStream);
         }
     });
+
+    async function getDevices() {
+        let devices = await navigator.mediaDevices.enumerateDevices();
+        console.log(devices);
+        let hasMic = devices.some(a => a.kind === "audioinput");
+        let hasCamera = devices.some(a => a.kind === "videoinput");
+        return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
+    }
 };
+

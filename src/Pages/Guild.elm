@@ -3258,6 +3258,19 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 )
 
 
+voiceChatView : Coord CssPixels -> RoomId -> LocalState -> Element FrontendMsg
+voiceChatView windowSize roomId local =
+    Ui.el
+        [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
+        , Ui.background MyUi.background3
+        , MyUi.noShrinking
+        , Ui.inFront (Ui.el [ Ui.paddingXY 16 7 ] (voiceChatButton roomId local))
+        ]
+        Ui.none
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -3305,33 +3318,50 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 Nothing ->
                     Nothing
+
+        showVoiceChat =
+            case ( local.calls.currentRoom, guildOrDmIdNoThread ) of
+                ( Just (DmRoomId otherUserIdA), GuildOrDmId_Dm otherUserIdB ) ->
+                    if otherUserIdA == otherUserIdB then
+                        local.calls.currentRoom
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ channelHeader
-            isMobile
-            True
-            (case guildOrDmIdNoThread of
-                GuildOrDmId_Dm otherUserId ->
-                    Ui.row
-                        [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself local
+        [ case showVoiceChat of
+            Just roomId ->
+                voiceChatView model.windowSize roomId local
 
-                         else
-                            privateChatWith otherUserId local name
-                        )
+            Nothing ->
+                channelHeader
+                    isMobile
+                    True
+                    (case guildOrDmIdNoThread of
+                        GuildOrDmId_Dm otherUserId ->
+                            Ui.row
+                                [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
+                                (if otherUserId == local.localUser.session.userId then
+                                    privateChatWithYourself local
 
-                GuildOrDmId_Guild _ _ ->
-                    Ui.row
-                        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
-                        , Ui.text name
-                        , showFilesButton
-                        ]
-            )
+                                 else
+                                    privateChatWith otherUserId local name
+                                )
+
+                        GuildOrDmId_Guild _ _ ->
+                            Ui.row
+                                [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                                [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                                , Ui.text name
+                                , showFilesButton
+                                ]
+                    )
         , Ui.el
             [ emojiSelector
                 isMobile
