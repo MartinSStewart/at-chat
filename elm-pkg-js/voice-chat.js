@@ -111,12 +111,17 @@ exports.init = async function init(app) {
         if (conn.localStream) {
             conn.localStream.getTracks().forEach(function (track) { track.stop(); });
         }
-        if (conn.pc) conn.pc.close();
-        if (conn.remoteVideo) {
-            conn.remoteVideo.srcObject = null;
-//            if (conn.remoteVideo.parentNode) {
-//                conn.remoteVideo.parentNode.removeChild(conn.remoteVideo);
-//            }
+        if (conn.pc) {
+            conn.pc.ontrack = null;
+            conn.pc.onnicecandidate = null;
+            conn.pc.oniceconnectionstatechange = null;
+            conn.pc.onsignalingstatechange = null;
+            conn.pc.onicegatheringstatechange = null;
+            conn.pc.onnotificationneeded = null;
+            conn.pc.close();
+        }
+        if (conn.remoteAudio) {
+            conn.remoteAudio.srcObject = null;
         }
         delete connections[peerUserId];
     }
