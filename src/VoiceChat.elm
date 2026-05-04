@@ -3,10 +3,12 @@ port module VoiceChat exposing
     , ConnectionId
     , DeviceKind(..)
     , Ice
+    , Local
     , LocalChange(..)
     , MediaDevices
     , MediaDevicesStatus(..)
     , Model
+    , Msg(..)
     , RoomId(..)
     , Sdp
     , ServerChange(..)
@@ -19,8 +21,11 @@ port module VoiceChat exposing
     , getMediaDevices
     , hasJoined
     , init
+    , initModel
+    , isPressMsg
     , joinedUsers
     , leaveVoiceChatCmds
+    , mediaDeviceSelectors
     , serverChangeCmd
     , voiceChatFromJs
     , voiceChatStart
@@ -33,11 +38,15 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Id exposing (Id, UserId)
 import Json.Decode
 import Json.Encode
+import MyUi
 import NonemptySet exposing (NonemptySet)
 import SeqDict exposing (SeqDict)
+import Ui exposing (Element)
+import Ui.Font
 
 
 type LocalChange
@@ -52,9 +61,21 @@ type ServerChange
     | Server_SignalReceived ConnectionId Signal
 
 
-type alias Model =
+type Msg
+    = SelectedAudioInputDevice String
+    | SelectedVideoInputDevice String
+
+
+type alias Local =
     { currentRoom : Maybe RoomId
     , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    }
+
+
+type alias Model =
+    { userMediaDevices : MediaDevicesStatus
+    , selectedAudioInputDevice : Maybe String
+    , selectedVideoInputDevice : Maybe String
     }
 
 
@@ -64,10 +85,18 @@ type MediaDevicesStatus
     | FailedToGetMediaDevices String
 
 
-init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Model
+init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
+    }
+
+
+initModel : Model
+initModel =
+    { userMediaDevices = MediaDevicesNotLoaded
+    , selectedAudioInputDevice = Nothing
+    , selectedVideoInputDevice = Nothing
     }
 
 
@@ -132,22 +161,21 @@ iceCodec =
         |> Codec.buildObject
 
 
-audioNodes : Model -> Html msg
+audioNodes : Local -> Html msg
 audioNodes model =
     SeqDict.toList model.voiceChats
         |> List.concatMap
             (\( roomId, sessions ) ->
                 if hasJoined roomId model then
-                    List.concatMap
+                    List.map
                         (\session ->
-                            [ Html.video
+                            Html.video
                                 [ Html.Attributes.style "width" "300px"
                                 , Html.Attributes.style "height" "200px"
                                 , (connectionIdToString { roomId = roomId, otherSession = session } ++ " video") |> Html.Attributes.id
                                 , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
                                 ]
                                 []
-                            ]
                         )
                         (NonemptySet.toList sessions)
 
@@ -222,12 +250,12 @@ videoTrackCodec =
         |> Codec.buildObject
 
 
-hasJoined : RoomId -> Model -> Bool
+hasJoined : RoomId -> Local -> Bool
 hasJoined roomId model =
     model.currentRoom == Just roomId
 
 
-leaveVoiceChatCmds : Model -> Command FrontendOnly toMsg msg
+leaveVoiceChatCmds : Local -> Command FrontendOnly toMsg msg
 leaveVoiceChatCmds model =
     case model.currentRoom of
         Just currentRoom ->
@@ -244,7 +272,7 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-joinedUsers : RoomId -> Model -> SeqDict (Id UserId) (NonemptySet ClientId)
+joinedUsers : RoomId -> Local -> SeqDict (Id UserId) (NonemptySet ClientId)
 joinedUsers roomId model =
     case SeqDict.get roomId model.voiceChats of
         Just voiceChat ->
@@ -269,7 +297,7 @@ joinedUsers roomId model =
             SeqDict.empty
 
 
-serverChangeCmd : ServerChange -> ClientId -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd : ServerChange -> ClientId -> Local -> Command FrontendOnly toBackend msg
 serverChangeCmd change clientId model =
     case change of
         Server_Joined _ connectionId ->
@@ -412,6 +440,7 @@ type alias MediaDevices =
 type DeviceKind
     = AudioInput
     | VideoInput
+    | AudioOutput
 
 
 mediaDevicesCodec : Codec MediaDevices
@@ -426,18 +455,7 @@ mediaDevicesCodec =
 
 deviceKindCodec : Codec DeviceKind
 deviceKindCodec =
-    Codec.custom
-        (\audioInputEncoder videoInputEncoder value ->
-            case value of
-                AudioInput ->
-                    audioInputEncoder
-
-                VideoInput ->
-                    videoInputEncoder
-        )
-        |> Codec.variant0 "audioinput" AudioInput
-        |> Codec.variant0 "videoinput" VideoInput
-        |> Codec.buildCustom
+    Codec.enum Codec.string [ ( "audioinput", AudioInput ), ( "audiooutput", AudioOutput ), ( "videoinput", VideoInput ) ]
 
 
 voiceChatFromJs : (Result String VoiceChatSubscription -> msg) -> Subscription FrontendOnly msg
@@ -481,3 +499,93 @@ connectionIdCodec =
         )
         connectionIdToString
         Codec.string
+
+
+mediaDeviceSelectors : Model -> Element Msg
+mediaDeviceSelectors model =
+    case model.userMediaDevices of
+        MediaDevicesNotLoaded ->
+            Ui.none
+
+        FailedToGetMediaDevices error ->
+            Ui.el
+                [ Ui.padding 16
+                , Ui.alignBottom
+                , Ui.Font.color MyUi.font1
+                ]
+                (Ui.text ("Failed to get media devices: " ++ error))
+
+        HasMediaDevices devices ->
+            let
+                audioDevices : List MediaDevices
+                audioDevices =
+                    List.filter (\d -> d.kind == AudioInput) devices
+
+                videoDevices : List MediaDevices
+                videoDevices =
+                    List.filter (\d -> d.kind == VideoInput) devices
+            in
+            Ui.column
+                [ Ui.padding 16
+                , Ui.spacing 12
+                , Ui.alignBottom
+                , Ui.width (Ui.px 400)
+                , Ui.widthMax 400
+                ]
+                [ deviceDropdown "Microphone" audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
+                , deviceDropdown "Camera" videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
+                ]
+
+
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        SelectedAudioInputDevice _ ->
+            False
+
+        SelectedVideoInputDevice _ ->
+            False
+
+
+deviceDropdown : String -> List MediaDevices -> Maybe String -> (String -> msg) -> Element msg
+deviceDropdown labelText devices selected onSelect =
+    Ui.column
+        [ Ui.spacing 4, Ui.Font.color MyUi.font1 ]
+        [ Ui.text labelText
+        , Ui.html
+            (Html.select
+                [ Html.Attributes.value (Maybe.withDefault "" selected)
+                , Html.Events.onInput onSelect
+                , Html.Attributes.style "width" "100%"
+                , Html.Attributes.style "padding" "7px 8px"
+                , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+                , Html.Attributes.style "border-radius" "4px"
+                , Html.Attributes.style "font-size" "16px"
+                , Html.Attributes.style "background-color" "rgb(32,40,70)"
+                , Html.Attributes.style "color" "rgb(255,255,255)"
+                , Html.Attributes.style "cursor" "pointer"
+                ]
+                (case devices of
+                    [] ->
+                        [ Html.option [] [ Html.text "No devices available" ] ]
+
+                    _ ->
+                        List.map
+                            (\device ->
+                                Html.option
+                                    [ Html.Attributes.value device.deviceId
+                                    , Html.Attributes.selected (Just device.deviceId == selected)
+                                    ]
+                                    [ Html.text
+                                        (if String.isEmpty device.label then
+                                            device.deviceId
+
+                                         else
+                                            device.label
+                                        )
+                                    ]
+                            )
+                            devices
+                )
+            )
+        ]

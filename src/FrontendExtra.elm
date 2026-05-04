@@ -1334,11 +1334,8 @@ isPressMsg msg =
         GotVoiceChatSignalFromJs _ ->
             False
 
-        SelectedAudioInputDevice _ ->
-            False
-
-        SelectedVideoInputDevice _ ->
-            False
+        VoiceChatMsg voiceChatMsg ->
+            VoiceChat.isPressMsg voiceChatMsg
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -2210,7 +2207,7 @@ changeUpdate localMsg local =
 
                 Local_VoiceChatChange voiceChatChange ->
                     let
-                        calls : VoiceChat.Model
+                        calls : VoiceChat.Local
                         calls =
                             local.calls
                     in

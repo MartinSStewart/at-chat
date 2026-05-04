@@ -107,7 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (ConnectionId, MediaDevicesStatus, RoomId, VoiceChatSubscription)
+import VoiceChat exposing (RoomId, VoiceChatSubscription)
 
 
 type FrontendModel
@@ -155,9 +155,7 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
-    , userMediaDevices : MediaDevicesStatus
-    , selectedAudioInputDevice : Maybe String
-    , selectedVideoInputDevice : Maybe String
+    , voiceChat : VoiceChat.Model
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
@@ -491,8 +489,7 @@ type FrontendMsg
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | PressedVoiceChatButton RoomId
     | GotVoiceChatSignalFromJs (Result String VoiceChatSubscription)
-    | SelectedAudioInputDevice String
-    | SelectedVideoInputDevice String
+    | VoiceChatMsg VoiceChat.Msg
 
 
 type ScrollPosition

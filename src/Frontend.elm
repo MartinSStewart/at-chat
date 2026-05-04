@@ -331,9 +331,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
-            , userMediaDevices = MediaDevicesNotLoaded
-            , selectedAudioInputDevice = Nothing
-            , selectedVideoInputDevice = Nothing
+            , voiceChat = VoiceChat.initModel
             , toFrontendLogs = Nothing
             }
 
@@ -3472,14 +3470,26 @@ updateLoaded msg model =
                                 )
                                 model
 
-                        VoiceChat.GotMediaStreamTracks videoTracks ->
+                        VoiceChat.GotMediaStreamTracks _ ->
                             ( model, Command.none )
 
                         VoiceChat.GotUserMediaDevices mediaDevices ->
-                            ( { model | userMediaDevices = HasMediaDevices mediaDevices }, Command.none )
+                            let
+                                voiceChat =
+                                    model.voiceChat
+                            in
+                            ( { model | voiceChat = { voiceChat | userMediaDevices = HasMediaDevices mediaDevices } }
+                            , Command.none
+                            )
 
                         VoiceChat.GotUserMediaDevicesError error ->
-                            ( { model | userMediaDevices = FailedToGetMediaDevices error }, Command.none )
+                            let
+                                voiceChat =
+                                    model.voiceChat
+                            in
+                            ( { model | voiceChat = { voiceChat | userMediaDevices = FailedToGetMediaDevices error } }
+                            , Command.none
+                            )
 
                 Err error ->
                     let
@@ -3487,12 +3497,6 @@ updateLoaded msg model =
                             Debug.log "voice chat port didn't decode" error
                     in
                     ( model, Command.none )
-
-        SelectedAudioInputDevice deviceId ->
-            ( { model | selectedAudioInputDevice = Just deviceId }, Command.none )
-
-        SelectedVideoInputDevice deviceId ->
-            ( { model | selectedVideoInputDevice = Just deviceId }, Command.none )
 
         PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
             FrontendExtra.updateLoggedIn
@@ -3563,6 +3567,18 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+        VoiceChatMsg voiceChatMsg ->
+            let
+                voiceChat =
+                    model.voiceChat
+            in
+            case voiceChatMsg of
+                VoiceChat.SelectedAudioInputDevice deviceId ->
+                    ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }, Command.none )
+
+                VoiceChat.SelectedVideoInputDevice deviceId ->
+                    ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }, Command.none )
 
 
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg

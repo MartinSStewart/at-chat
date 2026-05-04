@@ -167,7 +167,7 @@ type alias LocalState =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
-    , calls : VoiceChat.Model
+    , calls : VoiceChat.Local
     }
 
 
