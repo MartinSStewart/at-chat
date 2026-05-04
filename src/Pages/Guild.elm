@@ -92,7 +92,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (RoomId(..))
+import VoiceChat exposing (DeviceKind(..), MediaDevices, MediaDevicesStatus(..), RoomId(..))
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -3268,7 +3268,87 @@ voiceChatView windowSize roomId local model =
         , MyUi.noShrinking
         , Ui.inFront (Ui.el [ Ui.paddingXY 16 7 ] (voiceChatButton roomId local))
         ]
-        Ui.none
+        (mediaDeviceSelectors model)
+
+
+mediaDeviceSelectors : LoadedFrontend -> Element FrontendMsg
+mediaDeviceSelectors model =
+    case model.userMediaDevices of
+        MediaDevicesNotLoaded ->
+            Ui.none
+
+        FailedToGetMediaDevices error ->
+            Ui.el
+                [ Ui.padding 16
+                , Ui.alignBottom
+                , Ui.Font.color MyUi.font1
+                ]
+                (Ui.text ("Failed to get media devices: " ++ error))
+
+        HasMediaDevices devices ->
+            let
+                audioDevices : List MediaDevices
+                audioDevices =
+                    List.filter (\d -> d.kind == AudioInput) devices
+
+                videoDevices : List MediaDevices
+                videoDevices =
+                    List.filter (\d -> d.kind == VideoInput) devices
+            in
+            Ui.column
+                [ Ui.padding 16
+                , Ui.spacing 12
+                , Ui.alignBottom
+                , Ui.width (Ui.px 400)
+                , Ui.widthMax 400
+                ]
+                [ deviceDropdown "Microphone" audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
+                , deviceDropdown "Camera" videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
+                ]
+
+
+deviceDropdown : String -> List MediaDevices -> Maybe String -> (String -> FrontendMsg) -> Element FrontendMsg
+deviceDropdown labelText devices selected onSelect =
+    Ui.column
+        [ Ui.spacing 4, Ui.Font.color MyUi.font1 ]
+        [ Ui.text labelText
+        , Ui.html
+            (Html.select
+                [ Html.Attributes.value (Maybe.withDefault "" selected)
+                , Html.Events.onInput onSelect
+                , Html.Attributes.style "width" "100%"
+                , Html.Attributes.style "padding" "7px 8px"
+                , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+                , Html.Attributes.style "border-radius" "4px"
+                , Html.Attributes.style "font-size" "16px"
+                , Html.Attributes.style "background-color" "rgb(32,40,70)"
+                , Html.Attributes.style "color" "rgb(255,255,255)"
+                , Html.Attributes.style "cursor" "pointer"
+                ]
+                (case devices of
+                    [] ->
+                        [ Html.option [] [ Html.text "No devices available" ] ]
+
+                    _ ->
+                        List.map
+                            (\device ->
+                                Html.option
+                                    [ Html.Attributes.value device.deviceId
+                                    , Html.Attributes.selected (Just device.deviceId == selected)
+                                    ]
+                                    [ Html.text
+                                        (if String.isEmpty device.label then
+                                            device.deviceId
+
+                                         else
+                                            device.label
+                                        )
+                                    ]
+                            )
+                            devices
+                )
+            )
+        ]
 
 
 conversationView :

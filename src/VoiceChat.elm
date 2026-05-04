@@ -1,8 +1,10 @@
 port module VoiceChat exposing
     ( AudioTrackData
     , ConnectionId
+    , DeviceKind(..)
     , Ice
     , LocalChange(..)
+    , MediaDevices
     , MediaDevicesStatus(..)
     , Model
     , RoomId(..)

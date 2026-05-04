@@ -332,6 +332,8 @@ initLoadedFrontend loading time userAgent loginResult =
             , versionNumber = Nothing
             , emojiData = Nothing
             , userMediaDevices = MediaDevicesNotLoaded
+            , selectedAudioInputDevice = Nothing
+            , selectedVideoInputDevice = Nothing
             , toFrontendLogs = Nothing
             }
 
@@ -3485,6 +3487,12 @@ updateLoaded msg model =
                             Debug.log "voice chat port didn't decode" error
                     in
                     ( model, Command.none )
+
+        SelectedAudioInputDevice deviceId ->
+            ( { model | selectedAudioInputDevice = Just deviceId }, Command.none )
+
+        SelectedVideoInputDevice deviceId ->
+            ( { model | selectedVideoInputDevice = Just deviceId }, Command.none )
 
         PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
             FrontendExtra.updateLoggedIn

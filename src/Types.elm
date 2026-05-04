@@ -156,6 +156,8 @@ type alias LoadedFrontend =
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
     , userMediaDevices : MediaDevicesStatus
+    , selectedAudioInputDevice : Maybe String
+    , selectedVideoInputDevice : Maybe String
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
@@ -489,6 +491,8 @@ type FrontendMsg
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | PressedVoiceChatButton RoomId
     | GotVoiceChatSignalFromJs (Result String VoiceChatSubscription)
+    | SelectedAudioInputDevice String
+    | SelectedVideoInputDevice String
 
 
 type ScrollPosition
