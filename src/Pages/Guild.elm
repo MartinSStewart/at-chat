@@ -3258,8 +3258,8 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 )
 
 
-voiceChatView : Coord CssPixels -> RoomId -> LocalState -> Element FrontendMsg
-voiceChatView windowSize roomId local =
+voiceChatView : Coord CssPixels -> RoomId -> LocalState -> LoadedFrontend -> Element FrontendMsg
+voiceChatView windowSize roomId local model =
     Ui.el
         [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
@@ -3337,7 +3337,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ case showVoiceChat of
             Just roomId ->
-                voiceChatView model.windowSize roomId local
+                voiceChatView model.windowSize roomId local model
 
             Nothing ->
                 channelHeader
