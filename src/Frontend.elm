@@ -3474,11 +3474,7 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                         VoiceChat.GotUserMediaDevices mediaDevices ->
-                            let
-                                voiceChat =
-                                    model.voiceChat
-                            in
-                            ( { model | voiceChat = { voiceChat | userMediaDevices = HasMediaDevices mediaDevices } }
+                            ( { model | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices model.voiceChat }
                             , Command.none
                             )
 

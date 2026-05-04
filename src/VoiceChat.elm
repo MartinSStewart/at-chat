@@ -19,6 +19,7 @@ port module VoiceChat exposing
     , addSessionIdHash
     , audioNodes
     , getMediaDevices
+    , gotUserMediaDevices
     , hasJoined
     , init
     , initModel
@@ -98,6 +99,47 @@ initModel =
     , selectedAudioInputDevice = Nothing
     , selectedVideoInputDevice = Nothing
     }
+
+
+gotUserMediaDevices : List MediaDevices -> Model -> Model
+gotUserMediaDevices devices model =
+    { model
+        | userMediaDevices = HasMediaDevices devices
+        , selectedAudioInputDevice =
+            case model.selectedAudioInputDevice of
+                Just _ ->
+                    model.selectedAudioInputDevice
+
+                Nothing ->
+                    pickDefaultDevice AudioInput devices
+        , selectedVideoInputDevice =
+            case model.selectedVideoInputDevice of
+                Just _ ->
+                    model.selectedVideoInputDevice
+
+                Nothing ->
+                    pickDefaultDevice VideoInput devices
+    }
+
+
+pickDefaultDevice : DeviceKind -> List MediaDevices -> Maybe String
+pickDefaultDevice kind devices =
+    let
+        filtered : List MediaDevices
+        filtered =
+            List.filter (\d -> d.kind == kind) devices
+    in
+    case List.filter (\d -> d.deviceId == "default") filtered of
+        first :: _ ->
+            Just first.deviceId
+
+        [] ->
+            case filtered of
+                first :: _ ->
+                    Just first.deviceId
+
+                [] ->
+                    Nothing
 
 
 type alias ConnectionId =
