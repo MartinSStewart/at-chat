@@ -104,7 +104,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (RoomId)
+import VoiceChat exposing (MediaDevicesStatus(..), RoomId)
 
 
 app :
@@ -331,6 +331,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
+            , userMediaDevices = MediaDevicesNotLoaded
             , toFrontendLogs = Nothing
             }
 
@@ -3456,16 +3457,27 @@ updateLoaded msg model =
 
         GotVoiceChatSignalFromJs result ->
             case result of
-                Ok ( connectionId, signal ) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
-                                loggedIn
-                                Command.none
-                        )
-                        model
+                Ok event ->
+                    case event of
+                        VoiceChat.GotSignal connectionId signal ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                                        loggedIn
+                                        Command.none
+                                )
+                                model
+
+                        VoiceChat.GotMediaStreamTracks videoTracks ->
+                            ( model, Command.none )
+
+                        VoiceChat.GotUserMediaDevices mediaDevices ->
+                            ( { model | userMediaDevices = HasMediaDevices mediaDevices }, Command.none )
+
+                        VoiceChat.GotUserMediaDevicesError error ->
+                            ( { model | userMediaDevices = FailedToGetMediaDevices error }, Command.none )
 
                 Err error ->
                     let
@@ -4229,24 +4241,31 @@ pressedVoiceChatButton roomId model =
                     model.time
                     (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
                     loggedIn
-                    (VoiceChat.leaveVoiceChatCmds local.calls)
+                    (Command.batch
+                        [ VoiceChat.leaveVoiceChatCmds local.calls
+                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                        ]
+                    )
 
             else
                 FrontendExtra.handleLocalChange
                     model.time
                     (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
                     loggedIn
-                    (case SeqDict.get roomId local.calls.voiceChats of
-                        Just nonempty ->
-                            List.map
-                                (\otherSession ->
-                                    VoiceChat.voiceChatStart clientId { roomId = roomId, otherSession = otherSession }
-                                )
-                                (NonemptySet.toList nonempty)
-                                |> Command.batch
+                    (Command.batch
+                        [ case SeqDict.get roomId local.calls.voiceChats of
+                            Just nonempty ->
+                                List.map
+                                    (\otherSession ->
+                                        VoiceChat.voiceChatStart clientId { roomId = roomId, otherSession = otherSession }
+                                    )
+                                    (NonemptySet.toList nonempty)
+                                    |> Command.batch
 
-                        Nothing ->
-                            VoiceChat.getMediaDevices
+                            Nothing ->
+                                VoiceChat.getMediaDevices
+                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                        ]
                     )
         )
         model
@@ -5661,7 +5680,7 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.behindContent
+                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.inFront
                                     ]
                                     (page loggedIn local)
 

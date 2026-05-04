@@ -1,12 +1,17 @@
 port module VoiceChat exposing
-    ( ConnectionId
+    ( AudioTrackData
+    , ConnectionId
     , Ice
     , LocalChange(..)
+    , MediaDevicesStatus(..)
     , Model
     , RoomId(..)
     , Sdp
     , ServerChange(..)
     , Signal(..)
+    , Track(..)
+    , VideoTrackData
+    , VoiceChatSubscription(..)
     , addSessionIdHash
     , audioNodes
     , getMediaDevices
@@ -46,7 +51,15 @@ type ServerChange
 
 
 type alias Model =
-    { currentRoom : Maybe RoomId, voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) }
+    { currentRoom : Maybe RoomId
+    , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    }
+
+
+type MediaDevicesStatus
+    = MediaDevicesNotLoaded
+    | HasMediaDevices (List MediaDevices)
+    | FailedToGetMediaDevices String
 
 
 init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Model
@@ -123,14 +136,16 @@ audioNodes model =
         |> List.concatMap
             (\( roomId, sessions ) ->
                 if hasJoined roomId model then
-                    List.map
+                    List.concatMap
                         (\session ->
-                            Html.audio
-                                [ connectionIdToString { roomId = roomId, otherSession = session } |> Html.Attributes.id
-                                , Html.Attributes.autoplay True
-                                , Html.Attributes.style "display" "none"
+                            [ Html.video
+                                [ Html.Attributes.style "width" "300px"
+                                , Html.Attributes.style "height" "200px"
+                                , (connectionIdToString { roomId = roomId, otherSession = session } ++ " video") |> Html.Attributes.id
+                                , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
                                 ]
                                 []
+                            ]
                         )
                         (NonemptySet.toList sessions)
 
@@ -138,6 +153,71 @@ audioNodes model =
                     []
             )
         |> Html.div []
+
+
+type Track
+    = VideoTrack VideoTrackData
+    | AudioTrack AudioTrackData
+
+
+trackCodec : Codec Track
+trackCodec =
+    Codec.custom
+        (\aEncoder bEncoder value ->
+            case value of
+                VideoTrack a ->
+                    aEncoder a
+
+                AudioTrack a ->
+                    bEncoder a
+        )
+        |> Codec.variant1 "video" VideoTrack videoTrackCodec
+        |> Codec.variant1 "audio" AudioTrack audioTrackCodec
+        |> Codec.buildCustom
+
+
+type alias VideoTrackData =
+    { deviceId : String
+    , frameRate : Int
+    , groupId : String
+    , width : Int
+    , height : Int
+    , resizeMode : String
+    }
+
+
+type alias AudioTrackData =
+    { deviceId : String
+    , autoGainControl : Bool
+    , groupId : String
+    , channelCount : Int
+    , echoCancellation : Bool
+    , noiseSuppression : Bool
+    }
+
+
+audioTrackCodec : Codec AudioTrackData
+audioTrackCodec =
+    Codec.object AudioTrackData
+        |> Codec.field "deviceId" .deviceId Codec.string
+        |> Codec.field "autoGainControl" .autoGainControl Codec.bool
+        |> Codec.field "groupId" .groupId Codec.string
+        |> Codec.field "channelCount" .channelCount Codec.int
+        |> Codec.field "echoCancellation" .echoCancellation Codec.bool
+        |> Codec.field "noiseSuppression" .noiseSuppression Codec.bool
+        |> Codec.buildObject
+
+
+videoTrackCodec : Codec VideoTrackData
+videoTrackCodec =
+    Codec.object VideoTrackData
+        |> Codec.field "deviceId" .deviceId Codec.string
+        |> Codec.field "frameRate" .frameRate Codec.int
+        |> Codec.field "groupId" .groupId Codec.string
+        |> Codec.field "width" .width Codec.int
+        |> Codec.field "height" .height Codec.int
+        |> Codec.field "resizeMode" .resizeMode Codec.string
+        |> Codec.buildObject
 
 
 hasJoined : RoomId -> Model -> Bool
@@ -288,21 +368,82 @@ voiceChatDeliverSignal connectionId signal =
         )
 
 
-voiceChatFromJs : (Result String ( ConnectionId, Signal ) -> msg) -> Subscription FrontendOnly msg
+type VoiceChatSubscription
+    = GotSignal ConnectionId Signal
+    | GotMediaStreamTracks (List Track)
+    | GotUserMediaDevices (List MediaDevices)
+    | GotUserMediaDevicesError String
+
+
+voiceChatSubscriptionCodec : Codec VoiceChatSubscription
+voiceChatSubscriptionCodec =
+    Codec.custom
+        (\aEncoder bEncoder cEncoder dDecoder value ->
+            case value of
+                GotSignal a b ->
+                    aEncoder a b
+
+                GotMediaStreamTracks videoTracks ->
+                    bEncoder videoTracks
+
+                GotUserMediaDevices mediaDevices ->
+                    cEncoder mediaDevices
+
+                GotUserMediaDevicesError string ->
+                    dDecoder string
+        )
+        |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
+        |> Codec.variant1 "got-tracks" GotMediaStreamTracks (Codec.list trackCodec)
+        |> Codec.variant1 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec)
+        |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
+        |> Codec.buildCustom
+
+
+type alias MediaDevices =
+    { deviceId : String
+    , groupId : String
+    , kind : DeviceKind
+    , label : String
+    }
+
+
+type DeviceKind
+    = AudioInput
+    | VideoInput
+
+
+mediaDevicesCodec : Codec MediaDevices
+mediaDevicesCodec =
+    Codec.object MediaDevices
+        |> Codec.field "deviceId" .deviceId Codec.string
+        |> Codec.field "groupId" .groupId Codec.string
+        |> Codec.field "kind" .kind deviceKindCodec
+        |> Codec.field "label" .label Codec.string
+        |> Codec.buildObject
+
+
+deviceKindCodec : Codec DeviceKind
+deviceKindCodec =
+    Codec.custom
+        (\audioInputEncoder videoInputEncoder value ->
+            case value of
+                AudioInput ->
+                    audioInputEncoder
+
+                VideoInput ->
+                    videoInputEncoder
+        )
+        |> Codec.variant0 "audioinput" AudioInput
+        |> Codec.variant0 "videoinput" VideoInput
+        |> Codec.buildCustom
+
+
+voiceChatFromJs : (Result String VoiceChatSubscription -> msg) -> Subscription FrontendOnly msg
 voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
-        (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.map2 Tuple.pair
-                    (Json.Decode.field "peerUserId" (Codec.decoder connectionIdCodec))
-                    (Json.Decode.field "signal" (Codec.decoder signalCodec))
-                )
-                json
-                |> Result.mapError Json.Decode.errorToString
-                |> msg
-        )
+        (\json -> Codec.decodeValue voiceChatSubscriptionCodec json |> Result.mapError Json.Decode.errorToString |> msg)
 
 
 connectionIdToString : ConnectionId -> String
