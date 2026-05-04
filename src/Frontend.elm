@@ -3456,16 +3456,21 @@ updateLoaded msg model =
 
         GotVoiceChatSignalFromJs result ->
             case result of
-                Ok ( connectionId, signal ) ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
-                                loggedIn
-                                Command.none
-                        )
-                        model
+                Ok event ->
+                    case event of
+                        VoiceChat.GotSignal connectionId signal ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                                        loggedIn
+                                        Command.none
+                                )
+                                model
+
+                        VoiceChat.GotMediaStreamTracks videoTracks ->
+                            ( model, Command.none )
 
                 Err error ->
                     let

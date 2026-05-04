@@ -1,5 +1,6 @@
 port module VoiceChat exposing
-    ( ConnectionId
+    ( AudioTrackData
+    , ConnectionId
     , Ice
     , LocalChange(..)
     , Model
@@ -7,6 +8,9 @@ port module VoiceChat exposing
     , Sdp
     , ServerChange(..)
     , Signal(..)
+    , Track(..)
+    , VideoTrackData
+    , VoiceChatSubscription(..)
     , addSessionIdHash
     , audioNodes
     , getMediaDevices
@@ -142,7 +146,28 @@ audioNodes model =
         |> Html.div []
 
 
-type alias VideoTrack =
+type Track
+    = VideoTrack VideoTrackData
+    | AudioTrack AudioTrackData
+
+
+trackCodec : Codec Track
+trackCodec =
+    Codec.custom
+        (\aEncoder bEncoder value ->
+            case value of
+                VideoTrack a ->
+                    aEncoder a
+
+                AudioTrack a ->
+                    bEncoder a
+        )
+        |> Codec.variant1 "video" VideoTrack videoTrackCodec
+        |> Codec.variant1 "audio" AudioTrack audioTrackCodec
+        |> Codec.buildCustom
+
+
+type alias VideoTrackData =
     { deviceId : String
     , frameRate : Int
     , groupId : String
@@ -152,9 +177,31 @@ type alias VideoTrack =
     }
 
 
-videoTrackCodec : Codec VideoTrack
+type alias AudioTrackData =
+    { deviceId : String
+    , autoGainControl : Bool
+    , groupId : String
+    , channelCount : Int
+    , echoCancellation : Bool
+    , noiseSuppression : Bool
+    }
+
+
+audioTrackCodec : Codec AudioTrackData
+audioTrackCodec =
+    Codec.object AudioTrackData
+        |> Codec.field "deviceId" .deviceId Codec.string
+        |> Codec.field "autoGainControl" .autoGainControl Codec.bool
+        |> Codec.field "groupId" .groupId Codec.string
+        |> Codec.field "channelCount" .channelCount Codec.int
+        |> Codec.field "echoCancellation" .echoCancellation Codec.bool
+        |> Codec.field "noiseSuppression" .noiseSuppression Codec.bool
+        |> Codec.buildObject
+
+
+videoTrackCodec : Codec VideoTrackData
 videoTrackCodec =
-    Codec.object VideoTrack
+    Codec.object VideoTrackData
         |> Codec.field "deviceId" .deviceId Codec.string
         |> Codec.field "frameRate" .frameRate Codec.int
         |> Codec.field "groupId" .groupId Codec.string
@@ -314,7 +361,7 @@ voiceChatDeliverSignal connectionId signal =
 
 type VoiceChatSubscription
     = GotSignal ConnectionId Signal
-    | GotVideoTrack (List VideoTrack)
+    | GotMediaStreamTracks (List Track)
 
 
 voiceChatSubscriptionCodec : Codec VoiceChatSubscription
@@ -325,29 +372,20 @@ voiceChatSubscriptionCodec =
                 GotSignal a b ->
                     aEncoder a b
 
-                GotVideoTrack videoTracks ->
+                GotMediaStreamTracks videoTracks ->
                     bEncoder videoTracks
         )
         |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
-        |> Codec.variant1 "got-video-track" GotVideoTrack (Codec.list videoTrackCodec)
+        |> Codec.variant1 "got-tracks" GotMediaStreamTracks (Codec.list trackCodec)
         |> Codec.buildCustom
 
 
-voiceChatFromJs : (Result String ( ConnectionId, Signal ) -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs : (Result String VoiceChatSubscription -> msg) -> Subscription FrontendOnly msg
 voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
-        (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.map2 Tuple.pair
-                    (Json.Decode.field "peerUserId" (Codec.decoder connectionIdCodec))
-                    (Json.Decode.field "signal" (Codec.decoder signalCodec))
-                )
-                json
-                |> Result.mapError Json.Decode.errorToString
-                |> msg
-        )
+        (\json -> Codec.decodeValue voiceChatSubscriptionCodec json |> Result.mapError Json.Decode.errorToString |> msg)
 
 
 connectionIdToString : ConnectionId -> String

@@ -18,10 +18,22 @@ exports.init = async function init(app) {
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
         });
 
+
+        let videoTracks = [];
         localStream.getTracks().forEach(function (track) {
             pc.addTrack(track, localStream);
-            console.log(track.getSettings());
+
+            let settings = track.getSettings();
+            if (settings.channelCount) {
+                videoTracks.push({ tag: "audio" , args: [ settings ] });
+            }
+            else {
+                videoTracks.push({ tag: "video" , args: [ settings ] });
+            }
+            console.log(settings);
         });
+
+        app.ports.voice_chat_from_js.send( { tag: "got-tracks" , args: [ videoTracks ] });
 
         //const remoteAudio = document.getElementById(peerUserId);
         const remoteVideo = document.getElementById(peerUserId + " video");
@@ -56,10 +68,10 @@ exports.init = async function init(app) {
 
         pc.onicecandidate = function (event) {
             if (event.candidate) {
-                app.ports.voice_chat_from_js.send({
-                    peerUserId: peerUserId,
-                    signal: { tag: "ice", args: [ event.candidate ] }
-                });
+                app.ports.voice_chat_from_js.send(
+                    { tag: "got-signal"
+                    , args: [ peerUserId, { tag: "ice", args: [ event.candidate ] }]
+                    });
             }
         };
 
@@ -83,10 +95,10 @@ exports.init = async function init(app) {
             try {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
-                app.ports.voice_chat_from_js.send({
-                    peerUserId: peerUserId,
-                    signal: { tag: "offer", args: [ offer ] }
-                });
+                app.ports.voice_chat_from_js.send(
+                    { tag: "got-signal"
+                    , args: [ peerUserId, { tag: "offer", args: [ offer ] }]
+                    });
             } catch (e) {
                 console.error("Voice chat: failed to create offer", e);
             }
@@ -129,10 +141,10 @@ exports.init = async function init(app) {
                 await drainQueuedIceCandidates(conn, peerUserId);
                 const answer = await conn.pc.createAnswer();
                 await conn.pc.setLocalDescription(answer);
-                app.ports.voice_chat_from_js.send({
-                    peerUserId: peerUserId,
-                    signal: { tag: "answer", args: [ answer ] }
-                });
+                app.ports.voice_chat_from_js.send(
+                    { tag: "got-signal"
+                    , args: [ peerUserId, { tag: "answer", args: [ answer ] }]
+                    });
             } else if (signal.tag === "answer") {
                 await conn.pc.setRemoteDescription({ type: "answer", sdp: signal.args[0].sdp });
                 conn.remoteDescriptionSet = true;

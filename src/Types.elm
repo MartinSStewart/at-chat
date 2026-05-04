@@ -107,7 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (ConnectionId, RoomId)
+import VoiceChat exposing (ConnectionId, RoomId, VoiceChatSubscription)
 
 
 type FrontendModel
@@ -487,7 +487,7 @@ type FrontendMsg
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | PressedVoiceChatButton RoomId
-    | GotVoiceChatSignalFromJs (Result String ( ConnectionId, VoiceChat.Signal ))
+    | GotVoiceChatSignalFromJs (Result String VoiceChatSubscription)
 
 
 type ScrollPosition
