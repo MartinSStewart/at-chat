@@ -7,7 +7,7 @@ exports.init = async function init(app) {
 
         let localStream;
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         } catch (e) {
             console.error("Voice chat: failed to get microphone", e);
             return;
@@ -20,21 +20,26 @@ exports.init = async function init(app) {
 
         localStream.getTracks().forEach(function (track) {
             pc.addTrack(track, localStream);
+            console.log(track.getSettings());
         });
 
-        const remoteAudio = document.getElementById(peerUserId);
+        //const remoteAudio = document.getElementById(peerUserId);
+        const remoteVideo = document.getElementById(peerUserId + " video");
 
         pc.ontrack = function (event) {
             console.log("Voice chat: ontrack", peerUserId, event.streams);
+
+
             if (event.streams && event.streams[0]) {
-                remoteAudio.srcObject = event.streams[0];
+                remoteVideo.srcObject = event.streams[0];
+
             } else {
                 // Fallback: build a stream from the single track.
                 const stream = new MediaStream();
                 stream.addTrack(event.track);
-                remoteAudio.srcObject = stream;
+                remoteVideo.srcObject = stream;
             }
-            const playPromise = remoteAudio.play();
+            const playPromise = remoteVideo.play();
             if (playPromise && typeof playPromise.catch === "function") {
                 playPromise.catch(function (err) {
                     console.error("Voice chat: audio play() rejected", err);
@@ -61,7 +66,7 @@ exports.init = async function init(app) {
         const conn = {
             pc: pc,
             localStream: localStream,
-            remoteAudio: remoteAudio,
+            remoteAudio: remoteVideo,
             remoteDescriptionSet: false,
             queuedIceCandidates: [],
             signalChain: Promise.resolve()
@@ -95,11 +100,11 @@ exports.init = async function init(app) {
             conn.localStream.getTracks().forEach(function (track) { track.stop(); });
         }
         if (conn.pc) conn.pc.close();
-        if (conn.remoteAudio) {
-            conn.remoteAudio.srcObject = null;
-            if (conn.remoteAudio.parentNode) {
-                conn.remoteAudio.parentNode.removeChild(conn.remoteAudio);
-            }
+        if (conn.remoteVideo) {
+            conn.remoteVideo.srcObject = null;
+//            if (conn.remoteVideo.parentNode) {
+//                conn.remoteVideo.parentNode.removeChild(conn.remoteVideo);
+//            }
         }
         delete connections[peerUserId];
     }
@@ -165,6 +170,15 @@ exports.init = async function init(app) {
             delete pendingSignals[msg.peerUserId];
         } else if (msg.kind === "signal") {
             await handleSignal(msg.peerUserId, msg.signal);
+        } else if (msg.kind === "get-media-devices") {
+            let localStream;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            } catch (e) {
+                console.error("Voice chat: failed to get microphone", e);
+                return;
+            }
+            console.log(localStream);
         }
     });
 };

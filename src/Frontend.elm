@@ -5661,7 +5661,7 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.behindContent
+                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.inFront
                                     ]
                                     (page loggedIn local)
 

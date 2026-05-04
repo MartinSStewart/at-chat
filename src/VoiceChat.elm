@@ -123,14 +123,16 @@ audioNodes model =
         |> List.concatMap
             (\( roomId, sessions ) ->
                 if hasJoined roomId model then
-                    List.map
+                    List.concatMap
                         (\session ->
-                            Html.audio
-                                [ connectionIdToString { roomId = roomId, otherSession = session } |> Html.Attributes.id
-                                , Html.Attributes.autoplay True
-                                , Html.Attributes.style "display" "none"
+                            [ Html.video
+                                [ Html.Attributes.style "width" "300px"
+                                , Html.Attributes.style "height" "200px"
+                                , (connectionIdToString { roomId = roomId, otherSession = session } ++ " video") |> Html.Attributes.id
+                                , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
                                 ]
                                 []
+                            ]
                         )
                         (NonemptySet.toList sessions)
 
@@ -138,6 +140,28 @@ audioNodes model =
                     []
             )
         |> Html.div []
+
+
+type alias VideoTrack =
+    { deviceId : String
+    , frameRate : Int
+    , groupId : String
+    , width : Int
+    , height : Int
+    , resizeMode : String
+    }
+
+
+videoTrackCodec : Codec VideoTrack
+videoTrackCodec =
+    Codec.object VideoTrack
+        |> Codec.field "deviceId" .deviceId Codec.string
+        |> Codec.field "frameRate" .frameRate Codec.int
+        |> Codec.field "groupId" .groupId Codec.string
+        |> Codec.field "width" .width Codec.int
+        |> Codec.field "height" .height Codec.int
+        |> Codec.field "resizeMode" .resizeMode Codec.string
+        |> Codec.buildObject
 
 
 hasJoined : RoomId -> Model -> Bool
@@ -286,6 +310,27 @@ voiceChatDeliverSignal connectionId signal =
             , ( "signal", Codec.encoder signalCodec signal )
             ]
         )
+
+
+type VoiceChatSubscription
+    = GotSignal ConnectionId Signal
+    | GotVideoTrack (List VideoTrack)
+
+
+voiceChatSubscriptionCodec : Codec VoiceChatSubscription
+voiceChatSubscriptionCodec =
+    Codec.custom
+        (\aEncoder bEncoder value ->
+            case value of
+                GotSignal a b ->
+                    aEncoder a b
+
+                GotVideoTrack videoTracks ->
+                    bEncoder videoTracks
+        )
+        |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
+        |> Codec.variant1 "got-video-track" GotVideoTrack (Codec.list videoTrackCodec)
+        |> Codec.buildCustom
 
 
 voiceChatFromJs : (Result String ( ConnectionId, Signal ) -> msg) -> Subscription FrontendOnly msg
