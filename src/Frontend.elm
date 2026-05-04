@@ -4246,7 +4246,7 @@ pressedVoiceChatButton roomId model =
                                 |> Command.batch
 
                         Nothing ->
-                            Command.none
+                            VoiceChat.getMediaDevices
                     )
         )
         model

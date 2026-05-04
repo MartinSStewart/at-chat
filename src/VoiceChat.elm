@@ -9,6 +9,7 @@ port module VoiceChat exposing
     , Signal(..)
     , addSessionIdHash
     , audioNodes
+    , getMediaDevices
     , hasJoined
     , init
     , joinedUsers
@@ -231,6 +232,17 @@ port voice_chat_to_js : Json.Encode.Value -> Cmd msg
 
 
 port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+getMediaDevices : Command FrontendOnly toBackend msg
+getMediaDevices =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "get-media-devices" )
+            ]
+        )
 
 
 voiceChatStart : ClientId -> ConnectionId -> Command FrontendOnly toBackend msg
