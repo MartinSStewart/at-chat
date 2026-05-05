@@ -3291,11 +3291,11 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        VoiceChat.Server_Joined time { roomId, otherSession } ->
+                        VoiceChat.Server_Joined time { roomId, otherClientId } ->
                             { local
                                 | calls =
                                     { calls
-                                        | voiceChats = VoiceChat.addSessionIdHash roomId otherSession calls.voiceChats
+                                        | voiceChats = VoiceChat.addSessionIdHash roomId otherClientId calls.voiceChats
                                     }
                                 , dmChannels =
                                     case roomId of
@@ -3307,7 +3307,7 @@ changeUpdate localMsg local =
                                                         (\maybe ->
                                                             Maybe.withDefault DmChannel.frontendInit maybe
                                                                 |> LocalState.createChannelMessageFrontend
-                                                                    (CallStarted time (Tuple.first otherSession) SeqDict.empty)
+                                                                    (CallStarted time (Tuple.first otherClientId) SeqDict.empty)
                                                                 |> Just
                                                         )
                                                         local.dmChannels
@@ -3324,7 +3324,7 @@ changeUpdate localMsg local =
 
 
 otherUserLeaveCall : Time.Posix -> VoiceChat.ConnectionId -> LocalState -> LocalState
-otherUserLeaveCall time { roomId, otherSession } local =
+otherUserLeaveCall time { roomId, otherClientId } local =
     let
         calls =
             local.calls
@@ -3336,7 +3336,7 @@ otherUserLeaveCall time { roomId, otherSession } local =
                 voiceChats =
                     SeqDict.update
                         roomId
-                        (\_ -> NonemptySet.remove otherSession dmVoiceChat |> NonemptySet.fromSeqSet)
+                        (\_ -> NonemptySet.remove otherClientId dmVoiceChat |> NonemptySet.fromSeqSet)
                         calls.voiceChats
             in
             { local

@@ -1,6 +1,5 @@
 module IdString exposing
     ( IdString(..)
-    , changeType
     , codec
     , fromString
     , toString
@@ -24,11 +23,6 @@ fromString =
 toString : IdString a -> String
 toString (IdString a) =
     a
-
-
-changeType : IdString a -> IdString b
-changeType (IdString a) =
-    IdString a
 
 
 codec : Codec (IdString a)

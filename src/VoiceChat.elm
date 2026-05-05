@@ -141,7 +141,7 @@ gotUserMediaDevices devices selectedDevices model =
 
 
 type alias ConnectionId =
-    { roomId : RoomId, otherSession : ( Id UserId, ClientId ) }
+    { roomId : RoomId, otherClientId : ( Id UserId, ClientId ) }
 
 
 type RoomId
@@ -211,7 +211,7 @@ audioNodes model =
                         Html.video
                             [ Html.Attributes.style "width" "300px"
                             , Html.Attributes.style "height" "200px"
-                            , Html.Attributes.id (connectionIdToString { roomId = roomId, otherSession = session })
+                            , Html.Attributes.id (connectionIdToString { roomId = roomId, otherClientId = session })
                             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
                             ]
                             []
@@ -302,7 +302,7 @@ leaveVoiceChatCmds model =
             case SeqDict.get currentRoom model.voiceChats of
                 Just voiceChat ->
                     NonemptySet.toList voiceChat
-                        |> List.map (\sessionIdHash2 -> voiceChatStop { roomId = currentRoom, otherSession = sessionIdHash2 })
+                        |> List.map (\sessionIdHash2 -> voiceChatStop { roomId = currentRoom, otherClientId = sessionIdHash2 })
                         |> Command.batch
 
                 Nothing ->
@@ -398,9 +398,12 @@ getMediaDevices =
 voiceChatStart : ClientId -> ConnectionId -> Model -> Command FrontendOnly toBackend msg
 voiceChatStart clientId connectionId model =
     let
+        _ =
+            Debug.log "shouldOffer" ( clientId, connectionId.otherClientId )
+
         shouldOffer : Bool
         shouldOffer =
-            Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherSession)
+            Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
     in
     Command.sendToJs
         "voice_chat_to_js"
@@ -576,15 +579,15 @@ voiceChatFromJs msg =
 
 
 connectionIdToString : ConnectionId -> String
-connectionIdToString { roomId, otherSession } =
+connectionIdToString { roomId, otherClientId } =
     (case roomId of
         DmRoomId otherUserId ->
             Id.toString otherUserId
     )
         ++ " "
-        ++ Id.toString (Tuple.first otherSession)
+        ++ Id.toString (Tuple.first otherClientId)
         ++ " "
-        ++ Lamdera.clientIdToString (Tuple.second otherSession)
+        ++ Lamdera.clientIdToString (Tuple.second otherClientId)
 
 
 connectionIdCodec : Codec ConnectionId
@@ -597,7 +600,7 @@ connectionIdCodec =
                         ( Just int, Just userId ) ->
                             Codec.succeed
                                 { roomId = DmRoomId (Id.fromInt int)
-                                , otherSession = ( Id.fromInt userId, Lamdera.clientIdFromString third )
+                                , otherClientId = ( Id.fromInt userId, Lamdera.clientIdFromString third )
                                 }
 
                         _ ->
@@ -687,27 +690,22 @@ deviceDropdown labelText devices selected onSelect =
                 , Html.Attributes.style "color" "rgb(255,255,255)"
                 , Html.Attributes.style "cursor" "pointer"
                 ]
-                (case devices of
-                    [] ->
-                        [ Html.option [] [ Html.text "No devices available" ] ]
+                (List.map
+                    (\device ->
+                        Html.option
+                            [ Html.Attributes.value (IdString.toString device.deviceId)
+                            , Html.Attributes.selected (Just device.deviceId == selected)
+                            ]
+                            [ Html.text
+                                (if String.isEmpty device.label then
+                                    IdString.toString device.deviceId
 
-                    _ ->
-                        List.map
-                            (\device ->
-                                Html.option
-                                    [ Html.Attributes.value (IdString.toString device.deviceId)
-                                    , Html.Attributes.selected (Just device.deviceId == selected)
-                                    ]
-                                    [ Html.text
-                                        (if String.isEmpty device.label then
-                                            IdString.toString device.deviceId
-
-                                         else
-                                            device.label
-                                        )
-                                    ]
-                            )
-                            devices
+                                 else
+                                    device.label
+                                )
+                            ]
+                    )
+                    devices
                 )
             )
         ]

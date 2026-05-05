@@ -3,6 +3,7 @@ exports.init = async function init(app) {
     const pendingSignals = {};
 
     async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
+        console.log("Should offer: ", shouldOffer);
         stopConnection(peerUserId);
 
         let localStream;
@@ -233,6 +234,7 @@ exports.init = async function init(app) {
             setAudioEnabled(!msg.muted);
         } else if (msg.kind === "set-audio-input") {
             setAudioInput(msg.deviceId);
+            setAudioEnabled(!msg.isMuted);
         } else if (msg.kind === "set-video-paused") {
             setVideoEnabled(!msg.paused);
         } else if (msg.kind === "get-media-devices") {

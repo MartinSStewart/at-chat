@@ -4301,7 +4301,7 @@ pressedVoiceChatButton roomId model =
                                     (\otherSession ->
                                         VoiceChat.voiceChatStart
                                             clientId
-                                            { roomId = roomId, otherSession = otherSession }
+                                            { roomId = roomId, otherClientId = otherSession }
                                             model.voiceChat
                                     )
                                     (NonemptySet.toList nonempty)

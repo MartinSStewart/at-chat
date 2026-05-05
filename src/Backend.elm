@@ -1858,7 +1858,7 @@ disconnectClient time sessionId clientId model =
                                 VoiceChat.Server_Left
                                     time
                                     { roomId = VoiceChat.DmRoomId otherUserId2
-                                    , otherSession = ( session.userId, clientId )
+                                    , otherClientId = ( session.userId, clientId )
                                     }
                                     |> Server_VoiceChatChange
                             )
@@ -1874,57 +1874,6 @@ disconnectClient time sessionId clientId model =
 
         _ ->
             ( model, Command.none )
-
-
-
---(
---
---List.filterMap
---    (\result ->
---        case result of
---            Ok ( attachmentId, { imageSize, fileHash } ) ->
---                case SeqDict.get attachmentId attachmentsDict of
---                    Just attachment ->
---                        { fileName = FileName.fromString attachment.filename
---                        , fileSize = attachment.size
---                        , imageMetadata = imageSize
---                        , contentType =
---                            case attachment.contentType of
---                                Included contentType ->
---                                    FileStatus.contentType contentType
---
---                                Missing ->
---                                    case imageSize of
---                                        Just _ ->
---                                            FileStatus.webpContent
---
---                                        Nothing ->
---                                            FileStatus.unknownContentType
---                        , fileHash = fileHash
---                        }
---                            |> Just
---
---                    Nothing ->
---                        Nothing
---
---            Err _ ->
---                Nothing
---    )
---    results
---    |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
---    |> SeqDict.fromList
---, List.foldl
---    (\result dict ->
---        case result of
---            Ok ( attachment, uploadResponse ) ->
---                SeqDict.insert attachment.url uploadResponse.fileHash dict
---
---            Err _ ->
---                dict
---    )
---    existingDiscordAttachments
---    results
---)
 
 
 updateFromFrontend :
@@ -4776,7 +4725,7 @@ handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
                                     Nothing
                                     otherUserId
                                     (VoiceChat.Server_SignalReceived
-                                        { roomId = VoiceChat.DmRoomId session.userId, otherSession = ( session.userId, clientId ) }
+                                        { roomId = VoiceChat.DmRoomId session.userId, otherClientId = ( session.userId, clientId ) }
                                         signal
                                         |> Server_VoiceChatChange
                                         |> ServerChange
@@ -4878,7 +4827,7 @@ leaveVoiceHelper sessionId clientId time maybeChangeId model session roomId =
                         VoiceChat.Server_Left
                             time
                             { roomId = VoiceChat.DmRoomId otherUserId2
-                            , otherSession = ( session.userId, clientId )
+                            , otherClientId = ( session.userId, clientId )
                             }
                             |> Server_VoiceChatChange
                     )
@@ -4947,7 +4896,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 VoiceChat.Server_Joined
                                     time
                                     { roomId = VoiceChat.DmRoomId otherUserId2
-                                    , otherSession = ( session.userId, clientId )
+                                    , otherClientId = ( session.userId, clientId )
                                     }
                                     |> Server_VoiceChatChange
                             )

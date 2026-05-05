@@ -1646,7 +1646,7 @@ allAttackerLocalChanges =
     , Local_VoiceChatChange
         (VoiceChat.Local_Signal
             { roomId = VoiceChat.DmRoomId normalUserId
-            , otherSession = ( normalUserId, Lamdera.clientIdFromString "clientId0" )
+            , otherClientId = ( normalUserId, Lamdera.clientIdFromString "clientId0" )
             }
             (VoiceChat.OfferSignal { sdp = "" })
         )
