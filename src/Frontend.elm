@@ -3473,8 +3473,8 @@ updateLoaded msg model =
                         VoiceChat.GotMediaStreamTracks _ ->
                             ( model, Command.none )
 
-                        VoiceChat.GotUserMediaDevices mediaDevices ->
-                            ( { model | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices model.voiceChat }
+                        VoiceChat.GotUserMediaDevices mediaDevices defaultDevices ->
+                            ( { model | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices defaultDevices model.voiceChat }
                             , Command.none
                             )
 
@@ -4277,7 +4277,10 @@ pressedVoiceChatButton roomId model =
                             Just nonempty ->
                                 List.map
                                     (\otherSession ->
-                                        VoiceChat.voiceChatStart clientId { roomId = roomId, otherSession = otherSession }
+                                        VoiceChat.voiceChatStart
+                                            clientId
+                                            { roomId = roomId, otherSession = otherSession }
+                                            model.voiceChat
                                     )
                                     (NonemptySet.toList nonempty)
                                     |> Command.batch
@@ -5530,7 +5533,11 @@ updateLoadedFromBackend msg model =
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
-                                    , VoiceChat.serverChangeCmd voiceChatChange local.localUser.session.clientId local.calls
+                                    , VoiceChat.serverChangeCmd
+                                        voiceChatChange
+                                        local.localUser.session.clientId
+                                        local.calls
+                                        model.voiceChat
                                     )
 
                                 _ ->

@@ -5,7 +5,8 @@ port module VoiceChat exposing
     , Ice
     , Local
     , LocalChange(..)
-    , MediaDevices
+    , MediaDevice
+    , MediaDeviceId
     , MediaDevicesStatus(..)
     , Model
     , Msg(..)
@@ -41,8 +42,10 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Id exposing (Id, UserId)
+import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
+import List.Extra
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import SeqDict exposing (SeqDict)
@@ -63,8 +66,8 @@ type ServerChange
 
 
 type Msg
-    = SelectedAudioInputDevice String
-    | SelectedVideoInputDevice String
+    = SelectedAudioInputDevice (IdString MediaDeviceId)
+    | SelectedVideoInputDevice (IdString MediaDeviceId)
 
 
 type alias Local =
@@ -75,14 +78,14 @@ type alias Local =
 
 type alias Model =
     { userMediaDevices : MediaDevicesStatus
-    , selectedAudioInputDevice : Maybe String
-    , selectedVideoInputDevice : Maybe String
+    , selectedAudioInputDevice : Maybe (IdString MediaDeviceId)
+    , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
     }
 
 
 type MediaDevicesStatus
     = MediaDevicesNotLoaded
-    | HasMediaDevices (List MediaDevices)
+    | HasMediaDevices (List MediaDevice)
     | FailedToGetMediaDevices String
 
 
@@ -101,45 +104,31 @@ initModel =
     }
 
 
-gotUserMediaDevices : List MediaDevices -> Model -> Model
-gotUserMediaDevices devices model =
+gotUserMediaDevices : List MediaDevice -> List (IdString MediaDeviceId) -> Model -> Model
+gotUserMediaDevices devices selectedDevices model =
     { model
         | userMediaDevices = HasMediaDevices devices
         , selectedAudioInputDevice =
-            case model.selectedAudioInputDevice of
-                Just _ ->
-                    model.selectedAudioInputDevice
+            List.Extra.findMap
+                (\device ->
+                    if device.kind == AudioInput && List.member device.deviceId selectedDevices then
+                        Just device.deviceId
 
-                Nothing ->
-                    pickDefaultDevice AudioInput devices
+                    else
+                        Nothing
+                )
+                devices
         , selectedVideoInputDevice =
-            case model.selectedVideoInputDevice of
-                Just _ ->
-                    model.selectedVideoInputDevice
+            List.Extra.findMap
+                (\device ->
+                    if device.kind == VideoInput && List.member device.deviceId selectedDevices then
+                        Just device.deviceId
 
-                Nothing ->
-                    pickDefaultDevice VideoInput devices
+                    else
+                        Nothing
+                )
+                devices
     }
-
-
-pickDefaultDevice : DeviceKind -> List MediaDevices -> Maybe String
-pickDefaultDevice kind devices =
-    let
-        filtered : List MediaDevices
-        filtered =
-            List.filter (\d -> d.kind == kind) devices
-    in
-    case List.filter (\d -> d.deviceId == "default") filtered of
-        first :: _ ->
-            Just first.deviceId
-
-        [] ->
-            case filtered of
-                first :: _ ->
-                    Just first.deviceId
-
-                [] ->
-                    Nothing
 
 
 type alias ConnectionId =
@@ -205,25 +194,25 @@ iceCodec =
 
 audioNodes : Local -> Html msg
 audioNodes model =
-    SeqDict.toList model.voiceChats
-        |> List.concatMap
-            (\( roomId, sessions ) ->
-                if hasJoined roomId model then
-                    List.map
-                        (\session ->
-                            Html.video
-                                [ Html.Attributes.style "width" "300px"
-                                , Html.Attributes.style "height" "200px"
-                                , (connectionIdToString { roomId = roomId, otherSession = session } ++ " video") |> Html.Attributes.id
-                                , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
-                                ]
-                                []
-                        )
-                        (NonemptySet.toList sessions)
+    List.concatMap
+        (\( roomId, sessions ) ->
+            if hasJoined roomId model then
+                List.map
+                    (\session ->
+                        Html.video
+                            [ Html.Attributes.style "width" "300px"
+                            , Html.Attributes.style "height" "200px"
+                            , Html.Attributes.id (connectionIdToString { roomId = roomId, otherSession = session })
+                            , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+                            ]
+                            []
+                    )
+                    (NonemptySet.toList sessions)
 
-                else
-                    []
-            )
+            else
+                []
+        )
+        (SeqDict.toList model.voiceChats)
         |> Html.div []
 
 
@@ -339,14 +328,14 @@ joinedUsers roomId model =
             SeqDict.empty
 
 
-serverChangeCmd : ServerChange -> ClientId -> Local -> Command FrontendOnly toBackend msg
-serverChangeCmd change clientId model =
+serverChangeCmd : ServerChange -> ClientId -> Local -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd change clientId local model =
     case change of
         Server_Joined _ connectionId ->
-            case model.currentRoom of
+            case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
-                        voiceChatStart clientId connectionId
+                        voiceChatStart clientId connectionId model
 
                     else
                         Command.none
@@ -397,8 +386,8 @@ getMediaDevices =
         )
 
 
-voiceChatStart : ClientId -> ConnectionId -> Command FrontendOnly toBackend msg
-voiceChatStart clientId connectionId =
+voiceChatStart : ClientId -> ConnectionId -> Model -> Command FrontendOnly toBackend msg
+voiceChatStart clientId connectionId model =
     let
         shouldOffer : Bool
         shouldOffer =
@@ -411,6 +400,22 @@ voiceChatStart clientId connectionId =
             [ ( "kind", Json.Encode.string "start" )
             , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
             , ( "shouldOffer", Json.Encode.bool shouldOffer )
+            , ( "audioInput"
+              , case model.selectedAudioInputDevice of
+                    Just input ->
+                        Codec.encoder IdString.codec input
+
+                    Nothing ->
+                        Json.Encode.null
+              )
+            , ( "videoInput"
+              , case model.selectedVideoInputDevice of
+                    Just input ->
+                        Codec.encoder IdString.codec input
+
+                    Nothing ->
+                        Json.Encode.null
+              )
             ]
         )
 
@@ -440,10 +445,14 @@ voiceChatDeliverSignal connectionId signal =
         )
 
 
+type MediaDeviceId
+    = MediaDeviceId Never
+
+
 type VoiceChatSubscription
     = GotSignal ConnectionId Signal
     | GotMediaStreamTracks (List Track)
-    | GotUserMediaDevices (List MediaDevices)
+    | GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | GotUserMediaDevicesError String
 
 
@@ -458,21 +467,21 @@ voiceChatSubscriptionCodec =
                 GotMediaStreamTracks videoTracks ->
                     bEncoder videoTracks
 
-                GotUserMediaDevices mediaDevices ->
-                    cEncoder mediaDevices
+                GotUserMediaDevices a b ->
+                    cEncoder a b
 
                 GotUserMediaDevicesError string ->
                     dDecoder string
         )
         |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
         |> Codec.variant1 "got-tracks" GotMediaStreamTracks (Codec.list trackCodec)
-        |> Codec.variant1 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec)
+        |> Codec.variant2 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
         |> Codec.buildCustom
 
 
-type alias MediaDevices =
-    { deviceId : String
+type alias MediaDevice =
+    { deviceId : IdString MediaDeviceId
     , groupId : String
     , kind : DeviceKind
     , label : String
@@ -485,10 +494,10 @@ type DeviceKind
     | AudioOutput
 
 
-mediaDevicesCodec : Codec MediaDevices
+mediaDevicesCodec : Codec MediaDevice
 mediaDevicesCodec =
-    Codec.object MediaDevices
-        |> Codec.field "deviceId" .deviceId Codec.string
+    Codec.object MediaDevice
+        |> Codec.field "deviceId" .deviceId IdString.codec
         |> Codec.field "groupId" .groupId Codec.string
         |> Codec.field "kind" .kind deviceKindCodec
         |> Codec.field "label" .label Codec.string
@@ -559,11 +568,11 @@ mediaDeviceSelectors model =
 
         HasMediaDevices devices ->
             let
-                audioDevices : List MediaDevices
+                audioDevices : List MediaDevice
                 audioDevices =
                     List.filter (\d -> d.kind == AudioInput) devices
 
-                videoDevices : List MediaDevices
+                videoDevices : List MediaDevice
                 videoDevices =
                     List.filter (\d -> d.kind == VideoInput) devices
             in
@@ -589,15 +598,22 @@ isPressMsg msg =
             False
 
 
-deviceDropdown : String -> List MediaDevices -> Maybe String -> (String -> msg) -> Element msg
+deviceDropdown : String -> List MediaDevice -> Maybe (IdString MediaDeviceId) -> (IdString MediaDeviceId -> msg) -> Element msg
 deviceDropdown labelText devices selected onSelect =
     Ui.column
         [ Ui.spacing 4, Ui.Font.color MyUi.font1 ]
         [ Ui.text labelText
         , Ui.html
             (Html.select
-                [ Html.Attributes.value (Maybe.withDefault "" selected)
-                , Html.Events.onInput onSelect
+                [ Html.Attributes.value
+                    (case selected of
+                        Just a ->
+                            IdString.toString a
+
+                        Nothing ->
+                            ""
+                    )
+                , Html.Events.onInput (\text -> IdString.fromString text |> onSelect)
                 , Html.Attributes.style "width" "100%"
                 , Html.Attributes.style "padding" "7px 8px"
                 , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
@@ -615,12 +631,12 @@ deviceDropdown labelText devices selected onSelect =
                         List.map
                             (\device ->
                                 Html.option
-                                    [ Html.Attributes.value device.deviceId
+                                    [ Html.Attributes.value (IdString.toString device.deviceId)
                                     , Html.Attributes.selected (Just device.deviceId == selected)
                                     ]
                                     [ Html.text
                                         (if String.isEmpty device.label then
-                                            device.deviceId
+                                            IdString.toString device.deviceId
 
                                          else
                                             device.label

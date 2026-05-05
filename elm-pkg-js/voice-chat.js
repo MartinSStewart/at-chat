@@ -2,19 +2,18 @@ exports.init = async function init(app) {
     const connections = {};
     const pendingSignals = {};
 
-    async function startConnection(peerUserId, shouldOffer) {
+    async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
         stopConnection(peerUserId);
 
         let localStream;
+        let devices;
         try {
             localStream = await getDevices();
-            let devices = await navigator.mediaDevices.enumerateDevices();
-            app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices ] });
+            devices = await navigator.mediaDevices.enumerateDevices();
         } catch (e) {
             app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
             return;
         }
-        console.log(localStream);
 
         const pc = new RTCPeerConnection({
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -22,23 +21,18 @@ exports.init = async function init(app) {
 
 
         let videoTracks = [];
-        localStream.getTracks().forEach(function (track) {
-            pc.addTrack(track, localStream);
+        let defaultDevices = [];
 
-//            let settings = track.getSettings();
-//            if (settings.channelCount) {
-//                videoTracks.push({ tag: "audio" , args: [ settings ] });
-//            }
-//            else {
-//                videoTracks.push({ tag: "video" , args: [ settings ] });
-//            }
-//            console.log(settings);
+        localStream.getTracks().forEach(function (track) {
+            defaultDevices.push(track.getSettings().deviceId);
+            pc.addTrack(track, localStream);
         });
 
-        //app.ports.voice_chat_from_js.send( { tag: "got-tracks" , args: [ videoTracks ] });
+        app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
 
+        console.log("Voice chat: startConnection", peerUserId);
         //const remoteAudio = document.getElementById(peerUserId);
-        const remoteVideo = document.getElementById(peerUserId + " video");
+        const remoteVideo = document.getElementById(peerUserId);
 
         pc.ontrack = function (event) {
             console.log("Voice chat: ontrack", peerUserId, event.streams);
@@ -184,7 +178,7 @@ exports.init = async function init(app) {
 
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
         if (msg.kind === "start") {
-            await startConnection(msg.peerUserId, msg.shouldOffer);
+            await startConnection(msg.peerUserId, msg.shouldOffer, msg.audioInput, msg.videoInput);
         } else if (msg.kind === "stop") {
             stopConnection(msg.peerUserId);
         } else if (msg.kind === "signal") {
@@ -193,11 +187,14 @@ exports.init = async function init(app) {
             try {
                 let stream = await getDevices();
                 let devices = await navigator.mediaDevices.enumerateDevices();
-                console.log(devices);
 
-                stream.getTracks().forEach(track => track.stop());
+                let defaultDevices = [];
+                stream.getTracks().forEach(track => {
+                    defaultDevices.push(track.getSettings().deviceId);
+                    track.stop();
+                });
 
-                app.ports.voice_chat_from_js.send( { tag: "got-media-devices", args: [ devices ] });
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices", args: [ devices, defaultDevices ] });
 
             } catch (e) {
                 app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error", args: [ e.toString() ] });
@@ -207,7 +204,6 @@ exports.init = async function init(app) {
 
     async function getDevices() {
         let devices = await navigator.mediaDevices.enumerateDevices();
-        console.log(devices);
         let hasMic = devices.some(a => a.kind === "audioinput");
         let hasCamera = devices.some(a => a.kind === "videoinput");
         return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
