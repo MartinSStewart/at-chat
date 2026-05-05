@@ -8,8 +8,14 @@ exports.init = async function init(app) {
         let localStream;
         let devices;
         try {
-            localStream = await getDevices();
+            let devices2 = await navigator.mediaDevices.enumerateDevices();
+            localStream =
+                await navigator.mediaDevices.getUserMedia(
+                    { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
+                    , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
+                    });
             devices = await navigator.mediaDevices.enumerateDevices();
+            console.log("devices: ", devices);
         } catch (e) {
             app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
             return;
@@ -28,6 +34,7 @@ exports.init = async function init(app) {
             pc.addTrack(track, localStream);
         });
 
+        console.log("devices: ", devices);
         app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
 
         console.log("Voice chat: startConnection", peerUserId);

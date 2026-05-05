@@ -514,7 +514,18 @@ voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
-        (\json -> Codec.decodeValue voiceChatSubscriptionCodec json |> Result.mapError Json.Decode.errorToString |> msg)
+        (\json ->
+            Codec.decodeValue voiceChatSubscriptionCodec json
+                |> Result.mapError
+                    (\error ->
+                        let
+                            _ =
+                                Debug.log "voice_chat_from_js error" (Json.Encode.encode 0 json)
+                        in
+                        Json.Decode.errorToString error
+                    )
+                |> msg
+        )
 
 
 connectionIdToString : ConnectionId -> String
