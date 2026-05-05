@@ -3277,12 +3277,12 @@ voiceChatView windowSize roomId local model =
                 ]
                 [ voiceChatControlButton
                     "guild_voiceChatMute"
-                    Icons.microphone
+                    (Ui.html Icons.microphone)
                     model.voiceChat.isMuted
                     (VoiceChatMsg VoiceChat.PressedToggleMute)
                 , voiceChatControlButton
                     "guild_voiceChatPauseVideo"
-                    Icons.camera
+                    (Ui.el [ Ui.move { x = 2, y = 0, z = 0 } ] (Ui.html Icons.camera))
                     model.voiceChat.isVideoPaused
                     (VoiceChatMsg VoiceChat.PressedTogglePauseVideo)
                 ]
@@ -3291,7 +3291,7 @@ voiceChatView windowSize roomId local model =
         (VoiceChat.mediaDeviceSelectors model.voiceChat |> Ui.map VoiceChatMsg)
 
 
-voiceChatControlButton : String -> Html.Html FrontendMsg -> Bool -> FrontendMsg -> Element FrontendMsg
+voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
 voiceChatControlButton htmlId iconHtml isOff onPress =
     MyUi.elButton
         (Dom.id htmlId)
@@ -3320,7 +3320,7 @@ voiceChatControlButton htmlId iconHtml isOff onPress =
           else
             Ui.noAttr
         ]
-        (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] (Ui.html iconHtml))
+        (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] iconHtml)
 
 
 conversationView :

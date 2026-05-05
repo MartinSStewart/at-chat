@@ -993,12 +993,22 @@ diagonalSlash =
         , Svg.Attributes.preserveAspectRatio "none"
         ]
         [ Svg.line
-            [ Svg.Attributes.x1 "3"
-            , Svg.Attributes.y1 "21"
-            , Svg.Attributes.x2 "21"
-            , Svg.Attributes.y2 "3"
+            [ Svg.Attributes.x1 "18"
+            , Svg.Attributes.y1 "19"
+            , Svg.Attributes.x2 "6"
+            , Svg.Attributes.y2 "7"
+            , Svg.Attributes.stroke "rgb(200,60,60)"
+            , Svg.Attributes.strokeWidth "1"
+            , Svg.Attributes.strokeLinecap "round"
+            ]
+            []
+        , Svg.line
+            [ Svg.Attributes.x1 "18"
+            , Svg.Attributes.y1 "18"
+            , Svg.Attributes.x2 "6"
+            , Svg.Attributes.y2 "6"
             , Svg.Attributes.stroke "white"
-            , Svg.Attributes.strokeWidth "2.5"
+            , Svg.Attributes.strokeWidth "1"
             , Svg.Attributes.strokeLinecap "round"
             ]
             []
