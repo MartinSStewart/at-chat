@@ -29,6 +29,8 @@ port module VoiceChat exposing
     , leaveVoiceChatCmds
     , mediaDeviceSelectors
     , serverChangeCmd
+    , setMuted
+    , setVideoPaused
     , voiceChatFromJs
     , voiceChatStart
     )
@@ -68,6 +70,8 @@ type ServerChange
 type Msg
     = SelectedAudioInputDevice (IdString MediaDeviceId)
     | SelectedVideoInputDevice (IdString MediaDeviceId)
+    | PressedToggleMute
+    | PressedTogglePauseVideo
 
 
 type alias Local =
@@ -80,6 +84,8 @@ type alias Model =
     { userMediaDevices : MediaDevicesStatus
     , selectedAudioInputDevice : Maybe (IdString MediaDeviceId)
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
+    , isMuted : Bool
+    , isVideoPaused : Bool
     }
 
 
@@ -101,6 +107,8 @@ initModel =
     { userMediaDevices = MediaDevicesNotLoaded
     , selectedAudioInputDevice = Nothing
     , selectedVideoInputDevice = Nothing
+    , isMuted = False
+    , isVideoPaused = False
     }
 
 
@@ -416,6 +424,32 @@ voiceChatStart clientId connectionId model =
                     Nothing ->
                         Json.Encode.null
               )
+            , ( "isMuted", Json.Encode.bool model.isMuted )
+            , ( "isVideoPaused", Json.Encode.bool model.isVideoPaused )
+            ]
+        )
+
+
+setMuted : Bool -> Command FrontendOnly toBackend msg
+setMuted muted =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "set-muted" )
+            , ( "muted", Json.Encode.bool muted )
+            ]
+        )
+
+
+setVideoPaused : Bool -> Command FrontendOnly toBackend msg
+setVideoPaused paused =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "set-video-paused" )
+            , ( "paused", Json.Encode.bool paused )
             ]
         )
 
@@ -607,6 +641,12 @@ isPressMsg msg =
 
         SelectedVideoInputDevice _ ->
             False
+
+        PressedToggleMute ->
+            True
+
+        PressedTogglePauseVideo ->
+            True
 
 
 deviceDropdown : String -> List MediaDevice -> Maybe (IdString MediaDeviceId) -> (IdString MediaDeviceId -> msg) -> Element msg

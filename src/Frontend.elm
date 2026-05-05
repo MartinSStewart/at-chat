@@ -3576,6 +3576,26 @@ updateLoaded msg model =
                 VoiceChat.SelectedVideoInputDevice deviceId ->
                     ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }, Command.none )
 
+                VoiceChat.PressedToggleMute ->
+                    let
+                        newMuted : Bool
+                        newMuted =
+                            not voiceChat.isMuted
+                    in
+                    ( { model | voiceChat = { voiceChat | isMuted = newMuted } }
+                    , VoiceChat.setMuted newMuted
+                    )
+
+                VoiceChat.PressedTogglePauseVideo ->
+                    let
+                        newPaused : Bool
+                        newPaused =
+                            not voiceChat.isVideoPaused
+                    in
+                    ( { model | voiceChat = { voiceChat | isVideoPaused = newPaused } }
+                    , VoiceChat.setVideoPaused newPaused
+                    )
+
 
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg
 removePartialStickers textInputFocus htmlId text =

@@ -3267,8 +3267,49 @@ voiceChatView windowSize roomId local model =
         , Ui.background MyUi.background3
         , MyUi.noShrinking
         , Ui.inFront (Ui.el [ Ui.paddingXY 16 7 ] (voiceChatButton roomId local))
+        , Ui.inFront
+            (Ui.row
+                [ Ui.alignBottom
+                , Ui.alignRight
+                , Ui.width Ui.shrink
+                , Ui.padding 16
+                , Ui.spacing 8
+                ]
+                [ voiceChatControlButton
+                    "guild_voiceChatMute"
+                    Icons.microphone
+                    model.voiceChat.isMuted
+                    (VoiceChatMsg VoiceChat.PressedToggleMute)
+                , voiceChatControlButton
+                    "guild_voiceChatPauseVideo"
+                    Icons.camera
+                    model.voiceChat.isVideoPaused
+                    (VoiceChatMsg VoiceChat.PressedTogglePauseVideo)
+                ]
+            )
         ]
         (VoiceChat.mediaDeviceSelectors model.voiceChat |> Ui.map VoiceChatMsg)
+
+
+voiceChatControlButton : String -> Html.Html FrontendMsg -> Bool -> FrontendMsg -> Element FrontendMsg
+voiceChatControlButton htmlId iconHtml isOff onPress =
+    MyUi.elButton
+        (Dom.id htmlId)
+        onPress
+        [ Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.padding 8
+        , Ui.rounded 20
+        , Ui.background
+            (if isOff then
+                Ui.rgb 200 60 60
+
+             else
+                Ui.rgb 60 70 100
+            )
+        , Ui.Font.color MyUi.white
+        ]
+        (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] (Ui.html iconHtml))
 
 
 conversationView :

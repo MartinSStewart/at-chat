@@ -183,13 +183,39 @@ exports.init = async function init(app) {
         });
     }
 
+    function setAudioEnabled(enabled) {
+        Object.values(connections).forEach(function (conn) {
+            if (conn.localStream) {
+                conn.localStream.getAudioTracks().forEach(function (track) {
+                    track.enabled = enabled;
+                });
+            }
+        });
+    }
+
+    function setVideoEnabled(enabled) {
+        Object.values(connections).forEach(function (conn) {
+            if (conn.localStream) {
+                conn.localStream.getVideoTracks().forEach(function (track) {
+                    track.enabled = enabled;
+                });
+            }
+        });
+    }
+
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
         if (msg.kind === "start") {
             await startConnection(msg.peerUserId, msg.shouldOffer, msg.audioInput, msg.videoInput);
+            setAudioEnabled(!msg.isMuted);
+            setVideoEnabled(!msg.isVideoPaused);
         } else if (msg.kind === "stop") {
             stopConnection(msg.peerUserId);
         } else if (msg.kind === "signal") {
             await handleSignal(msg.peerUserId, msg.signal);
+        } else if (msg.kind === "set-muted") {
+            setAudioEnabled(!msg.muted);
+        } else if (msg.kind === "set-video-paused") {
+            setVideoEnabled(!msg.paused);
         } else if (msg.kind === "get-media-devices") {
             try {
                 let stream = await getDevices();
