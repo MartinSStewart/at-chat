@@ -29,6 +29,7 @@ port module VoiceChat exposing
     , leaveVoiceChatCmds
     , mediaDeviceSelectors
     , serverChangeCmd
+    , setAudioInput
     , setMuted
     , setVideoPaused
     , voiceChatFromJs
@@ -108,7 +109,7 @@ initModel =
     , selectedAudioInputDevice = Nothing
     , selectedVideoInputDevice = Nothing
     , isMuted = False
-    , isVideoPaused = False
+    , isVideoPaused = True
     }
 
 
@@ -438,6 +439,18 @@ setMuted muted =
         (Json.Encode.object
             [ ( "kind", Json.Encode.string "set-muted" )
             , ( "muted", Json.Encode.bool muted )
+            ]
+        )
+
+
+setAudioInput : IdString MediaDeviceId -> Command FrontendOnly toMsg msg
+setAudioInput deviceId =
+    Command.sendToJs
+        "voice_chat_to_js"
+        voice_chat_to_js
+        (Json.Encode.object
+            [ ( "kind", Json.Encode.string "set-audio-input" )
+            , ( "deviceId", Codec.encoder IdString.codec deviceId )
             ]
         )
 

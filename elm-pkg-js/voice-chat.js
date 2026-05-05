@@ -115,6 +115,8 @@ exports.init = async function init(app) {
             conn.localStream.getTracks().forEach(function (track) { track.stop(); });
         }
         if (conn.pc) {
+
+            conn.pc.getSenders().forEach((s) => s.track.stop());
             conn.pc.ontrack = null;
             conn.pc.onnicecandidate = null;
             conn.pc.oniceconnectionstatechange = null;
@@ -193,6 +195,21 @@ exports.init = async function init(app) {
         });
     }
 
+    async function setAudioInput(deviceId) {
+        let stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
+        let tracks = stream.getAudioTracks();
+        console.log("Tracks: ", tracks);
+        let track = tracks[0];
+        Object.values(connections).forEach(function (conn) {
+            if (conn.pc) {
+                const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
+                let oldTrack = sender.track;
+                sender.replaceTrack(track);
+                oldTrack.stop();
+            }
+        });
+    }
+
     function setVideoEnabled(enabled) {
         Object.values(connections).forEach(function (conn) {
             if (conn.localStream) {
@@ -214,6 +231,8 @@ exports.init = async function init(app) {
             await handleSignal(msg.peerUserId, msg.signal);
         } else if (msg.kind === "set-muted") {
             setAudioEnabled(!msg.muted);
+        } else if (msg.kind === "set-audio-input") {
+            setAudioInput(msg.deviceId);
         } else if (msg.kind === "set-video-paused") {
             setVideoEnabled(!msg.paused);
         } else if (msg.kind === "get-media-devices") {

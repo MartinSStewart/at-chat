@@ -3571,7 +3571,9 @@ updateLoaded msg model =
             in
             case voiceChatMsg of
                 VoiceChat.SelectedAudioInputDevice deviceId ->
-                    ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }, Command.none )
+                    ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
+                    , VoiceChat.setAudioInput deviceId
+                    )
 
                 VoiceChat.SelectedVideoInputDevice deviceId ->
                     ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }, Command.none )
