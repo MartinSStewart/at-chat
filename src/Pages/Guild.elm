@@ -3308,6 +3308,17 @@ voiceChatControlButton htmlId iconHtml isOff onPress =
                 Ui.rgb 60 70 100
             )
         , Ui.Font.color MyUi.white
+        , if isOff then
+            Ui.inFront
+                (Ui.el
+                    [ Ui.width Ui.fill
+                    , Ui.height Ui.fill
+                    ]
+                    (Ui.html Icons.diagonalSlash)
+                )
+
+          else
+            Ui.noAttr
         ]
         (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] (Ui.html iconHtml))
 
