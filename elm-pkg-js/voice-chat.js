@@ -45,15 +45,18 @@ exports.init = async function init(app) {
         pc.ontrack = function (event) {
             console.log("Voice chat: ontrack", peerUserId, event.streams);
 
-
+            let remoteStream;
             if (event.streams && event.streams[0]) {
-                remoteVideo.srcObject = event.streams[0];
-
+                remoteStream = event.streams[0];
+                remoteVideo.srcObject = remoteStream;
             } else {
                 // Fallback: build a stream from the single track.
-                const stream = new MediaStream();
-                stream.addTrack(event.track);
-                remoteVideo.srcObject = stream;
+                remoteStream = new MediaStream();
+                remoteStream.addTrack(event.track);
+                remoteVideo.srcObject = remoteStream;
+            }
+            if (event.track.kind === "audio" && !audioStreams.has(peerUserId)) {
+                handleAudioStream(remoteStream, peerUserId);
             }
             const playPromise = remoteVideo.play();
             if (playPromise && typeof playPromise.catch === "function") {
@@ -129,6 +132,7 @@ exports.init = async function init(app) {
         if (conn.remoteAudio) {
             conn.remoteAudio.srcObject = null;
         }
+        removeAudioStream(peerUserId);
         delete connections[peerUserId];
         delete pendingSignals[peerUserId];
     }
@@ -275,50 +279,58 @@ exports.init = async function init(app) {
         const audioContext = new AudioContext();
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
 
-
-        // Create an analyser node to process audio data
         const analyserNode = audioContext.createAnalyser();
-        // Window size in samples that is used when performing a Fast Fourier Transform (FFT),
-        // to get frequency domain data
         analyserNode.fftSize = AUDIO_WINDOW_SIZE;
         mediaStreamSource.connect(analyserNode);
 
-
-        // Buffer to hold the audio data
         const bufferLength = analyserNode.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
 
+        const entry = {
+            stream,
+            analyserNode,
+            audioContext,
+            mediaStreamSource,
+            rafId: 0,
+            isSpeaking: false,
+            stopped: false
+        };
+        audioStreams.set(userId, entry);
 
-        // Function to process audio data and detect the active speaker
         function processAudio() {
+            if (entry.stopped) return;
             analyserNode.getByteFrequencyData(dataArray);
-
-            // Implement your active speaker detection algorithm here
-            // For example, you can calculate the average volume of the audio data and use a threshold
-
-            // Example: Calculate the average volume
             const averageVolume = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
-            updateActiveSpeakerIndicator(userId, averageVolume > VOLUME_THRESHOLD);
-
-            // Repeat the process for the next audio frame
-            requestAnimationFrame(processAudio);
+            const isSpeaking = averageVolume > VOLUME_THRESHOLD;
+            if (isSpeaking !== entry.isSpeaking) {
+                entry.isSpeaking = isSpeaking;
+                app.ports.voice_chat_from_js.send(
+                    { tag: "is-speaking-changed"
+                    , args: [ userId, isSpeaking ]
+                    });
+            }
+            entry.rafId = requestAnimationFrame(processAudio);
         }
 
-        // Start the audio processing loop
         processAudio();
-
-
-        // Add the audio stream and its analyser node to the global map
-        audioStreams.set(userId, { stream, analyserNode });
     }
 
     // Function to remove audio stream and stop active speaker detection
     function removeAudioStream(userId) {
         const streamData = audioStreams.get(userId);
         if (streamData) {
-            streamData.stream.getTracks().forEach((track) => track.stop());
-            streamData.analyserNode.disconnect();
+            streamData.stopped = true;
+            if (streamData.rafId) cancelAnimationFrame(streamData.rafId);
+            try { streamData.mediaStreamSource.disconnect(); } catch (e) {}
+            try { streamData.analyserNode.disconnect(); } catch (e) {}
+            try { streamData.audioContext.close(); } catch (e) {}
             audioStreams.delete(userId);
+            if (streamData.isSpeaking) {
+                app.ports.voice_chat_from_js.send(
+                    { tag: "is-speaking-changed"
+                    , args: [ userId, false ]
+                    });
+            }
         }
     }
 
