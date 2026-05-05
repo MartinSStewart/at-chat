@@ -545,7 +545,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     , Ui.background MyUi.background1
                     ]
                     [ Ui.column
-                        [ Ui.height Ui.fill, Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize)) ]
+                        [ Ui.height Ui.fill, Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize)) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy False model local
@@ -760,23 +760,13 @@ conversationWidth model =
     else
         Coord.xRaw model.windowSize
             - ((GuildIcon.fullWidth + 1)
-                + channelColumnWidth model.windowSize
+                + MyUi.channelColumnWidth model.windowSize
                 + memberColumnWidth
                 + User.profileImageSize
                 + (messagePaddingX * 2)
                 + profileImagePaddingRight
                 + model.scrollbarWidth
               )
-
-
-channelColumnWidth : Coord CssPixels -> Int
-channelColumnWidth windowSize =
-    clamp 200 300 (toFloat (Coord.xRaw windowSize) * 0.2 |> round)
-
-
-channelAndGuildColumnWidth : Coord CssPixels -> Int
-channelAndGuildColumnWidth windowSize =
-    channelColumnWidth windowSize + 58
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
@@ -873,7 +863,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -929,7 +919,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1056,7 +1046,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1123,7 +1113,7 @@ guildErrorPage error local model =
             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
             [ Ui.column
                 [ Ui.height Ui.fill
-                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                 ]
                 [ Ui.row
                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -3168,7 +3158,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 Coord.xRaw model.windowSize - paddingX * 2
 
             else
-                Coord.xRaw model.windowSize - channelAndGuildColumnWidth model.windowSize - paddingX * 2
+                Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - paddingX * 2
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->

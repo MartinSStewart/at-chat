@@ -262,5 +262,65 @@ exports.init = async function init(app) {
         let hasCamera = devices.some(a => a.kind === "videoinput");
         return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
     }
+
+    // Original code found here: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
+    // Global variables to keep track of audio streams and their volume level
+    const VOLUME_THRESHOLD = 40; // Adjust this threshold to suit your needs
+    const LOW_GAIN_VALUE = 0.5;
+    const AUDIO_WINDOW_SIZE = 256;
+    let audioStreams = new Map();
+
+    // Function to handle incoming audio streams from WebRTC peers
+    function handleAudioStream(stream, userId) {
+        const audioContext = new AudioContext();
+        const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+
+
+        // Create an analyser node to process audio data
+        const analyserNode = audioContext.createAnalyser();
+        // Window size in samples that is used when performing a Fast Fourier Transform (FFT),
+        // to get frequency domain data
+        analyserNode.fftSize = AUDIO_WINDOW_SIZE;
+        mediaStreamSource.connect(analyserNode);
+
+
+        // Buffer to hold the audio data
+        const bufferLength = analyserNode.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+
+        // Function to process audio data and detect the active speaker
+        function processAudio() {
+            analyserNode.getByteFrequencyData(dataArray);
+
+            // Implement your active speaker detection algorithm here
+            // For example, you can calculate the average volume of the audio data and use a threshold
+
+            // Example: Calculate the average volume
+            const averageVolume = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
+            updateActiveSpeakerIndicator(userId, averageVolume > VOLUME_THRESHOLD);
+
+            // Repeat the process for the next audio frame
+            requestAnimationFrame(processAudio);
+        }
+
+        // Start the audio processing loop
+        processAudio();
+
+
+        // Add the audio stream and its analyser node to the global map
+        audioStreams.set(userId, { stream, analyserNode });
+    }
+
+    // Function to remove audio stream and stop active speaker detection
+    function removeAudioStream(userId) {
+        const streamData = audioStreams.get(userId);
+        if (streamData) {
+            streamData.stream.getTracks().forEach((track) => track.stop());
+            streamData.analyserNode.disconnect();
+            audioStreams.delete(userId);
+        }
+    }
+
 };
 

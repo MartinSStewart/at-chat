@@ -10,6 +10,8 @@ module MyUi exposing
     , buttonBorder
     , buttonFontColor
     , cancelButtonBackground
+    , channelAndGuildColumnWidth
+    , channelColumnWidth
     , colorToStyle
     , colorWithAlpha
     , column
@@ -885,6 +887,16 @@ userLabel2Html user =
 blockClickPropagation : msg -> Ui.Attribute msg
 blockClickPropagation msg =
     Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( msg, True ))
+
+
+channelColumnWidth : Coord CssPixels -> Int
+channelColumnWidth windowSize =
+    clamp 200 300 (toFloat (Coord.xRaw windowSize) * 0.2 |> round)
+
+
+channelAndGuildColumnWidth : Coord CssPixels -> Int
+channelAndGuildColumnWidth windowSize =
+    channelColumnWidth windowSize + 58
 
 
 insetTop : String

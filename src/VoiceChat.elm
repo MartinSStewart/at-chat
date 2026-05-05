@@ -17,7 +17,6 @@ port module VoiceChat exposing
     , Track(..)
     , VideoTrackData
     , VoiceChatSubscription(..)
-    , audioNodes
     , getMediaDevices
     , gotUserMediaDevices
     , hasJoined
@@ -31,11 +30,14 @@ port module VoiceChat exposing
     , setAudioInput
     , setMuted
     , setVideoPaused
+    , videoNodes
     , voiceChatFromJs
     , voiceChatStart
     )
 
 import Codec exposing (Codec)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -48,9 +50,11 @@ import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
 import List.Extra
+import List.Nonempty
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
 
@@ -86,6 +90,7 @@ type alias Model =
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
     , isMuted : Bool
     , isVideoPaused : Bool
+    , isSpeaking : SeqSet ConnectionId
     }
 
 
@@ -109,6 +114,7 @@ initModel =
     , selectedVideoInputDevice = Nothing
     , isMuted = False
     , isVideoPaused = True
+    , isSpeaking = SeqSet.empty
     }
 
 
@@ -200,18 +206,40 @@ iceCodec =
         |> Codec.buildObject
 
 
-audioNodes : Local -> Html msg
-audioNodes model =
+videoNodes : Coord CssPixels -> Model -> Local -> Html msg
+videoNodes windowSize model local =
     List.concatMap
         (\( roomId, sessions ) ->
-            if hasJoined roomId model then
-                List.map
-                    (\session ->
+            if hasJoined roomId local then
+                let
+                    total =
+                        NonemptySet.size sessions
+                in
+                List.indexedMap
+                    (\index session ->
+                        let
+                            connectionId : ConnectionId
+                            connectionId =
+                                { roomId = roomId, otherClientId = session }
+                        in
                         Html.video
                             [ Html.Attributes.style "width" "300px"
                             , Html.Attributes.style "height" "200px"
-                            , Html.Attributes.id (connectionIdToString { roomId = roomId, otherClientId = session })
+                            , Html.Attributes.style "position" "absolute"
+                            , Html.Attributes.style
+                                "left"
+                                (String.fromInt (index * 320 + 10 + MyUi.channelAndGuildColumnWidth windowSize) ++ "px")
+                            , Html.Attributes.style "top" "10px"
+                            , Html.Attributes.id (connectionIdToString connectionId)
                             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+                            , Html.Attributes.style
+                                "outline"
+                                (if SeqSet.member connectionId model.isSpeaking then
+                                    "12px solid aliceblue"
+
+                                 else
+                                    "0 solid aliceblue"
+                                )
                             ]
                             []
                     )
@@ -220,7 +248,7 @@ audioNodes model =
             else
                 []
         )
-        (SeqDict.toList model.voiceChats)
+        (SeqDict.toList local.voiceChats)
         |> Html.div []
 
 
@@ -484,12 +512,13 @@ type VoiceChatSubscription
     | GotMediaStreamTracks (List Track)
     | GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | GotUserMediaDevicesError String
+    | IsSpeakingChanged ConnectionId Bool
 
 
 voiceChatSubscriptionCodec : Codec VoiceChatSubscription
 voiceChatSubscriptionCodec =
     Codec.custom
-        (\aEncoder bEncoder cEncoder dDecoder value ->
+        (\aEncoder bEncoder cEncoder dEncoder eEncoder value ->
             case value of
                 GotSignal a b ->
                     aEncoder a b
@@ -501,12 +530,16 @@ voiceChatSubscriptionCodec =
                     cEncoder a b
 
                 GotUserMediaDevicesError string ->
-                    dDecoder string
+                    dEncoder string
+
+                IsSpeakingChanged a b ->
+                    eEncoder a b
         )
         |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
         |> Codec.variant1 "got-tracks" GotMediaStreamTracks (Codec.list trackCodec)
         |> Codec.variant2 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
+        |> Codec.variant2 "is-speaking-changed" IsSpeakingChanged connectionIdCodec Codec.bool
         |> Codec.buildCustom
 
 

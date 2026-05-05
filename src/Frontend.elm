@@ -58,6 +58,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqSet
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -3491,6 +3492,25 @@ updateLoaded msg model =
                             , Command.none
                             )
 
+                        VoiceChat.IsSpeakingChanged connectionId isSpeaking ->
+                            let
+                                voiceChat =
+                                    model.voiceChat
+                            in
+                            ( { model
+                                | voiceChat =
+                                    { voiceChat
+                                        | isSpeaking =
+                                            if isSpeaking then
+                                                SeqSet.insert connectionId voiceChat.isSpeaking
+
+                                            else
+                                                SeqSet.remove connectionId voiceChat.isSpeaking
+                                    }
+                              }
+                            , Command.none
+                            )
+
                 Err error ->
                     let
                         _ =
@@ -5732,7 +5752,9 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.inFront
+                                    , VoiceChat.videoNodes loaded.windowSize loaded.voiceChat local.calls
+                                        |> Ui.html
+                                        |> Ui.inFront
                                     ]
                                     (page loggedIn local)
 
