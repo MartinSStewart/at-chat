@@ -299,7 +299,7 @@ update msg model =
                         )
                         model.connections
               }
-            , Lamdera.sendToFrontend clientId YouConnected
+            , Lamdera.sendToFrontend clientId (YouConnected clientId)
             )
 
         UserDisconnected sessionId clientId ->
@@ -2005,7 +2005,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             session =
                                 UserSession.init
                                     sessionId
-                                    clientId
                                     userId
                                     (case requestMessagesFor of
                                         InitialLoadRequested_None ->
@@ -2060,7 +2059,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         session =
                                             UserSession.init
                                                 sessionId
-                                                clientId
                                                 pendingLogin.userId
                                                 (case requestMessagesFor of
                                                     InitialLoadRequested_None ->

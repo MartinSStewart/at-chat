@@ -63,6 +63,7 @@ import String.Extra
 import String.Nonempty
 import TextEditor
 import Thread
+import Toop exposing (T4(..))
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types
@@ -259,6 +260,7 @@ init url key =
     in
     ( Loading
         { navigationKey = key
+        , clientId = Nothing
         , route = route
         , windowSize = Coord.xy 1920 1080
         , time = Nothing
@@ -287,11 +289,12 @@ init url key =
 
 initLoadedFrontend :
     LoadingFrontend
+    -> ClientId
     -> Time.Posix
     -> UserAgent
     -> Result () LoginData
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-initLoadedFrontend loading time userAgent loginResult =
+initLoadedFrontend loading clientId time userAgent loginResult =
     let
         ( loginStatus, cmdB ) =
             case loginResult of
@@ -313,6 +316,7 @@ initLoadedFrontend loading time userAgent loginResult =
         model : LoadedFrontend
         model =
             { navigationKey = loading.navigationKey
+            , clientId = clientId
             , route = loading.route
             , time = time
             , timezone = loading.timezone
@@ -492,9 +496,9 @@ tryInitLoadedFrontend loading =
                 LoadError ->
                     Just (Err ())
     in
-    case ( loading.time, maybeLoginStatus, loading.userAgent ) of
-        ( Just time, Just loginStatus, Just userAgent ) ->
-            initLoadedFrontend loading time userAgent loginStatus |> Tuple.mapFirst Loaded
+    case T4 loading.clientId loading.time maybeLoginStatus loading.userAgent of
+        T4 (Just clientId) (Just time) (Just loginStatus) (Just userAgent) ->
+            initLoadedFrontend loading clientId time userAgent loginStatus |> Tuple.mapFirst Loaded
 
         _ ->
             ( Loading loading, Command.none )
@@ -4273,10 +4277,6 @@ pressedVoiceChatButton roomId model =
                 local : LocalState
                 local =
                     Local.model loggedIn.localState
-
-                clientId : ClientId
-                clientId =
-                    local.localUser.session.clientId
             in
             if VoiceChat.hasJoined roomId local.calls then
                 FrontendExtra.handleLocalChange
@@ -4300,7 +4300,7 @@ pressedVoiceChatButton roomId model =
                                 List.map
                                     (\otherSession ->
                                         VoiceChat.voiceChatStart
-                                            clientId
+                                            model.clientId
                                             { roomId = roomId, otherClientId = otherSession }
                                             model.voiceChat
                                     )
@@ -5000,6 +5000,9 @@ updateFromBackend msg model =
                         Err _ ->
                             tryInitLoadedFrontend { loading | loginStatus = LoadError }
 
+                YouConnected clientId ->
+                    tryInitLoadedFrontend { loading | clientId = Just clientId }
+
                 _ ->
                     ( model, Command.none )
 
@@ -5557,7 +5560,7 @@ updateLoadedFromBackend msg model =
                                     ( loggedIn2
                                     , VoiceChat.serverChangeCmd
                                         voiceChatChange
-                                        local.localUser.session.clientId
+                                        model.clientId
                                         local.calls
                                         model.voiceChat
                                     )
@@ -5588,14 +5591,14 @@ updateLoadedFromBackend msg model =
             in
             ( { model | aiChatModel = newAiChatModel }, Command.map AiChatToBackend AiChatMsg cmd )
 
-        YouConnected ->
+        YouConnected clientId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn | isReloading = True }
                     , Lamdera.sendToBackend (ReloadDataRequest (routeToInitialDataRequest model.route))
                     )
                 )
-                model
+                { model | clientId = clientId }
 
         ReloadDataResponse reloadData ->
             case reloadData of

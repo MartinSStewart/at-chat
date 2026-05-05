@@ -3295,7 +3295,18 @@ changeUpdate localMsg local =
                             { local
                                 | calls =
                                     { calls
-                                        | voiceChats = VoiceChat.addSessionIdHash roomId otherClientId calls.voiceChats
+                                        | voiceChats =
+                                            SeqDict.update
+                                                roomId
+                                                (\maybe ->
+                                                    case maybe of
+                                                        Just nonemptySet ->
+                                                            NonemptySet.insert otherClientId nonemptySet |> Just
+
+                                                        Nothing ->
+                                                            NonemptySet.singleton otherClientId |> Just
+                                                )
+                                                calls.voiceChats
                                     }
                                 , dmChannels =
                                     case roomId of

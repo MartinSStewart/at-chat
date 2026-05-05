@@ -402,48 +402,78 @@ voiceChatTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 voiceChatTest normalConfig =
-    startTest
-        "Hop between voice calls"
-        startTime
-        normalConfig
-        [ connectTwoUsersAndJoinNewGuild
-            desktopWindow
-            (\admin user ->
-                [ admin.click 100 (Dom.id "guild_openDm_0")
-                , user.click 100 (Dom.id "guild_openDm_0")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
-                , admin.click 100 (Dom.id "guild_voiceChat")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
-                , admin.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
-                , admin.navigateBack 100
-                , admin.click 100 (Dom.id "guild_openDm_1")
-                , user.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
-                , admin.click 100 (Dom.id "guild_voiceChat")
-                , user.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
-                , user.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
-                , admin.navigateBack 100
-                , admin.click 100 (Dom.id "guild_openDm_0")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
-                , admin.click 100 (Dom.id "guild_voiceChat")
-                , user.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
-                ]
-            )
+    T.testGroup
+        "Voice chat"
+        [ startTest
+            "Hop between voice calls"
+            startTime
+            normalConfig
+            [ connectTwoUsersAndJoinNewGuild
+                desktopWindow
+                (\admin user ->
+                    [ admin.click 100 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openDm_0")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                    , admin.navigateBack 100
+                    , admin.click 100 (Dom.id "guild_openDm_1")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                    , user.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                    , admin.navigateBack 100
+                    , admin.click 100 (Dom.id "guild_openDm_0")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+                    ]
+                )
+            ]
+        , startTest
+            "Multiple user instances"
+            startTime
+            normalConfig
+            [ T.connectFrontend
+                100
+                sessionId0
+                "/"
+                desktopWindow
+                (\adminA ->
+                    [ handleLogin firefoxDesktop adminEmail adminA
+                    , T.connectFrontend
+                        100
+                        sessionId0
+                        "/"
+                        desktopWindow
+                        (\adminB ->
+                            [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                            , adminA.click 100 (Dom.id "guild_friendLabel_0")
+                            , adminB.click 100 (Dom.id "guild_friendLabel_0")
+                            , adminB.click 100 (Dom.id "guild_voiceChat")
+                            , adminA.click 100 (Dom.id "guild_voiceChat")
+                            ]
+                        )
+                    ]
+                )
+            ]
         ]
 
 

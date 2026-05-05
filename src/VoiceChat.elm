@@ -17,7 +17,6 @@ port module VoiceChat exposing
     , Track(..)
     , VideoTrackData
     , VoiceChatSubscription(..)
-    , addSessionIdHash
     , audioNodes
     , getMediaDevices
     , gotUserMediaDevices
@@ -357,25 +356,6 @@ serverChangeCmd change clientId local model =
 
         Server_SignalReceived connectionId signal ->
             voiceChatDeliverSignal connectionId signal
-
-
-addSessionIdHash :
-    dmChannelId
-    -> sessionId
-    -> SeqDict dmChannelId (NonemptySet sessionId)
-    -> SeqDict dmChannelId (NonemptySet sessionId)
-addSessionIdHash otherUserId sessionIdHash dmVoiceChats =
-    SeqDict.update
-        otherUserId
-        (\maybe ->
-            case maybe of
-                Just nonemptySet ->
-                    NonemptySet.insert sessionIdHash nonemptySet |> Just
-
-                Nothing ->
-                    NonemptySet.singleton sessionIdHash |> Just
-        )
-        dmVoiceChats
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg

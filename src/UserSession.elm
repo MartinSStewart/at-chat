@@ -30,7 +30,6 @@ type alias UserSession =
     , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
-    , clientId : ClientId
     }
 
 
@@ -101,15 +100,14 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : SessionId -> ClientId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
-init sessionId clientId userId currentlyViewing userAgent =
+init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
+init sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
     , pushSubscription = NotSubscribed
     , currentlyViewing = currentlyViewing
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
-    , clientId = clientId
     }
 
 

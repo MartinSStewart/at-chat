@@ -117,6 +117,7 @@ type FrontendModel
 
 type alias LoadingFrontend =
     { navigationKey : Key
+    , clientId : Maybe ClientId
     , route : Route
     , windowSize : Coord CssPixels
     , time : Maybe Time.Posix
@@ -137,6 +138,7 @@ type LoadStatus
 
 type alias LoadedFrontend =
     { navigationKey : Key
+    , clientId : ClientId
     , route : Route
     , time : Time.Posix
     , timezone : Time.Zone
@@ -672,7 +674,7 @@ type ToFrontend
     | ChangeBroadcast LocalMsg
     | TwoFactorAuthenticationToFrontend TwoFactorAuthentication.ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
-    | YouConnected
+    | YouConnected ClientId
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
