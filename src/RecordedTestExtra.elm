@@ -1504,7 +1504,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
         AiChatToFrontend _ ->
             False
 
-        YouConnected ->
+        YouConnected _ ->
             True
 
         ReloadDataResponse _ ->
