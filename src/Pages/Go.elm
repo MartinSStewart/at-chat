@@ -22,7 +22,7 @@ type Stone
 
 
 type Phase
-    = Playing
+    = Playing { previousPlayerPassed : Bool }
     | Marking { markingPlayer : Stone }
     | Confirming { markingPlayer : Stone }
     | Scored { markingPlayer : Stone, blackScore : Int, whiteScore : Int }
@@ -34,7 +34,6 @@ type alias Model =
     , currentPlayer : Stone
     , blackCaptures : Int
     , whiteCaptures : Int
-    , passes : Int
     , phase : Phase
     , territoryMarks : Dict ( Int, Int ) Stone
     , lastError : Maybe String
@@ -48,8 +47,7 @@ init =
     , currentPlayer = Black
     , blackCaptures = 0
     , whiteCaptures = 0
-    , passes = 0
-    , phase = Playing
+    , phase = Playing { previousPlayerPassed = False }
     , territoryMarks = Dict.empty
     , lastError = Nothing
     }
@@ -240,7 +238,7 @@ tryPlace x y model =
             { model | lastError = Just "Suicide move not allowed" }
 
         else if List.member boardAfterCapture model.history then
-            { model | lastError = Just "Move repeats a recent board state" }
+            { model | lastError = Just "Move repeats a board state" }
 
         else
             { model
@@ -259,7 +257,7 @@ tryPlace x y model =
 
                     else
                         model.whiteCaptures
-                , passes = 0
+                , phase = Playing { previousPlayerPassed = False }
                 , lastError = Nothing
             }
 
@@ -391,7 +389,7 @@ update msg model =
     case msg of
         PressedCell x y ->
             case model.phase of
-                Playing ->
+                Playing _ ->
                     tryPlace x y model
 
                 Marking _ ->
@@ -405,24 +403,18 @@ update msg model =
 
         PressedPass ->
             case model.phase of
-                Playing ->
-                    if model.passes >= 1 then
-                        let
-                            firstPasser : Stone
-                            firstPasser =
-                                otherStone model.currentPlayer
-                        in
+                Playing { previousPlayerPassed } ->
+                    if previousPlayerPassed then
                         { model
-                            | passes = model.passes + 1
-                            , phase = Marking { markingPlayer = firstPasser }
+                            | phase = Marking { markingPlayer = model.currentPlayer }
                             , lastError = Nothing
                         }
 
                     else
                         { model
-                            | passes = model.passes + 1
-                            , currentPlayer = otherStone model.currentPlayer
+                            | currentPlayer = otherStone model.currentPlayer
                             , lastError = Nothing
+                            , phase = Playing { previousPlayerPassed = True }
                         }
 
                 _ ->
@@ -460,9 +452,8 @@ update msg model =
             case model.phase of
                 Confirming r ->
                     { model
-                        | phase = Playing
-                        , passes = 0
-                        , currentPlayer = r.markingPlayer
+                        | phase = Playing { previousPlayerPassed = False }
+                        , currentPlayer = otherStone r.markingPlayer
                         , territoryMarks = Dict.empty
                         , lastError = Just "Marking rejected. Resume play."
                     }
@@ -508,7 +499,7 @@ statusView model =
         turnText : String
         turnText =
             case model.phase of
-                Playing ->
+                Playing _ ->
                     stoneName model.currentPlayer ++ " to move"
 
                 Marking r ->
@@ -552,8 +543,18 @@ controlsView model =
         phaseButtons : List (Element Msg)
         phaseButtons =
             case model.phase of
-                Playing ->
-                    [ MyUi.simpleButton (Dom.id "go_pass") PressedPass (Ui.text "Pass") ]
+                Playing { previousPlayerPassed } ->
+                    [ MyUi.simpleButton (Dom.id "go_pass")
+                        PressedPass
+                        (Ui.text
+                            (if previousPlayerPassed then
+                                "Pass and mark territory"
+
+                             else
+                                "Pass"
+                            )
+                        )
+                    ]
 
                 Marking _ ->
                     [ MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking") ]
@@ -583,7 +584,7 @@ boardView model =
         clickable : Bool
         clickable =
             case model.phase of
-                Playing ->
+                Playing _ ->
                     True
 
                 Marking _ ->
