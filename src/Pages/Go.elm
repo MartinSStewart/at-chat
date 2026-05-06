@@ -106,11 +106,6 @@ maxDimension =
     25
 
 
-koHistoryLimit : Int
-koHistoryLimit =
-    10
-
-
 type Msg
     = PressedCell Int Int
     | PressedPass
@@ -346,7 +341,7 @@ tryPlace x y model =
 
             recentBoards : List (Dict ( Int, Int ) Stone)
             recentBoards =
-                List.take koHistoryLimit model.history |> List.map .board
+                List.take 10 model.history |> List.map .board
         in
         if Set.isEmpty myGroup.liberties then
             { model | lastError = Just "Suicide move not allowed" }
@@ -762,15 +757,6 @@ setupView model =
 
             Nothing ->
                 Ui.none
-        , Ui.el [ Ui.Font.size 14 ]
-            (Ui.text
-                ("Allowed range: "
-                    ++ String.fromInt minDimension
-                    ++ " to "
-                    ++ String.fromInt maxDimension
-                    ++ "."
-                )
-            )
         ]
 
 
