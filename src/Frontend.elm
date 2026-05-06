@@ -3629,16 +3629,15 @@ updateLoaded msg model =
                 voiceChat =
                     model.voiceChat
             in
-            Debug.todo ""
+            case Bytes.Decode.decode (VoiceChat.decodeVoiceChatRecorder bytes) bytes |> Debug.log "asdf" of
+                Just ( connectionId, mimeType, recording ) ->
+                    ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 
---case Bytes.Decode.decode VoiceChat.decodeVoiceChatRecorder bytes of
---    Just ( connectionId, mimeType, recording ) ->
---        ( model, Command.none )
---
---    Nothing ->
---        ( model, Command.none )
 --( { model | voiceChat = {voiceChat | recording =  }}, Command.none)
 --
 --)

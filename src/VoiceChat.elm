@@ -19,6 +19,7 @@ port module VoiceChat exposing
     , VideoTrackData
     , VoiceChatFromJs(..)
     , VoiceChatToJs(..)
+    , decodeVoiceChatRecorder
     , gotRecordedData
     , gotUserMediaDevices
     , hasJoined
@@ -36,6 +37,7 @@ port module VoiceChat exposing
     )
 
 import Bytes exposing (Bytes)
+import Bytes.Decode
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -547,6 +549,33 @@ gotRecordedData msg =
     Subscription.fromJsBytes "got_recorded_data" got_recorded_data msg
 
 
+decodeVoiceChatRecorder : Bytes -> Bytes.Decode.Decoder ( ConnectionId, String, Bytes )
+decodeVoiceChatRecorder bytes =
+    Bytes.Decode.unsignedInt8
+        |> Bytes.Decode.andThen
+            (\connectionIdLength ->
+                Bytes.Decode.string connectionIdLength
+                    |> Bytes.Decode.andThen
+                        (\connectionId ->
+                            case connectionIdFromString connectionId of
+                                Ok connectionId2 ->
+                                    Bytes.Decode.unsignedInt8
+                                        |> Bytes.Decode.andThen
+                                            (\mimeTypeLength ->
+                                                Bytes.Decode.string mimeTypeLength
+                                                    |> Bytes.Decode.andThen
+                                                        (\mimeType ->
+                                                            Bytes.Decode.bytes (Bytes.width bytes - (1 + 1 + connectionIdLength + mimeTypeLength))
+                                                                |> Bytes.Decode.map (\recording -> ( connectionId2, mimeType, recording ))
+                                                        )
+                                            )
+
+                                Err () ->
+                                    Bytes.Decode.fail
+                        )
+            )
+
+
 type alias MediaDevice =
     { deviceId : IdString MediaDeviceId
     , groupId : String
@@ -607,23 +636,33 @@ connectionIdToString { roomId, otherClientId } =
         ++ Lamdera.clientIdToString (Tuple.second otherClientId)
 
 
+connectionIdFromString : String -> Result () ConnectionId
+connectionIdFromString text =
+    case String.split " " text of
+        [ first, second, third ] ->
+            case ( String.toInt first, String.toInt second ) of
+                ( Just int, Just userId ) ->
+                    Ok
+                        { roomId = DmRoomId (Id.fromInt int)
+                        , otherClientId = ( Id.fromInt userId, Lamdera.clientIdFromString third )
+                        }
+
+                _ ->
+                    Err ()
+
+        _ ->
+            Err ()
+
+
 connectionIdCodec : Codec ConnectionId
 connectionIdCodec =
     Codec.andThen
         (\text ->
-            case String.split " " text of
-                [ first, second, third ] ->
-                    case ( String.toInt first, String.toInt second ) of
-                        ( Just int, Just userId ) ->
-                            Codec.succeed
-                                { roomId = DmRoomId (Id.fromInt int)
-                                , otherClientId = ( Id.fromInt userId, Lamdera.clientIdFromString third )
-                                }
+            case connectionIdFromString text of
+                Ok ok ->
+                    Codec.succeed ok
 
-                        _ ->
-                            Codec.fail ("Invalid connectionId: " ++ text)
-
-                _ ->
+                Err () ->
                     Codec.fail ("Invalid connectionId: " ++ text)
         )
         connectionIdToString

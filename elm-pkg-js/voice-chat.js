@@ -44,16 +44,16 @@ exports.init = async function init(app) {
             const view = new DataView(result);
             const bytes = new Uint8Array(result);
             let offset = 0;
-            view.setUint16(offset, peerIdBytes.length);
-            offset += 2;
+            view.setUint8(offset, peerIdBytes.length);
+            offset += 1;
             bytes.set(peerIdBytes, offset);
             offset += peerIdBytes.length;
-            view.setUint16(offset, typeBytes.length);
-            offset += 2;
+            view.setUint8(offset, typeBytes.length);
+            offset += 1;
             bytes.set(typeBytes, offset);
             offset += typeBytes.length;
             bytes.set(new Uint8Array(dataBuffer), offset);
-            app.ports.got_recorded_data.send(result);
+            app.ports.got_recorded_data.send(new DataView(result));
         });
         mediaRecorder.start();
 
