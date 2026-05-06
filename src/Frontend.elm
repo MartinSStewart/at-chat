@@ -1167,7 +1167,12 @@ updateLoaded msg model =
                         model
 
                 _ ->
-                    ( model, Command.none )
+                    case ( model.route, Pages.Go.keyMsg key ) of
+                        ( GoRoute, Just goMsg ) ->
+                            ( { model | goModel = Pages.Go.update goMsg model.goModel }, Command.none )
+
+                        _ ->
+                            ( model, Command.none )
 
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
             showReactionEmojiSelector guildOrDmId threadRoute model

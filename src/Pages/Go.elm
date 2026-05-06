@@ -1,7 +1,10 @@
-module Pages.Go exposing (Model, Msg, init, update, view)
+module Pages.Go exposing (Model, Msg, init, keyMsg, update, view)
 
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom
+import Html
+import Html.Attributes
+import Html.Events
 import MyUi
 import Set exposing (Set)
 import Svg
@@ -28,9 +31,18 @@ type Phase
     | Scored { markingPlayer : Stone, blackScore : Int, whiteScore : Int }
 
 
+type alias Snapshot =
+    { board : Dict ( Int, Int ) Stone
+    , currentPlayer : Stone
+    , blackCaptures : Int
+    , whiteCaptures : Int
+    }
+
+
 type alias Model =
     { board : Dict ( Int, Int ) Stone
-    , history : List (Dict ( Int, Int ) Stone)
+    , history : List Snapshot
+    , viewingMovesBack : Int
     , currentPlayer : Stone
     , blackCaptures : Int
     , whiteCaptures : Int
@@ -44,6 +56,7 @@ init : Model
 init =
     { board = Dict.empty
     , history = []
+    , viewingMovesBack = 0
     , currentPlayer = Black
     , blackCaptures = 0
     , whiteCaptures = 0
@@ -53,8 +66,8 @@ init =
     }
 
 
-historyLimit : Int
-historyLimit =
+koHistoryLimit : Int
+koHistoryLimit =
     10
 
 
@@ -65,6 +78,22 @@ type Msg
     | PressedDoneMarking
     | PressedAgree
     | PressedDisagree
+    | ChangedViewingMove Int
+    | PressedArrowLeft
+    | PressedArrowRight
+
+
+keyMsg : String -> Maybe Msg
+keyMsg key =
+    case key of
+        "ArrowLeft" ->
+            Just PressedArrowLeft
+
+        "ArrowRight" ->
+            Just PressedArrowRight
+
+        _ ->
+            Nothing
 
 
 otherStone : Stone -> Stone
@@ -183,6 +212,39 @@ regionFlood board queue visited =
             regionFlood board newQueue newVisited
 
 
+currentSnapshot : Model -> Snapshot
+currentSnapshot model =
+    { board = model.board
+    , currentPlayer = model.currentPlayer
+    , blackCaptures = model.blackCaptures
+    , whiteCaptures = model.whiteCaptures
+    }
+
+
+viewingSnapshot : Model -> Snapshot
+viewingSnapshot model =
+    if model.viewingMovesBack <= 0 then
+        currentSnapshot model
+
+    else
+        case List.drop (model.viewingMovesBack - 1) model.history |> List.head of
+            Just snapshot ->
+                snapshot
+
+            Nothing ->
+                currentSnapshot model
+
+
+isViewingPast : Model -> Bool
+isViewingPast model =
+    model.viewingMovesBack > 0
+
+
+jumpToLatest : Model -> Model
+jumpToLatest model =
+    { model | viewingMovesBack = 0, lastError = Nothing }
+
+
 tryPlace : Int -> Int -> Model -> Model
 tryPlace x y model =
     if Dict.member ( x, y ) model.board then
@@ -233,17 +295,22 @@ tryPlace x y model =
             myGroup : GroupInfo
             myGroup =
                 groupAt boardAfterCapture ( x, y )
+
+            recentBoards : List (Dict ( Int, Int ) Stone)
+            recentBoards =
+                List.take koHistoryLimit model.history |> List.map .board
         in
         if Set.isEmpty myGroup.liberties then
             { model | lastError = Just "Suicide move not allowed" }
 
-        else if List.member boardAfterCapture model.history then
+        else if List.member boardAfterCapture recentBoards then
             { model | lastError = Just "Move repeats a board state" }
 
         else
             { model
                 | board = boardAfterCapture
-                , history = List.take historyLimit (model.board :: model.history)
+                , history = currentSnapshot model :: model.history
+                , viewingMovesBack = 0
                 , currentPlayer = opponent
                 , blackCaptures =
                     if stone == Black then
@@ -388,37 +455,45 @@ update : Msg -> Model -> Model
 update msg model =
     case msg of
         PressedCell x y ->
-            case model.phase of
-                Playing _ ->
-                    tryPlace x y model
+            if isViewingPast model then
+                jumpToLatest model
 
-                Marking _ ->
-                    cycleTerritory x y model
+            else
+                case model.phase of
+                    Playing _ ->
+                        tryPlace x y model
 
-                Confirming _ ->
-                    model
+                    Marking _ ->
+                        cycleTerritory x y model
 
-                Scored _ ->
-                    model
+                    Confirming _ ->
+                        model
+
+                    Scored _ ->
+                        model
 
         PressedPass ->
-            case model.phase of
-                Playing { previousPlayerPassed } ->
-                    if previousPlayerPassed then
-                        { model
-                            | phase = Marking { markingPlayer = model.currentPlayer }
-                            , lastError = Nothing
-                        }
+            if isViewingPast model then
+                jumpToLatest model
 
-                    else
-                        { model
-                            | currentPlayer = otherStone model.currentPlayer
-                            , lastError = Nothing
-                            , phase = Playing { previousPlayerPassed = True }
-                        }
+            else
+                case model.phase of
+                    Playing { previousPlayerPassed } ->
+                        if previousPlayerPassed then
+                            { model
+                                | phase = Marking { markingPlayer = model.currentPlayer }
+                                , lastError = Nothing
+                            }
 
-                _ ->
-                    model
+                        else
+                            { model
+                                | currentPlayer = otherStone model.currentPlayer
+                                , lastError = Nothing
+                                , phase = Playing { previousPlayerPassed = True }
+                            }
+
+                    _ ->
+                        model
 
         PressedDoneMarking ->
             case model.phase of
@@ -464,6 +539,30 @@ update msg model =
         PressedReset ->
             init
 
+        ChangedViewingMove moveNumber ->
+            let
+                total : Int
+                total =
+                    List.length model.history
+
+                clamped : Int
+                clamped =
+                    clamp 0 total moveNumber
+            in
+            { model | viewingMovesBack = total - clamped, lastError = Nothing }
+
+        PressedArrowLeft ->
+            { model
+                | viewingMovesBack = min (List.length model.history) (model.viewingMovesBack + 1)
+                , lastError = Nothing
+            }
+
+        PressedArrowRight ->
+            { model
+                | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
+                , lastError = Nothing
+            }
+
 
 cellPx : Int
 cellPx =
@@ -482,6 +581,7 @@ view model =
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go")
         , statusView model
         , boardView model
+        , historyView model
         , controlsView model
         , case model.lastError of
             Just err ->
@@ -489,39 +589,47 @@ view model =
 
             Nothing ->
                 Ui.none
-        , Ui.el [ Ui.Font.size 14 ] (Ui.text "One device, two players. Pass twice to score.")
+        , Ui.el [ Ui.Font.size 14 ] (Ui.text "One device, two players. Pass twice to score. Arrow keys or slider to review past moves.")
         ]
 
 
 statusView : Model -> Element msg
 statusView model =
     let
+        snapshot : Snapshot
+        snapshot =
+            viewingSnapshot model
+
         turnText : String
         turnText =
-            case model.phase of
-                Playing _ ->
-                    stoneName model.currentPlayer ++ " to move"
+            if isViewingPast model then
+                "Reviewing past move (click the board or press a button to return to the latest)"
 
-                Marking r ->
-                    stoneName r.markingPlayer
-                        ++ " marks territory: tap an empty region to cycle owner (none → Black → White)."
+            else
+                case model.phase of
+                    Playing _ ->
+                        stoneName model.currentPlayer ++ " to move"
 
-                Confirming r ->
-                    stoneName (otherStone r.markingPlayer)
-                        ++ ": agree with the marking, or disagree to resume play."
+                    Marking r ->
+                        stoneName r.markingPlayer
+                            ++ " marks territory: tap an empty region to cycle owner (none → Black → White)."
 
-                Scored s ->
-                    "Final score - Black: "
-                        ++ String.fromInt s.blackScore
-                        ++ ", White: "
-                        ++ String.fromInt s.whiteScore
-                        ++ winnerSuffix s.blackScore s.whiteScore
+                    Confirming r ->
+                        stoneName (otherStone r.markingPlayer)
+                            ++ ": agree with the marking, or disagree to resume play."
+
+                    Scored s ->
+                        "Final score - Black: "
+                            ++ String.fromInt s.blackScore
+                            ++ ", White: "
+                            ++ String.fromInt s.whiteScore
+                            ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
         [ Ui.spacing 4 ]
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText)
-        , Ui.text ("Black has captured: " ++ String.fromInt model.blackCaptures)
-        , Ui.text ("White has captured: " ++ String.fromInt model.whiteCaptures)
+        , Ui.text ("Black has captured: " ++ String.fromInt snapshot.blackCaptures)
+        , Ui.text ("White has captured: " ++ String.fromInt snapshot.whiteCaptures)
         ]
 
 
@@ -574,6 +682,44 @@ controlsView model =
         )
 
 
+historyView : Model -> Element Msg
+historyView model =
+    let
+        total : Int
+        total =
+            List.length model.history
+
+        currentMove : Int
+        currentMove =
+            total - model.viewingMovesBack
+    in
+    if total == 0 then
+        Ui.none
+
+    else
+        Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink ]
+            [ MyUi.simpleButton (Dom.id "go_arrowLeft") PressedArrowLeft (Ui.text "←")
+            , Html.input
+                [ Html.Attributes.type_ "range"
+                , Html.Attributes.min "0"
+                , Html.Attributes.max (String.fromInt total)
+                , Html.Attributes.value (String.fromInt currentMove)
+                , Html.Attributes.style "width" "200px"
+                , Html.Events.onInput
+                    (\s ->
+                        ChangedViewingMove (String.toInt s |> Maybe.withDefault currentMove)
+                    )
+                ]
+                []
+                |> Ui.html
+                |> Ui.el [ Ui.width (Ui.px 220) ]
+            , MyUi.simpleButton (Dom.id "go_arrowRight") PressedArrowRight (Ui.text "→")
+            , Ui.el [ Ui.Font.size 14 ]
+                (Ui.text ("Move " ++ String.fromInt currentMove ++ " / " ++ String.fromInt total))
+            ]
+
+
 boardView : Model -> Element Msg
 boardView model =
     let
@@ -581,17 +727,45 @@ boardView model =
         size =
             boardSize * cellPx
 
+        viewing : Bool
+        viewing =
+            isViewingPast model
+
+        snapshot : Snapshot
+        snapshot =
+            viewingSnapshot model
+
         clickable : Bool
         clickable =
-            case model.phase of
-                Playing _ ->
-                    True
+            if viewing then
+                True
 
-                Marking _ ->
-                    True
+            else
+                case model.phase of
+                    Playing _ ->
+                        True
 
-                _ ->
-                    False
+                    Marking _ ->
+                        True
+
+                    _ ->
+                        False
+
+        marks : Dict ( Int, Int ) Stone
+        marks =
+            if viewing then
+                Dict.empty
+
+            else
+                model.territoryMarks
+
+        deadSet : Set ( Int, Int )
+        deadSet =
+            if viewing then
+                Set.empty
+
+            else
+                deadStonePositions model
     in
     Svg.svg
         [ Svg.Attributes.width (String.fromInt size)
@@ -600,8 +774,8 @@ boardView model =
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
         (gridLines
-            ++ territoryShapes model.territoryMarks
-            ++ stoneShapes (deadStonePositions model) model.board
+            ++ territoryShapes marks
+            ++ stoneShapes deadSet snapshot.board
             ++ (if clickable then
                     clickTargets
 
