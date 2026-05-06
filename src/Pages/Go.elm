@@ -21,13 +21,21 @@ type Stone
     | White
 
 
+type Phase
+    = Playing
+    | Marking { markingPlayer : Stone }
+    | Confirming { markingPlayer : Stone }
+    | Scored { markingPlayer : Stone, blackScore : Int, whiteScore : Int }
+
+
 type alias Model =
     { board : Dict ( Int, Int ) Stone
     , currentPlayer : Stone
     , blackCaptures : Int
     , whiteCaptures : Int
     , passes : Int
-    , gameOver : Bool
+    , phase : Phase
+    , territoryMarks : Dict ( Int, Int ) Stone
     , lastError : Maybe String
     }
 
@@ -39,7 +47,8 @@ init =
     , blackCaptures = 0
     , whiteCaptures = 0
     , passes = 0
-    , gameOver = False
+    , phase = Playing
+    , territoryMarks = Dict.empty
     , lastError = Nothing
     }
 
@@ -48,6 +57,9 @@ type Msg
     = PressedCell Int Int
     | PressedPass
     | PressedReset
+    | PressedDoneMarking
+    | PressedAgree
+    | PressedDisagree
 
 
 otherStone : Stone -> Stone
@@ -58,6 +70,16 @@ otherStone stone =
 
         White ->
             Black
+
+
+stoneName : Stone -> String
+stoneName stone =
+    case stone of
+        Black ->
+            "Black"
+
+        White ->
+            "White"
 
 
 neighbors : ( Int, Int ) -> List ( Int, Int )
@@ -120,12 +142,45 @@ floodFill board stone queue stones liberties =
             floodFill board stone newQueue newStones newLiberties
 
 
+findRegion : Dict ( Int, Int ) Stone -> ( Int, Int ) -> Set ( Int, Int )
+findRegion board start =
+    if Dict.member start board then
+        Set.empty
+
+    else
+        regionFlood board [ start ] (Set.singleton start)
+
+
+regionFlood :
+    Dict ( Int, Int ) Stone
+    -> List ( Int, Int )
+    -> Set ( Int, Int )
+    -> Set ( Int, Int )
+regionFlood board queue visited =
+    case queue of
+        [] ->
+            visited
+
+        pos :: rest ->
+            let
+                ( newQueue, newVisited ) =
+                    List.foldl
+                        (\n ( q, v ) ->
+                            if Set.member n v || Dict.member n board then
+                                ( q, v )
+
+                            else
+                                ( n :: q, Set.insert n v )
+                        )
+                        ( rest, visited )
+                        (neighbors pos)
+            in
+            regionFlood board newQueue newVisited
+
+
 tryPlace : Int -> Int -> Model -> Model
 tryPlace x y model =
-    if model.gameOver then
-        model
-
-    else if Dict.member ( x, y ) model.board then
+    if Dict.member ( x, y ) model.board then
         { model | lastError = Just "There's already a stone there" }
 
     else
@@ -198,24 +253,160 @@ tryPlace x y model =
             }
 
 
+cycleOwner : Maybe Stone -> Maybe Stone
+cycleOwner current =
+    case current of
+        Nothing ->
+            Just Black
+
+        Just Black ->
+            Just White
+
+        Just White ->
+            Nothing
+
+
+cycleTerritory : Int -> Int -> Model -> Model
+cycleTerritory x y model =
+    if Dict.member ( x, y ) model.board then
+        model
+
+    else
+        let
+            region : Set ( Int, Int )
+            region =
+                findRegion model.board ( x, y )
+
+            currentOwner : Maybe Stone
+            currentOwner =
+                Set.toList region
+                    |> List.head
+                    |> Maybe.andThen (\p -> Dict.get p model.territoryMarks)
+
+            newOwner : Maybe Stone
+            newOwner =
+                cycleOwner currentOwner
+
+            cleared : Dict ( Int, Int ) Stone
+            cleared =
+                Set.foldl Dict.remove model.territoryMarks region
+
+            newMarks : Dict ( Int, Int ) Stone
+            newMarks =
+                case newOwner of
+                    Just s ->
+                        Set.foldl (\p d -> Dict.insert p s d) cleared region
+
+                    Nothing ->
+                        cleared
+        in
+        { model | territoryMarks = newMarks, lastError = Nothing }
+
+
+computeScore : Model -> ( Int, Int )
+computeScore model =
+    let
+        ( blackTerritory, whiteTerritory ) =
+            Dict.foldl
+                (\_ s ( b, w ) ->
+                    case s of
+                        Black ->
+                            ( b + 1, w )
+
+                        White ->
+                            ( b, w + 1 )
+                )
+                ( 0, 0 )
+                model.territoryMarks
+    in
+    ( blackTerritory + model.blackCaptures
+    , whiteTerritory + model.whiteCaptures
+    )
+
+
 update : Msg -> Model -> Model
 update msg model =
     case msg of
         PressedCell x y ->
-            tryPlace x y model
+            case model.phase of
+                Playing ->
+                    tryPlace x y model
+
+                Marking _ ->
+                    cycleTerritory x y model
+
+                Confirming _ ->
+                    model
+
+                Scored _ ->
+                    model
 
         PressedPass ->
-            let
-                newPasses : Int
-                newPasses =
-                    model.passes + 1
-            in
-            { model
-                | passes = newPasses
-                , currentPlayer = otherStone model.currentPlayer
-                , gameOver = newPasses >= 2
-                , lastError = Nothing
-            }
+            case model.phase of
+                Playing ->
+                    if model.passes >= 1 then
+                        let
+                            firstPasser : Stone
+                            firstPasser =
+                                otherStone model.currentPlayer
+                        in
+                        { model
+                            | passes = model.passes + 1
+                            , phase = Marking { markingPlayer = firstPasser }
+                            , lastError = Nothing
+                        }
+
+                    else
+                        { model
+                            | passes = model.passes + 1
+                            , currentPlayer = otherStone model.currentPlayer
+                            , lastError = Nothing
+                        }
+
+                _ ->
+                    model
+
+        PressedDoneMarking ->
+            case model.phase of
+                Marking r ->
+                    { model | phase = Confirming r, lastError = Nothing }
+
+                _ ->
+                    model
+
+        PressedAgree ->
+            case model.phase of
+                Confirming r ->
+                    let
+                        ( b, w ) =
+                            computeScore model
+                    in
+                    { model
+                        | phase =
+                            Scored
+                                { markingPlayer = r.markingPlayer
+                                , blackScore = b
+                                , whiteScore = w
+                                }
+                        , lastError = Nothing
+                    }
+
+                _ ->
+                    model
+
+        PressedDisagree ->
+            case model.phase of
+                Confirming r ->
+                    { model
+                        | phase = Playing
+                        , passes = 0
+                        , currentPlayer = r.markingPlayer
+                        , territoryMarks = Dict.empty
+                        , lastError = Just "Marking rejected. Resume play."
+                    }
+
+                _ ->
+                    model
 
         PressedReset ->
             init
@@ -238,14 +429,14 @@ view model =
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go")
         , statusView model
         , boardView model
-        , controlsView
+        , controlsView model
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
 
             Nothing ->
                 Ui.none
-        , Ui.el [ Ui.Font.size 14 ] (Ui.text "One device, two players. Pass twice to end the game.")
+        , Ui.el [ Ui.Font.size 14 ] (Ui.text "One device, two players. Pass twice to score.")
         ]
 
 
@@ -254,16 +445,24 @@ statusView model =
     let
         turnText : String
         turnText =
-            if model.gameOver then
-                "Game over - both players passed"
+            case model.phase of
+                Playing ->
+                    stoneName model.currentPlayer ++ " to move"
 
-            else
-                case model.currentPlayer of
-                    Black ->
-                        "Black to move"
+                Marking r ->
+                    stoneName r.markingPlayer
+                        ++ " marks territory: tap an empty region to cycle owner (none → Black → White)."
 
-                    White ->
-                        "White to move"
+                Confirming r ->
+                    stoneName (otherStone r.markingPlayer)
+                        ++ ": agree with the marking, or disagree to resume play."
+
+                Scored s ->
+                    "Final score - Black: "
+                        ++ String.fromInt s.blackScore
+                        ++ ", White: "
+                        ++ String.fromInt s.whiteScore
+                        ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -273,13 +472,43 @@ statusView model =
         ]
 
 
-controlsView : Element Msg
-controlsView =
+winnerSuffix : Int -> Int -> String
+winnerSuffix b w =
+    if b > w then
+        " (Black wins)"
+
+    else if w > b then
+        " (White wins)"
+
+    else
+        " (tie)"
+
+
+controlsView : Model -> Element Msg
+controlsView model =
+    let
+        phaseButtons : List (Element Msg)
+        phaseButtons =
+            case model.phase of
+                Playing ->
+                    [ MyUi.simpleButton (Dom.id "go_pass") PressedPass (Ui.text "Pass") ]
+
+                Marking _ ->
+                    [ MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking") ]
+
+                Confirming _ ->
+                    [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
+                    , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
+                    ]
+
+                Scored _ ->
+                    []
+    in
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        [ MyUi.simpleButton (Dom.id "go_pass") PressedPass (Ui.text "Pass")
-        , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "Reset")
-        ]
+        (phaseButtons
+            ++ [ MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "Reset") ]
+        )
 
 
 boardView : Model -> Element Msg
@@ -288,6 +517,18 @@ boardView model =
         size : Int
         size =
             boardSize * cellPx
+
+        clickable : Bool
+        clickable =
+            case model.phase of
+                Playing ->
+                    True
+
+                Marking _ ->
+                    True
+
+                _ ->
+                    False
     in
     Svg.svg
         [ Svg.Attributes.width (String.fromInt size)
@@ -295,7 +536,16 @@ boardView model =
         , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt size ++ " " ++ String.fromInt size)
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
-        (gridLines ++ stoneShapes model.board ++ clickTargets)
+        (gridLines
+            ++ territoryShapes model.territoryMarks
+            ++ stoneShapes model.board
+            ++ (if clickable then
+                    clickTargets
+
+                else
+                    []
+               )
+        )
         |> Ui.html
         |> Ui.el [ Ui.width Ui.shrink ]
 
@@ -368,6 +618,46 @@ stoneShapes board =
                     [ Svg.Attributes.cx (String.fromInt cx)
                     , Svg.Attributes.cy (String.fromInt cy)
                     , Svg.Attributes.r (String.fromInt (cellPx // 2 - 2))
+                    , Svg.Attributes.fill color
+                    , Svg.Attributes.stroke "black"
+                    , Svg.Attributes.strokeWidth "1"
+                    ]
+                    []
+            )
+
+
+territoryShapes : Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
+territoryShapes marks =
+    Dict.toList marks
+        |> List.map
+            (\( ( x, y ), stone ) ->
+                let
+                    cx : Int
+                    cx =
+                        x * cellPx + cellPx // 2
+
+                    cy : Int
+                    cy =
+                        y * cellPx + cellPx // 2
+
+                    side : Int
+                    side =
+                        cellPx // 4
+
+                    color : String
+                    color =
+                        case stone of
+                            Black ->
+                                "black"
+
+                            White ->
+                                "white"
+                in
+                Svg.rect
+                    [ Svg.Attributes.x (String.fromInt (cx - side // 2))
+                    , Svg.Attributes.y (String.fromInt (cy - side // 2))
+                    , Svg.Attributes.width (String.fromInt side)
+                    , Svg.Attributes.height (String.fromInt side)
                     , Svg.Attributes.fill color
                     , Svg.Attributes.stroke "black"
                     , Svg.Attributes.strokeWidth "1"
