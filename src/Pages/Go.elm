@@ -217,11 +217,6 @@ maxDimension =
     25
 
 
-koHistoryLimit : Int
-koHistoryLimit =
-    10
-
-
 type Msg
     = PressedCell Int Int
     | PressedPass
@@ -458,7 +453,7 @@ tryPlace x y model =
 
             recentBoards : List (Dict ( Int, Int ) Stone)
             recentBoards =
-                List.take koHistoryLimit model.history |> List.map .board
+                List.take 10 model.history |> List.map .board
         in
         if Set.isEmpty myGroup.liberties then
             { model | lastError = Just "Suicide move not allowed" }
@@ -905,7 +900,8 @@ setupView model =
             , MyUi.simpleButton (Dom.id "go_preset19") (PressedPresetSize 19 19) (Ui.text "19 x 19")
             ]
         , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Custom size")
-        , Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+        , Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
             [ dimensionInput "go_widthInput" "Width" model.widthInput ChangedWidthInput
             , dimensionInput "go_heightInput" "Height" model.heightInput ChangedHeightInput
             , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
@@ -925,15 +921,6 @@ setupView model =
 
             Nothing ->
                 Ui.none
-        , Ui.el [ Ui.Font.size 14 ]
-            (Ui.text
-                ("Allowed range: "
-                    ++ String.fromInt minDimension
-                    ++ " to "
-                    ++ String.fromInt maxDimension
-                    ++ "."
-                )
-            )
         ]
 
 
@@ -959,7 +946,8 @@ numberInput :
     }
     -> Element Msg
 numberInput args =
-    Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text args.label)
         , Html.input
             [ Html.Attributes.id args.htmlId
@@ -967,9 +955,10 @@ numberInput args =
             , Html.Attributes.min (String.fromInt args.minValue)
             , Html.Attributes.max (String.fromInt args.maxValue)
             , Html.Attributes.value args.value
+            , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "width" "80px"
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "border" "1px solid #ccc"
+            , Html.Attributes.style "padding" "8.5px"
+            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
             , Html.Attributes.style "border-radius" "4px"
             , Html.Events.onInput args.onChange
             ]
