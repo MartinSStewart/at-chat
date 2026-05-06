@@ -1,4 +1,13 @@
-module Pages.Go exposing (Model, Msg, init, keyMsg, update, view)
+module Pages.Go exposing
+    ( Model
+    , Msg
+    , Stone(..)
+    , deadStones
+    , init
+    , keyMsg
+    , update
+    , view
+    )
 
 import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom
@@ -434,10 +443,14 @@ computeScore model =
                 ( 0, 0 )
                 model.territoryMarks
 
+        ctx : DeadContext
+        ctx =
+            gameDeadContext model
+
         ( deadBlack, deadWhite ) =
             Dict.foldl
                 (\pos stone ( db, dw ) ->
-                    if isDeadStone model pos stone then
+                    if isStoneDead ctx pos stone then
                         case stone of
                             Black ->
                                 ( db + 1, dw )
@@ -456,38 +469,69 @@ computeScore model =
     )
 
 
-isDeadStone : GameModel -> ( Int, Int ) -> Stone -> Bool
-isDeadStone model pos stone =
+type alias DeadContext =
+    { width : Int
+    , height : Int
+    , board : Dict ( Int, Int ) Stone
+    , territoryMarks : Dict ( Int, Int ) Stone
+    }
+
+
+isStoneDead : DeadContext -> ( Int, Int ) -> Stone -> Bool
+isStoneDead ctx pos stone =
     let
-        empties : List ( Int, Int )
-        empties =
-            neighbors model.width model.height pos
-                |> List.filter (\n -> not (Dict.member n model.board))
+        group : GroupInfo
+        group =
+            groupAt ctx.width ctx.height ctx.board pos
+
+        liberties : List ( Int, Int )
+        liberties =
+            Set.toList group.liberties
     in
-    case empties of
+    case liberties of
         [] ->
             False
 
         _ ->
             List.all
                 (\lib ->
-                    Dict.get lib model.territoryMarks == Just (otherStone stone)
+                    Dict.get lib ctx.territoryMarks == Just (otherStone stone)
                 )
-                empties
+                liberties
 
 
-deadStonePositions : GameModel -> Set ( Int, Int )
-deadStonePositions model =
+deadStones :
+    { width : Int
+    , height : Int
+    , board : Dict ( Int, Int ) Stone
+    , territoryMarks : Dict ( Int, Int ) Stone
+    }
+    -> Set ( Int, Int )
+deadStones ctx =
     Dict.foldl
         (\pos stone acc ->
-            if isDeadStone model pos stone then
+            if isStoneDead ctx pos stone then
                 Set.insert pos acc
 
             else
                 acc
         )
         Set.empty
-        model.board
+        ctx.board
+
+
+gameDeadContext : GameModel -> DeadContext
+gameDeadContext model =
+    { width = model.width
+    , height = model.height
+    , board = model.board
+    , territoryMarks = model.territoryMarks
+    }
+
+
+deadStonePositions : GameModel -> Set ( Int, Int )
+deadStonePositions model =
+    deadStones (gameDeadContext model)
 
 
 parseDimension : String -> Result String Int
