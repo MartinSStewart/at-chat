@@ -3461,6 +3461,7 @@ updateLoaded msg model =
 
         PressedChannelHeaderVoiceChatButton roomId ->
             let
+                voiceChat : VoiceChat.Model
                 voiceChat =
                     model.voiceChat
             in
@@ -3475,7 +3476,15 @@ updateLoaded msg model =
                                 SeqSet.insert roomId voiceChat.expanded
                     }
               }
-            , Command.none
+            , case voiceChat.userMediaDevices of
+                MediaDevicesNotLoaded ->
+                    VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+
+                HasMediaDevices mediaDevices ->
+                    Command.none
+
+                FailedToGetMediaDevices string ->
+                    VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
             )
 
         GotVoiceChatSignalFromJs result ->
