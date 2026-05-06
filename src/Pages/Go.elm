@@ -33,7 +33,7 @@ type Phase
     = Playing { previousPlayerPassed : Bool }
     | Marking { markingPlayer : Stone }
     | Confirming { markingPlayer : Stone }
-    | Scored { markingPlayer : Stone, blackScore : Int, whiteScore : Int }
+    | Scored { markingPlayer : Stone, blackScore : Float, whiteScore : Float }
 
 
 type alias Snapshot =
@@ -47,6 +47,7 @@ type alias Snapshot =
 type alias GameModel =
     { width : Int
     , height : Int
+    , komi : Float
     , board : Dict ( Int, Int ) Stone
     , history : List Snapshot
     , viewingMovesBack : Int
@@ -63,6 +64,7 @@ type alias SetupModel =
     { widthInput : String
     , heightInput : String
     , handicapInput : String
+    , komiInput : String
     , error : Maybe String
     }
 
@@ -78,6 +80,7 @@ init =
         { widthInput = "9"
         , heightInput = "9"
         , handicapInput = "0"
+        , komiInput = "6.5"
         , error = Nothing
         }
 
@@ -172,8 +175,8 @@ handicapPositions handicap width height =
         |> Set.toList
 
 
-startGame : Int -> Int -> Int -> GameModel
-startGame width height handicap =
+startGame : Int -> Int -> Int -> Float -> GameModel
+startGame width height handicap komi =
     let
         positions : List ( Int, Int )
         positions =
@@ -195,6 +198,7 @@ startGame width height handicap =
     in
     { width = width
     , height = height
+    , komi = komi
     , board = board
     , history = []
     , viewingMovesBack = 0
@@ -230,6 +234,7 @@ type Msg
     | ChangedWidthInput String
     | ChangedHeightInput String
     | ChangedHandicapInput String
+    | ChangedKomiInput String
     | PressedPresetSize Int Int
     | PressedStartGame
 
@@ -534,7 +539,7 @@ cycleTerritory x y model =
         { model | territoryMarks = newMarks, lastError = Nothing }
 
 
-computeScore : GameModel -> ( Int, Int )
+computeScore : GameModel -> ( Float, Float )
 computeScore model =
     let
         ( blackTerritory, whiteTerritory ) =
@@ -571,8 +576,8 @@ computeScore model =
                 ( 0, 0 )
                 model.board
     in
-    ( blackTerritory + model.blackCaptures + 2 * deadWhite
-    , whiteTerritory + model.whiteCaptures + 2 * deadBlack
+    ( toFloat (blackTerritory + model.blackCaptures + 2 * deadWhite)
+    , toFloat (whiteTerritory + model.whiteCaptures + 2 * deadBlack) + model.komi
     )
 
 
@@ -684,6 +689,25 @@ parseHandicap input =
                 Err "Enter a number"
 
 
+parseKomi : String -> Result String Float
+parseKomi input =
+    let
+        trimmed : String
+        trimmed =
+            String.trim input
+    in
+    if trimmed == "" then
+        Ok 0
+
+    else
+        case String.toFloat trimmed of
+            Just n ->
+                Ok n
+
+            Nothing ->
+                Err "Enter a number"
+
+
 update : Msg -> Model -> Model
 update msg model =
     case model of
@@ -692,6 +716,21 @@ update msg model =
 
         Game game ->
             updateGame msg game
+
+
+startWithSettings : Int -> Int -> SetupModel -> Model
+startWithSettings w h model =
+    case parseHandicap model.handicapInput of
+        Err err ->
+            Setup { model | error = Just ("Handicap: " ++ err) }
+
+        Ok handicap ->
+            case parseKomi model.komiInput of
+                Err err ->
+                    Setup { model | error = Just ("Komi: " ++ err) }
+
+                Ok komi ->
+                    Game (startGame w h handicap komi)
 
 
 updateSetup : Msg -> SetupModel -> Model
@@ -706,23 +745,16 @@ updateSetup msg model =
         ChangedHandicapInput input ->
             Setup { model | handicapInput = input, error = Nothing }
 
-        PressedPresetSize w h ->
-            case parseHandicap model.handicapInput of
-                Ok handicap ->
-                    Game (startGame w h handicap)
+        ChangedKomiInput input ->
+            Setup { model | komiInput = input, error = Nothing }
 
-                Err err ->
-                    Setup { model | error = Just ("Handicap: " ++ err) }
+        PressedPresetSize w h ->
+            startWithSettings w h model
 
         PressedStartGame ->
             case ( parseDimension model.widthInput, parseDimension model.heightInput ) of
                 ( Ok w, Ok h ) ->
-                    case parseHandicap model.handicapInput of
-                        Ok handicap ->
-                            Game (startGame w h handicap)
-
-                        Err err ->
-                            Setup { model | error = Just ("Handicap: " ++ err) }
+                    startWithSettings w h model
 
                 ( Err err, _ ) ->
                     Setup { model | error = Just ("Width: " ++ err) }
@@ -861,6 +893,9 @@ updateGame msg model =
         ChangedHandicapInput _ ->
             Game model
 
+        ChangedKomiInput _ ->
+            Game model
+
         PressedPresetSize _ _ ->
             Game model
 
@@ -915,6 +950,8 @@ setupView model =
             , value = model.handicapInput
             , onChange = ChangedHandicapInput
             }
+        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Komi (extra points for White at scoring)")
+        , komiInput model.komiInput
         , case model.error of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -934,6 +971,29 @@ dimensionInput htmlId label value onChange =
         , value = value
         , onChange = onChange
         }
+
+
+komiInput : String -> Element Msg
+komiInput value =
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Points")
+        , Html.input
+            [ Html.Attributes.id "go_komiInput"
+            , Html.Attributes.type_ "number"
+            , Html.Attributes.step "0.5"
+            , Html.Attributes.value value
+            , Html.Attributes.style "font-size" "inherit"
+            , Html.Attributes.style "width" "80px"
+            , Html.Attributes.style "padding" "8.5px"
+            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Events.onInput ChangedKomiInput
+            ]
+            []
+            |> Ui.html
+            |> Ui.el [ Ui.width (Ui.px 100) ]
+        ]
 
 
 numberInput :
@@ -1023,9 +1083,9 @@ statusView model =
 
                 Scored s ->
                     "Final score - Black: "
-                        ++ String.fromInt s.blackScore
+                        ++ formatScore s.blackScore
                         ++ ", White: "
-                        ++ String.fromInt s.whiteScore
+                        ++ formatScore s.whiteScore
                         ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
@@ -1033,10 +1093,20 @@ statusView model =
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText)
         , Ui.text ("Black has captured: " ++ String.fromInt snapshot.blackCaptures)
         , Ui.text ("White has captured: " ++ String.fromInt snapshot.whiteCaptures)
+        , Ui.text ("Komi: " ++ formatScore model.komi)
         ]
 
 
-winnerSuffix : Int -> Int -> String
+formatScore : Float -> String
+formatScore score =
+    if score == toFloat (floor score) then
+        String.fromInt (floor score)
+
+    else
+        String.fromFloat score
+
+
+winnerSuffix : Float -> Float -> String
 winnerSuffix b w =
     if b > w then
         " (Black wins)"
