@@ -4,6 +4,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
+import Bytes.Decode
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -3622,6 +3623,25 @@ updateLoaded msg model =
                     ( { model | voiceChat = { voiceChat | isVideoPaused = newPaused } }
                     , VoiceChat.voiceChatToJs (VoiceChat.Js_SetVideoPaused newPaused)
                     )
+
+        GotVoiceChatRecording bytes ->
+            let
+                voiceChat =
+                    model.voiceChat
+            in
+            Debug.todo ""
+
+
+
+--case Bytes.Decode.decode VoiceChat.decodeVoiceChatRecorder bytes of
+--    Just ( connectionId, mimeType, recording ) ->
+--        ( model, Command.none )
+--
+--    Nothing ->
+--        ( model, Command.none )
+--( { model | voiceChat = {voiceChat | recording =  }}, Command.none)
+--
+--)
 
 
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg

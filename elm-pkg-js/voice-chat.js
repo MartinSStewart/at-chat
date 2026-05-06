@@ -36,7 +36,7 @@ exports.init = async function init(app) {
         let mediaRecorder = new MediaRecorder(localStream);
         mediaRecorder.addEventListener("dataavailable", (e) => {
             console.log(e);
-            app.ports.voice_chat_from_js.send(e.data);
+            app.ports.got_recorded_data.send(e.data);
         });
         mediaRecorder.start();
 
