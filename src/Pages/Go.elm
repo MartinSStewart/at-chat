@@ -15,11 +15,6 @@ import Ui exposing (Element)
 import Ui.Font
 
 
-boardSize : Int
-boardSize =
-    9
-
-
 type Stone
     = Black
     | White
@@ -40,8 +35,10 @@ type alias Snapshot =
     }
 
 
-type alias Model =
-    { board : Dict ( Int, Int ) Stone
+type alias GameModel =
+    { width : Int
+    , height : Int
+    , board : Dict ( Int, Int ) Stone
     , history : List Snapshot
     , viewingMovesBack : Int
     , currentPlayer : Stone
@@ -53,9 +50,32 @@ type alias Model =
     }
 
 
+type alias SetupModel =
+    { widthInput : String
+    , heightInput : String
+    , error : Maybe String
+    }
+
+
+type Model
+    = Setup SetupModel
+    | Game GameModel
+
+
 init : Model
 init =
-    { board = Dict.empty
+    Setup
+        { widthInput = "9"
+        , heightInput = "9"
+        , error = Nothing
+        }
+
+
+startGame : Int -> Int -> GameModel
+startGame width height =
+    { width = width
+    , height = height
+    , board = Dict.empty
     , history = []
     , viewingMovesBack = 0
     , currentPlayer = Black
@@ -65,6 +85,16 @@ init =
     , territoryMarks = Dict.empty
     , lastError = Nothing
     }
+
+
+minDimension : Int
+minDimension =
+    2
+
+
+maxDimension : Int
+maxDimension =
+    25
 
 
 koHistoryLimit : Int
@@ -82,6 +112,10 @@ type Msg
     | ChangedViewingMove Int
     | PressedArrowLeft
     | PressedArrowRight
+    | ChangedWidthInput String
+    | ChangedHeightInput String
+    | PressedPresetSize Int Int
+    | PressedStartGame
 
 
 keyMsg : String -> Maybe Msg
@@ -117,10 +151,10 @@ stoneName stone =
             "White"
 
 
-neighbors : ( Int, Int ) -> List ( Int, Int )
-neighbors ( x, y ) =
+neighbors : Int -> Int -> ( Int, Int ) -> List ( Int, Int )
+neighbors width height ( x, y ) =
     [ ( x - 1, y ), ( x + 1, y ), ( x, y - 1 ), ( x, y + 1 ) ]
-        |> List.filter (\( a, b ) -> a >= 0 && a < boardSize && b >= 0 && b < boardSize)
+        |> List.filter (\( a, b ) -> a >= 0 && a < width && b >= 0 && b < height)
 
 
 type alias GroupInfo =
@@ -129,24 +163,26 @@ type alias GroupInfo =
     }
 
 
-groupAt : Dict ( Int, Int ) Stone -> ( Int, Int ) -> GroupInfo
-groupAt board start =
+groupAt : Int -> Int -> Dict ( Int, Int ) Stone -> ( Int, Int ) -> GroupInfo
+groupAt width height board start =
     case Dict.get start board of
         Nothing ->
             { stones = Set.empty, liberties = Set.empty }
 
         Just stone ->
-            floodFill board stone [ start ] (Set.singleton start) Set.empty
+            floodFill width height board stone [ start ] (Set.singleton start) Set.empty
 
 
 floodFill :
-    Dict ( Int, Int ) Stone
+    Int
+    -> Int
+    -> Dict ( Int, Int ) Stone
     -> Stone
     -> List ( Int, Int )
     -> Set ( Int, Int )
     -> Set ( Int, Int )
     -> GroupInfo
-floodFill board stone queue stones liberties =
+floodFill width height board stone queue stones liberties =
     case queue of
         [] ->
             { stones = stones, liberties = liberties }
@@ -172,26 +208,28 @@ floodFill board stone queue stones liberties =
                                             ( q, s, l )
                         )
                         ( rest, stones, liberties )
-                        (neighbors pos)
+                        (neighbors width height pos)
             in
-            floodFill board stone newQueue newStones newLiberties
+            floodFill width height board stone newQueue newStones newLiberties
 
 
-findRegion : Dict ( Int, Int ) Stone -> ( Int, Int ) -> Set ( Int, Int )
-findRegion board start =
+findRegion : Int -> Int -> Dict ( Int, Int ) Stone -> ( Int, Int ) -> Set ( Int, Int )
+findRegion width height board start =
     if Dict.member start board then
         Set.empty
 
     else
-        regionFlood board [ start ] (Set.singleton start)
+        regionFlood width height board [ start ] (Set.singleton start)
 
 
 regionFlood :
-    Dict ( Int, Int ) Stone
+    Int
+    -> Int
+    -> Dict ( Int, Int ) Stone
     -> List ( Int, Int )
     -> Set ( Int, Int )
     -> Set ( Int, Int )
-regionFlood board queue visited =
+regionFlood width height board queue visited =
     case queue of
         [] ->
             visited
@@ -208,12 +246,12 @@ regionFlood board queue visited =
                                 ( n :: q, Set.insert n v )
                         )
                         ( rest, visited )
-                        (neighbors pos)
+                        (neighbors width height pos)
             in
-            regionFlood board newQueue newVisited
+            regionFlood width height board newQueue newVisited
 
 
-currentSnapshot : Model -> Snapshot
+currentSnapshot : GameModel -> Snapshot
 currentSnapshot model =
     { board = model.board
     , currentPlayer = model.currentPlayer
@@ -222,7 +260,7 @@ currentSnapshot model =
     }
 
 
-viewingSnapshot : Model -> Snapshot
+viewingSnapshot : GameModel -> Snapshot
 viewingSnapshot model =
     if model.viewingMovesBack <= 0 then
         currentSnapshot model
@@ -236,17 +274,17 @@ viewingSnapshot model =
                 currentSnapshot model
 
 
-isViewingPast : Model -> Bool
+isViewingPast : GameModel -> Bool
 isViewingPast model =
     model.viewingMovesBack > 0
 
 
-jumpToLatest : Model -> Model
+jumpToLatest : GameModel -> GameModel
 jumpToLatest model =
     { model | viewingMovesBack = 0, lastError = Nothing }
 
 
-tryPlace : Int -> Int -> Model -> Model
+tryPlace : Int -> Int -> GameModel -> GameModel
 tryPlace x y model =
     if Dict.member ( x, y ) model.board then
         { model | lastError = Just "There's already a stone there" }
@@ -274,7 +312,7 @@ tryPlace x y model =
                                     let
                                         group : GroupInfo
                                         group =
-                                            groupAt b n
+                                            groupAt model.width model.height b n
                                     in
                                     if Set.isEmpty group.liberties then
                                         ( Set.foldl Dict.remove b group.stones
@@ -291,11 +329,11 @@ tryPlace x y model =
                                 ( b, captures )
                     )
                     ( boardWithStone, 0 )
-                    (neighbors ( x, y ))
+                    (neighbors model.width model.height ( x, y ))
 
             myGroup : GroupInfo
             myGroup =
-                groupAt boardAfterCapture ( x, y )
+                groupAt model.width model.height boardAfterCapture ( x, y )
 
             recentBoards : List (Dict ( Int, Int ) Stone)
             recentBoards =
@@ -343,7 +381,7 @@ cycleOwner current =
             Nothing
 
 
-cycleTerritory : Int -> Int -> Model -> Model
+cycleTerritory : Int -> Int -> GameModel -> GameModel
 cycleTerritory x y model =
     if Dict.member ( x, y ) model.board then
         model
@@ -352,7 +390,7 @@ cycleTerritory x y model =
         let
             region : Set ( Int, Int )
             region =
-                findRegion model.board ( x, y )
+                findRegion model.width model.height model.board ( x, y )
 
             currentOwner : Maybe Stone
             currentOwner =
@@ -380,7 +418,7 @@ cycleTerritory x y model =
         { model | territoryMarks = newMarks, lastError = Nothing }
 
 
-computeScore : Model -> ( Int, Int )
+computeScore : GameModel -> ( Int, Int )
 computeScore model =
     let
         ( blackTerritory, whiteTerritory ) =
@@ -418,12 +456,12 @@ computeScore model =
     )
 
 
-isDeadStone : Model -> ( Int, Int ) -> Stone -> Bool
+isDeadStone : GameModel -> ( Int, Int ) -> Stone -> Bool
 isDeadStone model pos stone =
     let
         empties : List ( Int, Int )
         empties =
-            neighbors pos
+            neighbors model.width model.height pos
                 |> List.filter (\n -> not (Dict.member n model.board))
     in
     case empties of
@@ -438,7 +476,7 @@ isDeadStone model pos stone =
                 empties
 
 
-deadStonePositions : Model -> Set ( Int, Int )
+deadStonePositions : GameModel -> Set ( Int, Int )
 deadStonePositions model =
     Dict.foldl
         (\pos stone acc ->
@@ -452,57 +490,113 @@ deadStonePositions model =
         model.board
 
 
+parseDimension : String -> Result String Int
+parseDimension input =
+    case String.toInt (String.trim input) of
+        Just n ->
+            if n < minDimension then
+                Err ("Minimum dimension is " ++ String.fromInt minDimension)
+
+            else if n > maxDimension then
+                Err ("Maximum dimension is " ++ String.fromInt maxDimension)
+
+            else
+                Ok n
+
+        Nothing ->
+            Err "Enter a number"
+
+
 update : Msg -> Model -> Model
 update msg model =
+    case model of
+        Setup setup ->
+            updateSetup msg setup
+
+        Game game ->
+            updateGame msg game
+
+
+updateSetup : Msg -> SetupModel -> Model
+updateSetup msg model =
+    case msg of
+        ChangedWidthInput input ->
+            Setup { model | widthInput = input, error = Nothing }
+
+        ChangedHeightInput input ->
+            Setup { model | heightInput = input, error = Nothing }
+
+        PressedPresetSize w h ->
+            Game (startGame w h)
+
+        PressedStartGame ->
+            case ( parseDimension model.widthInput, parseDimension model.heightInput ) of
+                ( Ok w, Ok h ) ->
+                    Game (startGame w h)
+
+                ( Err err, _ ) ->
+                    Setup { model | error = Just ("Width: " ++ err) }
+
+                ( _, Err err ) ->
+                    Setup { model | error = Just ("Height: " ++ err) }
+
+        _ ->
+            Setup model
+
+
+updateGame : Msg -> GameModel -> Model
+updateGame msg model =
     case msg of
         PressedCell x y ->
-            if isViewingPast model then
-                jumpToLatest model
+            Game <|
+                if isViewingPast model then
+                    jumpToLatest model
 
-            else
-                case model.phase of
-                    Playing _ ->
-                        tryPlace x y model
+                else
+                    case model.phase of
+                        Playing _ ->
+                            tryPlace x y model
 
-                    Marking _ ->
-                        cycleTerritory x y model
+                        Marking _ ->
+                            cycleTerritory x y model
 
-                    Confirming _ ->
-                        model
+                        Confirming _ ->
+                            model
 
-                    Scored _ ->
-                        model
+                        Scored _ ->
+                            model
 
         PressedPass ->
-            if isViewingPast model then
-                jumpToLatest model
+            Game <|
+                if isViewingPast model then
+                    jumpToLatest model
 
-            else
-                case model.phase of
-                    Playing { previousPlayerPassed } ->
-                        if previousPlayerPassed then
-                            { model
-                                | phase = Marking { markingPlayer = model.currentPlayer }
-                                , lastError = Nothing
-                            }
+                else
+                    case model.phase of
+                        Playing { previousPlayerPassed } ->
+                            if previousPlayerPassed then
+                                { model
+                                    | phase = Marking { markingPlayer = model.currentPlayer }
+                                    , lastError = Nothing
+                                }
 
-                        else
-                            { model
-                                | currentPlayer = otherStone model.currentPlayer
-                                , lastError = Nothing
-                                , phase = Playing { previousPlayerPassed = True }
-                            }
+                            else
+                                { model
+                                    | currentPlayer = otherStone model.currentPlayer
+                                    , lastError = Nothing
+                                    , phase = Playing { previousPlayerPassed = True }
+                                }
 
-                    _ ->
-                        model
+                        _ ->
+                            model
 
         PressedDoneMarking ->
             case model.phase of
                 Marking r ->
-                    { model | phase = Confirming r, lastError = Nothing }
+                    Game { model | phase = Confirming r, lastError = Nothing }
 
                 _ ->
-                    model
+                    Game model
 
         PressedAgree ->
             case model.phase of
@@ -511,31 +605,33 @@ update msg model =
                         ( b, w ) =
                             computeScore model
                     in
-                    { model
-                        | phase =
-                            Scored
-                                { markingPlayer = r.markingPlayer
-                                , blackScore = b
-                                , whiteScore = w
-                                }
-                        , lastError = Nothing
-                    }
+                    Game
+                        { model
+                            | phase =
+                                Scored
+                                    { markingPlayer = r.markingPlayer
+                                    , blackScore = b
+                                    , whiteScore = w
+                                    }
+                            , lastError = Nothing
+                        }
 
                 _ ->
-                    model
+                    Game model
 
         PressedDisagree ->
             case model.phase of
                 Confirming r ->
-                    { model
-                        | phase = Playing { previousPlayerPassed = False }
-                        , currentPlayer = otherStone r.markingPlayer
-                        , territoryMarks = Dict.empty
-                        , lastError = Just "Marking rejected. Resume play."
-                    }
+                    Game
+                        { model
+                            | phase = Playing { previousPlayerPassed = False }
+                            , currentPlayer = otherStone r.markingPlayer
+                            , territoryMarks = Dict.empty
+                            , lastError = Just "Marking rejected. Resume play."
+                        }
 
                 _ ->
-                    model
+                    Game model
 
         PressedReset ->
             init
@@ -550,19 +646,33 @@ update msg model =
                 clamped =
                     clamp 0 total moveNumber
             in
-            { model | viewingMovesBack = total - clamped, lastError = Nothing }
+            Game { model | viewingMovesBack = total - clamped, lastError = Nothing }
 
         PressedArrowLeft ->
-            { model
-                | viewingMovesBack = min (List.length model.history) (model.viewingMovesBack + 1)
-                , lastError = Nothing
-            }
+            Game
+                { model
+                    | viewingMovesBack = min (List.length model.history) (model.viewingMovesBack + 1)
+                    , lastError = Nothing
+                }
 
         PressedArrowRight ->
-            { model
-                | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
-                , lastError = Nothing
-            }
+            Game
+                { model
+                    | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
+                    , lastError = Nothing
+                }
+
+        ChangedWidthInput _ ->
+            Game model
+
+        ChangedHeightInput _ ->
+            Game model
+
+        PressedPresetSize _ _ ->
+            Game model
+
+        PressedStartGame ->
+            Game model
 
 
 cellPx : Int
@@ -572,6 +682,16 @@ cellPx =
 
 view : Model -> Element Msg
 view model =
+    case model of
+        Setup setup ->
+            setupView setup
+
+        Game game ->
+            gameView game
+
+
+setupView : SetupModel -> Element Msg
+setupView model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
@@ -579,7 +699,77 @@ view model =
         , Ui.width Ui.shrink
         , MyUi.montserrat
         ]
-        [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go")
+        [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go - new game")
+        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Standard sizes")
+        , Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+            [ MyUi.simpleButton (Dom.id "go_preset9") (PressedPresetSize 9 9) (Ui.text "9 x 9")
+            , MyUi.simpleButton (Dom.id "go_preset13") (PressedPresetSize 13 13) (Ui.text "13 x 13")
+            , MyUi.simpleButton (Dom.id "go_preset19") (PressedPresetSize 19 19) (Ui.text "19 x 19")
+            ]
+        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Custom size")
+        , Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+            [ dimensionInput "go_widthInput" "Width" model.widthInput ChangedWidthInput
+            , dimensionInput "go_heightInput" "Height" model.heightInput ChangedHeightInput
+            , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
+            ]
+        , case model.error of
+            Just err ->
+                Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
+
+            Nothing ->
+                Ui.none
+        , Ui.el [ Ui.Font.size 14 ]
+            (Ui.text
+                ("Allowed range: "
+                    ++ String.fromInt minDimension
+                    ++ " to "
+                    ++ String.fromInt maxDimension
+                    ++ "."
+                )
+            )
+        ]
+
+
+dimensionInput : String -> String -> String -> (String -> Msg) -> Element Msg
+dimensionInput htmlId label value onChange =
+    Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
+        [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
+        , Html.input
+            [ Html.Attributes.id htmlId
+            , Html.Attributes.type_ "number"
+            , Html.Attributes.min (String.fromInt minDimension)
+            , Html.Attributes.max (String.fromInt maxDimension)
+            , Html.Attributes.value value
+            , Html.Attributes.style "width" "80px"
+            , Html.Attributes.style "padding" "8px"
+            , Html.Attributes.style "border" "1px solid #ccc"
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Events.onInput onChange
+            ]
+            []
+            |> Ui.html
+            |> Ui.el [ Ui.width (Ui.px 100) ]
+        ]
+
+
+gameView : GameModel -> Element Msg
+gameView model =
+    Ui.column
+        [ Ui.spacing 16
+        , Ui.padding 24
+        , Ui.centerX
+        , Ui.width Ui.shrink
+        , MyUi.montserrat
+        ]
+        [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ]
+            (Ui.text
+                ("Go ("
+                    ++ String.fromInt model.width
+                    ++ " x "
+                    ++ String.fromInt model.height
+                    ++ ")"
+                )
+            )
         , statusView model
         , boardView model
         , historyView model
@@ -594,7 +784,7 @@ view model =
         ]
 
 
-statusView : Model -> Element msg
+statusView : GameModel -> Element msg
 statusView model =
     let
         snapshot : Snapshot
@@ -642,7 +832,7 @@ winnerSuffix b w =
         " (tie)"
 
 
-controlsView : Model -> Element Msg
+controlsView : GameModel -> Element Msg
 controlsView model =
     let
         phaseButtons : List (Element Msg)
@@ -675,11 +865,11 @@ controlsView model =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
         (phaseButtons
-            ++ [ MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "Reset") ]
+            ++ [ MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game") ]
         )
 
 
-historyView : Model -> Element Msg
+historyView : GameModel -> Element Msg
 historyView model =
     let
         total : Int
@@ -714,12 +904,16 @@ historyView model =
             ]
 
 
-boardView : Model -> Element Msg
+boardView : GameModel -> Element Msg
 boardView model =
     let
-        size : Int
-        size =
-            boardSize * cellPx
+        widthPx : Int
+        widthPx =
+            model.width * cellPx
+
+        heightPx : Int
+        heightPx =
+            model.height * cellPx
 
         viewing : Bool
         viewing =
@@ -762,16 +956,16 @@ boardView model =
                 deadStonePositions model
     in
     Svg.svg
-        [ Svg.Attributes.width (String.fromInt size)
-        , Svg.Attributes.height (String.fromInt size)
-        , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt size ++ " " ++ String.fromInt size)
+        [ Svg.Attributes.width (String.fromInt widthPx)
+        , Svg.Attributes.height (String.fromInt heightPx)
+        , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt widthPx ++ " " ++ String.fromInt heightPx)
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
-        (gridLines
+        (gridLines model.width model.height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ (if clickable then
-                    clickTargets
+                    clickTargets model.width model.height
 
                 else
                     []
@@ -781,45 +975,64 @@ boardView model =
         |> Ui.el [ Ui.width Ui.shrink ]
 
 
-gridLines : List (Svg.Svg Msg)
-gridLines =
+gridLines : Int -> Int -> List (Svg.Svg Msg)
+gridLines width height =
     let
         offset : Int
         offset =
             cellPx // 2
 
-        endPx : Int
-        endPx =
-            (boardSize - 1) * cellPx + offset
+        endX : Int
+        endX =
+            (width - 1) * cellPx + offset
+
+        endY : Int
+        endY =
+            (height - 1) * cellPx + offset
+
+        horizontal : List (Svg.Svg Msg)
+        horizontal =
+            List.range 0 (height - 1)
+                |> List.map
+                    (\j ->
+                        let
+                            p : Int
+                            p =
+                                j * cellPx + offset
+                        in
+                        Svg.line
+                            [ Svg.Attributes.x1 (String.fromInt offset)
+                            , Svg.Attributes.y1 (String.fromInt p)
+                            , Svg.Attributes.x2 (String.fromInt endX)
+                            , Svg.Attributes.y2 (String.fromInt p)
+                            , Svg.Attributes.stroke "black"
+                            , Svg.Attributes.strokeWidth "1"
+                            ]
+                            []
+                    )
+
+        vertical : List (Svg.Svg Msg)
+        vertical =
+            List.range 0 (width - 1)
+                |> List.map
+                    (\i ->
+                        let
+                            p : Int
+                            p =
+                                i * cellPx + offset
+                        in
+                        Svg.line
+                            [ Svg.Attributes.x1 (String.fromInt p)
+                            , Svg.Attributes.y1 (String.fromInt offset)
+                            , Svg.Attributes.x2 (String.fromInt p)
+                            , Svg.Attributes.y2 (String.fromInt endY)
+                            , Svg.Attributes.stroke "black"
+                            , Svg.Attributes.strokeWidth "1"
+                            ]
+                            []
+                    )
     in
-    List.range 0 (boardSize - 1)
-        |> List.concatMap
-            (\i ->
-                let
-                    p : Int
-                    p =
-                        i * cellPx + offset
-                in
-                [ Svg.line
-                    [ Svg.Attributes.x1 (String.fromInt offset)
-                    , Svg.Attributes.y1 (String.fromInt p)
-                    , Svg.Attributes.x2 (String.fromInt endPx)
-                    , Svg.Attributes.y2 (String.fromInt p)
-                    , Svg.Attributes.stroke "black"
-                    , Svg.Attributes.strokeWidth "1"
-                    ]
-                    []
-                , Svg.line
-                    [ Svg.Attributes.x1 (String.fromInt p)
-                    , Svg.Attributes.y1 (String.fromInt offset)
-                    , Svg.Attributes.x2 (String.fromInt p)
-                    , Svg.Attributes.y2 (String.fromInt endPx)
-                    , Svg.Attributes.stroke "black"
-                    , Svg.Attributes.strokeWidth "1"
-                    ]
-                    []
-                ]
-            )
+    horizontal ++ vertical
 
 
 stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
@@ -908,12 +1121,12 @@ territoryShapes marks =
             )
 
 
-clickTargets : List (Svg.Svg Msg)
-clickTargets =
-    List.range 0 (boardSize - 1)
+clickTargets : Int -> Int -> List (Svg.Svg Msg)
+clickTargets width height =
+    List.range 0 (width - 1)
         |> List.concatMap
             (\x ->
-                List.range 0 (boardSize - 1)
+                List.range 0 (height - 1)
                     |> List.map
                         (\y ->
                             Svg.rect
