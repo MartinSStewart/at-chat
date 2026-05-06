@@ -5,6 +5,7 @@ import Effect.Browser.Dom as Dom
 import Html
 import Html.Attributes
 import Html.Events
+import Icons
 import MyUi
 import Set exposing (Set)
 import Svg
@@ -602,28 +603,24 @@ statusView model =
 
         turnText : String
         turnText =
-            if isViewingPast model then
-                "Reviewing past move (click the board or press a button to return to the latest)"
+            case model.phase of
+                Playing _ ->
+                    stoneName model.currentPlayer ++ " to move"
 
-            else
-                case model.phase of
-                    Playing _ ->
-                        stoneName model.currentPlayer ++ " to move"
+                Marking r ->
+                    stoneName r.markingPlayer
+                        ++ " marks territory: tap an empty region to cycle owner (none → Black → White)."
 
-                    Marking r ->
-                        stoneName r.markingPlayer
-                            ++ " marks territory: tap an empty region to cycle owner (none → Black → White)."
+                Confirming r ->
+                    stoneName (otherStone r.markingPlayer)
+                        ++ ": agree with the marking, or disagree to resume play."
 
-                    Confirming r ->
-                        stoneName (otherStone r.markingPlayer)
-                            ++ ": agree with the marking, or disagree to resume play."
-
-                    Scored s ->
-                        "Final score - Black: "
-                            ++ String.fromInt s.blackScore
-                            ++ ", White: "
-                            ++ String.fromInt s.whiteScore
-                            ++ winnerSuffix s.blackScore s.whiteScore
+                Scored s ->
+                    "Final score - Black: "
+                        ++ String.fromInt s.blackScore
+                        ++ ", White: "
+                        ++ String.fromInt s.whiteScore
+                        ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -699,22 +696,19 @@ historyView model =
     else
         Ui.row
             [ Ui.spacing 8, Ui.width Ui.shrink ]
-            [ MyUi.simpleButton (Dom.id "go_arrowLeft") PressedArrowLeft (Ui.text "←")
+            [ MyUi.simpleButton (Dom.id "go_arrowLeft") PressedArrowLeft (Ui.html (Icons.arrowLeft 20))
             , Html.input
                 [ Html.Attributes.type_ "range"
                 , Html.Attributes.min "0"
                 , Html.Attributes.max (String.fromInt total)
                 , Html.Attributes.value (String.fromInt currentMove)
                 , Html.Attributes.style "width" "200px"
-                , Html.Events.onInput
-                    (\s ->
-                        ChangedViewingMove (String.toInt s |> Maybe.withDefault currentMove)
-                    )
+                , Html.Events.onInput (\s -> String.toInt s |> Maybe.withDefault currentMove |> ChangedViewingMove)
                 ]
                 []
                 |> Ui.html
                 |> Ui.el [ Ui.width (Ui.px 220) ]
-            , MyUi.simpleButton (Dom.id "go_arrowRight") PressedArrowRight (Ui.text "→")
+            , MyUi.simpleButton (Dom.id "go_arrowRight") PressedArrowRight (Ui.html (Icons.arrowRight 20))
             , Ui.el [ Ui.Font.size 14 ]
                 (Ui.text ("Move " ++ String.fromInt currentMove ++ " / " ++ String.fromInt total))
             ]

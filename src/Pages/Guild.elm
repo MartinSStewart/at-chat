@@ -2962,14 +2962,14 @@ headerBackButton htmlId onPress =
     MyUi.elButton
         htmlId
         onPress
-        [ Ui.width (Ui.px 36)
+        [ Ui.width Ui.shrink
         , Ui.height Ui.fill
         , Ui.Font.color MyUi.font3
         , Ui.contentCenterY
         , Ui.contentCenterX
         , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
         ]
-        (Ui.html Icons.arrowLeft)
+        (Ui.html (Icons.arrowLeft 16))
 
 
 channelHeaderHeight : number
