@@ -34,9 +34,26 @@ exports.init = async function init(app) {
         });
 
         let mediaRecorder = new MediaRecorder(localStream);
-        mediaRecorder.addEventListener("dataavailable", (e) => {
+        mediaRecorder.addEventListener("dataavailable", async (e) => {
             console.log(e);
-            app.ports.got_recorded_data.send(e.data);
+            const peerIdBytes = new TextEncoder().encode(peerUserId);
+            const typeBytes = new TextEncoder().encode(e.data.type);
+            const dataBuffer = await e.data.arrayBuffer();
+            const totalLen = 2 + peerIdBytes.length + 2 + typeBytes.length + dataBuffer.byteLength;
+            const result = new ArrayBuffer(totalLen);
+            const view = new DataView(result);
+            const bytes = new Uint8Array(result);
+            let offset = 0;
+            view.setUint16(offset, peerIdBytes.length);
+            offset += 2;
+            bytes.set(peerIdBytes, offset);
+            offset += peerIdBytes.length;
+            view.setUint16(offset, typeBytes.length);
+            offset += 2;
+            bytes.set(typeBytes, offset);
+            offset += typeBytes.length;
+            bytes.set(new Uint8Array(dataBuffer), offset);
+            app.ports.got_recorded_data.send(result);
         });
         mediaRecorder.start();
 
