@@ -19,6 +19,7 @@ port module VoiceChat exposing
     , VideoTrackData
     , VoiceChatFromJs(..)
     , VoiceChatToJs(..)
+    , gotRecordedData
     , gotUserMediaDevices
     , hasJoined
     , init
@@ -34,6 +35,7 @@ port module VoiceChat exposing
     , voiceChatToJs
     )
 
+import Bytes exposing (Bytes)
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -535,6 +537,14 @@ voiceChatFromJsCodec =
         |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" IsSpeakingChanged connectionIdCodec Codec.bool
         |> Codec.buildCustom
+
+
+port got_recorded_data : (Bytes -> msg) -> Sub msg
+
+
+gotRecordedData : (Bytes -> msg) -> Subscription FrontendOnly msg
+gotRecordedData msg =
+    Subscription.fromJsBytes "got_recorded_data" got_recorded_data msg
 
 
 type alias MediaDevice =

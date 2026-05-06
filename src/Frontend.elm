@@ -159,6 +159,7 @@ subscriptions model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , VoiceChat.voiceChatFromJs GotVoiceChatSignalFromJs
+        , VoiceChat.gotRecordedData GotVoiceChatRecording
         , case model of
             Loading _ ->
                 Subscription.none

@@ -491,6 +491,7 @@ type FrontendMsg
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | PressedVoiceChatButton RoomId
     | GotVoiceChatSignalFromJs (Result String VoiceChatFromJs)
+    | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
 
 

@@ -1337,6 +1337,9 @@ isPressMsg msg =
         VoiceChatMsg voiceChatMsg ->
             VoiceChat.isPressMsg voiceChatMsg
 
+        GotVoiceChatRecording bytes ->
+            False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
