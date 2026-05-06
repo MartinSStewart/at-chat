@@ -489,7 +489,7 @@ type FrontendMsg
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
-    | PressedVoiceChatButton RoomId
+    | PressedChannelHeaderVoiceChatButton RoomId
     | GotVoiceChatSignalFromJs (Result String VoiceChatFromJs)
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg

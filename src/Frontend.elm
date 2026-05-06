@@ -3459,8 +3459,24 @@ updateLoaded msg model =
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
 
-        PressedVoiceChatButton otherUserId ->
-            pressedVoiceChatButton otherUserId model
+        PressedChannelHeaderVoiceChatButton roomId ->
+            let
+                voiceChat =
+                    model.voiceChat
+            in
+            ( { model
+                | voiceChat =
+                    { voiceChat
+                        | expanded =
+                            if SeqSet.member roomId voiceChat.expanded then
+                                SeqSet.remove roomId voiceChat.expanded
+
+                            else
+                                SeqSet.insert roomId voiceChat.expanded
+                    }
+              }
+            , Command.none
+            )
 
         GotVoiceChatSignalFromJs result ->
             case result of

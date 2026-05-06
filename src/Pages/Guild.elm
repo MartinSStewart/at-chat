@@ -3110,7 +3110,7 @@ voiceChatButton voiceChatId local =
         [ joined
         , MyUi.elButton
             (Dom.id "guild_voiceChat")
-            (PressedVoiceChatButton voiceChatId)
+            (PressedChannelHeaderVoiceChatButton voiceChatId)
             [ Ui.width (Ui.px 44)
             , Ui.paddingXY 4 0
             , Ui.height Ui.fill

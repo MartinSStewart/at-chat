@@ -95,6 +95,7 @@ type alias Model =
     , isVideoPaused : Bool
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict ConnectionId (Nonempty Recording)
+    , expanded : SeqSet RoomId
     }
 
 
@@ -129,6 +130,7 @@ initModel =
     , isVideoPaused = True
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
+    , expanded = SeqSet.empty
     }
 
 

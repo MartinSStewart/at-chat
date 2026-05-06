@@ -1328,7 +1328,7 @@ isPressMsg msg =
         PageUpGotViewport _ ->
             False
 
-        PressedVoiceChatButton _ ->
+        PressedChannelHeaderVoiceChatButton _ ->
             True
 
         GotVoiceChatSignalFromJs _ ->
