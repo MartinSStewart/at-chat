@@ -22,6 +22,7 @@ import Svg.Attributes
 import Svg.Events
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Input
 
 
 type Stone
@@ -960,21 +961,27 @@ setupView model =
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go - new game")
         , setupSection
             "Board size"
-            (Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
-                [ sizeRadio model "go_size9" Standard9 (Ui.text "9 x 9")
-                , sizeRadio model "go_size13" Standard13 (Ui.text "13 x 13")
-                , sizeRadio model "go_size19" Standard19 (Ui.text "19 x 19")
-                , sizeRadio model
-                    "go_sizeCustom"
-                    CustomSize
-                    (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                        [ Ui.text "Custom:"
-                        , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
-                        , Ui.text "x"
-                        , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
-                        ]
-                    )
-                ]
+            (Ui.Input.chooseOne Ui.column
+                [ Ui.spacing 8 ]
+                { onChange = SelectedSize
+                , selected = Just model.sizeSelection
+                , label = Ui.Input.labelHidden "go_boardSize"
+                , options =
+                    [ Ui.Input.option Standard9 (Ui.text "9 x 9")
+                    , Ui.Input.option Standard13 (Ui.text "13 x 13")
+                    , Ui.Input.option Standard19 (Ui.text "19 x 19")
+                    , Ui.Input.optionWith CustomSize
+                        (sizeOptionView
+                            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                [ Ui.text "Custom:"
+                                , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
+                                , Ui.text "x"
+                                , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                                ]
+                            )
+                        )
+                    ]
+                }
             )
         , setupSection
             "Handicap (Black starts with this many stones; White moves first)"
@@ -997,48 +1004,35 @@ setupView model =
         ]
 
 
-sizeRadio : SetupModel -> String -> SizeSelection -> Element Msg -> Element Msg
-sizeRadio model htmlId selection label =
-    let
-        isSelected : Bool
-        isSelected =
-            model.sizeSelection == selection
-    in
-    MyUi.rowButton (Dom.id htmlId)
-        (SelectedSize selection)
-        [ Ui.spacing 8
-        , Ui.padding 6
-        , Ui.width Ui.shrink
-        , Ui.contentCenterY
-        ]
-        [ radioCircle isSelected
+sizeOptionView : Element Msg -> Ui.Input.OptionState -> Element Msg
+sizeOptionView label status =
+    Ui.row
+        [ Ui.spacing 10, Ui.alignLeft, Ui.width Ui.shrink, Ui.contentCenterY ]
+        [ Ui.el
+            [ Ui.width (Ui.px 14)
+            , Ui.height (Ui.px 14)
+            , Ui.background (Ui.rgb 255 255 255)
+            , Ui.rounded 7
+            , Ui.borderColor
+                (case status of
+                    Ui.Input.Selected ->
+                        Ui.rgb 59 153 252
+
+                    _ ->
+                        Ui.rgb 208 208 208
+                )
+            , Ui.border
+                (case status of
+                    Ui.Input.Selected ->
+                        5
+
+                    _ ->
+                        1
+                )
+            ]
+            Ui.none
         , label
         ]
-
-
-radioCircle : Bool -> Element msg
-radioCircle isSelected =
-    Ui.el
-        [ Ui.width (Ui.px 18)
-        , Ui.height (Ui.px 18)
-        , Ui.rounded 999
-        , Ui.border 1
-        , Ui.borderColor (Ui.rgb 120 120 120)
-        ]
-        (if isSelected then
-            Ui.el
-                [ Ui.width (Ui.px 10)
-                , Ui.height (Ui.px 10)
-                , Ui.rounded 999
-                , Ui.background (Ui.rgb 60 60 60)
-                , Ui.centerX
-                , Ui.centerY
-                ]
-                Ui.none
-
-         else
-            Ui.none
-        )
 
 
 setupSection : String -> Element msg -> Element msg
