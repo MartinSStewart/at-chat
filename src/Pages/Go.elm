@@ -318,10 +318,61 @@ computeScore model =
                 )
                 ( 0, 0 )
                 model.territoryMarks
+
+        ( deadBlack, deadWhite ) =
+            Dict.foldl
+                (\pos stone ( db, dw ) ->
+                    if isDeadStone model pos stone then
+                        case stone of
+                            Black ->
+                                ( db + 1, dw )
+
+                            White ->
+                                ( db, dw + 1 )
+
+                    else
+                        ( db, dw )
+                )
+                ( 0, 0 )
+                model.board
     in
-    ( blackTerritory + model.blackCaptures
-    , whiteTerritory + model.whiteCaptures
+    ( blackTerritory + model.blackCaptures + 2 * deadWhite
+    , whiteTerritory + model.whiteCaptures + 2 * deadBlack
     )
+
+
+isDeadStone : Model -> ( Int, Int ) -> Stone -> Bool
+isDeadStone model pos stone =
+    let
+        empties : List ( Int, Int )
+        empties =
+            neighbors pos
+                |> List.filter (\n -> not (Dict.member n model.board))
+    in
+    case empties of
+        [] ->
+            False
+
+        _ ->
+            List.all
+                (\lib ->
+                    Dict.get lib model.territoryMarks == Just (otherStone stone)
+                )
+                empties
+
+
+deadStonePositions : Model -> Set ( Int, Int )
+deadStonePositions model =
+    Dict.foldl
+        (\pos stone acc ->
+            if isDeadStone model pos stone then
+                Set.insert pos acc
+
+            else
+                acc
+        )
+        Set.empty
+        model.board
 
 
 update : Msg -> Model -> Model
@@ -538,7 +589,7 @@ boardView model =
         ]
         (gridLines
             ++ territoryShapes model.territoryMarks
-            ++ stoneShapes model.board
+            ++ stoneShapes (deadStonePositions model) model.board
             ++ (if clickable then
                     clickTargets
 
@@ -591,8 +642,8 @@ gridLines =
             )
 
 
-stoneShapes : Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
-stoneShapes board =
+stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
+stoneShapes dead board =
     Dict.toList board
         |> List.map
             (\( ( x, y ), stone ) ->
@@ -613,6 +664,10 @@ stoneShapes board =
 
                             White ->
                                 "white"
+
+                    isDead : Bool
+                    isDead =
+                        Set.member ( x, y ) dead
                 in
                 Svg.circle
                     [ Svg.Attributes.cx (String.fromInt cx)
@@ -621,6 +676,13 @@ stoneShapes board =
                     , Svg.Attributes.fill color
                     , Svg.Attributes.stroke "black"
                     , Svg.Attributes.strokeWidth "1"
+                    , Svg.Attributes.opacity
+                        (if isDead then
+                            "0.35"
+
+                         else
+                            "1"
+                        )
                     ]
                     []
             )
