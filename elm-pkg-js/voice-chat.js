@@ -1,6 +1,6 @@
 exports.init = async function init(app) {
-    const connections = {};
-    const pendingSignals = {};
+    const connections = new Map();
+    const pendingSignals = new Map();
 
     async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
         console.log("Should offer: ", shouldOffer);
@@ -90,10 +90,10 @@ exports.init = async function init(app) {
             queuedIceCandidates: [],
             signalChain: Promise.resolve()
         };
-        connections[peerUserId] = conn;
+        connections.set(peerUserId, conn);
 
-        const pending = pendingSignals[peerUserId] || [];
-        pendingSignals[peerUserId] = [];
+        const pending = pendingSignals.get(peerUserId) || [];
+        pendingSignals.set(peerUserId, []);
         for (let i = 0; i < pending.length; i++) {
             await handleSignalInternal(conn, peerUserId, pending[i]);
         }
@@ -113,7 +113,7 @@ exports.init = async function init(app) {
     }
 
     function stopConnection(peerUserId) {
-        const conn = connections[peerUserId];
+        const conn = connections.get(peerUserId);
         if (!conn) return;
         if (conn.localStream) {
             conn.localStream.getTracks().forEach(function (track) { track.stop(); });
@@ -133,8 +133,8 @@ exports.init = async function init(app) {
             conn.remoteAudio.srcObject = null;
         }
         removeAudioStream(peerUserId);
-        delete connections[peerUserId];
-        delete pendingSignals[peerUserId];
+        connections.delete(peerUserId);
+        pendingSignals.delete(peerUserId);
     }
 
     async function drainQueuedIceCandidates(conn, peerUserId) {
@@ -178,10 +178,14 @@ exports.init = async function init(app) {
     }
 
     function handleSignal(peerUserId, signalStr) {
-        const conn = connections[peerUserId];
+        const conn = connections.get(peerUserId);
         if (!conn) {
-            if (!pendingSignals[peerUserId]) pendingSignals[peerUserId] = [];
-            pendingSignals[peerUserId].push(signalStr);
+            let pending = pendingSignals.get(peerUserId);
+            if (!pending) {
+                pending = [];
+                pendingSignals.set(peerUserId, pending);
+            }
+            pending.push(signalStr);
             return;
         }
         // Serialize signal processing per peer so offer/answer/ice never race.
@@ -191,7 +195,7 @@ exports.init = async function init(app) {
     }
 
     function setAudioEnabled(enabled) {
-        Object.values(connections).forEach(function (conn) {
+        connections.forEach(function (conn) {
             if (conn.localStream) {
                 conn.localStream.getAudioTracks().forEach(function (track) {
                     track.enabled = enabled;
@@ -205,7 +209,7 @@ exports.init = async function init(app) {
         let tracks = stream.getAudioTracks();
         console.log("Tracks: ", tracks);
         let track = tracks[0];
-        Object.values(connections).forEach(function (conn) {
+        connections.forEach(function (conn) {
             if (conn.pc) {
                 const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
                 let oldTrack = sender.track;
@@ -216,7 +220,7 @@ exports.init = async function init(app) {
     }
 
     function setVideoEnabled(enabled) {
-        Object.values(connections).forEach(function (conn) {
+        connections.forEach(function (conn) {
             if (conn.localStream) {
                 conn.localStream.getVideoTracks().forEach(function (track) {
                     track.enabled = enabled;
