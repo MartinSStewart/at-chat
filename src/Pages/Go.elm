@@ -30,6 +30,7 @@ type Phase
 
 type alias Model =
     { board : Dict ( Int, Int ) Stone
+    , history : List (Dict ( Int, Int ) Stone)
     , currentPlayer : Stone
     , blackCaptures : Int
     , whiteCaptures : Int
@@ -43,6 +44,7 @@ type alias Model =
 init : Model
 init =
     { board = Dict.empty
+    , history = []
     , currentPlayer = Black
     , blackCaptures = 0
     , whiteCaptures = 0
@@ -51,6 +53,11 @@ init =
     , territoryMarks = Dict.empty
     , lastError = Nothing
     }
+
+
+historyLimit : Int
+historyLimit =
+    10
 
 
 type Msg
@@ -232,9 +239,13 @@ tryPlace x y model =
         if Set.isEmpty myGroup.liberties then
             { model | lastError = Just "Suicide move not allowed" }
 
+        else if List.member boardAfterCapture model.history then
+            { model | lastError = Just "Move repeats a recent board state" }
+
         else
             { model
                 | board = boardAfterCapture
+                , history = List.take historyLimit (model.board :: model.history)
                 , currentPlayer = opponent
                 , blackCaptures =
                     if stone == Black then
