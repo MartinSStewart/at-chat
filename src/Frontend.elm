@@ -3630,8 +3630,26 @@ updateLoaded msg model =
                     model.voiceChat
             in
             case Bytes.Decode.decode (VoiceChat.decodeVoiceChatRecorder bytes) bytes |> Debug.log "asdf" of
-                Just ( connectionId, mimeType, recording ) ->
-                    ( model, Command.none )
+                Just ( connectionId, recording ) ->
+                    ( { model
+                        | voiceChat =
+                            { voiceChat
+                                | recordings =
+                                    SeqDict.update
+                                        connectionId
+                                        (\maybe ->
+                                            case maybe of
+                                                Just nonempty ->
+                                                    List.Nonempty.cons recording nonempty |> Just
+
+                                                Nothing ->
+                                                    Nonempty recording [] |> Just
+                                        )
+                                        voiceChat.recordings
+                            }
+                      }
+                    , Command.none
+                    )
 
                 Nothing ->
                     ( model, Command.none )

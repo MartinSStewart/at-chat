@@ -53,7 +53,7 @@ import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
 import List.Extra
-import List.Nonempty
+import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import SeqDict exposing (SeqDict)
@@ -94,6 +94,16 @@ type alias Model =
     , isMuted : Bool
     , isVideoPaused : Bool
     , isSpeaking : SeqSet ConnectionId
+    , recordings : SeqDict ConnectionId (Nonempty Recording)
+    }
+
+
+type alias Recording =
+    { mimeType : String
+    , extraData : String
+    , startTime : Time.Posix
+    , endTime : Time.Posix
+    , data : Bytes
     }
 
 
@@ -118,6 +128,7 @@ initModel =
     , isMuted = False
     , isVideoPaused = True
     , isSpeaking = SeqSet.empty
+    , recordings = SeqDict.empty
     }
 
 
@@ -549,31 +560,55 @@ gotRecordedData msg =
     Subscription.fromJsBytes "got_recorded_data" got_recorded_data msg
 
 
-decodeVoiceChatRecorder : Bytes -> Bytes.Decode.Decoder ( ConnectionId, String, Bytes )
+decodeVoiceChatRecorder : Bytes -> Bytes.Decode.Decoder ( ConnectionId, Recording )
 decodeVoiceChatRecorder bytes =
-    Bytes.Decode.unsignedInt8
+    Bytes.Decode.map4 (\a b c d -> ( a, b, ( c, d ) )) decodeString decodeMimeType decodeTime decodeTime
         |> Bytes.Decode.andThen
-            (\connectionIdLength ->
-                Bytes.Decode.string connectionIdLength
-                    |> Bytes.Decode.andThen
-                        (\connectionId ->
-                            case connectionIdFromString connectionId of
-                                Ok connectionId2 ->
-                                    Bytes.Decode.unsignedInt8
-                                        |> Bytes.Decode.andThen
-                                            (\mimeTypeLength ->
-                                                Bytes.Decode.string mimeTypeLength
-                                                    |> Bytes.Decode.andThen
-                                                        (\mimeType ->
-                                                            Bytes.Decode.bytes (Bytes.width bytes - (1 + 1 + connectionIdLength + mimeTypeLength))
-                                                                |> Bytes.Decode.map (\recording -> ( connectionId2, mimeType, recording ))
-                                                        )
-                                            )
+            (\( ( connectionIdLength, connectionId ), ( mimeTypeLength, ( mimeType, extraData ) ), ( startTime, endTime ) ) ->
+                case connectionIdFromString connectionId of
+                    Ok connectionId2 ->
+                        Bytes.Decode.bytes (Bytes.width bytes - (connectionIdLength + mimeTypeLength + 8 + 8))
+                            |> Bytes.Decode.map
+                                (\recording ->
+                                    ( connectionId2
+                                    , { mimeType = mimeType
+                                      , extraData = extraData
+                                      , data = recording
+                                      , startTime = startTime
+                                      , endTime = endTime
+                                      }
+                                    )
+                                )
 
-                                Err () ->
-                                    Bytes.Decode.fail
-                        )
+                    Err () ->
+                        Bytes.Decode.fail
             )
+
+
+decodeMimeType : Bytes.Decode.Decoder ( Int, ( String, String ) )
+decodeMimeType =
+    Bytes.Decode.map
+        (\( length, text ) ->
+            ( length
+            , case String.split ";" text of
+                mimeType :: extraData ->
+                    ( mimeType, String.join ";" extraData )
+
+                _ ->
+                    ( "", "" )
+            )
+        )
+        decodeString
+
+
+decodeString : Bytes.Decode.Decoder ( Int, String )
+decodeString =
+    Bytes.Decode.andThen (\length -> Bytes.Decode.map (Tuple.pair (length + 1)) (Bytes.Decode.string length)) Bytes.Decode.unsignedInt8
+
+
+decodeTime : Bytes.Decode.Decoder Time.Posix
+decodeTime =
+    Bytes.Decode.map (\a -> Time.millisToPosix (round a)) (Bytes.Decode.float64 Bytes.BE)
 
 
 type alias MediaDevice =
