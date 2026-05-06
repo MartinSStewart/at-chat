@@ -934,24 +934,27 @@ setupView model =
             , MyUi.simpleButton (Dom.id "go_preset13") (PressedPresetSize 13 13) (Ui.text "13 x 13")
             , MyUi.simpleButton (Dom.id "go_preset19") (PressedPresetSize 19 19) (Ui.text "19 x 19")
             ]
-        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Custom size")
-        , Ui.row
-            [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
-            [ dimensionInput "go_widthInput" "Width" model.widthInput ChangedWidthInput
-            , dimensionInput "go_heightInput" "Height" model.heightInput ChangedHeightInput
-            , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
-            ]
-        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Handicap (Black starts with this many stones; White moves first)")
-        , numberInput
-            { htmlId = "go_handicapInput"
-            , label = "Stones"
-            , minValue = 0
-            , maxValue = maxHandicap
-            , value = model.handicapInput
-            , onChange = ChangedHandicapInput
-            }
-        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Komi (extra points for White at scoring)")
-        , komiInput model.komiInput
+        , setupSection
+            "Custom size"
+            (Ui.row
+                [ Ui.spacing 8, Ui.width Ui.shrink ]
+                [ dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
+                , Ui.text "x"
+                , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
+                ]
+            )
+        , setupSection
+            "Handicap (Black starts with this many stones; White moves first)"
+            (numberInput
+                { htmlId = "go_handicapInput"
+                , minValue = 0
+                , maxValue = maxHandicap
+                , value = model.handicapInput
+                , onChange = ChangedHandicapInput
+                }
+            )
+        , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
         , case model.error of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -961,11 +964,19 @@ setupView model =
         ]
 
 
-dimensionInput : String -> String -> String -> (String -> Msg) -> Element Msg
-dimensionInput htmlId label value onChange =
+setupSection : String -> Element msg -> Element msg
+setupSection title content =
+    Ui.column
+        [ Ui.spacing 8 ]
+        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text title)
+        , content
+        ]
+
+
+dimensionInput : String -> String -> (String -> Msg) -> Element Msg
+dimensionInput htmlId value onChange =
     numberInput
         { htmlId = htmlId
-        , label = label
         , minValue = minDimension
         , maxValue = maxDimension
         , value = value
@@ -975,30 +986,24 @@ dimensionInput htmlId label value onChange =
 
 komiInput : String -> Element Msg
 komiInput value =
-    Ui.column
-        [ Ui.spacing 4, Ui.width Ui.shrink ]
-        [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Points")
-        , Html.input
-            [ Html.Attributes.id "go_komiInput"
-            , Html.Attributes.type_ "number"
-            , Html.Attributes.step "0.5"
-            , Html.Attributes.value value
-            , Html.Attributes.style "font-size" "inherit"
-            , Html.Attributes.style "width" "80px"
-            , Html.Attributes.style "padding" "8.5px"
-            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-            , Html.Attributes.style "border-radius" "4px"
-            , Html.Events.onInput ChangedKomiInput
-            ]
-            []
-            |> Ui.html
-            |> Ui.el [ Ui.width (Ui.px 100) ]
+    Html.input
+        [ Html.Attributes.id "go_komiInput"
+        , Html.Attributes.type_ "number"
+        , Html.Attributes.step "0.5"
+        , Html.Attributes.value value
+        , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "width" "50px"
+        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Events.onInput ChangedKomiInput
         ]
+        []
+        |> Ui.html
 
 
 numberInput :
     { htmlId : String
-    , label : String
     , minValue : Int
     , maxValue : Int
     , value : String
@@ -1006,26 +1011,21 @@ numberInput :
     }
     -> Element Msg
 numberInput args =
-    Ui.column
-        [ Ui.spacing 4, Ui.width Ui.shrink ]
-        [ Ui.el [ Ui.Font.size 12 ] (Ui.text args.label)
-        , Html.input
-            [ Html.Attributes.id args.htmlId
-            , Html.Attributes.type_ "number"
-            , Html.Attributes.min (String.fromInt args.minValue)
-            , Html.Attributes.max (String.fromInt args.maxValue)
-            , Html.Attributes.value args.value
-            , Html.Attributes.style "font-size" "inherit"
-            , Html.Attributes.style "width" "80px"
-            , Html.Attributes.style "padding" "8.5px"
-            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
-            , Html.Attributes.style "border-radius" "4px"
-            , Html.Events.onInput args.onChange
-            ]
-            []
-            |> Ui.html
-            |> Ui.el [ Ui.width (Ui.px 100) ]
+    Html.input
+        [ Html.Attributes.id args.htmlId
+        , Html.Attributes.type_ "number"
+        , Html.Attributes.min (String.fromInt args.minValue)
+        , Html.Attributes.max (String.fromInt args.maxValue)
+        , Html.Attributes.value args.value
+        , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "width" "50px"
+        , Html.Attributes.style "padding" "8px"
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Events.onInput args.onChange
         ]
+        []
+        |> Ui.html
 
 
 gameView : GameModel -> Element Msg
