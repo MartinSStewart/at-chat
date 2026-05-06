@@ -269,13 +269,12 @@ exports.init = async function init(app) {
 
     // Original code found here: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
     // Global variables to keep track of audio streams and their volume level
-    const VOLUME_THRESHOLD = 40; // Adjust this threshold to suit your needs
-    const LOW_GAIN_VALUE = 0.5;
+    const VOLUME_THRESHOLD = 20; // Adjust this threshold to suit your needs
     const AUDIO_WINDOW_SIZE = 256;
     let audioStreams = new Map();
 
     // Function to handle incoming audio streams from WebRTC peers
-    function handleAudioStream(stream, userId) {
+    function handleAudioStream(stream, peerUserId) {
         const audioContext = new AudioContext();
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
 
@@ -291,11 +290,10 @@ exports.init = async function init(app) {
             analyserNode,
             audioContext,
             mediaStreamSource,
-            rafId: 0,
             isSpeaking: false,
             stopped: false
         };
-        audioStreams.set(userId, entry);
+        audioStreams.set(peerUserId, entry);
 
         function processAudio() {
             if (entry.stopped) return;
@@ -306,29 +304,28 @@ exports.init = async function init(app) {
                 entry.isSpeaking = isSpeaking;
                 app.ports.voice_chat_from_js.send(
                     { tag: "is-speaking-changed"
-                    , args: [ userId, isSpeaking ]
+                    , args: [ peerUserId, isSpeaking ]
                     });
             }
-            entry.rafId = requestAnimationFrame(processAudio);
+            requestAnimationFrame(processAudio);
         }
 
         processAudio();
     }
 
     // Function to remove audio stream and stop active speaker detection
-    function removeAudioStream(userId) {
-        const streamData = audioStreams.get(userId);
+    function removeAudioStream(peerUserId) {
+        const streamData = audioStreams.get(peerUserId);
         if (streamData) {
             streamData.stopped = true;
-            if (streamData.rafId) cancelAnimationFrame(streamData.rafId);
             try { streamData.mediaStreamSource.disconnect(); } catch (e) {}
             try { streamData.analyserNode.disconnect(); } catch (e) {}
             try { streamData.audioContext.close(); } catch (e) {}
-            audioStreams.delete(userId);
+            audioStreams.delete(peerUserId);
             if (streamData.isSpeaking) {
                 app.ports.voice_chat_from_js.send(
                     { tag: "is-speaking-changed"
-                    , args: [ userId, false ]
+                    , args: [ peerUserId, false ]
                     });
             }
         }
