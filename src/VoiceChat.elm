@@ -17,7 +17,7 @@ port module VoiceChat exposing
     , StartArgs
     , Track(..)
     , VideoTrackData
-    , VoiceChatSubscription(..)
+    , VoiceChatFromJs(..)
     , VoiceChatToJs(..)
     , gotUserMediaDevices
     , hasJoined
@@ -488,7 +488,7 @@ type MediaDeviceId
     = MediaDeviceId Never
 
 
-type VoiceChatSubscription
+type VoiceChatFromJs
     = GotSignal ConnectionId Signal
     | GotMediaStreamTracks (List Track)
     | GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
@@ -496,8 +496,8 @@ type VoiceChatSubscription
     | IsSpeakingChanged ConnectionId Bool
 
 
-voiceChatSubscriptionCodec : Codec VoiceChatSubscription
-voiceChatSubscriptionCodec =
+voiceChatFromJsCodec : Codec VoiceChatFromJs
+voiceChatFromJsCodec =
     Codec.custom
         (\aEncoder bEncoder cEncoder dEncoder eEncoder value ->
             case value of
@@ -553,13 +553,13 @@ deviceKindCodec =
     Codec.enum Codec.string [ ( "audioinput", AudioInput ), ( "audiooutput", AudioOutput ), ( "videoinput", VideoInput ) ]
 
 
-voiceChatFromJs : (Result String VoiceChatSubscription -> msg) -> Subscription FrontendOnly msg
+voiceChatFromJs : (Result String VoiceChatFromJs -> msg) -> Subscription FrontendOnly msg
 voiceChatFromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js
         (\json ->
-            Codec.decodeValue voiceChatSubscriptionCodec json
+            Codec.decodeValue voiceChatFromJsCodec json
                 |> Result.mapError
                     (\error ->
                         let
