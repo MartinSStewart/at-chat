@@ -65,8 +65,16 @@ type alias SetupModel =
     , heightInput : String
     , handicapInput : String
     , komiInput : String
+    , sizeSelection : SizeSelection
     , error : Maybe String
     }
+
+
+type SizeSelection
+    = Standard9
+    | Standard13
+    | Standard19
+    | CustomSize
 
 
 type Model
@@ -81,6 +89,7 @@ init =
         , heightInput = "9"
         , handicapInput = "0"
         , komiInput = "6.5"
+        , sizeSelection = Standard9
         , error = Nothing
         }
 
@@ -235,7 +244,7 @@ type Msg
     | ChangedHeightInput String
     | ChangedHandicapInput String
     | ChangedKomiInput String
-    | PressedPresetSize Int Int
+    | SelectedSize SizeSelection
     | PressedStartGame
 
 
@@ -748,22 +757,43 @@ updateSetup msg model =
         ChangedKomiInput input ->
             Setup { model | komiInput = input, error = Nothing }
 
-        PressedPresetSize w h ->
-            startWithSettings w h model
+        SelectedSize selection ->
+            Setup { model | sizeSelection = selection, error = Nothing }
 
         PressedStartGame ->
-            case ( parseDimension model.widthInput, parseDimension model.heightInput ) of
-                ( Ok w, Ok h ) ->
+            case selectedDimensions model of
+                Ok ( w, h ) ->
                     startWithSettings w h model
 
-                ( Err err, _ ) ->
-                    Setup { model | error = Just ("Width: " ++ err) }
-
-                ( _, Err err ) ->
-                    Setup { model | error = Just ("Height: " ++ err) }
+                Err err ->
+                    Setup { model | error = Just err }
 
         _ ->
             Setup model
+
+
+selectedDimensions : SetupModel -> Result String ( Int, Int )
+selectedDimensions model =
+    case model.sizeSelection of
+        Standard9 ->
+            Ok ( 9, 9 )
+
+        Standard13 ->
+            Ok ( 13, 13 )
+
+        Standard19 ->
+            Ok ( 19, 19 )
+
+        CustomSize ->
+            case ( parseDimension model.widthInput, parseDimension model.heightInput ) of
+                ( Ok w, Ok h ) ->
+                    Ok ( w, h )
+
+                ( Err err, _ ) ->
+                    Err ("Width: " ++ err)
+
+                ( _, Err err ) ->
+                    Err ("Height: " ++ err)
 
 
 updateGame : Msg -> GameModel -> Model
@@ -896,7 +926,7 @@ updateGame msg model =
         ChangedKomiInput _ ->
             Game model
 
-        PressedPresetSize _ _ ->
+        SelectedSize _ ->
             Game model
 
         PressedStartGame ->
@@ -928,20 +958,22 @@ setupView model =
         , MyUi.montserrat
         ]
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go - new game")
-        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Standard sizes")
-        , Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-            [ MyUi.simpleButton (Dom.id "go_preset9") (PressedPresetSize 9 9) (Ui.text "9 x 9")
-            , MyUi.simpleButton (Dom.id "go_preset13") (PressedPresetSize 13 13) (Ui.text "13 x 13")
-            , MyUi.simpleButton (Dom.id "go_preset19") (PressedPresetSize 19 19) (Ui.text "19 x 19")
-            ]
         , setupSection
-            "Custom size"
-            (Ui.row
-                [ Ui.spacing 8, Ui.width Ui.shrink ]
-                [ dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
-                , Ui.text "x"
-                , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
-                , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
+            "Board size"
+            (Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
+                [ sizeRadio model "go_size9" Standard9 (Ui.text "9 x 9")
+                , sizeRadio model "go_size13" Standard13 (Ui.text "13 x 13")
+                , sizeRadio model "go_size19" Standard19 (Ui.text "19 x 19")
+                , sizeRadio model
+                    "go_sizeCustom"
+                    CustomSize
+                    (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                        [ Ui.text "Custom:"
+                        , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
+                        , Ui.text "x"
+                        , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
+                        ]
+                    )
                 ]
             )
         , setupSection
@@ -961,7 +993,52 @@ setupView model =
 
             Nothing ->
                 Ui.none
+        , MyUi.simpleButton (Dom.id "go_start") PressedStartGame (Ui.text "Start game")
         ]
+
+
+sizeRadio : SetupModel -> String -> SizeSelection -> Element Msg -> Element Msg
+sizeRadio model htmlId selection label =
+    let
+        isSelected : Bool
+        isSelected =
+            model.sizeSelection == selection
+    in
+    MyUi.rowButton (Dom.id htmlId)
+        (SelectedSize selection)
+        [ Ui.spacing 8
+        , Ui.padding 6
+        , Ui.width Ui.shrink
+        , Ui.contentCenterY
+        ]
+        [ radioCircle isSelected
+        , label
+        ]
+
+
+radioCircle : Bool -> Element msg
+radioCircle isSelected =
+    Ui.el
+        [ Ui.width (Ui.px 18)
+        , Ui.height (Ui.px 18)
+        , Ui.rounded 999
+        , Ui.border 1
+        , Ui.borderColor (Ui.rgb 120 120 120)
+        ]
+        (if isSelected then
+            Ui.el
+                [ Ui.width (Ui.px 10)
+                , Ui.height (Ui.px 10)
+                , Ui.rounded 999
+                , Ui.background (Ui.rgb 60 60 60)
+                , Ui.centerX
+                , Ui.centerY
+                ]
+                Ui.none
+
+         else
+            Ui.none
+        )
 
 
 setupSection : String -> Element msg -> Element msg
