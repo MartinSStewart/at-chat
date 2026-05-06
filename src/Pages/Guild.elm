@@ -3361,11 +3361,12 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Nothing
 
+        showVoiceChat : Maybe RoomId
         showVoiceChat =
-            case ( local.calls.currentRoom, guildOrDmIdNoThread ) of
-                ( Just (DmRoomId otherUserIdA), GuildOrDmId_Dm otherUserIdB ) ->
-                    if otherUserIdA == otherUserIdB then
-                        local.calls.currentRoom
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Dm otherUserIdB ->
+                    if SeqSet.member (DmRoomId otherUserIdB) model.voiceChat.expanded then
+                        Just (DmRoomId otherUserIdB)
 
                     else
                         Nothing
