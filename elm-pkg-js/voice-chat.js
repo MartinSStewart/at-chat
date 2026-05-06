@@ -35,24 +35,18 @@ exports.init = async function init(app) {
 
         let mediaRecorder = new MediaRecorder(localStream);
         mediaRecorder.addEventListener("dataavailable", async (e) => {
-            console.log(e);
             const peerIdBytes = new TextEncoder().encode(peerUserId);
             const typeBytes = new TextEncoder().encode(e.data.type);
             const dataBuffer = await e.data.arrayBuffer();
-            const totalLen = 2 + peerIdBytes.length + 2 + typeBytes.length + dataBuffer.byteLength;
-            const result = new ArrayBuffer(totalLen);
+            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + dataBuffer.byteLength);
             const view = new DataView(result);
             const bytes = new Uint8Array(result);
-            let offset = 0;
-            view.setUint8(offset, peerIdBytes.length);
-            offset += 1;
-            bytes.set(peerIdBytes, offset);
-            offset += peerIdBytes.length;
-            view.setUint8(offset, typeBytes.length);
-            offset += 1;
-            bytes.set(typeBytes, offset);
-            offset += typeBytes.length;
-            bytes.set(new Uint8Array(dataBuffer), offset);
+
+            view.setUint8(0, peerIdBytes.length);
+            bytes.set(peerIdBytes, 1);
+            view.setUint8(1 + peerIdBytes.length, typeBytes.length);
+            bytes.set(typeBytes, 1 + peerIdBytes.length + 1);
+            bytes.set(new Uint8Array(dataBuffer), 1 + peerIdBytes.length + 1 + typeBytes.length);
             app.ports.got_recorded_data.send(new DataView(result));
         });
         mediaRecorder.start();
