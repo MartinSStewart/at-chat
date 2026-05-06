@@ -3265,7 +3265,12 @@ voiceChatView windowSize roomId local model =
                 , Ui.padding 16
                 , Ui.spacing 8
                 ]
-                [ voiceChatControlButton
+                [ MyUi.rowButton
+                    (Dom.id "guild_startVoiceChat")
+                    (VoiceChatMsg (VoiceChat.PressedJoinCall roomId))
+                    [ Ui.spacing 4, Ui.background (Ui.rgb 90 180 100), Ui.rounded 99 ]
+                    [ Ui.html Icons.phone, Ui.text "Start call" ]
+                , voiceChatControlButton
                     "guild_voiceChatMute"
                     (Ui.html Icons.microphone)
                     model.voiceChat.isMuted

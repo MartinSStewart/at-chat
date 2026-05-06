@@ -79,6 +79,8 @@ type Msg
     | SelectedVideoInputDevice (IdString MediaDeviceId)
     | PressedToggleMute
     | PressedTogglePauseVideo
+    | PressedJoinCall RoomId
+    | PressedLeaveCall RoomId
 
 
 type alias Local =
