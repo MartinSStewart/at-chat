@@ -62,6 +62,7 @@ type alias GameModel =
 type alias SetupModel =
     { widthInput : String
     , heightInput : String
+    , handicapInput : String
     , error : Maybe String
     }
 
@@ -76,18 +77,128 @@ init =
     Setup
         { widthInput = "9"
         , heightInput = "9"
+        , handicapInput = "0"
         , error = Nothing
         }
 
 
-startGame : Int -> Int -> GameModel
-startGame width height =
+maxHandicap : Int
+maxHandicap =
+    9
+
+
+handicapPositions : Int -> Int -> Int -> List ( Int, Int )
+handicapPositions handicap width height =
+    let
+        margin : Int
+        margin =
+            if min width height >= 13 then
+                3
+
+            else if min width height >= 9 then
+                2
+
+            else
+                1
+
+        leftX : Int
+        leftX =
+            margin
+
+        rightX : Int
+        rightX =
+            width - 1 - margin
+
+        topY : Int
+        topY =
+            margin
+
+        bottomY : Int
+        bottomY =
+            height - 1 - margin
+
+        midX : Int
+        midX =
+            width // 2
+
+        midY : Int
+        midY =
+            height // 2
+
+        corners : List ( Int, Int )
+        corners =
+            [ ( leftX, bottomY ), ( rightX, topY ), ( leftX, topY ), ( rightX, bottomY ) ]
+
+        center : ( Int, Int )
+        center =
+            ( midX, midY )
+
+        positions : List ( Int, Int )
+        positions =
+            case handicap of
+                0 ->
+                    []
+
+                1 ->
+                    [ ( leftX, bottomY ) ]
+
+                2 ->
+                    [ ( leftX, bottomY ), ( rightX, topY ) ]
+
+                3 ->
+                    [ ( leftX, bottomY ), ( rightX, topY ), ( leftX, topY ) ]
+
+                4 ->
+                    corners
+
+                5 ->
+                    corners ++ [ center ]
+
+                6 ->
+                    corners ++ [ ( leftX, midY ), ( rightX, midY ) ]
+
+                7 ->
+                    corners ++ [ ( leftX, midY ), ( rightX, midY ), center ]
+
+                8 ->
+                    corners ++ [ ( leftX, midY ), ( rightX, midY ), ( midX, topY ), ( midX, bottomY ) ]
+
+                _ ->
+                    corners ++ [ ( leftX, midY ), ( rightX, midY ), ( midX, topY ), ( midX, bottomY ), center ]
+    in
+    positions
+        |> List.filter (\( x, y ) -> x >= 0 && x < width && y >= 0 && y < height)
+        |> Set.fromList
+        |> Set.toList
+
+
+startGame : Int -> Int -> Int -> GameModel
+startGame width height handicap =
+    let
+        positions : List ( Int, Int )
+        positions =
+            handicapPositions handicap width height
+
+        board : Dict ( Int, Int ) Stone
+        board =
+            positions
+                |> List.map (\p -> ( p, Black ))
+                |> Dict.fromList
+
+        startingPlayer : Stone
+        startingPlayer =
+            if List.isEmpty positions then
+                Black
+
+            else
+                White
+    in
     { width = width
     , height = height
-    , board = Dict.empty
+    , board = board
     , history = []
     , viewingMovesBack = 0
-    , currentPlayer = Black
+    , currentPlayer = startingPlayer
     , blackCaptures = 0
     , whiteCaptures = 0
     , phase = Playing { previousPlayerPassed = False }
@@ -123,6 +234,7 @@ type Msg
     | PressedArrowRight
     | ChangedWidthInput String
     | ChangedHeightInput String
+    | ChangedHandicapInput String
     | PressedPresetSize Int Int
     | PressedStartGame
 
@@ -551,6 +663,32 @@ parseDimension input =
             Err "Enter a number"
 
 
+parseHandicap : String -> Result String Int
+parseHandicap input =
+    let
+        trimmed : String
+        trimmed =
+            String.trim input
+    in
+    if trimmed == "" then
+        Ok 0
+
+    else
+        case String.toInt trimmed of
+            Just n ->
+                if n < 0 then
+                    Err "Cannot be negative"
+
+                else if n > maxHandicap then
+                    Err ("Maximum is " ++ String.fromInt maxHandicap)
+
+                else
+                    Ok n
+
+            Nothing ->
+                Err "Enter a number"
+
+
 update : Msg -> Model -> Model
 update msg model =
     case model of
@@ -570,13 +708,26 @@ updateSetup msg model =
         ChangedHeightInput input ->
             Setup { model | heightInput = input, error = Nothing }
 
+        ChangedHandicapInput input ->
+            Setup { model | handicapInput = input, error = Nothing }
+
         PressedPresetSize w h ->
-            Game (startGame w h)
+            case parseHandicap model.handicapInput of
+                Ok handicap ->
+                    Game (startGame w h handicap)
+
+                Err err ->
+                    Setup { model | error = Just ("Handicap: " ++ err) }
 
         PressedStartGame ->
             case ( parseDimension model.widthInput, parseDimension model.heightInput ) of
                 ( Ok w, Ok h ) ->
-                    Game (startGame w h)
+                    case parseHandicap model.handicapInput of
+                        Ok handicap ->
+                            Game (startGame w h handicap)
+
+                        Err err ->
+                            Setup { model | error = Just ("Handicap: " ++ err) }
 
                 ( Err err, _ ) ->
                     Setup { model | error = Just ("Width: " ++ err) }
@@ -712,6 +863,9 @@ updateGame msg model =
         ChangedHeightInput _ ->
             Game model
 
+        ChangedHandicapInput _ ->
+            Game model
+
         PressedPresetSize _ _ ->
             Game model
 
@@ -756,6 +910,15 @@ setupView model =
             , dimensionInput "go_heightInput" "Height" model.heightInput ChangedHeightInput
             , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
             ]
+        , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Handicap (Black starts with this many stones; White moves first)")
+        , numberInput
+            { htmlId = "go_handicapInput"
+            , label = "Stones"
+            , minValue = 0
+            , maxValue = maxHandicap
+            , value = model.handicapInput
+            , onChange = ChangedHandicapInput
+            }
         , case model.error of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -776,19 +939,39 @@ setupView model =
 
 dimensionInput : String -> String -> String -> (String -> Msg) -> Element Msg
 dimensionInput htmlId label value onChange =
+    numberInput
+        { htmlId = htmlId
+        , label = label
+        , minValue = minDimension
+        , maxValue = maxDimension
+        , value = value
+        , onChange = onChange
+        }
+
+
+numberInput :
+    { htmlId : String
+    , label : String
+    , minValue : Int
+    , maxValue : Int
+    , value : String
+    , onChange : String -> Msg
+    }
+    -> Element Msg
+numberInput args =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
-        [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
+        [ Ui.el [ Ui.Font.size 12 ] (Ui.text args.label)
         , Html.input
-            [ Html.Attributes.id htmlId
+            [ Html.Attributes.id args.htmlId
             , Html.Attributes.type_ "number"
-            , Html.Attributes.min (String.fromInt minDimension)
-            , Html.Attributes.max (String.fromInt maxDimension)
-            , Html.Attributes.value value
+            , Html.Attributes.min (String.fromInt args.minValue)
+            , Html.Attributes.max (String.fromInt args.maxValue)
+            , Html.Attributes.value args.value
             , Html.Attributes.style "width" "80px"
             , Html.Attributes.style "padding" "8px"
             , Html.Attributes.style "border" "1px solid #ccc"
             , Html.Attributes.style "border-radius" "4px"
-            , Html.Events.onInput onChange
+            , Html.Events.onInput args.onChange
             ]
             []
             |> Ui.html
