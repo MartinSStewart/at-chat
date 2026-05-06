@@ -3,7 +3,6 @@ exports.init = async function init(app) {
     const pendingSignals = new Map();
 
     async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
-        console.log("Should offer: ", shouldOffer);
         stopConnection(peerUserId);
 
         let localStream;
@@ -16,7 +15,6 @@ exports.init = async function init(app) {
                     , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
                     });
             devices = await navigator.mediaDevices.enumerateDevices();
-            console.log("devices: ", devices);
         } catch (e) {
             app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
             return;
@@ -35,7 +33,12 @@ exports.init = async function init(app) {
             pc.addTrack(track, localStream);
         });
 
-        console.log("devices: ", devices);
+        let mediaRecorder = new MediaRecorder(localStream);
+        mediaRecorder.addEventListener("dataavailable", (e) => {
+            console.log("data available");
+            chunks.push(e.data);
+        });
+
         app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
 
         console.log("Voice chat: startConnection", peerUserId);

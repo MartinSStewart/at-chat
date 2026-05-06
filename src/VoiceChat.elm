@@ -207,6 +207,11 @@ iceCodec =
 
 videoNodes : Coord CssPixels -> Model -> Local -> Html msg
 videoNodes windowSize model local =
+    let
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+    in
     List.concatMap
         (\( roomId, sessions ) ->
             if hasJoined roomId local then
@@ -227,14 +232,22 @@ videoNodes windowSize model local =
                             , Html.Attributes.style "position" "absolute"
                             , Html.Attributes.style
                                 "left"
-                                (String.fromInt (index * 320 + 10 + MyUi.channelAndGuildColumnWidth windowSize) ++ "px")
+                                (String.fromInt
+                                    (if isMobile then
+                                        index * 320 + 10
+
+                                     else
+                                        index * 320 + 10 + MyUi.channelAndGuildColumnWidth windowSize
+                                    )
+                                    ++ "px"
+                                )
                             , Html.Attributes.style "top" "10px"
                             , Html.Attributes.id (connectionIdToString connectionId)
                             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
                             , Html.Attributes.style
                                 "outline"
                                 (if SeqSet.member connectionId model.isSpeaking then
-                                    "12px solid aliceblue"
+                                    "4px solid aliceblue"
 
                                  else
                                     "0 solid aliceblue"
