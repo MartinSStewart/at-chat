@@ -39,8 +39,8 @@ exports.init = async function init(app) {
         app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
 
         console.log("Voice chat: startConnection", peerUserId);
-        //const remoteAudio = document.getElementById(peerUserId);
-        const remoteVideo = document.getElementById(peerUserId);
+
+        const videoNode = document.getElementById(peerUserId);
 
         pc.ontrack = function (event) {
             console.log("Voice chat: ontrack", peerUserId, event.streams);
@@ -48,17 +48,17 @@ exports.init = async function init(app) {
             let remoteStream;
             if (event.streams && event.streams[0]) {
                 remoteStream = event.streams[0];
-                remoteVideo.srcObject = remoteStream;
+                videoNode.srcObject = remoteStream;
             } else {
                 // Fallback: build a stream from the single track.
                 remoteStream = new MediaStream();
                 remoteStream.addTrack(event.track);
-                remoteVideo.srcObject = remoteStream;
+                videoNode.srcObject = remoteStream;
             }
             if (event.track.kind === "audio" && !audioStreams.has(peerUserId)) {
                 handleAudioStream(remoteStream, peerUserId);
             }
-            const playPromise = remoteVideo.play();
+            const playPromise = videoNode.play();
             if (playPromise && typeof playPromise.catch === "function") {
                 playPromise.catch(function (err) {
                     console.error("Voice chat: audio play() rejected", err);
@@ -85,7 +85,7 @@ exports.init = async function init(app) {
         const conn = {
             pc: pc,
             localStream: localStream,
-            remoteAudio: remoteVideo,
+            videoNode: videoNode,
             remoteDescriptionSet: false,
             queuedIceCandidates: [],
             signalChain: Promise.resolve()
@@ -129,8 +129,8 @@ exports.init = async function init(app) {
             conn.pc.onnotificationneeded = null;
             conn.pc.close();
         }
-        if (conn.remoteAudio) {
-            conn.remoteAudio.srcObject = null;
+        if (conn.videoNode) {
+            conn.videoNode.srcObject = null;
         }
         removeAudioStream(peerUserId);
         connections.delete(peerUserId);
