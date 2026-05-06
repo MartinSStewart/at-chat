@@ -746,7 +746,8 @@ setupView model =
             , MyUi.simpleButton (Dom.id "go_preset19") (PressedPresetSize 19 19) (Ui.text "19 x 19")
             ]
         , Ui.el [ Ui.Font.weight 600 ] (Ui.text "Custom size")
-        , Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+        , Ui.row
+            [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
             [ dimensionInput "go_widthInput" "Width" model.widthInput ChangedWidthInput
             , dimensionInput "go_heightInput" "Height" model.heightInput ChangedHeightInput
             , MyUi.simpleButton (Dom.id "go_startCustom") PressedStartGame (Ui.text "Start")
@@ -762,7 +763,8 @@ setupView model =
 
 dimensionInput : String -> String -> String -> (String -> Msg) -> Element Msg
 dimensionInput htmlId label value onChange =
-    Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
         , Html.input
             [ Html.Attributes.id htmlId
@@ -770,9 +772,10 @@ dimensionInput htmlId label value onChange =
             , Html.Attributes.min (String.fromInt minDimension)
             , Html.Attributes.max (String.fromInt maxDimension)
             , Html.Attributes.value value
+            , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "width" "80px"
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "border" "1px solid #ccc"
+            , Html.Attributes.style "padding" "8.5px"
+            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
             , Html.Attributes.style "border-radius" "4px"
             , Html.Events.onInput onChange
             ]
