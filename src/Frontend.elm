@@ -3596,7 +3596,7 @@ updateLoaded msg model =
             case voiceChatMsg of
                 VoiceChat.SelectedAudioInputDevice deviceId ->
                     ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
-                    , VoiceChat.setAudioInput deviceId
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetAudioInput deviceId)
                     )
 
                 VoiceChat.SelectedVideoInputDevice deviceId ->
@@ -3609,7 +3609,7 @@ updateLoaded msg model =
                             not voiceChat.isMuted
                     in
                     ( { model | voiceChat = { voiceChat | isMuted = newMuted } }
-                    , VoiceChat.setMuted newMuted
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetMuted newMuted)
                     )
 
                 VoiceChat.PressedTogglePauseVideo ->
@@ -3619,7 +3619,7 @@ updateLoaded msg model =
                             not voiceChat.isVideoPaused
                     in
                     ( { model | voiceChat = { voiceChat | isVideoPaused = newPaused } }
-                    , VoiceChat.setVideoPaused newPaused
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetVideoPaused newPaused)
                     )
 
 
@@ -4319,16 +4319,20 @@ pressedVoiceChatButton roomId model =
                             Just nonempty ->
                                 List.map
                                     (\otherSession ->
-                                        VoiceChat.voiceChatStart
-                                            model.clientId
-                                            { roomId = roomId, otherClientId = otherSession }
-                                            model.voiceChat
+                                        VoiceChat.voiceChatToJs
+                                            (VoiceChat.Js_Start
+                                                (VoiceChat.startArgs
+                                                    model.clientId
+                                                    { roomId = roomId, otherClientId = otherSession }
+                                                    model.voiceChat
+                                                )
+                                            )
                                     )
                                     (NonemptySet.toList nonempty)
                                     |> Command.batch
 
                             Nothing ->
-                                VoiceChat.getMediaDevices
+                                VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
                         , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
                         ]
                     )

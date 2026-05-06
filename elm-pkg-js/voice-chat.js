@@ -230,22 +230,22 @@ exports.init = async function init(app) {
     }
 
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
-        if (msg.kind === "start") {
-            await startConnection(msg.peerUserId, msg.shouldOffer, msg.audioInput, msg.videoInput);
-            setAudioEnabled(!msg.isMuted);
-            setVideoEnabled(!msg.isVideoPaused);
-        } else if (msg.kind === "stop") {
-            stopConnection(msg.peerUserId);
-        } else if (msg.kind === "signal") {
-            await handleSignal(msg.peerUserId, msg.signal);
-        } else if (msg.kind === "set-muted") {
-            setAudioEnabled(!msg.muted);
-        } else if (msg.kind === "set-audio-input") {
-            setAudioInput(msg.deviceId);
-            setAudioEnabled(!msg.isMuted);
-        } else if (msg.kind === "set-video-paused") {
-            setVideoEnabled(!msg.paused);
-        } else if (msg.kind === "get-media-devices") {
+        if (msg.tag === "start") {
+            const args = msg.args[0];
+            await startConnection(args.peerUserId, args.shouldOffer, args.audioInput, args.videoInput);
+            setAudioEnabled(!args.isMuted);
+            setVideoEnabled(!args.isVideoPaused);
+        } else if (msg.tag === "stop") {
+            stopConnection(msg.args[0]);
+        } else if (msg.tag === "signal") {
+            await handleSignal(msg.args[0], msg.args[1]);
+        } else if (msg.tag === "set-muted") {
+            setAudioEnabled(!msg.args[0]);
+        } else if (msg.tag === "set-audio-input") {
+            setAudioInput(msg.args[0]);
+        } else if (msg.tag === "set-video-paused") {
+            setVideoEnabled(!msg.args[0]);
+        } else if (msg.tag === "get-media-devices") {
             try {
                 let stream = await getDevices();
                 let devices = await navigator.mediaDevices.enumerateDevices();

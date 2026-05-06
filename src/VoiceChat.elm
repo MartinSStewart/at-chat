@@ -14,10 +14,11 @@ port module VoiceChat exposing
     , Sdp
     , ServerChange(..)
     , Signal(..)
+    , StartArgs
     , Track(..)
     , VideoTrackData
     , VoiceChatSubscription(..)
-    , getMediaDevices
+    , VoiceChatToJs(..)
     , gotUserMediaDevices
     , hasJoined
     , init
@@ -27,12 +28,10 @@ port module VoiceChat exposing
     , leaveVoiceChatCmds
     , mediaDeviceSelectors
     , serverChangeCmd
-    , setAudioInput
-    , setMuted
-    , setVideoPaused
+    , startArgs
     , videoNodes
     , voiceChatFromJs
-    , voiceChatStart
+    , voiceChatToJs
     )
 
 import Codec exposing (Codec)
@@ -329,7 +328,11 @@ leaveVoiceChatCmds model =
             case SeqDict.get currentRoom model.voiceChats of
                 Just voiceChat ->
                     NonemptySet.toList voiceChat
-                        |> List.map (\sessionIdHash2 -> voiceChatStop { roomId = currentRoom, otherClientId = sessionIdHash2 })
+                        |> List.map
+                            (\sessionIdHash2 ->
+                                voiceChatToJs
+                                    (Js_Stop { roomId = currentRoom, otherClientId = sessionIdHash2 })
+                            )
                         |> Command.batch
 
                 Nothing ->
@@ -371,7 +374,7 @@ serverChangeCmd change clientId local model =
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
-                        voiceChatStart clientId connectionId model
+                        voiceChatToJs (Js_Start (startArgs clientId connectionId model))
 
                     else
                         Command.none
@@ -380,10 +383,10 @@ serverChangeCmd change clientId local model =
                     Command.none
 
         Server_Left _ connectionId ->
-            voiceChatStop connectionId
+            voiceChatToJs (Js_Stop connectionId)
 
         Server_SignalReceived connectionId signal ->
-            voiceChatDeliverSignal connectionId signal
+            voiceChatToJs (Js_Signal connectionId signal)
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
@@ -392,115 +395,93 @@ port voice_chat_to_js : Json.Encode.Value -> Cmd msg
 port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
-getMediaDevices : Command FrontendOnly toBackend msg
-getMediaDevices =
+type VoiceChatToJs
+    = Js_Start StartArgs
+    | Js_Stop ConnectionId
+    | Js_Signal ConnectionId Signal
+    | Js_SetMuted Bool
+    | Js_SetAudioInput (IdString MediaDeviceId)
+    | Js_SetVideoPaused Bool
+    | Js_GetMediaDevices
+
+
+type alias StartArgs =
+    { peerUserId : ConnectionId
+    , shouldOffer : Bool
+    , audioInput : Maybe (IdString MediaDeviceId)
+    , videoInput : Maybe (IdString MediaDeviceId)
+    , isMuted : Bool
+    , isVideoPaused : Bool
+    }
+
+
+startArgsCodec : Codec StartArgs
+startArgsCodec =
+    Codec.object StartArgs
+        |> Codec.field "peerUserId" .peerUserId connectionIdCodec
+        |> Codec.field "shouldOffer" .shouldOffer Codec.bool
+        |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
+        |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
+        |> Codec.field "isMuted" .isMuted Codec.bool
+        |> Codec.field "isVideoPaused" .isVideoPaused Codec.bool
+        |> Codec.buildObject
+
+
+voiceChatToJsCodec : Codec VoiceChatToJs
+voiceChatToJsCodec =
+    Codec.custom
+        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices value ->
+            case value of
+                Js_Start a ->
+                    eStart a
+
+                Js_Stop a ->
+                    eStop a
+
+                Js_Signal a b ->
+                    eSignal a b
+
+                Js_SetMuted a ->
+                    eSetMuted a
+
+                Js_SetAudioInput a ->
+                    eSetAudioInput a
+
+                Js_SetVideoPaused a ->
+                    eSetVideoPaused a
+
+                Js_GetMediaDevices ->
+                    eGetMediaDevices
+        )
+        |> Codec.variant1 "start" Js_Start startArgsCodec
+        |> Codec.variant1 "stop" Js_Stop connectionIdCodec
+        |> Codec.variant2 "signal" Js_Signal connectionIdCodec signalCodec
+        |> Codec.variant1 "set-muted" Js_SetMuted Codec.bool
+        |> Codec.variant1 "set-audio-input" Js_SetAudioInput IdString.codec
+        |> Codec.variant1 "set-video-paused" Js_SetVideoPaused Codec.bool
+        |> Codec.variant0 "get-media-devices" Js_GetMediaDevices
+        |> Codec.buildCustom
+
+
+voiceChatToJs : VoiceChatToJs -> Command FrontendOnly toMsg msg
+voiceChatToJs msg =
     Command.sendToJs
         "voice_chat_to_js"
         voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "get-media-devices" )
-            ]
-        )
+        (Codec.encoder voiceChatToJsCodec msg)
 
 
-voiceChatStart : ClientId -> ConnectionId -> Model -> Command FrontendOnly toBackend msg
-voiceChatStart clientId connectionId model =
-    let
-        _ =
-            Debug.log "shouldOffer" ( clientId, connectionId.otherClientId )
-
-        shouldOffer : Bool
-        shouldOffer =
-            Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
-    in
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "start" )
-            , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
-            , ( "shouldOffer", Json.Encode.bool shouldOffer )
-            , ( "audioInput"
-              , case model.selectedAudioInputDevice of
-                    Just input ->
-                        Codec.encoder IdString.codec input
-
-                    Nothing ->
-                        Json.Encode.null
-              )
-            , ( "videoInput"
-              , case model.selectedVideoInputDevice of
-                    Just input ->
-                        Codec.encoder IdString.codec input
-
-                    Nothing ->
-                        Json.Encode.null
-              )
-            , ( "isMuted", Json.Encode.bool model.isMuted )
-            , ( "isVideoPaused", Json.Encode.bool model.isVideoPaused )
-            ]
-        )
-
-
-setMuted : Bool -> Command FrontendOnly toBackend msg
-setMuted muted =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "set-muted" )
-            , ( "muted", Json.Encode.bool muted )
-            ]
-        )
-
-
-setAudioInput : IdString MediaDeviceId -> Command FrontendOnly toMsg msg
-setAudioInput deviceId =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "set-audio-input" )
-            , ( "deviceId", Codec.encoder IdString.codec deviceId )
-            ]
-        )
-
-
-setVideoPaused : Bool -> Command FrontendOnly toBackend msg
-setVideoPaused paused =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "set-video-paused" )
-            , ( "paused", Json.Encode.bool paused )
-            ]
-        )
-
-
-voiceChatStop : ConnectionId -> Command FrontendOnly toBackend msg
-voiceChatStop connectionId =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "stop" )
-            , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
-            ]
-        )
-
-
-voiceChatDeliverSignal : ConnectionId -> Signal -> Command FrontendOnly toBackend msg
-voiceChatDeliverSignal connectionId signal =
-    Command.sendToJs
-        "voice_chat_to_js"
-        voice_chat_to_js
-        (Json.Encode.object
-            [ ( "kind", Json.Encode.string "signal" )
-            , ( "peerUserId", Codec.encoder connectionIdCodec connectionId )
-            , ( "signal", Codec.encoder signalCodec signal )
-            ]
-        )
+startArgs : ClientId -> ConnectionId -> Model -> StartArgs
+startArgs clientId connectionId model =
+    { peerUserId = connectionId
+    , shouldOffer =
+        Lamdera.clientIdToString clientId
+            < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
+    , audioInput = model.selectedAudioInputDevice
+    , videoInput = model.selectedVideoInputDevice
+    , isMuted = model.isMuted
+    , isVideoPaused = model.isVideoPaused
+    }
 
 
 type MediaDeviceId
