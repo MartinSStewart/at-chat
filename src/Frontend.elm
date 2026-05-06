@@ -48,6 +48,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
+import Pages.Go
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -330,6 +331,7 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
+            , goModel = Pages.Go.init
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
@@ -1828,6 +1830,9 @@ updateLoaded msg model =
             ( { model | aiChatModel = aiChatModel2 }
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
+
+        GoMsg goMsg ->
+            ( { model | goModel = Pages.Go.update goMsg model.goModel }, Command.none )
 
         UserNameEditableMsg editableMsg ->
             handleEditable
@@ -5825,6 +5830,13 @@ view model =
                                     _ ->
                                         errorPage loaded "Admin access required to view this page"
                             )
+
+                    GoRoute ->
+                        Pages.Go.view loaded.goModel
+                            |> Ui.map GoMsg
+                            |> FrontendExtra.layout loaded
+                                [ Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.loginStatus)
+                                ]
 
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel

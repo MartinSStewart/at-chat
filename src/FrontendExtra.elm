@@ -886,6 +886,9 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
 
+        GoRoute ->
+            ( model2, viewCmd )
+
         DmRoute dmRoute ->
             let
                 model3 : LoadedFrontend
@@ -1171,6 +1174,9 @@ isPressMsg msg =
 
         AiChatMsg aiChatMsg ->
             AiChat.isPressMsg aiChatMsg
+
+        GoMsg _ ->
+            True
 
         UserNameEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
