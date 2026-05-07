@@ -23,13 +23,10 @@ port module VoiceChat exposing
     , decodeVoiceChatRecorder
     , gotRecordedData
     , gotUserMediaDevices
-    , hasJoined
     , init
     , initModel
     , isPressMsg
-    , joinedUsers
     , leaveVoiceChatCmds
-    , mediaDeviceSelectors
     , serverChangeCmd
     , startArgs
     , videoNodes
@@ -949,13 +946,13 @@ isPressMsg msg =
         PressedTogglePauseVideo ->
             True
 
-        PressedJoinCall roomId ->
+        PressedJoinCall _ ->
             True
 
-        PressedLeaveCall roomId ->
+        PressedLeaveCall _ ->
             True
 
-        PressedDownloadRecording roomId ->
+        PressedDownloadRecording _ ->
             True
 
         PressedChannelHeaderVoiceChatButton _ ->

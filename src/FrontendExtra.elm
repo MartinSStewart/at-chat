@@ -1334,7 +1334,7 @@ isPressMsg msg =
         VoiceChatMsg voiceChatMsg ->
             VoiceChat.isPressMsg voiceChatMsg
 
-        GotVoiceChatRecording bytes ->
+        GotVoiceChatRecording _ ->
             False
 
 

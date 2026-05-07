@@ -108,7 +108,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (MediaDevicesStatus(..), RoomId)
+import VoiceChat exposing (MediaDevicesStatus(..))
 
 
 app :
@@ -3721,10 +3721,10 @@ updateLoaded msg model =
                         MediaDevicesNotLoaded ->
                             VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
 
-                        HasMediaDevices mediaDevices ->
+                        HasMediaDevices _ ->
                             Command.none
 
-                        FailedToGetMediaDevices string ->
+                        FailedToGetMediaDevices _ ->
                             VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
                     )
 

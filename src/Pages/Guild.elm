@@ -22,15 +22,13 @@ import Array exposing (Array)
 import Array.Extra
 import Bitwise
 import ChannelName
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
+import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Lamdera exposing (ClientId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)

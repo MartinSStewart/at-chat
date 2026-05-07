@@ -108,7 +108,6 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
-import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -139,16 +138,14 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
-import Sticker exposing (StickerData)
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
 import Url exposing (Url)
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser)
-import UserAgent exposing (UserAgent)
-import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import User exposing (BackendUser, DiscordFrontendUser, FrontendUser, LocalUser)
+import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 import VoiceChat
 

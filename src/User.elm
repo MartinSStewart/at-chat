@@ -14,7 +14,6 @@ module User exposing
     , addNewCustomEmojis
     , addNewStickers
     , addRecentlyUsedEmoji
-    , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
