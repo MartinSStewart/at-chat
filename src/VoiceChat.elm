@@ -949,7 +949,7 @@ isPressMsg msg =
         PressedJoinCall _ ->
             True
 
-        PressedLeaveCall _ ->
+        PressedLeaveCall ->
             True
 
         PressedDownloadRecording _ ->
