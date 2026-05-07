@@ -53,14 +53,6 @@ trait FromToml {
         }
     }
 
-    fn as_bool(table: &Table, field: &'static str) -> bool {
-        let value = &table[field];
-        match value.as_bool() {
-            Some(v) => v,
-            None => Self::fail(field, value, "boolean")
-        }
-    }
-
     fn fail(field: &'static str, value: &Value, expected: &'static str) -> ! {
         let long_name = match Self::name() {
             Some(name) => format!("{}.{}", name, field),

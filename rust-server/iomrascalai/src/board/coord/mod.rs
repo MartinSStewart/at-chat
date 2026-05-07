@@ -86,7 +86,7 @@ impl Coord {
     }
 
     pub fn to_index(&self, board_size: u8) -> usize {
-        (self.col as usize-1 + (self.row as usize-1)*board_size as usize)
+        self.col as usize-1 + (self.row as usize-1)*board_size as usize
     }
 
     #[cfg(test)]
