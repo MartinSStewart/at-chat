@@ -18,6 +18,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -3649,6 +3650,36 @@ updateLoaded msg model =
                     , VoiceChat.voiceChatToJs (VoiceChat.Js_SetVideoPaused newPaused)
                     )
 
+                VoiceChat.PressedJoinCall roomId ->
+                    pressedVoiceChatButton roomId model
+
+                VoiceChat.PressedLeaveCall roomId ->
+                    pressedVoiceChatButton roomId model
+
+                VoiceChat.PressedDownloadRecording roomId ->
+                    case SeqDict.get roomId model.voiceChat.recordings of
+                        Just (Nonempty recording rest) ->
+                            ( { model
+                                | voiceChat =
+                                    { voiceChat
+                                        | recordings =
+                                            case List.Nonempty.fromList rest of
+                                                Just nonempty ->
+                                                    SeqDict.insert roomId nonempty voiceChat.recordings
+
+                                                Nothing ->
+                                                    SeqDict.remove roomId voiceChat.recordings
+                                    }
+                              }
+                            , Effect.File.Download.bytes
+                                ("recording " ++ UserAgent.browserToString model.userAgent.browser)
+                                recording.mimeType
+                                recording.data
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
         GotVoiceChatRecording bytes ->
             let
                 voiceChat =
@@ -3661,7 +3692,7 @@ updateLoaded msg model =
                             { voiceChat
                                 | recordings =
                                     SeqDict.update
-                                        connectionId
+                                        connectionId.roomId
                                         (\maybe ->
                                             case maybe of
                                                 Just nonempty ->

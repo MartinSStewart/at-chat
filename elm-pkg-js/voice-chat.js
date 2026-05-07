@@ -225,9 +225,11 @@ exports.init = async function init(app) {
 
     function setAudioEnabled(enabled) {
         connections.forEach(function (conn) {
-            if (conn.localStream) {
-                conn.localStream.getAudioTracks().forEach(function (track) {
-                    track.enabled = enabled;
+            if (conn.pc) {
+                const sender = conn.pc.getSenders().forEach((s) => {
+                    if (s.track.kind === "audio") {
+                        s.track.enabled = enabled;
+                    }
                 });
             }
         });
@@ -250,9 +252,11 @@ exports.init = async function init(app) {
 
     function setVideoEnabled(enabled) {
         connections.forEach(function (conn) {
-            if (conn.localStream) {
-                conn.localStream.getVideoTracks().forEach(function (track) {
-                    track.enabled = enabled;
+            if (conn.pc) {
+                const sender = conn.pc.getSenders().forEach((s) => {
+                    if (s.track.kind === "video") {
+                        s.track.enabled = enabled;
+                    }
                 });
             }
         });

@@ -10,6 +10,7 @@ port module VoiceChat exposing
     , MediaDevicesStatus(..)
     , Model
     , Msg(..)
+    , Recording
     , RoomId(..)
     , Sdp
     , ServerChange(..)
@@ -41,6 +42,7 @@ import Bytes.Decode
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -81,6 +83,7 @@ type Msg
     | PressedTogglePauseVideo
     | PressedJoinCall RoomId
     | PressedLeaveCall RoomId
+    | PressedDownloadRecording RoomId
 
 
 type alias Local =
@@ -96,7 +99,7 @@ type alias Model =
     , isMuted : Bool
     , isVideoPaused : Bool
     , isSpeaking : SeqSet ConnectionId
-    , recordings : SeqDict ConnectionId (Nonempty Recording)
+    , recordings : SeqDict RoomId (Nonempty Recording)
     , expanded : SeqSet RoomId
     }
 
@@ -708,8 +711,8 @@ connectionIdCodec =
         Codec.string
 
 
-mediaDeviceSelectors : Model -> Element Msg
-mediaDeviceSelectors model =
+mediaDeviceSelectors : RoomId -> Model -> Element Msg
+mediaDeviceSelectors roomId model =
     case model.userMediaDevices of
         MediaDevicesNotLoaded ->
             Ui.none
@@ -739,7 +742,16 @@ mediaDeviceSelectors model =
                 , Ui.width (Ui.px 400)
                 , Ui.widthMax 400
                 ]
-                [ deviceDropdown "Microphone" audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
+                [ case SeqDict.get roomId model.recordings of
+                    Just _ ->
+                        MyUi.simpleButton
+                            (Dom.id "voiceChat_downloadRecording")
+                            (PressedDownloadRecording roomId)
+                            (Ui.text "Download recording")
+
+                    Nothing ->
+                        Ui.none
+                , deviceDropdown "Microphone" audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
                 , deviceDropdown "Camera" videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
                 ]
 
@@ -757,6 +769,15 @@ isPressMsg msg =
             True
 
         PressedTogglePauseVideo ->
+            True
+
+        PressedJoinCall roomId ->
+            True
+
+        PressedLeaveCall roomId ->
+            True
+
+        PressedDownloadRecording roomId ->
             True
 
 

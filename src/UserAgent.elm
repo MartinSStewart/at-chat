@@ -1,4 +1,4 @@
-module UserAgent exposing (Browser(..), Device(..), UserAgent, init, parseUserAgent)
+module UserAgent exposing (Browser(..), Device(..), UserAgent, browserToString, init, parseUserAgent)
 
 
 type Browser
@@ -57,6 +57,28 @@ parseBrowser userAgentString =
 
     else
         UnknownBrowser
+
+
+browserToString : Browser -> String
+browserToString browser =
+    case browser of
+        Chrome ->
+            "chrome"
+
+        Firefox ->
+            "firefox"
+
+        Safari ->
+            "safari"
+
+        Edge ->
+            "edge"
+
+        Opera ->
+            "opera"
+
+        UnknownBrowser ->
+            "unknown browser"
 
 
 parseDevice : String -> Device

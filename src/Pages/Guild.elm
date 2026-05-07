@@ -30,6 +30,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Lamdera exposing (ClientId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
@@ -3250,6 +3251,15 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
 
 voiceChatView : Coord CssPixels -> RoomId -> LocalState -> LoadedFrontend -> Element FrontendMsg
 voiceChatView windowSize roomId local model =
+    let
+        hasJoined : Bool
+        hasJoined =
+            VoiceChat.hasJoined roomId local.calls
+
+        ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
+        ongoingCall =
+            SeqDict.get roomId local.calls.voiceChats
+    in
     Ui.el
         [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
@@ -3268,8 +3278,29 @@ voiceChatView windowSize roomId local model =
                 [ MyUi.rowButton
                     (Dom.id "guild_startVoiceChat")
                     (VoiceChatMsg (VoiceChat.PressedJoinCall roomId))
-                    [ Ui.spacing 4, Ui.background (Ui.rgb 90 180 100), Ui.rounded 99 ]
-                    [ Ui.html Icons.phone, Ui.text "Start call" ]
+                    [ Ui.spacing 8
+                    , Ui.background (Ui.rgb 60 160 70)
+                    , Ui.rounded 99
+                    , Ui.height Ui.fill
+                    , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
+                    ]
+                    [ Ui.html Icons.phone
+                    , (case ( hasJoined, ongoingCall ) of
+                        ( True, Nothing ) ->
+                            "End Call"
+
+                        ( True, Just _ ) ->
+                            "Leave Call"
+
+                        ( False, Nothing ) ->
+                            "Start Call"
+
+                        ( False, Just _ ) ->
+                            "Join Call"
+                      )
+                        |> Ui.text
+                        |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
+                    ]
                 , voiceChatControlButton
                     "guild_voiceChatMute"
                     (Ui.html Icons.microphone)
@@ -3283,7 +3314,7 @@ voiceChatView windowSize roomId local model =
                 ]
             )
         ]
-        (VoiceChat.mediaDeviceSelectors model.voiceChat |> Ui.map VoiceChatMsg)
+        (VoiceChat.mediaDeviceSelectors roomId model.voiceChat |> Ui.map VoiceChatMsg)
 
 
 voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
