@@ -6,6 +6,7 @@ pack.zip
 elm-pkg-js/test-gen.js
 endpoint.json
 rust-server/target/
+rust-server/var/
 tests/var/lib/atchat/storage/
 tests/var/lib/atchat/backups/
 index.html
