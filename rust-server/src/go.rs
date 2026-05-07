@@ -10,10 +10,8 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::Response;
-use rand::Rng;
-use rand::seq::IndexedRandom;
+use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum Color {
@@ -76,32 +74,72 @@ impl Board {
         out
     }
 
-    /// Flood-fill the chain of stones connected to (x, y), and return its
-    /// stones plus its set of liberties.
-    fn chain(&self, x: usize, y: usize) -> (HashSet<(usize, usize)>, HashSet<(usize, usize)>) {
-        let mut stones: HashSet<(usize, usize)> = HashSet::new();
-        let mut liberties: HashSet<(usize, usize)> = HashSet::new();
+    /// True if the chain containing (x, y) has at least one empty neighbor.
+    /// `visited` is reused between calls; the caller must zero it first.
+    fn chain_has_liberty(&self, x: usize, y: usize, visited: &mut [bool]) -> bool {
         let color = match self.get(x, y) {
             Some(c) => c,
-            None => return (stones, liberties),
+            None => return false,
         };
-        let mut queue = vec![(x, y)];
-        stones.insert((x, y));
-        while let Some((cx, cy)) = queue.pop() {
+        let start = self.idx(x, y);
+        // Scratch stack of indices.
+        let mut stack: [usize; 25 * 25] = [0; 25 * 25];
+        let mut top = 0usize;
+        stack[top] = start;
+        top += 1;
+        visited[start] = true;
+        while top > 0 {
+            top -= 1;
+            let i = stack[top];
+            let cy = i / self.width;
+            let cx = i - cy * self.width;
             for (nx, ny) in self.neighbors(cx, cy) {
-                match self.get(nx, ny) {
-                    None => {
-                        liberties.insert((nx, ny));
-                    }
-                    Some(c) if c == color && !stones.contains(&(nx, ny)) => {
-                        stones.insert((nx, ny));
-                        queue.push((nx, ny));
+                let ni = self.idx(nx, ny);
+                match self.cells[ni] {
+                    None => return true,
+                    Some(c) if c == color && !visited[ni] => {
+                        visited[ni] = true;
+                        stack[top] = ni;
+                        top += 1;
                     }
                     _ => {}
                 }
             }
         }
-        (stones, liberties)
+        false
+    }
+
+    /// Remove the captured chain rooted at (x, y) (assumed to have no
+    /// liberties) and return the number of stones removed.
+    fn remove_chain(&mut self, x: usize, y: usize) -> usize {
+        let color = match self.get(x, y) {
+            Some(c) => c,
+            None => return 0,
+        };
+        let mut count = 0usize;
+        let mut stack: [usize; 25 * 25] = [0; 25 * 25];
+        let mut top = 0usize;
+        stack[top] = self.idx(x, y);
+        top += 1;
+        while top > 0 {
+            top -= 1;
+            let i = stack[top];
+            if self.cells[i] != Some(color) {
+                continue;
+            }
+            self.cells[i] = None;
+            count += 1;
+            let cy = i / self.width;
+            let cx = i - cy * self.width;
+            for (nx, ny) in self.neighbors(cx, cy) {
+                let ni = self.idx(nx, ny);
+                if self.cells[ni] == Some(color) {
+                    stack[top] = ni;
+                    top += 1;
+                }
+            }
+        }
+        count
     }
 
     /// Returns the new board after playing `color` at (x, y), and the number
@@ -113,6 +151,7 @@ impl Board {
         y: usize,
         color: Color,
         previous: Option<&Board>,
+        visited: &mut Vec<bool>,
     ) -> Option<(Board, usize)> {
         if self.get(x, y).is_some() {
             return None;
@@ -123,17 +162,14 @@ impl Board {
         let mut captured = 0usize;
         for (nx, ny) in self.neighbors(x, y) {
             if next.get(nx, ny) == Some(opp) {
-                let (stones, libs) = next.chain(nx, ny);
-                if libs.is_empty() {
-                    for (sx, sy) in &stones {
-                        next.set(*sx, *sy, None);
-                    }
-                    captured += stones.len();
+                visited.iter_mut().for_each(|v| *v = false);
+                if !next.chain_has_liberty(nx, ny, visited) {
+                    captured += next.remove_chain(nx, ny);
                 }
             }
         }
-        let (_, my_libs) = next.chain(x, y);
-        if my_libs.is_empty() {
+        visited.iter_mut().for_each(|v| *v = false);
+        if !next.chain_has_liberty(x, y, visited) {
             return None;
         }
         if let Some(prev) = previous {
@@ -184,39 +220,49 @@ impl Board {
 
     /// Chinese-style area scoring: stones + territory. Ignores life/death;
     /// playouts run to the bitter end so dead stones get captured naturally.
-    fn area_score(&self, komi: f32) -> f32 {
+    fn area_score(&self, komi: f32, visited: &mut [bool]) -> f32 {
+        visited.iter_mut().for_each(|v| *v = false);
         let mut black = 0i32;
         let mut white = 0i32;
-        let mut visited: HashSet<(usize, usize)> = HashSet::new();
+        let mut stack: [usize; 25 * 25] = [0; 25 * 25];
         for y in 0..self.height {
             for x in 0..self.width {
-                match self.get(x, y) {
+                let i0 = self.idx(x, y);
+                match self.cells[i0] {
                     Some(Color::Black) => black += 1,
                     Some(Color::White) => white += 1,
                     None => {
-                        if visited.contains(&(x, y)) {
+                        if visited[i0] {
                             continue;
                         }
-                        let mut region: Vec<(usize, usize)> = vec![(x, y)];
-                        let mut q = vec![(x, y)];
-                        visited.insert((x, y));
+                        visited[i0] = true;
+                        let mut top = 0usize;
+                        stack[top] = i0;
+                        top += 1;
+                        let mut size = 0i32;
                         let mut touches_black = false;
                         let mut touches_white = false;
-                        while let Some((cx, cy)) = q.pop() {
+                        while top > 0 {
+                            top -= 1;
+                            let i = stack[top];
+                            size += 1;
+                            let cy = i / self.width;
+                            let cx = i - cy * self.width;
                             for (nx, ny) in self.neighbors(cx, cy) {
-                                match self.get(nx, ny) {
+                                let ni = self.idx(nx, ny);
+                                match self.cells[ni] {
                                     Some(Color::Black) => touches_black = true,
                                     Some(Color::White) => touches_white = true,
                                     None => {
-                                        if visited.insert((nx, ny)) {
-                                            region.push((nx, ny));
-                                            q.push((nx, ny));
+                                        if !visited[ni] {
+                                            visited[ni] = true;
+                                            stack[top] = ni;
+                                            top += 1;
                                         }
                                     }
                                 }
                             }
                         }
-                        let size = region.len() as i32;
                         match (touches_black, touches_white) {
                             (true, false) => black += size,
                             (false, true) => white += size,
@@ -230,14 +276,9 @@ impl Board {
     }
 }
 
-#[derive(Clone, Copy)]
-enum PlayoutMove {
-    Play(usize, usize),
-    Pass,
-}
-
 fn legal_moves(board: &Board, color: Color, previous: Option<&Board>) -> Vec<(usize, usize)> {
     let mut moves = Vec::new();
+    let mut visited = vec![false; board.width * board.height];
     for y in 0..board.height {
         for x in 0..board.width {
             if board.get(x, y).is_some() {
@@ -246,7 +287,7 @@ fn legal_moves(board: &Board, color: Color, previous: Option<&Board>) -> Vec<(us
             if board.is_eye(x, y, color) {
                 continue;
             }
-            if board.try_play(x, y, color, previous).is_some() {
+            if board.try_play(x, y, color, previous, &mut visited).is_some() {
                 moves.push((x, y));
             }
         }
@@ -260,43 +301,50 @@ fn random_playout<R: Rng>(
     start_player: Color,
     komi: f32,
     max_moves: usize,
+    visited: &mut Vec<bool>,
 ) -> f32 {
     let mut board = start.clone();
     let mut previous: Option<Board> = None;
     let mut current = start_player;
     let mut consecutive_passes = 0u8;
+    let mut empties: Vec<(usize, usize)> = Vec::with_capacity(board.width * board.height);
     for _ in 0..max_moves {
-        let moves = legal_moves(&board, current, previous.as_ref());
-        let chosen = if let Some((mx, my)) = moves.choose(rng) {
-            PlayoutMove::Play(*mx, *my)
-        } else {
-            PlayoutMove::Pass
-        };
-        match chosen {
-            PlayoutMove::Play(mx, my) => match board.try_play(mx, my, current, previous.as_ref()) {
-                Some((next, _)) => {
-                    previous = Some(board);
-                    board = next;
-                    consecutive_passes = 0;
+        empties.clear();
+        for y in 0..board.height {
+            for x in 0..board.width {
+                if board.get(x, y).is_none() {
+                    empties.push((x, y));
                 }
-                None => {
-                    consecutive_passes += 1;
-                    if consecutive_passes >= 2 {
-                        break;
-                    }
-                }
-            },
-            PlayoutMove::Pass => {
-                previous = Some(board.clone());
-                consecutive_passes += 1;
-                if consecutive_passes >= 2 {
-                    break;
-                }
+            }
+        }
+        // Walk empties in a random order; first legal non-eye move wins.
+        for i in (1..empties.len()).rev() {
+            let j = rng.random_range(0..=i);
+            empties.swap(i, j);
+        }
+        let mut played = false;
+        for &(mx, my) in &empties {
+            if board.is_eye(mx, my, current) {
+                continue;
+            }
+            if let Some((next, _)) = board.try_play(mx, my, current, previous.as_ref(), visited) {
+                previous = Some(board);
+                board = next;
+                consecutive_passes = 0;
+                played = true;
+                break;
+            }
+        }
+        if !played {
+            previous = Some(board.clone());
+            consecutive_passes += 1;
+            if consecutive_passes >= 2 {
+                break;
             }
         }
         current = current.opposite();
     }
-    board.area_score(komi)
+    board.area_score(komi, visited)
 }
 
 fn pick_move(
@@ -317,15 +365,22 @@ fn pick_move(
         Color::Black => 1.0,
         Color::White => -1.0,
     };
+    let mut visited = vec![false; board.width * board.height];
+    // Score for passing right now — the AI passes if no candidate beats it.
+    let mut pass_total: f32 = 0.0;
+    for _ in 0..playouts_per_move {
+        pass_total += sign * random_playout(&mut rng, board, color.opposite(), komi, max_moves, &mut visited);
+    }
+    let pass_score = pass_total / playouts_per_move as f32;
     let mut best: Option<((usize, usize), f32)> = None;
     for (mx, my) in candidates {
-        let (after, _) = match board.try_play(mx, my, color, previous) {
+        let (after, _) = match board.try_play(mx, my, color, previous, &mut visited) {
             Some(r) => r,
             None => continue,
         };
         let mut total: f32 = 0.0;
         for _ in 0..playouts_per_move {
-            let s = random_playout(&mut rng, &after, color.opposite(), komi, max_moves);
+            let s = random_playout(&mut rng, &after, color.opposite(), komi, max_moves, &mut visited);
             // Score is from Black's perspective; flip if we're White.
             total += sign * s;
         }
@@ -336,14 +391,6 @@ fn pick_move(
             _ => {}
         }
     }
-    // If even the best move is worse than passing (negative for us), pass.
-    let pass_score = {
-        let mut total = 0.0;
-        for _ in 0..playouts_per_move {
-            total += sign * random_playout(&mut rand::rng(), board, color.opposite(), komi, max_moves);
-        }
-        total / playouts_per_move as f32
-    };
     match best {
         Some((mv, score)) if score >= pass_score => Some(mv),
         _ => None,
@@ -374,7 +421,7 @@ pub struct GoMoveRequest {
 }
 
 fn default_playouts() -> usize {
-    50
+    8
 }
 
 #[derive(Debug, Serialize)]
@@ -407,7 +454,7 @@ pub async fn go_move_endpoint(Json(req): Json<GoMoveRequest>) -> Response<String
     if req.width == 0 || req.height == 0 || req.width > 25 || req.height > 25 {
         return error_response("Board dimensions must be in 1..=25");
     }
-    let playouts = req.playouts_per_move.clamp(1, 500);
+    let playouts = req.playouts_per_move.clamp(1, 200);
     let board = match build_board(req.width, req.height, &req.stones) {
         Ok(b) => b,
         Err(e) => return error_response(&e),
@@ -423,7 +470,17 @@ pub async fn go_move_endpoint(Json(req): Json<GoMoveRequest>) -> Response<String
         Ok(c) => c,
         Err(e) => return error_response(&e),
     };
-    let chosen = pick_move(&board, color, previous.as_ref(), req.komi, playouts);
+    let komi = req.komi;
+    // Playouts are CPU-bound and can take seconds; run off the runtime thread
+    // so concurrent requests don't pile up behind a single search.
+    let chosen = match tokio::task::spawn_blocking(move || {
+        pick_move(&board, color, previous.as_ref(), komi, playouts)
+    })
+    .await
+    {
+        Ok(c) => c,
+        Err(_) => return error_response("AI worker panicked"),
+    };
     let response = match chosen {
         Some((x, y)) => GoMoveResponse::Play { x, y },
         None => GoMoveResponse::Pass,

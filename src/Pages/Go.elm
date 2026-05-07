@@ -1294,13 +1294,13 @@ encodeAiMoveRequest model =
         playoutsPerMove : Int
         playoutsPerMove =
             if model.width * model.height >= 19 * 19 then
-                15
+                3
 
             else if model.width * model.height >= 13 * 13 then
-                30
+                5
 
             else
-                60
+                8
     in
     Json.Encode.object
         ([ ( "width", Json.Encode.int model.width )
