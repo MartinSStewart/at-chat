@@ -113,7 +113,6 @@ exports.init = async function init(app) {
 
         const conn = {
             pc: pc,
-            localStream: localStream,
             videoNode: videoNode,
             remoteDescriptionSet: false,
             queuedIceCandidates: [],
@@ -144,11 +143,8 @@ exports.init = async function init(app) {
     function stopConnection(peerUserId) {
         const conn = connections.get(peerUserId);
         if (!conn) return;
-        if (conn.localStream) {
-            conn.localStream.getTracks().forEach(function (track) { track.stop(); });
-        }
-        if (conn.pc) {
 
+        if (conn.pc) {
             conn.pc.getSenders().forEach((s) => s.track.stop());
             conn.pc.ontrack = null;
             conn.pc.onnicecandidate = null;
@@ -223,7 +219,7 @@ exports.init = async function init(app) {
         });
     }
 
-    function setAudioEnabled(enabled) {
+    function setAudioInputEnabled(enabled) {
         connections.forEach(function (conn) {
             if (conn.pc) {
                 const sender = conn.pc.getSenders().forEach((s) => {
@@ -244,13 +240,14 @@ exports.init = async function init(app) {
             if (conn.pc) {
                 const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
                 let oldTrack = sender.track;
+                track.enabled = oldTrack.enabled;
                 sender.replaceTrack(track);
                 oldTrack.stop();
             }
         });
     }
 
-    function setVideoEnabled(enabled) {
+    function setVideoInputEnabled(enabled) {
         connections.forEach(function (conn) {
             if (conn.pc) {
                 const sender = conn.pc.getSenders().forEach((s) => {
@@ -266,18 +263,18 @@ exports.init = async function init(app) {
         if (msg.tag === "start") {
             const args = msg.args[0];
             await startConnection(args.peerUserId, args.shouldOffer, args.audioInput, args.videoInput);
-            setAudioEnabled(!args.isMuted);
-            setVideoEnabled(!args.isVideoPaused);
+            setAudioInputEnabled(args.audioInputEnabled);
+            setVideoInputEnabled(args.videoInputEnabled);
         } else if (msg.tag === "stop") {
             stopConnection(msg.args[0]);
         } else if (msg.tag === "signal") {
             await handleSignal(msg.args[0], msg.args[1]);
-        } else if (msg.tag === "set-muted") {
-            setAudioEnabled(!msg.args[0]);
+        } else if (msg.tag === "set-audio-input-enabled") {
+            setAudioInputEnabled(msg.args[0]);
         } else if (msg.tag === "set-audio-input") {
             setAudioInput(msg.args[0]);
-        } else if (msg.tag === "set-video-paused") {
-            setVideoEnabled(!msg.args[0]);
+        } else if (msg.tag === "set-video-input-enabled") {
+            setVideoInputEnabled(msg.args[0]);
         } else if (msg.tag === "get-media-devices") {
             try {
                 let stream = await getDevices();

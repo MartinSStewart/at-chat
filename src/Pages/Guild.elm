@@ -3304,12 +3304,12 @@ voiceChatView windowSize roomId local model =
                 , voiceChatControlButton
                     "guild_voiceChatMute"
                     (Ui.html Icons.microphone)
-                    model.voiceChat.isMuted
+                    model.voiceChat.audioInputEnabled
                     (VoiceChatMsg VoiceChat.PressedToggleMute)
                 , voiceChatControlButton
                     "guild_voiceChatPauseVideo"
                     (Ui.el [ Ui.move { x = 2, y = 0, z = 0 } ] (Ui.html Icons.camera))
-                    model.voiceChat.isVideoPaused
+                    model.voiceChat.videoInputEnabled
                     (VoiceChatMsg VoiceChat.PressedTogglePauseVideo)
                 ]
             )
@@ -3318,7 +3318,7 @@ voiceChatView windowSize roomId local model =
 
 
 voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
-voiceChatControlButton htmlId iconHtml isOff onPress =
+voiceChatControlButton htmlId iconHtml isEnabled onPress =
     MyUi.elButton
         (Dom.id htmlId)
         onPress
@@ -3327,14 +3327,17 @@ voiceChatControlButton htmlId iconHtml isOff onPress =
         , Ui.padding 8
         , Ui.rounded 20
         , Ui.background
-            (if isOff then
-                Ui.rgb 200 60 60
+            (if isEnabled then
+                Ui.rgb 60 70 100
 
              else
-                Ui.rgb 60 70 100
+                Ui.rgb 200 60 60
             )
         , Ui.Font.color MyUi.white
-        , if isOff then
+        , if isEnabled then
+            Ui.noAttr
+
+          else
             Ui.inFront
                 (Ui.el
                     [ Ui.width Ui.fill
@@ -3342,9 +3345,6 @@ voiceChatControlButton htmlId iconHtml isOff onPress =
                     ]
                     (Ui.html Icons.diagonalSlash)
                 )
-
-          else
-            Ui.noAttr
         ]
         (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] iconHtml)
 

@@ -3632,22 +3632,22 @@ updateLoaded msg model =
 
                 VoiceChat.PressedToggleMute ->
                     let
-                        newMuted : Bool
-                        newMuted =
-                            not voiceChat.isMuted
+                        audioInputEnabled : Bool
+                        audioInputEnabled =
+                            not voiceChat.audioInputEnabled
                     in
-                    ( { model | voiceChat = { voiceChat | isMuted = newMuted } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetMuted newMuted)
+                    ( { model | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetAudioInputEnabled audioInputEnabled)
                     )
 
                 VoiceChat.PressedTogglePauseVideo ->
                     let
-                        newPaused : Bool
-                        newPaused =
-                            not voiceChat.isVideoPaused
+                        videoInputEnabled : Bool
+                        videoInputEnabled =
+                            not voiceChat.videoInputEnabled
                     in
-                    ( { model | voiceChat = { voiceChat | isVideoPaused = newPaused } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetVideoPaused newPaused)
+                    ( { model | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetVideoInputEnabled videoInputEnabled)
                     )
 
                 VoiceChat.PressedJoinCall roomId ->

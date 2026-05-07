@@ -96,8 +96,8 @@ type alias Model =
     { userMediaDevices : MediaDevicesStatus
     , selectedAudioInputDevice : Maybe (IdString MediaDeviceId)
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
-    , isMuted : Bool
-    , isVideoPaused : Bool
+    , audioInputEnabled : Bool
+    , videoInputEnabled : Bool
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
     , expanded : SeqSet RoomId
@@ -131,8 +131,8 @@ initModel =
     { userMediaDevices = MediaDevicesNotLoaded
     , selectedAudioInputDevice = Nothing
     , selectedVideoInputDevice = Nothing
-    , isMuted = False
-    , isVideoPaused = True
+    , audioInputEnabled = True
+    , videoInputEnabled = False
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , expanded = SeqSet.empty
@@ -434,9 +434,9 @@ type VoiceChatToJs
     = Js_Start StartArgs
     | Js_Stop ConnectionId
     | Js_Signal ConnectionId Signal
-    | Js_SetMuted Bool
+    | Js_SetAudioInputEnabled Bool
     | Js_SetAudioInput (IdString MediaDeviceId)
-    | Js_SetVideoPaused Bool
+    | Js_SetVideoInputEnabled Bool
     | Js_GetMediaDevices
 
 
@@ -445,8 +445,8 @@ type alias StartArgs =
     , shouldOffer : Bool
     , audioInput : Maybe (IdString MediaDeviceId)
     , videoInput : Maybe (IdString MediaDeviceId)
-    , isMuted : Bool
-    , isVideoPaused : Bool
+    , audioInputEnabled : Bool
+    , videoInputEnabled : Bool
     }
 
 
@@ -457,8 +457,8 @@ startArgsCodec =
         |> Codec.field "shouldOffer" .shouldOffer Codec.bool
         |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
-        |> Codec.field "isMuted" .isMuted Codec.bool
-        |> Codec.field "isVideoPaused" .isVideoPaused Codec.bool
+        |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
+        |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
         |> Codec.buildObject
 
 
@@ -476,13 +476,13 @@ voiceChatToJsCodec =
                 Js_Signal a b ->
                     eSignal a b
 
-                Js_SetMuted a ->
+                Js_SetAudioInputEnabled a ->
                     eSetMuted a
 
                 Js_SetAudioInput a ->
                     eSetAudioInput a
 
-                Js_SetVideoPaused a ->
+                Js_SetVideoInputEnabled a ->
                     eSetVideoPaused a
 
                 Js_GetMediaDevices ->
@@ -491,9 +491,9 @@ voiceChatToJsCodec =
         |> Codec.variant1 "start" Js_Start startArgsCodec
         |> Codec.variant1 "stop" Js_Stop connectionIdCodec
         |> Codec.variant2 "signal" Js_Signal connectionIdCodec signalCodec
-        |> Codec.variant1 "set-muted" Js_SetMuted Codec.bool
+        |> Codec.variant1 "set-audio-input-enabled" Js_SetAudioInputEnabled Codec.bool
         |> Codec.variant1 "set-audio-input" Js_SetAudioInput IdString.codec
-        |> Codec.variant1 "set-video-paused" Js_SetVideoPaused Codec.bool
+        |> Codec.variant1 "set-video-input-enabled" Js_SetVideoInputEnabled Codec.bool
         |> Codec.variant0 "get-media-devices" Js_GetMediaDevices
         |> Codec.buildCustom
 
@@ -510,12 +510,11 @@ startArgs : ClientId -> ConnectionId -> Model -> StartArgs
 startArgs clientId connectionId model =
     { peerUserId = connectionId
     , shouldOffer =
-        Lamdera.clientIdToString clientId
-            < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
+        Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
     , audioInput = model.selectedAudioInputDevice
     , videoInput = model.selectedVideoInputDevice
-    , isMuted = model.isMuted
-    , isVideoPaused = model.isVideoPaused
+    , audioInputEnabled = model.audioInputEnabled
+    , videoInputEnabled = model.videoInputEnabled
     }
 
 
