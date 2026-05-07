@@ -1,0 +1,17 @@
+[package]
+name = "iomrascalai"
+version = "0.4.0"
+edition = "2021"
+description = "Modernised port of iomrascalai's Go AI (https://github.com/ujh/iomrascalai)"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+crossbeam-channel = { version = "0.5", features = ["std"] }
+num_cpus = "1"
+quicksort = "1"
+rand = "0.10"
+smallvec = "1"
+toml = "0.8"
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,38 @@
+[playout]
+
+atari_check = 0.743349
+ladder_check = 0.702563
+last_moves_for_heuristics = 2
+pattern_probability = 0.9
+play_in_middle_of_eye = 1.0
+
+[priors]
+
+best_move_factor = 1.0
+capture_many = 30
+capture_one = 15
+empty = 20
+neutral_plays = 10
+neutral_wins = 5
+self_atari = 10
+small_patterns = 10
+
+[time_control]
+
+c = 0.439747
+fastplay_threshold = 0.811985
+fastplay_budget = 0.305821
+min_stones = 35
+
+[tree]
+
+expand_after = 1
+rave_equiv = 20.0
+score_weight = 0.0653414
+
+[scoring]
+
+ownership_prior = 87
+ownership_cutoff = 0.892867
+playouts = 10000
+resignation_percentage = 0.15
