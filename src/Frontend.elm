@@ -3625,10 +3625,61 @@ updateLoaded msg model =
                     )
 
                 VoiceChat.PressedJoinCall roomId ->
-                    pressedVoiceChatButton roomId model
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
+                                loggedIn
+                                (Command.batch
+                                    [ case SeqDict.get roomId local.calls.voiceChats of
+                                        Just nonempty ->
+                                            List.map
+                                                (\otherSession ->
+                                                    VoiceChat.voiceChatToJs
+                                                        (VoiceChat.Js_Start
+                                                            (VoiceChat.startArgs
+                                                                model.clientId
+                                                                { roomId = roomId, otherClientId = otherSession }
+                                                                model.voiceChat
+                                                            )
+                                                        )
+                                                )
+                                                (NonemptySet.toList nonempty)
+                                                |> Command.batch
 
-                VoiceChat.PressedLeaveCall roomId ->
-                    pressedVoiceChatButton roomId model
+                                        Nothing ->
+                                            VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+                                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    ]
+                                )
+                        )
+                        model
+
+                VoiceChat.PressedLeaveCall ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
+                                loggedIn
+                                (Command.batch
+                                    [ VoiceChat.leaveVoiceChatCmds local.calls
+                                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    ]
+                                )
+                        )
+                        model
 
                 VoiceChat.PressedDownloadRecording roomId ->
                     case SeqDict.get roomId model.voiceChat.recordings of
@@ -4372,57 +4423,6 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
               }
             , Command.none
             )
-
-
-pressedVoiceChatButton : RoomId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-pressedVoiceChatButton roomId model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            let
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-            in
-            if VoiceChat.hasJoined roomId local.calls then
-                FrontendExtra.handleLocalChange
-                    model.time
-                    (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
-                    loggedIn
-                    (Command.batch
-                        [ VoiceChat.leaveVoiceChatCmds local.calls
-                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                        ]
-                    )
-
-            else
-                FrontendExtra.handleLocalChange
-                    model.time
-                    (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
-                    loggedIn
-                    (Command.batch
-                        [ case SeqDict.get roomId local.calls.voiceChats of
-                            Just nonempty ->
-                                List.map
-                                    (\otherSession ->
-                                        VoiceChat.voiceChatToJs
-                                            (VoiceChat.Js_Start
-                                                (VoiceChat.startArgs
-                                                    model.clientId
-                                                    { roomId = roomId, otherClientId = otherSession }
-                                                    model.voiceChat
-                                                )
-                                            )
-                                    )
-                                    (NonemptySet.toList nonempty)
-                                    |> Command.batch
-
-                            Nothing ->
-                                VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
-                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                        ]
-                    )
-        )
-        model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

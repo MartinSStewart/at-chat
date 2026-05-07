@@ -88,7 +88,7 @@ type Msg
     | PressedToggleMute
     | PressedTogglePauseVideo
     | PressedJoinCall RoomId
-    | PressedLeaveCall RoomId
+    | PressedLeaveCall
     | PressedDownloadRecording RoomId
     | PressedChannelHeaderVoiceChatButton RoomId
 
@@ -322,7 +322,12 @@ voiceChatView windowSize roomId localUser calls model =
                 ]
                 [ MyUi.rowButton
                     (Dom.id "guild_startVoiceChat")
-                    (PressedJoinCall roomId)
+                    (if hasJoined roomId calls then
+                        PressedLeaveCall
+
+                     else
+                        PressedJoinCall roomId
+                    )
                     [ Ui.spacing 8
                     , Ui.background (Ui.rgb 60 160 70)
                     , Ui.rounded 99
