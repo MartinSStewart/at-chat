@@ -50,8 +50,9 @@ import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Html.Keyed
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), Id, UserId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -60,6 +61,7 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater
+import Route exposing (Route)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -231,68 +233,125 @@ iceCodec =
         |> Codec.buildObject
 
 
-videoNodes : Coord CssPixels -> Model -> Local -> Html msg
-videoNodes windowSize model local =
+videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html msg
+videoNodes route windowSize model local =
     let
+        viewingRoomId : Maybe RoomId
+        viewingRoomId =
+            case Route.toGuildOrDmId route of
+                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
+                    DmRoomId otherUserId |> Just
+
+                _ ->
+                    Nothing
+
+        total : Int
+        total =
+            NonemptySet.size sessions + 1
+
+        voiceChatX =
+            if isMobile then
+                0
+
+            else
+                MyUi.channelAndGuildColumnWidth windowSize
+
+        voiceChatWidth =
+            Coord.xRaw windowSize - voiceChatX
+
+        padding =
+            0
+
+        videoPosAndSize : Int -> ( Int, Int, Int )
+        videoPosAndSize index =
+            case total of
+                1 ->
+                    ( voiceChatX + padding, padding, voiceChatWidth - padding * 2 )
+
+                2 ->
+                    let
+                        width2 =
+                            voiceChatWidth - 24 // 2
+                    in
+                    if index == 0 then
+                        ( voiceChatX + padding, padding, width2 )
+
+                    else
+                        ( voiceChatX + padding + width2, padding, width2 )
+
+                _ ->
+                    ( padding + index * 20, padding, voiceChatWidth // total )
+
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        localVideo =
+            videoNode "local-video" False (videoPosAndSize 0) False
     in
-    List.concatMap
-        (\( roomId, sessions ) ->
-            if hasJoined roomId local then
-                let
-                    total =
-                        NonemptySet.size sessions
-                in
-                List.indexedMap
-                    (\index session ->
-                        let
-                            connectionId : ConnectionId
-                            connectionId =
-                                { roomId = roomId, otherClientId = session }
-
-                            voiceChatX =
-                                if isMobile then
-                                    0
-
-                                else
-                                    MyUi.channelAndGuildColumnWidth windowSize
-
-                            voiceChatWidth =
-                                Coord.xRaw windowSize - voiceChatX
-                        in
-                        Html.video
-                            [ Html.Attributes.style "width" "300px"
-                            , Html.Attributes.style "height" "200px"
-                            , Html.Attributes.style "position" "absolute"
-                            , Html.Attributes.style
-                                "left"
-                                (String.fromInt
-                                    (index * 320 + 10 + voiceChatX)
-                                    ++ "px"
+    (case viewingRoomId of
+        Just viewingRoomId2 ->
+            if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
+                case SeqDict.get viewingRoomId2 local.voiceChats of
+                    Just sessions ->
+                        localVideo
+                            :: List.indexedMap
+                                (\index session ->
+                                    let
+                                        connectionId : ConnectionId
+                                        connectionId =
+                                            { roomId = viewingRoomId2, otherClientId = session }
+                                    in
+                                    videoNode
+                                        (connectionIdToString connectionId)
+                                        False
+                                        (videoPosAndSize (index + 1))
+                                        (SeqSet.member connectionId model.isSpeaking)
                                 )
-                            , Html.Attributes.style "top" "10px"
-                            , Html.Attributes.id (connectionIdToString connectionId)
-                            , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
-                            , Html.Attributes.style
-                                "outline"
-                                (if SeqSet.member connectionId model.isSpeaking then
-                                    "4px solid aliceblue"
+                                (NonemptySet.toList sessions)
 
-                                 else
-                                    "0 solid aliceblue"
-                                )
-                            ]
-                            []
-                    )
-                    (NonemptySet.toList sessions)
+                    Nothing ->
+                        [ localVideo ]
 
             else
                 []
-        )
-        (SeqDict.toList local.voiceChats)
-        |> Html.div []
+
+        Nothing ->
+            []
+    )
+        |> Html.Keyed.node "div" []
+
+
+videoNode : String -> Bool -> ( Int, Int, Int ) -> Bool -> ( String, Html msg )
+videoNode id isHidden ( x, y, width ) isSpeaking =
+    ( id
+    , Html.video
+        [ Html.Attributes.style "width" (String.fromInt width ++ "px")
+        , Html.Attributes.style "height" (String.fromFloat (toFloat width * 9 / 16) ++ "px")
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (String.fromInt x ++ "px")
+        , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Attributes.style
+            "opacity"
+            (if isHidden then
+                "0.1"
+
+             else
+                "1"
+            )
+        , Html.Attributes.id id
+        , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+        , Html.Attributes.style
+            "outline"
+            (if isSpeaking then
+                "4px solid aliceblue"
+
+             else
+                "0 solid aliceblue"
+            )
+        ]
+        []
+    )
 
 
 voiceChatView : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
@@ -614,6 +673,8 @@ type VoiceChatToJs
     | Js_SetInput Bool (IdString MediaDeviceId)
     | Js_SetVideoInputEnabled Bool
     | Js_GetMediaDevices
+    | Js_StartLocalStream
+    | Js_StopLocalStream
 
 
 type alias StartData =
@@ -641,7 +702,7 @@ startDataCodec =
 voiceChatToJsCodec : Codec VoiceChatToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices value ->
+        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream value ->
             case value of
                 Js_Start a ->
                     eStart a
@@ -663,6 +724,12 @@ voiceChatToJsCodec =
 
                 Js_GetMediaDevices ->
                     eGetMediaDevices
+
+                Js_StartLocalStream ->
+                    eStartLocalStream
+
+                Js_StopLocalStream ->
+                    eStopLocalStream
         )
         |> Codec.variant1 "start" Js_Start startDataCodec
         |> Codec.variant1 "stop" Js_Stop connectionIdCodec
@@ -671,6 +738,8 @@ voiceChatToJsCodec =
         |> Codec.variant2 "set-input" Js_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" Js_SetVideoInputEnabled Codec.bool
         |> Codec.variant0 "get-media-devices" Js_GetMediaDevices
+        |> Codec.variant0 "start-local-stream" Js_StartLocalStream
+        |> Codec.variant0 "stop-local-stream" Js_StopLocalStream
         |> Codec.buildCustom
 
 

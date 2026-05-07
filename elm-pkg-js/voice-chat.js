@@ -296,6 +296,29 @@ exports.init = async function init(app) {
             } catch (e) {
                 app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error", args: [ e.toString() ] });
             }
+        } else if (msg.tag === "start-local-stream") {
+            try {
+                let devices2 = await navigator.mediaDevices.enumerateDevices();
+                let localStream =
+                    await navigator.mediaDevices.getUserMedia(
+                        { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
+                        , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
+                        });
+                let devices = await navigator.mediaDevices.enumerateDevices();
+
+                let defaultDevices = [];
+                localStream.getTracks().forEach(function (track) {
+                    defaultDevices.push(track.getSettings().deviceId);
+                });
+
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
+
+                const videoNode = document.getElementById("local-video");
+                videoNode.srcObject = localStream;
+            } catch (e) {
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
+                return;
+            }
         }
     });
 
