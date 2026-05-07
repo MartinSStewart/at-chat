@@ -33,7 +33,7 @@ use crate::score::Score;
 
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
-use rand::{Rng, RngExt, SeedableRng};
+use rand::RngExt;
 use std::cmp;
 use std::collections::HashMap;
 use std::sync::Arc;

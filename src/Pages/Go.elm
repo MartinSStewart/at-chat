@@ -1291,33 +1291,25 @@ encodeBoardStones board =
 encodeAiMoveRequest : GameModel -> Json.Encode.Value
 encodeAiMoveRequest model =
     let
-        playoutsPerMove : Int
-        playoutsPerMove =
+        thinkMs : Int
+        thinkMs =
             if model.width * model.height >= 19 * 19 then
-                3
+                5000
 
             else if model.width * model.height >= 13 * 13 then
-                5
+                3500
 
             else
-                8
+                2500
     in
     Json.Encode.object
-        ([ ( "width", Json.Encode.int model.width )
-         , ( "height", Json.Encode.int model.height )
-         , ( "komi", Json.Encode.float model.komi )
-         , ( "current_player", encodeStone model.currentPlayer )
-         , ( "stones", encodeBoardStones model.board )
-         , ( "playouts_per_move", Json.Encode.int playoutsPerMove )
-         ]
-            ++ (case List.head model.history of
-                    Just snapshot ->
-                        [ ( "previous_stones", encodeBoardStones snapshot.board ) ]
-
-                    Nothing ->
-                        []
-               )
-        )
+        [ ( "width", Json.Encode.int model.width )
+        , ( "height", Json.Encode.int model.height )
+        , ( "komi", Json.Encode.float model.komi )
+        , ( "current_player", encodeStone model.currentPlayer )
+        , ( "stones", encodeBoardStones model.board )
+        , ( "think_ms", Json.Encode.int thinkMs )
+        ]
 
 
 decodeAiMove : Json.Decode.Decoder AiMove
