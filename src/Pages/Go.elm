@@ -5,12 +5,17 @@ module Pages.Go exposing
     , deadStones
     , init
     , keyMsg
+    , subscriptions
     , update
     , view
     )
 
 import Dict exposing (Dict)
+import Duration
 import Effect.Browser.Dom as Dom
+import Effect.Command exposing (FrontendOnly)
+import Effect.Subscription as Subscription exposing (Subscription)
+import Effect.Time as Time
 import Html
 import Html.Attributes
 import Html.Events
@@ -45,10 +50,20 @@ type alias Snapshot =
     }
 
 
+type alias TimeControl =
+    { mainTime : Float
+    , increment : Float
+    }
+
+
 type alias GameModel =
     { width : Int
     , height : Int
     , komi : Float
+    , timeControl : Maybe TimeControl
+    , blackTime : Float
+    , whiteTime : Float
+    , lastTick : Maybe Time.Posix
     , board : Dict ( Int, Int ) Stone
     , history : List Snapshot
     , viewingMovesBack : Int
@@ -66,6 +81,8 @@ type alias SetupModel =
     , heightInput : String
     , handicapInput : String
     , komiInput : String
+    , mainTimeInput : String
+    , incrementInput : String
     , sizeSelection : SizeSelection
     , error : Maybe String
     }
@@ -90,6 +107,8 @@ init =
         , heightInput = "9"
         , handicapInput = "0"
         , komiInput = "6.5"
+        , mainTimeInput = "10"
+        , incrementInput = "5"
         , sizeSelection = Standard9
         , error = Nothing
         }
@@ -185,8 +204,8 @@ handicapPositions handicap width height =
         |> Set.toList
 
 
-startGame : Int -> Int -> Int -> Float -> GameModel
-startGame width height handicap komi =
+startGame : Int -> Int -> Int -> Float -> Maybe TimeControl -> GameModel
+startGame width height handicap komi timeControl =
     let
         positions : List ( Int, Int )
         positions =
@@ -209,6 +228,22 @@ startGame width height handicap komi =
     { width = width
     , height = height
     , komi = komi
+    , timeControl = timeControl
+    , blackTime =
+        case timeControl of
+            Just tc ->
+                tc.mainTime
+
+            Nothing ->
+                0
+    , whiteTime =
+        case timeControl of
+            Just tc ->
+                tc.mainTime
+
+            Nothing ->
+                0
+    , lastTick = Nothing
     , board = board
     , history = []
     , viewingMovesBack = 0
@@ -245,8 +280,11 @@ type Msg
     | ChangedHeightInput String
     | ChangedHandicapInput String
     | ChangedKomiInput String
+    | ChangedMainTimeInput String
+    | ChangedIncrementInput String
     | SelectedSize SizeSelection
     | PressedStartGame
+    | Tick Time.Posix
 
 
 keyMsg : String -> Maybe Msg
@@ -260,6 +298,25 @@ keyMsg key =
 
         _ ->
             Nothing
+
+
+subscriptions : Model -> Subscription FrontendOnly Msg
+subscriptions model =
+    case model of
+        Game game ->
+            case ( game.timeControl, game.phase ) of
+                ( Just _, Playing _ ) ->
+                    if isViewingPast game then
+                        Subscription.none
+
+                    else
+                        Time.every (Duration.milliseconds 250) Tick
+
+                _ ->
+                    Subscription.none
+
+        Setup _ ->
+            Subscription.none
 
 
 otherStone : Stone -> Stone
@@ -391,6 +448,106 @@ currentSnapshot model =
     }
 
 
+applyIncrement : Stone -> GameModel -> GameModel
+applyIncrement mover model =
+    case model.timeControl of
+        Just tc ->
+            case mover of
+                Black ->
+                    { model | blackTime = model.blackTime + tc.increment, lastTick = Nothing }
+
+                White ->
+                    { model | whiteTime = model.whiteTime + tc.increment, lastTick = Nothing }
+
+        Nothing ->
+            { model | lastTick = Nothing }
+
+
+performPass : GameModel -> GameModel
+performPass model =
+    case model.phase of
+        Playing { previousPlayerPassed } ->
+            if previousPlayerPassed then
+                { model
+                    | phase = Marking { markingPlayer = model.currentPlayer }
+                    , lastError = Nothing
+                }
+
+            else
+                { model
+                    | currentPlayer = otherStone model.currentPlayer
+                    , lastError = Nothing
+                    , phase = Playing { previousPlayerPassed = True }
+                }
+
+        _ ->
+            model
+
+
+timeoutPass : GameModel -> GameModel
+timeoutPass model =
+    let
+        timedOutPlayer : Stone
+        timedOutPlayer =
+            model.currentPlayer
+
+        passed : GameModel
+        passed =
+            performPass model
+    in
+    { passed
+        | lastError = Just (stoneName timedOutPlayer ++ " ran out of time and passed.")
+        , lastTick = Nothing
+    }
+
+
+tickClock : Time.Posix -> GameModel -> GameModel
+tickClock now model =
+    case model.timeControl of
+        Nothing ->
+            model
+
+        Just _ ->
+            case ( model.phase, isViewingPast model ) of
+                ( Playing _, False ) ->
+                    let
+                        elapsed : Float
+                        elapsed =
+                            case model.lastTick of
+                                Just last ->
+                                    max 0 (Duration.from last now |> Duration.inSeconds)
+
+                                Nothing ->
+                                    0
+
+                        decremented : GameModel
+                        decremented =
+                            case model.currentPlayer of
+                                Black ->
+                                    { model | blackTime = max 0 (model.blackTime - elapsed) }
+
+                                White ->
+                                    { model | whiteTime = max 0 (model.whiteTime - elapsed) }
+
+                        currentRemaining : Float
+                        currentRemaining =
+                            case decremented.currentPlayer of
+                                Black ->
+                                    decremented.blackTime
+
+                                White ->
+                                    decremented.whiteTime
+                    in
+                    if currentRemaining <= 0 then
+                        timeoutPass { decremented | lastTick = Just now }
+
+                    else
+                        { decremented | lastTick = Just now }
+
+                _ ->
+                    { model | lastTick = Just now }
+
+
 viewingSnapshot : GameModel -> Snapshot
 viewingSnapshot model =
     if model.viewingMovesBack <= 0 then
@@ -477,26 +634,27 @@ tryPlace x y model =
             { model | lastError = Just "Move repeats a board state" }
 
         else
-            { model
-                | board = boardAfterCapture
-                , history = currentSnapshot model :: model.history
-                , viewingMovesBack = 0
-                , currentPlayer = opponent
-                , blackCaptures =
-                    if stone == Black then
-                        model.blackCaptures + captured
+            applyIncrement stone
+                { model
+                    | board = boardAfterCapture
+                    , history = currentSnapshot model :: model.history
+                    , viewingMovesBack = 0
+                    , currentPlayer = opponent
+                    , blackCaptures =
+                        if stone == Black then
+                            model.blackCaptures + captured
 
-                    else
-                        model.blackCaptures
-                , whiteCaptures =
-                    if stone == White then
-                        model.whiteCaptures + captured
+                        else
+                            model.blackCaptures
+                    , whiteCaptures =
+                        if stone == White then
+                            model.whiteCaptures + captured
 
-                    else
-                        model.whiteCaptures
-                , phase = Playing { previousPlayerPassed = False }
-                , lastError = Nothing
-            }
+                        else
+                            model.whiteCaptures
+                    , phase = Playing { previousPlayerPassed = False }
+                    , lastError = Nothing
+                }
 
 
 cycleOwner : Maybe Stone -> Maybe Stone
@@ -718,6 +876,38 @@ parseKomi input =
                 Err "Enter a number"
 
 
+parseTimeControl : SetupModel -> Result String (Maybe TimeControl)
+parseTimeControl model =
+    let
+        trimmedMain : String
+        trimmedMain =
+            String.trim model.mainTimeInput
+    in
+    if trimmedMain == "" then
+        Ok Nothing
+
+    else
+        case String.toFloat trimmedMain of
+            Nothing ->
+                Err "Main time: enter a number of minutes"
+
+            Just minutes ->
+                if minutes <= 0 then
+                    Ok Nothing
+
+                else
+                    case String.toFloat (String.trim model.incrementInput) of
+                        Nothing ->
+                            Err "Increment: enter a number of seconds"
+
+                        Just inc ->
+                            if inc < 0 then
+                                Err "Increment cannot be negative"
+
+                            else
+                                Ok (Just { mainTime = minutes * 60, increment = inc })
+
+
 update : Msg -> Model -> Model
 update msg model =
     case model of
@@ -740,7 +930,12 @@ startWithSettings w h model =
                     Setup { model | error = Just ("Komi: " ++ err) }
 
                 Ok komi ->
-                    Game (startGame w h handicap komi)
+                    case parseTimeControl model of
+                        Err err ->
+                            Setup { model | error = Just err }
+
+                        Ok timeControl ->
+                            Game (startGame w h handicap komi timeControl)
 
 
 updateSetup : Msg -> SetupModel -> Model
@@ -757,6 +952,12 @@ updateSetup msg model =
 
         ChangedKomiInput input ->
             Setup { model | komiInput = input, error = Nothing }
+
+        ChangedMainTimeInput input ->
+            Setup { model | mainTimeInput = input, error = Nothing }
+
+        ChangedIncrementInput input ->
+            Setup { model | incrementInput = input, error = Nothing }
 
         SelectedSize selection ->
             Setup { model | sizeSelection = selection, error = Nothing }
@@ -826,19 +1027,8 @@ updateGame msg model =
 
                 else
                     case model.phase of
-                        Playing { previousPlayerPassed } ->
-                            if previousPlayerPassed then
-                                { model
-                                    | phase = Marking { markingPlayer = model.currentPlayer }
-                                    , lastError = Nothing
-                                }
-
-                            else
-                                { model
-                                    | currentPlayer = otherStone model.currentPlayer
-                                    , lastError = Nothing
-                                    , phase = Playing { previousPlayerPassed = True }
-                                }
+                        Playing _ ->
+                            applyIncrement model.currentPlayer (performPass model)
 
                         _ ->
                             model
@@ -927,11 +1117,20 @@ updateGame msg model =
         ChangedKomiInput _ ->
             Game model
 
+        ChangedMainTimeInput _ ->
+            Game model
+
+        ChangedIncrementInput _ ->
+            Game model
+
         SelectedSize _ ->
             Game model
 
         PressedStartGame ->
             Game model
+
+        Tick now ->
+            Game (tickClock now model)
 
 
 cellPx : Int
@@ -994,6 +1193,13 @@ setupView model =
                 }
             )
         , setupSection "Komi (extra points for White at scoring)" (komiInput model.komiInput)
+        , setupSection
+            "Time control (set main time to 0 to disable)"
+            (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink, Ui.contentBottom ]
+                [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
+                , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
+                ]
+            )
         , case model.error of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -1099,6 +1305,104 @@ numberInput args =
         |> Ui.html
 
 
+timeInput : String -> String -> String -> (String -> Msg) -> Element Msg
+timeInput htmlId label value onChange =
+    Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
+        [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
+        , Html.input
+            [ Html.Attributes.id htmlId
+            , Html.Attributes.type_ "number"
+            , Html.Attributes.min "0"
+            , Html.Attributes.step "1"
+            , Html.Attributes.value value
+            , Html.Attributes.style "font-size" "inherit"
+            , Html.Attributes.style "width" "70px"
+            , Html.Attributes.style "padding" "8px"
+            , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.inputBorder)
+            , Html.Attributes.style "border-radius" "4px"
+            , Html.Events.onInput onChange
+            ]
+            []
+            |> Ui.html
+        ]
+
+
+formatClock : Float -> String
+formatClock seconds =
+    let
+        clamped : Int
+        clamped =
+            max 0 (floor seconds)
+
+        minutes : Int
+        minutes =
+            clamped // 60
+
+        secs : Int
+        secs =
+            modBy 60 clamped
+
+        twoDigit : Int -> String
+        twoDigit n =
+            if n < 10 then
+                "0" ++ String.fromInt n
+
+            else
+                String.fromInt n
+    in
+    String.fromInt minutes ++ ":" ++ twoDigit secs
+
+
+clockView : GameModel -> Element Msg
+clockView model =
+    case model.timeControl of
+        Nothing ->
+            Ui.none
+
+        Just _ ->
+            Ui.row
+                [ Ui.spacing 16, Ui.width Ui.shrink ]
+                [ clockChip "Black" model.blackTime (model.currentPlayer == Black && isPlayingPhase model)
+                , clockChip "White" model.whiteTime (model.currentPlayer == White && isPlayingPhase model)
+                ]
+
+
+clockChip : String -> Float -> Bool -> Element msg
+clockChip label seconds isActive =
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.padding 8
+        , Ui.rounded 4
+        , Ui.border 1
+        , Ui.borderColor
+            (if isActive then
+                Ui.rgb 59 153 252
+
+             else
+                Ui.rgb 200 200 200
+            )
+        , Ui.width Ui.shrink
+        , if isActive then
+            Ui.background (Ui.rgb 230 240 255)
+
+          else
+            Ui.noAttr
+        ]
+        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text label)
+        , Ui.text (formatClock seconds)
+        ]
+
+
+isPlayingPhase : GameModel -> Bool
+isPlayingPhase model =
+    case model.phase of
+        Playing _ ->
+            True
+
+        _ ->
+            False
+
+
 gameView : GameModel -> Element Msg
 gameView model =
     Ui.column
@@ -1118,6 +1422,7 @@ gameView model =
                 )
             )
         , statusView model
+        , clockView model
         , boardView model
         , historyView model
         , controlsView model

@@ -151,6 +151,12 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
+        , case model of
+            Loaded loaded ->
+                Pages.Go.subscriptions loaded.goModel |> Subscription.map GoMsg
+
+            Loading _ ->
+                Subscription.none
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
