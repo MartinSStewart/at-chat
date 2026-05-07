@@ -33,37 +33,37 @@ exports.init = async function init(app) {
             pc.addTrack(track, localStream);
         });
 
-        let mediaRecorder = new MediaRecorder(localStream);
-
-        let startTime = Date.now();
-        console.log("Start", startTime);
-
-        mediaRecorder.addEventListener("dataavailable", async (e) => {
-            let endTime = Date.now();
-            const peerIdBytes = new TextEncoder().encode(peerUserId);
-            const typeBytes = new TextEncoder().encode(e.data.type);
-            const dataBuffer = await e.data.arrayBuffer();
-            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + 8 + 8 + dataBuffer.byteLength);
-            const view = new DataView(result);
-            const bytes = new Uint8Array(result);
-
-            view.setUint8(0, peerIdBytes.length);
-            bytes.set(peerIdBytes, 1);
-            let offset = 1 + peerIdBytes.length;
-            view.setUint8(offset, typeBytes.length);
-            offset += 1;
-            bytes.set(typeBytes, offset);
-            offset += typeBytes.length;
-
-            view.setFloat64(offset, startTime);
-            offset += 8;
-            view.setFloat64(offset, endTime);
-            offset += 8;
-
-            bytes.set(new Uint8Array(dataBuffer), offset);
-            app.ports.got_recorded_data.send(new DataView(result));
-        });
-        mediaRecorder.start();
+//        let mediaRecorder = new MediaRecorder(localStream);
+//
+//        let startTime = Date.now();
+//        console.log("Start", startTime);
+//
+//        mediaRecorder.addEventListener("dataavailable", async (e) => {
+//            let endTime = Date.now();
+//            const peerIdBytes = new TextEncoder().encode(peerUserId);
+//            const typeBytes = new TextEncoder().encode(e.data.type);
+//            const dataBuffer = await e.data.arrayBuffer();
+//            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + 8 + 8 + dataBuffer.byteLength);
+//            const view = new DataView(result);
+//            const bytes = new Uint8Array(result);
+//
+//            view.setUint8(0, peerIdBytes.length);
+//            bytes.set(peerIdBytes, 1);
+//            let offset = 1 + peerIdBytes.length;
+//            view.setUint8(offset, typeBytes.length);
+//            offset += 1;
+//            bytes.set(typeBytes, offset);
+//            offset += typeBytes.length;
+//
+//            view.setFloat64(offset, startTime);
+//            offset += 8;
+//            view.setFloat64(offset, endTime);
+//            offset += 8;
+//
+//            bytes.set(new Uint8Array(dataBuffer), offset);
+//            app.ports.got_recorded_data.send(new DataView(result));
+//        });
+//        mediaRecorder.start();
 
         app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
 
@@ -231,22 +231,6 @@ exports.init = async function init(app) {
         });
     }
 
-    async function setAudioInput(deviceId) {
-        let stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
-        let tracks = stream.getAudioTracks();
-        console.log("Tracks: ", tracks);
-        let track = tracks[0];
-        connections.forEach(function (conn) {
-            if (conn.pc) {
-                const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
-                let oldTrack = sender.track;
-                track.enabled = oldTrack.enabled;
-                sender.replaceTrack(track);
-                oldTrack.stop();
-            }
-        });
-    }
-
     function setVideoInputEnabled(enabled) {
         connections.forEach(function (conn) {
             if (conn.pc) {
@@ -255,6 +239,28 @@ exports.init = async function init(app) {
                         s.track.enabled = enabled;
                     }
                 });
+            }
+        });
+    }
+
+    async function setInput(isAudioInput, deviceId) {
+        let config;
+        if (isAudioInput) {
+            config = { audio: { deviceId: { exact: deviceId } } };
+        } else {
+            config = { video: { deviceId: { exact: deviceId } } };
+        }
+
+        let stream = await navigator.mediaDevices.getUserMedia(config);
+        let tracks = stream.getAudioTracks();
+        let track = tracks[0];
+        connections.forEach(function (conn) {
+            if (conn.pc) {
+                const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
+                let oldTrack = sender.track;
+                track.enabled = oldTrack.enabled;
+                sender.replaceTrack(track);
+                oldTrack.stop();
             }
         });
     }
@@ -271,8 +277,8 @@ exports.init = async function init(app) {
             await handleSignal(msg.args[0], msg.args[1]);
         } else if (msg.tag === "set-audio-input-enabled") {
             setAudioInputEnabled(msg.args[0]);
-        } else if (msg.tag === "set-audio-input") {
-            setAudioInput(msg.args[0]);
+        } else if (msg.tag === "set-input") {
+            setInput(msg.args[0], msg.args[1]);
         } else if (msg.tag === "set-video-input-enabled") {
             setVideoInputEnabled(msg.args[0]);
         } else if (msg.tag === "get-media-devices") {
@@ -364,6 +370,5 @@ exports.init = async function init(app) {
             }
         }
     }
-
 };
 

@@ -3624,11 +3624,13 @@ updateLoaded msg model =
             case voiceChatMsg of
                 VoiceChat.SelectedAudioInputDevice deviceId ->
                     ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetAudioInput deviceId)
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetInput True deviceId)
                     )
 
                 VoiceChat.SelectedVideoInputDevice deviceId ->
-                    ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }, Command.none )
+                    ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }
+                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetInput False deviceId)
+                    )
 
                 VoiceChat.PressedToggleMute ->
                     let

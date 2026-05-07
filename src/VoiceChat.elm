@@ -435,7 +435,7 @@ type VoiceChatToJs
     | Js_Stop ConnectionId
     | Js_Signal ConnectionId Signal
     | Js_SetAudioInputEnabled Bool
-    | Js_SetAudioInput (IdString MediaDeviceId)
+    | Js_SetInput Bool (IdString MediaDeviceId)
     | Js_SetVideoInputEnabled Bool
     | Js_GetMediaDevices
 
@@ -479,8 +479,8 @@ voiceChatToJsCodec =
                 Js_SetAudioInputEnabled a ->
                     eSetMuted a
 
-                Js_SetAudioInput a ->
-                    eSetAudioInput a
+                Js_SetInput a b ->
+                    eSetAudioInput a b
 
                 Js_SetVideoInputEnabled a ->
                     eSetVideoPaused a
@@ -492,7 +492,7 @@ voiceChatToJsCodec =
         |> Codec.variant1 "stop" Js_Stop connectionIdCodec
         |> Codec.variant2 "signal" Js_Signal connectionIdCodec signalCodec
         |> Codec.variant1 "set-audio-input-enabled" Js_SetAudioInputEnabled Codec.bool
-        |> Codec.variant1 "set-audio-input" Js_SetAudioInput IdString.codec
+        |> Codec.variant2 "set-input" Js_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" Js_SetVideoInputEnabled Codec.bool
         |> Codec.variant0 "get-media-devices" Js_GetMediaDevices
         |> Codec.buildCustom
