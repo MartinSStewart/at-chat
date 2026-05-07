@@ -468,17 +468,21 @@ performPass model =
     case model.phase of
         Playing { previousPlayerPassed } ->
             if previousPlayerPassed then
-                { model
-                    | phase = Marking { markingPlayer = model.currentPlayer }
-                    , lastError = Nothing
-                }
+                applyIncrement
+                    model.currentPlayer
+                    { model
+                        | phase = Marking { markingPlayer = model.currentPlayer }
+                        , lastError = Nothing
+                    }
 
             else
-                { model
-                    | currentPlayer = otherStone model.currentPlayer
-                    , lastError = Nothing
-                    , phase = Playing { previousPlayerPassed = True }
-                }
+                applyIncrement
+                    model.currentPlayer
+                    { model
+                        | currentPlayer = otherStone model.currentPlayer
+                        , lastError = Nothing
+                        , phase = Playing { previousPlayerPassed = True }
+                    }
 
         _ ->
             model
@@ -1028,7 +1032,7 @@ updateGame msg model =
                 else
                     case model.phase of
                         Playing _ ->
-                            applyIncrement model.currentPlayer (performPass model)
+                            performPass model
 
                         _ ->
                             model
@@ -1372,6 +1376,7 @@ clockChip label seconds isActive =
     Ui.row
         [ Ui.spacing 8
         , Ui.padding 8
+        , Ui.width (Ui.px 150)
         , Ui.rounded 4
         , Ui.border 1
         , Ui.borderColor
@@ -1381,9 +1386,8 @@ clockChip label seconds isActive =
              else
                 Ui.rgb 200 200 200
             )
-        , Ui.width Ui.shrink
         , if isActive then
-            Ui.background (Ui.rgb 230 240 255)
+            Ui.background MyUi.background2
 
           else
             Ui.noAttr
