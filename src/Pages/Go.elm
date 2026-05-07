@@ -18,6 +18,7 @@ import Effect.Http as Http
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
 import Env
+import FileStatus
 import Html
 import Html.Attributes
 import Html.Events
@@ -1262,7 +1263,7 @@ handleAiMove result model =
 requestAiMove : GameModel -> Command FrontendOnly toMsg Msg
 requestAiMove model =
     Http.post
-        { url = Env.domain ++ "/file/go-move"
+        { url = FileStatus.domain ++ "/file/go-move"
         , body = Http.jsonBody (encodeAiMoveRequest model)
         , expect = Http.expectJson GotAiMove decodeAiMove
         }
