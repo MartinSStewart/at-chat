@@ -3460,34 +3460,6 @@ updateLoaded msg model =
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
 
-        PressedChannelHeaderVoiceChatButton roomId ->
-            let
-                voiceChat : VoiceChat.Model
-                voiceChat =
-                    model.voiceChat
-            in
-            ( { model
-                | voiceChat =
-                    { voiceChat
-                        | expanded =
-                            if SeqSet.member roomId voiceChat.expanded then
-                                SeqSet.remove roomId voiceChat.expanded
-
-                            else
-                                SeqSet.insert roomId voiceChat.expanded
-                    }
-              }
-            , case voiceChat.userMediaDevices of
-                MediaDevicesNotLoaded ->
-                    VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
-
-                HasMediaDevices mediaDevices ->
-                    Command.none
-
-                FailedToGetMediaDevices string ->
-                    VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
-            )
-
         GotVoiceChatSignalFromJs result ->
             case result of
                 Ok event ->
@@ -3682,6 +3654,29 @@ updateLoaded msg model =
                         Nothing ->
                             ( model, Command.none )
 
+                VoiceChat.PressedChannelHeaderVoiceChatButton roomId ->
+                    ( { model
+                        | voiceChat =
+                            { voiceChat
+                                | expanded =
+                                    if SeqSet.member roomId voiceChat.expanded then
+                                        SeqSet.remove roomId voiceChat.expanded
+
+                                    else
+                                        SeqSet.insert roomId voiceChat.expanded
+                            }
+                      }
+                    , case voiceChat.userMediaDevices of
+                        MediaDevicesNotLoaded ->
+                            VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+
+                        HasMediaDevices mediaDevices ->
+                            Command.none
+
+                        FailedToGetMediaDevices string ->
+                            VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+                    )
+
         GotVoiceChatRecording bytes ->
             let
                 voiceChat =
@@ -3711,12 +3706,6 @@ updateLoaded msg model =
 
                 Nothing ->
                     ( model, Command.none )
-
-
-
---( { model | voiceChat = {voiceChat | recording =  }}, Command.none)
---
---)
 
 
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg

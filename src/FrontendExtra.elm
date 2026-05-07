@@ -26,7 +26,7 @@ import ImageEditor
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
 import Local
-import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import LoginForm
 import MembersAndOwner
 import Message exposing (ChangeAttachments(..), Message(..), MessageState)
@@ -60,7 +60,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Prose
 import Url exposing (Url)
-import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), NotificationLevel(..))
+import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 import VoiceChat exposing (RoomId(..))
@@ -1327,9 +1327,6 @@ isPressMsg msg =
 
         PageUpGotViewport _ ->
             False
-
-        PressedChannelHeaderVoiceChatButton _ ->
-            True
 
         GotVoiceChatSignalFromJs _ ->
             False

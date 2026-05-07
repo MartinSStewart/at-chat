@@ -5,33 +5,32 @@ exports.init = async function init(app) {
     async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
         stopConnection(peerUserId);
 
-        let localStream;
-        let devices;
-        try {
-            let devices2 = await navigator.mediaDevices.enumerateDevices();
-            localStream =
-                await navigator.mediaDevices.getUserMedia(
-                    { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
-                    , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
-                    });
-            devices = await navigator.mediaDevices.enumerateDevices();
-        } catch (e) {
-            app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
-            return;
-        }
-
         const pc = new RTCPeerConnection({
             iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
         });
 
 
-        let videoTracks = [];
-        let defaultDevices = [];
+        try {
+            let devices2 = await navigator.mediaDevices.enumerateDevices();
+            let localStream =
+                await navigator.mediaDevices.getUserMedia(
+                    { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
+                    , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
+                    });
+            let devices = await navigator.mediaDevices.enumerateDevices();
 
-        localStream.getTracks().forEach(function (track) {
-            defaultDevices.push(track.getSettings().deviceId);
-            pc.addTrack(track, localStream);
-        });
+            let defaultDevices = [];
+            localStream.getTracks().forEach(function (track) {
+                defaultDevices.push(track.getSettings().deviceId);
+                pc.addTrack(track, localStream);
+            });
+
+            app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
+        } catch (e) {
+            app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
+            return;
+        }
+
 
 //        let mediaRecorder = new MediaRecorder(localStream);
 //
@@ -65,7 +64,7 @@ exports.init = async function init(app) {
 //        });
 //        mediaRecorder.start();
 
-        app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
+
 
         console.log("Voice chat: startConnection", peerUserId);
 

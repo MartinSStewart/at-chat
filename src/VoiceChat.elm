@@ -15,7 +15,7 @@ port module VoiceChat exposing
     , Sdp
     , ServerChange(..)
     , Signal(..)
-    , StartArgs
+    , StartData
     , Track(..)
     , VideoTrackData
     , VoiceChatFromJs(..)
@@ -33,8 +33,10 @@ port module VoiceChat exposing
     , serverChangeCmd
     , startArgs
     , videoNodes
+    , voiceChatButton
     , voiceChatFromJs
     , voiceChatToJs
+    , voiceChatView
     )
 
 import Bytes exposing (Bytes)
@@ -47,9 +49,11 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (Id, UserId)
 import IdString exposing (IdString)
 import Json.Decode
@@ -58,10 +62,12 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
+import OneOrGreater
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import User exposing (LocalUser)
 
 
 type LocalChange
@@ -84,6 +90,7 @@ type Msg
     | PressedJoinCall RoomId
     | PressedLeaveCall RoomId
     | PressedDownloadRecording RoomId
+    | PressedChannelHeaderVoiceChatButton RoomId
 
 
 type alias Local =
@@ -247,6 +254,16 @@ videoNodes windowSize model local =
                             connectionId : ConnectionId
                             connectionId =
                                 { roomId = roomId, otherClientId = session }
+
+                            voiceChatX =
+                                if isMobile then
+                                    0
+
+                                else
+                                    MyUi.channelAndGuildColumnWidth windowSize
+
+                            voiceChatWidth =
+                                Coord.xRaw windowSize - voiceChatX
                         in
                         Html.video
                             [ Html.Attributes.style "width" "300px"
@@ -255,12 +272,7 @@ videoNodes windowSize model local =
                             , Html.Attributes.style
                                 "left"
                                 (String.fromInt
-                                    (if isMobile then
-                                        index * 320 + 10
-
-                                     else
-                                        index * 320 + 10 + MyUi.channelAndGuildColumnWidth windowSize
-                                    )
+                                    (index * 320 + 10 + voiceChatX)
                                     ++ "px"
                                 )
                             , Html.Attributes.style "top" "10px"
@@ -284,6 +296,168 @@ videoNodes windowSize model local =
         )
         (SeqDict.toList local.voiceChats)
         |> Html.div []
+
+
+voiceChatView : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
+voiceChatView windowSize roomId localUser calls model =
+    let
+        ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
+        ongoingCall =
+            SeqDict.get roomId calls.voiceChats
+    in
+    Ui.el
+        [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
+        , Ui.background MyUi.background3
+        , MyUi.noShrinking
+        , Ui.inFront (Ui.el [ Ui.paddingXY 16 7 ] (voiceChatButton roomId localUser calls))
+        , Ui.inFront
+            (Ui.row
+                [ Ui.alignBottom
+                , Ui.alignRight
+                , Ui.width Ui.shrink
+                , Ui.padding 16
+                , Ui.spacing 8
+                ]
+                [ MyUi.rowButton
+                    (Dom.id "guild_startVoiceChat")
+                    (PressedJoinCall roomId)
+                    [ Ui.spacing 8
+                    , Ui.background (Ui.rgb 60 160 70)
+                    , Ui.rounded 99
+                    , Ui.height Ui.fill
+                    , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
+                    ]
+                    [ Ui.html Icons.phone
+                    , (case ( hasJoined roomId calls, ongoingCall ) of
+                        ( True, Nothing ) ->
+                            "End Call"
+
+                        ( True, Just _ ) ->
+                            "Leave Call"
+
+                        ( False, Nothing ) ->
+                            "Start Call"
+
+                        ( False, Just _ ) ->
+                            "Join Call"
+                      )
+                        |> Ui.text
+                        |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
+                    ]
+                , voiceChatControlButton
+                    "guild_voiceChatMute"
+                    (Ui.html Icons.microphone)
+                    model.audioInputEnabled
+                    PressedToggleMute
+                , voiceChatControlButton
+                    "guild_voiceChatPauseVideo"
+                    (Ui.el [ Ui.move { x = 2, y = 0, z = 0 } ] (Ui.html Icons.camera))
+                    model.videoInputEnabled
+                    PressedTogglePauseVideo
+                ]
+            )
+        ]
+        (mediaDeviceSelectors roomId model)
+
+
+voiceChatButton : RoomId -> LocalUser -> Local -> Element Msg
+voiceChatButton voiceChatId localUser calls =
+    let
+        joined : Element msg
+        joined =
+            joinedUsers voiceChatId calls
+                |> SeqDict.toList
+                |> List.map
+                    (\( userId, clientIds ) ->
+                        let
+                            count =
+                                NonemptySet.size clientIds
+                        in
+                        Ui.el
+                            [ case ( count > 1, OneOrGreater.fromInt count ) of
+                                ( True, Just count2 ) ->
+                                    GuildIcon.notificationHelper
+                                        MyUi.background1
+                                        MyUi.white
+                                        MyUi.border1
+                                        2
+                                        -2
+                                        count2
+
+                                _ ->
+                                    Ui.noAttr
+                            ]
+                            (case User.getUser userId localUser of
+                                Just user ->
+                                    User.profileImage user.icon
+
+                                Nothing ->
+                                    User.profileImage Nothing
+                            )
+                    )
+                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
+    in
+    Ui.row
+        [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
+        [ joined
+        , MyUi.elButton
+            (Dom.id "guild_voiceChat")
+            (PressedChannelHeaderVoiceChatButton voiceChatId)
+            [ Ui.width (Ui.px 44)
+            , Ui.paddingXY 4 0
+            , Ui.height Ui.fill
+            ]
+            (Ui.row
+                [ Ui.spacing 2, Ui.centerY ]
+                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+                , if hasJoined voiceChatId calls then
+                    Ui.el
+                        [ Ui.width (Ui.px 8)
+                        , Ui.height (Ui.px 8)
+                        , Ui.background (Ui.rgb 40 190 80)
+                        , Ui.rounded 4
+                        ]
+                        Ui.none
+
+                  else
+                    Ui.none
+                ]
+            )
+        ]
+
+
+voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
+voiceChatControlButton htmlId iconHtml isEnabled onPress =
+    MyUi.elButton
+        (Dom.id htmlId)
+        onPress
+        [ Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        , Ui.padding 8
+        , Ui.rounded 20
+        , Ui.background
+            (if isEnabled then
+                Ui.rgb 60 70 100
+
+             else
+                Ui.rgb 200 60 60
+            )
+        , Ui.Font.color MyUi.white
+        , if isEnabled then
+            Ui.noAttr
+
+          else
+            Ui.inFront
+                (Ui.el
+                    [ Ui.width Ui.fill
+                    , Ui.height Ui.fill
+                    ]
+                    (Ui.html Icons.diagonalSlash)
+                )
+        ]
+        (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] iconHtml)
 
 
 type Track
@@ -431,7 +605,7 @@ port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 type VoiceChatToJs
-    = Js_Start StartArgs
+    = Js_Start StartData
     | Js_Stop ConnectionId
     | Js_Signal ConnectionId Signal
     | Js_SetAudioInputEnabled Bool
@@ -440,7 +614,7 @@ type VoiceChatToJs
     | Js_GetMediaDevices
 
 
-type alias StartArgs =
+type alias StartData =
     { peerUserId : ConnectionId
     , shouldOffer : Bool
     , audioInput : Maybe (IdString MediaDeviceId)
@@ -450,9 +624,9 @@ type alias StartArgs =
     }
 
 
-startArgsCodec : Codec StartArgs
-startArgsCodec =
-    Codec.object StartArgs
+startDataCodec : Codec StartData
+startDataCodec =
+    Codec.object StartData
         |> Codec.field "peerUserId" .peerUserId connectionIdCodec
         |> Codec.field "shouldOffer" .shouldOffer Codec.bool
         |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
@@ -488,7 +662,7 @@ voiceChatToJsCodec =
                 Js_GetMediaDevices ->
                     eGetMediaDevices
         )
-        |> Codec.variant1 "start" Js_Start startArgsCodec
+        |> Codec.variant1 "start" Js_Start startDataCodec
         |> Codec.variant1 "stop" Js_Stop connectionIdCodec
         |> Codec.variant2 "signal" Js_Signal connectionIdCodec signalCodec
         |> Codec.variant1 "set-audio-input-enabled" Js_SetAudioInputEnabled Codec.bool
@@ -506,7 +680,7 @@ voiceChatToJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startArgs : ClientId -> ConnectionId -> Model -> StartArgs
+startArgs : ClientId -> ConnectionId -> Model -> StartData
 startArgs clientId connectionId model =
     { peerUserId = connectionId
     , shouldOffer =
@@ -777,6 +951,9 @@ isPressMsg msg =
             True
 
         PressedDownloadRecording roomId ->
+            True
+
+        PressedChannelHeaderVoiceChatButton _ ->
             True
 
 
