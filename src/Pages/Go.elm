@@ -1624,6 +1624,7 @@ boardView model =
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
         (gridLines model.width model.height
+            ++ starPointShapes model.width model.height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ (if clickable then
@@ -1695,6 +1696,46 @@ gridLines width height =
                     )
     in
     horizontal ++ vertical
+
+
+starPoints : Int -> Int -> List ( Int, Int )
+starPoints width height =
+    case ( width, height ) of
+        ( 9, 9 ) ->
+            [ ( 2, 2 ), ( 6, 2 ), ( 4, 4 ), ( 2, 6 ), ( 6, 6 ) ]
+
+        ( 13, 13 ) ->
+            [ ( 3, 3 ), ( 9, 3 ), ( 6, 6 ), ( 3, 9 ), ( 9, 9 ) ]
+
+        ( 19, 19 ) ->
+            [ ( 3, 3 )
+            , ( 9, 3 )
+            , ( 15, 3 )
+            , ( 3, 9 )
+            , ( 9, 9 )
+            , ( 15, 9 )
+            , ( 3, 15 )
+            , ( 9, 15 )
+            , ( 15, 15 )
+            ]
+
+        _ ->
+            []
+
+
+starPointShapes : Int -> Int -> List (Svg.Svg Msg)
+starPointShapes width height =
+    starPoints width height
+        |> List.map
+            (\( x, y ) ->
+                Svg.circle
+                    [ Svg.Attributes.cx (String.fromInt (x * cellPx + cellPx // 2))
+                    , Svg.Attributes.cy (String.fromInt (y * cellPx + cellPx // 2))
+                    , Svg.Attributes.r "3"
+                    , Svg.Attributes.fill "black"
+                    ]
+                    []
+            )
 
 
 stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
