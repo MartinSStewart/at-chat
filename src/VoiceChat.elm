@@ -16,6 +16,7 @@ port module VoiceChat exposing
     , ServerChange(..)
     , Signal(..)
     , StartData
+    , StartLocalStreamData
     , Track(..)
     , VideoTrackData
     , VoiceChatFromJs(..)
@@ -107,6 +108,7 @@ type alias Model =
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
     , expanded : SeqSet RoomId
+    , localIsSpeaking : Bool
     }
 
 
@@ -142,6 +144,7 @@ initModel =
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , expanded = SeqSet.empty
+    , localIsSpeaking = False
     }
 
 
@@ -245,10 +248,6 @@ videoNodes route windowSize model local =
                 _ ->
                     Nothing
 
-        total : Int
-        total =
-            NonemptySet.size sessions + 1
-
         voiceChatX =
             if isMobile then
                 0
@@ -257,13 +256,13 @@ videoNodes route windowSize model local =
                 MyUi.channelAndGuildColumnWidth windowSize
 
         voiceChatWidth =
-            Coord.xRaw windowSize - voiceChatX
+            Coord.xRaw windowSize - voiceChatX |> min 500
 
         padding =
             0
 
-        videoPosAndSize : Int -> ( Int, Int, Int )
-        videoPosAndSize index =
+        videoPosAndSize : Int -> Int -> ( Int, Int, Int )
+        videoPosAndSize total index =
             case total of
                 1 ->
                     ( voiceChatX + padding, padding, voiceChatWidth - padding * 2 )
@@ -285,16 +284,18 @@ videoNodes route windowSize model local =
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
-
-        localVideo =
-            videoNode "local-video" False (videoPosAndSize 0) False
     in
     (case viewingRoomId of
         Just viewingRoomId2 ->
             if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
                 case SeqDict.get viewingRoomId2 local.voiceChats of
                     Just sessions ->
-                        localVideo
+                        let
+                            total : Int
+                            total =
+                                NonemptySet.size sessions + 1
+                        in
+                        videoNode "local-video" False (videoPosAndSize total 0) False
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -305,19 +306,22 @@ videoNodes route windowSize model local =
                                     videoNode
                                         (connectionIdToString connectionId)
                                         False
-                                        (videoPosAndSize (index + 1))
+                                        (videoPosAndSize total (index + 1))
                                         (SeqSet.member connectionId model.isSpeaking)
                                 )
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ localVideo ]
+                        [ videoNode "local-video" False (videoPosAndSize 1 0) False ]
+
+            else if SeqSet.member viewingRoomId2 model.expanded then
+                [ videoNode "local-video" False (videoPosAndSize 1 0) False ]
 
             else
-                []
+                [ videoNode "local-video" True (videoPosAndSize 1 0) False ]
 
         Nothing ->
-            []
+            [ videoNode "local-video" True (videoPosAndSize 1 0) False ]
     )
         |> Html.Keyed.node "div" []
 
@@ -673,8 +677,26 @@ type VoiceChatToJs
     | Js_SetInput Bool (IdString MediaDeviceId)
     | Js_SetVideoInputEnabled Bool
     | Js_GetMediaDevices
-    | Js_StartLocalStream
+    | Js_StartLocalStream StartLocalStreamData
     | Js_StopLocalStream
+
+
+type alias StartLocalStreamData =
+    { audioInput : Maybe (IdString MediaDeviceId)
+    , videoInput : Maybe (IdString MediaDeviceId)
+    , audioInputEnabled : Bool
+    , videoInputEnabled : Bool
+    }
+
+
+startLocalStreamDataCodec : Codec StartLocalStreamData
+startLocalStreamDataCodec =
+    Codec.object StartLocalStreamData
+        |> Codec.field "audioInput" .audioInput (Codec.nullable IdString.codec)
+        |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
+        |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
+        |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
+        |> Codec.buildObject
 
 
 type alias StartData =
@@ -725,8 +747,8 @@ voiceChatToJsCodec =
                 Js_GetMediaDevices ->
                     eGetMediaDevices
 
-                Js_StartLocalStream ->
-                    eStartLocalStream
+                Js_StartLocalStream a ->
+                    eStartLocalStream a
 
                 Js_StopLocalStream ->
                     eStopLocalStream
@@ -738,7 +760,7 @@ voiceChatToJsCodec =
         |> Codec.variant2 "set-input" Js_SetInput Codec.bool IdString.codec
         |> Codec.variant1 "set-video-input-enabled" Js_SetVideoInputEnabled Codec.bool
         |> Codec.variant0 "get-media-devices" Js_GetMediaDevices
-        |> Codec.variant0 "start-local-stream" Js_StartLocalStream
+        |> Codec.variant1 "start-local-stream" Js_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" Js_StopLocalStream
         |> Codec.buildCustom
 
@@ -769,22 +791,18 @@ type MediaDeviceId
 
 type VoiceChatFromJs
     = GotSignal ConnectionId Signal
-    | GotMediaStreamTracks (List Track)
     | GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | GotUserMediaDevicesError String
-    | IsSpeakingChanged ConnectionId Bool
+    | IsSpeakingChanged (Maybe ConnectionId) Bool
 
 
 voiceChatFromJsCodec : Codec VoiceChatFromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\aEncoder bEncoder cEncoder dEncoder eEncoder value ->
+        (\aEncoder cEncoder dEncoder eEncoder value ->
             case value of
                 GotSignal a b ->
                     aEncoder a b
-
-                GotMediaStreamTracks videoTracks ->
-                    bEncoder videoTracks
 
                 GotUserMediaDevices a b ->
                     cEncoder a b
@@ -796,10 +814,9 @@ voiceChatFromJsCodec =
                     eEncoder a b
         )
         |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
-        |> Codec.variant1 "got-tracks" GotMediaStreamTracks (Codec.list trackCodec)
         |> Codec.variant2 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
-        |> Codec.variant2 "is-speaking-changed" IsSpeakingChanged connectionIdCodec Codec.bool
+        |> Codec.variant2 "is-speaking-changed" IsSpeakingChanged (Codec.nullable connectionIdCodec) Codec.bool
         |> Codec.buildCustom
 
 

@@ -3475,9 +3475,6 @@ updateLoaded msg model =
                                 )
                                 model
 
-                        VoiceChat.GotMediaStreamTracks _ ->
-                            ( model, Command.none )
-
                         VoiceChat.GotUserMediaDevices mediaDevices defaultDevices ->
                             ( { model | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices defaultDevices model.voiceChat }
                             , Command.none
@@ -3494,19 +3491,25 @@ updateLoaded msg model =
 
                         VoiceChat.IsSpeakingChanged connectionId isSpeaking ->
                             let
+                                voiceChat : VoiceChat.Model
                                 voiceChat =
                                     model.voiceChat
                             in
                             ( { model
                                 | voiceChat =
-                                    { voiceChat
-                                        | isSpeaking =
-                                            if isSpeaking then
-                                                SeqSet.insert connectionId voiceChat.isSpeaking
+                                    case connectionId of
+                                        Just connection2 ->
+                                            { voiceChat
+                                                | isSpeaking =
+                                                    if isSpeaking then
+                                                        SeqSet.insert connection2 voiceChat.isSpeaking
 
-                                            else
-                                                SeqSet.remove connectionId voiceChat.isSpeaking
-                                    }
+                                                    else
+                                                        SeqSet.remove connection2 voiceChat.isSpeaking
+                                            }
+
+                                        Nothing ->
+                                            { voiceChat | localIsSpeaking = isSpeaking }
                               }
                             , Command.none
                             )
@@ -3590,6 +3593,7 @@ updateLoaded msg model =
 
         VoiceChatMsg voiceChatMsg ->
             let
+                voiceChat : VoiceChat.Model
                 voiceChat =
                     model.voiceChat
             in
@@ -3717,15 +3721,22 @@ updateLoaded msg model =
                                         SeqSet.insert roomId voiceChat.expanded
                             }
                       }
-                    , case voiceChat.userMediaDevices of
-                        MediaDevicesNotLoaded ->
-                            VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
-
-                        HasMediaDevices _ ->
-                            Command.none
-
-                        FailedToGetMediaDevices _ ->
-                            VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+                    , VoiceChat.Js_StartLocalStream
+                        { audioInput = voiceChat.selectedAudioInputDevice
+                        , videoInput = voiceChat.selectedVideoInputDevice
+                        , audioInputEnabled = voiceChat.audioInputEnabled
+                        , videoInputEnabled = voiceChat.videoInputEnabled
+                        }
+                        |> VoiceChat.voiceChatToJs
+                      --case voiceChat.userMediaDevices of
+                      --    MediaDevicesNotLoaded ->
+                      --        VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+                      --
+                      --    HasMediaDevices _ ->
+                      --        Command.none
+                      --
+                      --    FailedToGetMediaDevices _ ->
+                      --        VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
                     )
 
         GotVoiceChatRecording bytes ->
@@ -5841,7 +5852,7 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.videoNodes loaded.windowSize loaded.voiceChat local.calls
+                                    , VoiceChat.videoNodes loaded.route loaded.windowSize loaded.voiceChat local.calls
                                         |> Ui.html
                                         |> Ui.inFront
                                     ]

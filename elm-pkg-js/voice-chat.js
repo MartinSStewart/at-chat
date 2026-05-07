@@ -1,6 +1,7 @@
 exports.init = async function init(app) {
     const connections = new Map();
     const pendingSignals = new Map();
+    let localStreamPreview = null;
 
     async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
         stopConnection(peerUserId);
@@ -297,28 +298,38 @@ exports.init = async function init(app) {
                 app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error", args: [ e.toString() ] });
             }
         } else if (msg.tag === "start-local-stream") {
+            const args = msg.args[0];
             try {
                 let devices2 = await navigator.mediaDevices.enumerateDevices();
-                let localStream =
+                localStreamPreview =
                     await navigator.mediaDevices.getUserMedia(
-                        { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
-                        , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
+                        { audio: args.audioInput ? { deviceId: args.audioInput } : devices2.some(a => a.kind === "audioinput")
+                        , video: args.videoInput ? { deviceId: args.videoInput } : devices2.some(a => a.kind === "videoinput")
                         });
                 let devices = await navigator.mediaDevices.enumerateDevices();
 
                 let defaultDevices = [];
-                localStream.getTracks().forEach(function (track) {
+                localStreamPreview.getTracks().forEach(function (track) {
                     defaultDevices.push(track.getSettings().deviceId);
                 });
 
                 app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
 
-                const videoNode = document.getElementById("local-video");
-                videoNode.srcObject = localStream;
+
             } catch (e) {
                 app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
                 return;
             }
+
+            const videoNode = document.getElementById("local-video");
+            videoNode.srcObject = localStreamPreview;
+            videoNode.play();
+
+//            setAudioInputEnabled(args.audioInputEnabled);
+//            setVideoInputEnabled(args.videoInputEnabled);
+        } else if (msg.tag === "stop-local-stream") {
+            const videoNode = document.getElementById("local-video");
+            videoNode.srcObject = null;
         }
     });
 
