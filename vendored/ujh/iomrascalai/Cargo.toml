@@ -1,0 +1,39 @@
+[package]
+
+description = "An AI for the game of Go"
+name = "iomrascalai"
+version = "0.3.2"
+authors = ["Urban Hafner <contact@urbanhafner.com>",
+        "Thomas Poinsot <thomas.poinsot1@gmail.com>",
+        "Igor Polyakov <iopguy+iomrasclai@gmail.com>"]
+homepage = "https://github.com/ujh/iomrascalai"
+repository = "https://github.com/ujh/iomrascalai"
+license = "GPL-3.0+"
+build = "build.rs"
+
+[dependencies]
+getopts = "*"
+num = "*"
+num_cpus = "*"
+quicksort = "*"
+rand = "*"
+regex = "*"
+smallvec = "*"
+time = "*"
+toml = "*"
+
+[dev-dependencies]
+hamcrest = "*"
+stainless = "*"
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+
+[profile.bench]
+opt-level = 3
+debug = false
+rpath = false
+lto = true

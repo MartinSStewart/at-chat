@@ -13,13 +13,17 @@ module Pages.Go exposing
 import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom
-import Effect.Command exposing (FrontendOnly)
+import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.Http as Http
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import Env
 import Html
 import Html.Attributes
 import Html.Events
 import Icons
+import Json.Decode
+import Json.Encode
 import MyUi
 import Set exposing (Set)
 import Svg
@@ -73,6 +77,8 @@ type alias GameModel =
     , phase : Phase
     , territoryMarks : Dict ( Int, Int ) Stone
     , lastError : Maybe String
+    , aiPlayer : Maybe Stone
+    , aiThinking : Bool
     }
 
 
@@ -84,8 +90,15 @@ type alias SetupModel =
     , mainTimeInput : String
     , incrementInput : String
     , sizeSelection : SizeSelection
+    , aiSelection : AiSelection
     , error : Maybe String
     }
+
+
+type AiSelection
+    = AiOff
+    | AiPlaysWhite
+    | AiPlaysBlack
 
 
 type SizeSelection
@@ -110,6 +123,7 @@ init =
         , mainTimeInput = "10"
         , incrementInput = "5"
         , sizeSelection = Standard9
+        , aiSelection = AiOff
         , error = Nothing
         }
 
@@ -204,8 +218,8 @@ handicapPositions handicap width height =
         |> Set.toList
 
 
-startGame : Int -> Int -> Int -> Float -> Maybe TimeControl -> GameModel
-startGame width height handicap komi timeControl =
+startGame : Int -> Int -> Int -> Float -> Maybe TimeControl -> Maybe Stone -> GameModel
+startGame width height handicap komi timeControl aiPlayer =
     let
         positions : List ( Int, Int )
         positions =
@@ -253,6 +267,8 @@ startGame width height handicap komi timeControl =
     , phase = Playing { previousPlayerPassed = False }
     , territoryMarks = Dict.empty
     , lastError = Nothing
+    , aiPlayer = aiPlayer
+    , aiThinking = False
     }
 
 
@@ -283,8 +299,15 @@ type Msg
     | ChangedMainTimeInput String
     | ChangedIncrementInput String
     | SelectedSize SizeSelection
+    | SelectedAi AiSelection
     | PressedStartGame
     | Tick Time.Posix
+    | GotAiMove (Result Http.Error AiMove)
+
+
+type AiMove
+    = AiPlay Int Int
+    | AiPass
 
 
 keyMsg : String -> Maybe Msg
@@ -912,7 +935,7 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Command FrontendOnly toMsg Msg )
 update msg model =
     case model of
         Setup setup ->
@@ -922,49 +945,70 @@ update msg model =
             updateGame msg game
 
 
-startWithSettings : Int -> Int -> SetupModel -> Model
+aiSelectionToStone : AiSelection -> Maybe Stone
+aiSelectionToStone selection =
+    case selection of
+        AiOff ->
+            Nothing
+
+        AiPlaysWhite ->
+            Just White
+
+        AiPlaysBlack ->
+            Just Black
+
+
+startWithSettings : Int -> Int -> SetupModel -> ( Model, Command FrontendOnly toMsg Msg )
 startWithSettings w h model =
     case parseHandicap model.handicapInput of
         Err err ->
-            Setup { model | error = Just ("Handicap: " ++ err) }
+            ( Setup { model | error = Just ("Handicap: " ++ err) }, Command.none )
 
         Ok handicap ->
             case parseKomi model.komiInput of
                 Err err ->
-                    Setup { model | error = Just ("Komi: " ++ err) }
+                    ( Setup { model | error = Just ("Komi: " ++ err) }, Command.none )
 
                 Ok komi ->
                     case parseTimeControl model of
                         Err err ->
-                            Setup { model | error = Just err }
+                            ( Setup { model | error = Just err }, Command.none )
 
                         Ok timeControl ->
-                            Game (startGame w h handicap komi timeControl)
+                            let
+                                game : GameModel
+                                game =
+                                    startGame w h handicap komi timeControl (aiSelectionToStone model.aiSelection)
+                            in
+                            wrapGameWithAi game
 
 
-updateSetup : Msg -> SetupModel -> Model
+updateSetup : Msg -> SetupModel -> ( Model, Command FrontendOnly toMsg Msg )
 updateSetup msg model =
     case msg of
         ChangedWidthInput input ->
-            Setup { model | widthInput = input, error = Nothing }
+            ( Setup { model | widthInput = input, error = Nothing }, Command.none )
 
         ChangedHeightInput input ->
-            Setup { model | heightInput = input, error = Nothing }
+            ( Setup { model | heightInput = input, error = Nothing }, Command.none )
 
         ChangedHandicapInput input ->
-            Setup { model | handicapInput = input, error = Nothing }
+            ( Setup { model | handicapInput = input, error = Nothing }, Command.none )
 
         ChangedKomiInput input ->
-            Setup { model | komiInput = input, error = Nothing }
+            ( Setup { model | komiInput = input, error = Nothing }, Command.none )
 
         ChangedMainTimeInput input ->
-            Setup { model | mainTimeInput = input, error = Nothing }
+            ( Setup { model | mainTimeInput = input, error = Nothing }, Command.none )
 
         ChangedIncrementInput input ->
-            Setup { model | incrementInput = input, error = Nothing }
+            ( Setup { model | incrementInput = input, error = Nothing }, Command.none )
 
         SelectedSize selection ->
-            Setup { model | sizeSelection = selection, error = Nothing }
+            ( Setup { model | sizeSelection = selection, error = Nothing }, Command.none )
+
+        SelectedAi selection ->
+            ( Setup { model | aiSelection = selection, error = Nothing }, Command.none )
 
         PressedStartGame ->
             case selectedDimensions model of
@@ -972,10 +1016,10 @@ updateSetup msg model =
                     startWithSettings w h model
 
                 Err err ->
-                    Setup { model | error = Just err }
+                    ( Setup { model | error = Just err }, Command.none )
 
         _ ->
-            Setup model
+            ( Setup model, Command.none )
 
 
 selectedDimensions : SetupModel -> Result String ( Int, Int )
@@ -1002,48 +1046,54 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-updateGame : Msg -> GameModel -> Model
+updateGame : Msg -> GameModel -> ( Model, Command FrontendOnly toMsg Msg )
 updateGame msg model =
     case msg of
         PressedCell x y ->
-            Game <|
-                if isViewingPast model then
-                    jumpToLatest model
+            if isViewingPast model then
+                ( Game (jumpToLatest model), Command.none )
 
-                else
-                    case model.phase of
-                        Playing _ ->
-                            tryPlace x y model
+            else
+                case model.phase of
+                    Playing _ ->
+                        if isAiTurn model then
+                            ( Game model, Command.none )
 
-                        Marking _ ->
-                            cycleTerritory x y model
+                        else
+                            wrapGameWithAi (tryPlace x y model)
 
-                        Confirming _ ->
-                            model
+                    Marking _ ->
+                        ( Game (cycleTerritory x y model), Command.none )
 
-                        Scored _ ->
-                            model
+                    Confirming _ ->
+                        ( Game model, Command.none )
+
+                    Scored _ ->
+                        ( Game model, Command.none )
 
         PressedPass ->
-            Game <|
-                if isViewingPast model then
-                    jumpToLatest model
+            if isViewingPast model then
+                ( Game (jumpToLatest model), Command.none )
 
-                else
-                    case model.phase of
-                        Playing _ ->
-                            performPass model
+            else
+                case model.phase of
+                    Playing _ ->
+                        if isAiTurn model then
+                            ( Game model, Command.none )
 
-                        _ ->
-                            model
+                        else
+                            wrapGameWithAi (performPass model)
+
+                    _ ->
+                        ( Game model, Command.none )
 
         PressedDoneMarking ->
             case model.phase of
                 Marking r ->
-                    Game { model | phase = Confirming r, lastError = Nothing }
+                    ( Game { model | phase = Confirming r, lastError = Nothing }, Command.none )
 
                 _ ->
-                    Game model
+                    ( Game model, Command.none )
 
         PressedAgree ->
             case model.phase of
@@ -1052,7 +1102,7 @@ updateGame msg model =
                         ( b, w ) =
                             computeScore model
                     in
-                    Game
+                    ( Game
                         { model
                             | phase =
                                 Scored
@@ -1062,26 +1112,30 @@ updateGame msg model =
                                     }
                             , lastError = Nothing
                         }
+                    , Command.none
+                    )
 
                 _ ->
-                    Game model
+                    ( Game model, Command.none )
 
         PressedDisagree ->
             case model.phase of
                 Confirming r ->
-                    Game
+                    ( Game
                         { model
                             | phase = Playing { previousPlayerPassed = False }
                             , currentPlayer = otherStone r.markingPlayer
                             , territoryMarks = Dict.empty
                             , lastError = Just "Marking rejected. Resume play."
                         }
+                    , Command.none
+                    )
 
                 _ ->
-                    Game model
+                    ( Game model, Command.none )
 
         PressedReset ->
-            init
+            ( init, Command.none )
 
         ChangedViewingMove moveNumber ->
             let
@@ -1093,48 +1147,195 @@ updateGame msg model =
                 clamped =
                     clamp 0 total moveNumber
             in
-            Game { model | viewingMovesBack = total - clamped, lastError = Nothing }
+            ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none )
 
         PressedArrowLeft ->
-            Game
+            ( Game
                 { model
                     | viewingMovesBack = min (List.length model.history) (model.viewingMovesBack + 1)
                     , lastError = Nothing
                 }
+            , Command.none
+            )
 
         PressedArrowRight ->
-            Game
+            ( Game
                 { model
                     | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
                     , lastError = Nothing
                 }
+            , Command.none
+            )
 
         ChangedWidthInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedHeightInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedHandicapInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedKomiInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedMainTimeInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedIncrementInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         SelectedSize _ ->
-            Game model
+            ( Game model, Command.none )
+
+        SelectedAi _ ->
+            ( Game model, Command.none )
 
         PressedStartGame ->
-            Game model
+            ( Game model, Command.none )
 
         Tick now ->
-            Game (tickClock now model)
+            ( Game (tickClock now model), Command.none )
+
+        GotAiMove result ->
+            handleAiMove result model
+
+
+isAiTurn : GameModel -> Bool
+isAiTurn model =
+    case ( model.phase, model.aiPlayer ) of
+        ( Playing _, Just stone ) ->
+            stone == model.currentPlayer
+
+        _ ->
+            False
+
+
+wrapGameWithAi : GameModel -> ( Model, Command FrontendOnly toMsg Msg )
+wrapGameWithAi game =
+    if isAiTurn game && not game.aiThinking then
+        ( Game { game | aiThinking = True }, requestAiMove game )
+
+    else
+        ( Game game, Command.none )
+
+
+handleAiMove : Result Http.Error AiMove -> GameModel -> ( Model, Command FrontendOnly toMsg Msg )
+handleAiMove result model =
+    let
+        cleared : GameModel
+        cleared =
+            { model | aiThinking = False }
+    in
+    case result of
+        Err _ ->
+            ( Game { cleared | lastError = Just "AI request failed; pass or play to continue." }, Command.none )
+
+        Ok aiMove ->
+            case ( cleared.phase, cleared.aiPlayer ) of
+                ( Playing _, Just aiStone ) ->
+                    if aiStone /= cleared.currentPlayer then
+                        ( Game cleared, Command.none )
+
+                    else
+                        case aiMove of
+                            AiPlay x y ->
+                                let
+                                    next : GameModel
+                                    next =
+                                        tryPlace x y cleared
+                                in
+                                if next.lastError /= Nothing then
+                                    -- Fall back to passing so the game doesn't deadlock on a bad move
+                                    wrapGameWithAi (performPass cleared)
+
+                                else
+                                    wrapGameWithAi next
+
+                            AiPass ->
+                                wrapGameWithAi (performPass cleared)
+
+                _ ->
+                    ( Game cleared, Command.none )
+
+
+requestAiMove : GameModel -> Command FrontendOnly toMsg Msg
+requestAiMove model =
+    Http.post
+        { url = Env.domain ++ "/file/go-move"
+        , body = Http.jsonBody (encodeAiMoveRequest model)
+        , expect = Http.expectJson GotAiMove decodeAiMove
+        }
+
+
+encodeStone : Stone -> Json.Encode.Value
+encodeStone stone =
+    Json.Encode.string (stoneName stone)
+
+
+encodeBoardStones : Dict ( Int, Int ) Stone -> Json.Encode.Value
+encodeBoardStones board =
+    Dict.toList board
+        |> List.map
+            (\( ( x, y ), stone ) ->
+                Json.Encode.object
+                    [ ( "x", Json.Encode.int x )
+                    , ( "y", Json.Encode.int y )
+                    , ( "color", encodeStone stone )
+                    ]
+            )
+        |> Json.Encode.list identity
+
+
+encodeAiMoveRequest : GameModel -> Json.Encode.Value
+encodeAiMoveRequest model =
+    let
+        playoutsPerMove : Int
+        playoutsPerMove =
+            if model.width * model.height >= 19 * 19 then
+                15
+
+            else if model.width * model.height >= 13 * 13 then
+                30
+
+            else
+                60
+    in
+    Json.Encode.object
+        ([ ( "width", Json.Encode.int model.width )
+         , ( "height", Json.Encode.int model.height )
+         , ( "komi", Json.Encode.float model.komi )
+         , ( "current_player", encodeStone model.currentPlayer )
+         , ( "stones", encodeBoardStones model.board )
+         , ( "playouts_per_move", Json.Encode.int playoutsPerMove )
+         ]
+            ++ (case List.head model.history of
+                    Just snapshot ->
+                        [ ( "previous_stones", encodeBoardStones snapshot.board ) ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
+decodeAiMove : Json.Decode.Decoder AiMove
+decodeAiMove =
+    Json.Decode.field "type" Json.Decode.string
+        |> Json.Decode.andThen
+            (\tag ->
+                case tag of
+                    "Play" ->
+                        Json.Decode.map2 AiPlay
+                            (Json.Decode.field "x" Json.Decode.int)
+                            (Json.Decode.field "y" Json.Decode.int)
+
+                    "Pass" ->
+                        Json.Decode.succeed AiPass
+
+                    other ->
+                        Json.Decode.fail ("Unknown move type: " ++ other)
+            )
 
 
 cellPx : Int
@@ -1203,6 +1404,20 @@ setupView model =
                 [ timeInput "go_mainTimeInput" "Main time (minutes)" model.mainTimeInput ChangedMainTimeInput
                 , timeInput "go_incrementInput" "Increment (seconds)" model.incrementInput ChangedIncrementInput
                 ]
+            )
+        , setupSection
+            "Opponent"
+            (Ui.Input.chooseOne Ui.column
+                [ Ui.spacing 8 ]
+                { onChange = SelectedAi
+                , selected = Just model.aiSelection
+                , label = Ui.Input.labelHidden "go_opponent"
+                , options =
+                    [ Ui.Input.option AiOff (Ui.text "Two human players")
+                    , Ui.Input.option AiPlaysWhite (Ui.text "AI plays White")
+                    , Ui.Input.option AiPlaysBlack (Ui.text "AI plays Black")
+                    ]
+                }
             )
         , case model.error of
             Just err ->

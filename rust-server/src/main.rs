@@ -22,6 +22,7 @@ use std::str::FromStr;
 use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
+mod go;
 use rand::RngExt;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -65,6 +66,10 @@ async fn main() {
                 .route(
                     "/file/internal/custom-request",
                     post(custom_request_endpoint).options(options_endpoint),
+                )
+                .route(
+                    "/file/go-move",
+                    post(go::go_move_endpoint).options(options_endpoint),
                 )
                 .route(
                     "/file/discord-sticker/{sticker_id}",
