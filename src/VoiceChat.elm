@@ -339,6 +339,9 @@ videoNodes route windowSize model local =
             else
                 MyUi.channelAndGuildColumnWidth windowSize
 
+        voiceChatY =
+            MyUi.channelHeaderHeight
+
         voiceChatWidth =
             Coord.xRaw windowSize - voiceChatX |> min 500
 
@@ -349,7 +352,7 @@ videoNodes route windowSize model local =
         videoPosAndSize total index =
             case total of
                 1 ->
-                    ( voiceChatX + padding, padding, voiceChatWidth - padding * 2 )
+                    ( voiceChatX + padding, voiceChatY + padding, voiceChatWidth - padding * 2 )
 
                 2 ->
                     let
@@ -357,13 +360,13 @@ videoNodes route windowSize model local =
                             voiceChatWidth - 24 // 2
                     in
                     if index == 0 then
-                        ( voiceChatX + padding, padding, width2 )
+                        ( voiceChatX + padding, voiceChatY + padding, width2 )
 
                     else
-                        ( voiceChatX + padding + width2, padding, width2 )
+                        ( voiceChatX + padding + width2, voiceChatY + padding, width2 )
 
                 _ ->
-                    ( padding + index * 20, padding, voiceChatWidth // total )
+                    ( padding + index * 20, voiceChatY + padding, voiceChatWidth // total )
 
         isMobile : Bool
         isMobile =

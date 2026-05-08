@@ -2,7 +2,6 @@ module Pages.Guild exposing
     ( DmChannelSelection(..)
     , HighlightMessage(..)
     , IsHovered(..)
-    , channelHeaderHeight
     , channelMessageHtmlId
     , channelTextInputId
     , conversationContainerId
@@ -1226,7 +1225,7 @@ memberColumnMobile canScroll2 localUser membersAndOwner =
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border2
             , Ui.background MyUi.background3
-            , Ui.height (Ui.px channelHeaderHeight)
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
             , MyUi.noShrinking
             ]
             [ headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
@@ -1279,7 +1278,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOw
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border2
             , Ui.background MyUi.background3
-            , Ui.height (Ui.px channelHeaderHeight)
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
             , MyUi.noShrinking
             ]
             [ headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
@@ -2919,7 +2918,7 @@ channelHeader isMobile2 includeShowMembers content =
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
-        , Ui.height (Ui.px channelHeaderHeight)
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
         , MyUi.noShrinking
         ]
         (if isMobile2 then
@@ -2959,11 +2958,6 @@ headerBackButton htmlId onPress =
         , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
         ]
         (Ui.html Icons.arrowLeft)
-
-
-channelHeaderHeight : number
-channelHeaderHeight =
-    38
 
 
 scrollable : Bool -> Ui.Attribute msg
@@ -3148,7 +3142,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         EmojiSelectorForEditMessage position _ ->
             let
                 y =
-                    Coord.yRaw position - Emoji.selectorHeight - channelHeaderHeight
+                    Coord.yRaw position - Emoji.selectorHeight - MyUi.channelHeaderHeight
             in
             Ui.inFront
                 (Emoji.selector
@@ -5964,7 +5958,7 @@ channelColumnContainer header content =
                 , Ui.Font.color MyUi.font1
                 , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.border1
-                , Ui.height (Ui.px channelHeaderHeight)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
                 , MyUi.noShrinking
                 , Ui.clipWithEllipsis
                 ]
@@ -6280,7 +6274,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                             (not isMobile)
                             (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId threadRoute))
                         , Ui.clipWithEllipsis
-                        , Ui.height (Ui.px channelHeaderHeight)
+                        , Ui.height (Ui.px MyUi.channelHeaderHeight)
                         , MyUi.hoverText name
                         , Ui.contentCenterY
                         , MyUi.noShrinking
@@ -6388,7 +6382,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                             (not isMobile)
                             (Ui.Events.onMouseLeave (MouseExitedDiscordChannelName routeData.guildId channelId threadRoute))
                         , Ui.clipWithEllipsis
-                        , Ui.height (Ui.px channelHeaderHeight)
+                        , Ui.height (Ui.px MyUi.channelHeaderHeight)
                         , MyUi.hoverText name
                         , Ui.contentCenterY
                         , MyUi.noShrinking
@@ -6497,7 +6491,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
             (not isMobile)
             (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId NoThread))
         , Ui.clipWithEllipsis
-        , Ui.height (Ui.px channelHeaderHeight)
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
         , MyUi.hoverText (ChannelName.toString channel.name)
         , Ui.contentCenterY
         , MyUi.noShrinking
@@ -6594,7 +6588,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
             (not isMobile)
             (Ui.Events.onMouseLeave (MouseExitedDiscordChannelName routeData.guildId channelId NoThread))
         , Ui.clipWithEllipsis
-        , Ui.height (Ui.px channelHeaderHeight)
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
         , MyUi.hoverText (ChannelName.toString channel.name)
         , Ui.contentCenterY
         , MyUi.noShrinking

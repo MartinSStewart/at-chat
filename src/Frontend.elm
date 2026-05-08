@@ -2987,7 +2987,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             case
                                 ( Route.toGuildOrDmId model.route
-                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
+                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
                                 )
                             of
                                 ( Just ( guildOrDmId, threadRoute ), True ) ->
@@ -3951,7 +3951,7 @@ pageUpOrDownScroll isUp model =
               else
                 0.9
              )
-                * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight)
+                * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight)
             )
         , Dom.getViewportOf Pages.Guild.conversationContainerId
             |> Task.attempt PageUpGotViewport

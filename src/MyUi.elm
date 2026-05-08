@@ -12,6 +12,7 @@ module MyUi exposing
     , cancelButtonBackground
     , channelAndGuildColumnWidth
     , channelColumnWidth
+    , channelHeaderHeight
     , colorToStyle
     , colorWithAlpha
     , column
@@ -897,6 +898,11 @@ channelColumnWidth windowSize =
 channelAndGuildColumnWidth : Coord CssPixels -> Int
 channelAndGuildColumnWidth windowSize =
     channelColumnWidth windowSize + 58
+
+
+channelHeaderHeight : number
+channelHeaderHeight =
+    38
 
 
 insetTop : String

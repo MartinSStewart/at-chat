@@ -329,6 +329,11 @@ exports.init = async function init(app) {
 //            setVideoInputEnabled(args.videoInputEnabled);
         } else if (msg.tag === "stop-local-stream") {
             const videoNode = document.getElementById("local-video");
+            if (videoNode.srcObject) {
+                let tracks = videoNode.srcObject.getTracks();
+                console.log(tracks);
+                tracks.forEach((s) => s.stop());
+            }
             videoNode.srcObject = null;
         }
     });
