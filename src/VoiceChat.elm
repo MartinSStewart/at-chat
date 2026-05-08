@@ -93,6 +93,7 @@ type Msg
     | PressedLeaveCall
     | PressedDownloadRecording RoomId
     | PressedChannelHeaderVoiceChatButton RoomId
+    | PressedCopyError String
 
 
 type alias Local =
@@ -111,6 +112,7 @@ type alias Model =
     , recordings : SeqDict RoomId (Nonempty Recording)
     , expanded : SeqSet RoomId
     , localIsSpeaking : Bool
+    , startConnectionError : Maybe String
     }
 
 
@@ -142,11 +144,12 @@ initModel =
     , selectedAudioInputDevice = Nothing
     , selectedVideoInputDevice = Nothing
     , audioInputEnabled = True
-    , videoInputEnabled = False
+    , videoInputEnabled = True
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , expanded = SeqSet.empty
     , localIsSpeaking = False
+    , startConnectionError = Nothing
     }
 
 
@@ -485,7 +488,13 @@ view windowSize roomId localUser calls model =
                 , Ui.padding 16
                 , Ui.spacing 8
                 ]
-                [ MyUi.rowButton
+                [ case model.startConnectionError of
+                    Just error ->
+                        MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error
+
+                    Nothing ->
+                        Ui.none
+                , MyUi.rowButton
                     (Dom.id "guild_startVoiceChat")
                     (if hasJoined2 then
                         PressedLeaveCall
@@ -905,12 +914,13 @@ type FromJs
     | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | FromJs_GotUserMediaDevicesError String
     | FromJs_SpeakingChanged (Maybe ConnectionId) Bool
+    | FromJs_StartConnectionError String
 
 
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\aEncoder cEncoder dEncoder eEncoder value ->
+        (\aEncoder cEncoder dEncoder eEncoder fEncoder value ->
             case value of
                 FromJs_GotSignal a b ->
                     aEncoder a b
@@ -923,11 +933,15 @@ voiceChatFromJsCodec =
 
                 FromJs_SpeakingChanged a b ->
                     eEncoder a b
+
+                FromJs_StartConnectionError string ->
+                    fEncoder string
         )
         |> Codec.variant2 "got-signal" FromJs_GotSignal connectionIdCodec signalCodec
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged (Codec.nullable connectionIdCodec) Codec.bool
+        |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
         |> Codec.buildCustom
 
 
@@ -1153,6 +1167,9 @@ isPressMsg msg =
             True
 
         PressedChannelHeaderVoiceChatButton _ ->
+            True
+
+        PressedCopyError string ->
             True
 
 

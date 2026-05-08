@@ -3518,6 +3518,16 @@ updateLoaded msg model =
                                     , Command.none
                                     )
 
+                                VoiceChat.FromJs_StartConnectionError string ->
+                                    let
+                                        voiceChat : VoiceChat.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn | voiceChat = { voiceChat | startConnectionError = Just string } }
+                                    , Command.none
+                                    )
+
                         Err error ->
                             let
                                 _ =
@@ -3598,26 +3608,43 @@ updateLoaded msg model =
                 model
 
         VoiceChatMsg voiceChatMsg ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    let
-                        voiceChat : VoiceChat.Model
-                        voiceChat =
-                            loggedIn.voiceChat
-                    in
-                    case voiceChatMsg of
-                        VoiceChat.SelectedAudioInputDevice deviceId ->
+            case voiceChatMsg of
+                VoiceChat.SelectedAudioInputDevice deviceId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
                             ( { loggedIn | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
                             , VoiceChat.toJs (VoiceChat.ToJs_SetInput True deviceId)
                             )
+                        )
+                        model
 
-                        VoiceChat.SelectedVideoInputDevice deviceId ->
+                VoiceChat.SelectedVideoInputDevice deviceId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
                             ( { loggedIn | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }
                             , VoiceChat.toJs (VoiceChat.ToJs_SetInput False deviceId)
                             )
+                        )
+                        model
 
-                        VoiceChat.PressedToggleMute ->
+                VoiceChat.PressedToggleMute ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
                             let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
                                 audioInputEnabled : Bool
                                 audioInputEnabled =
                                     not voiceChat.audioInputEnabled
@@ -3625,9 +3652,17 @@ updateLoaded msg model =
                             ( { loggedIn | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
                             , VoiceChat.toJs (VoiceChat.ToJs_SetAudioInputEnabled audioInputEnabled)
                             )
+                        )
+                        model
 
-                        VoiceChat.PressedTogglePauseVideo ->
+                VoiceChat.PressedTogglePauseVideo ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
                             let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
                                 videoInputEnabled : Bool
                                 videoInputEnabled =
                                     not voiceChat.videoInputEnabled
@@ -3635,8 +3670,12 @@ updateLoaded msg model =
                             ( { loggedIn | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
                             , VoiceChat.toJs (VoiceChat.ToJs_SetVideoInputEnabled videoInputEnabled)
                             )
+                        )
+                        model
 
-                        VoiceChat.PressedJoinCall roomId ->
+                VoiceChat.PressedJoinCall roomId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
                             let
                                 local : LocalState
                                 local =
@@ -3665,8 +3704,12 @@ updateLoaded msg model =
                                     Nothing ->
                                         VoiceChat.toJs VoiceChat.ToJs_GetMediaDevices
                                 )
+                        )
+                        model
 
-                        VoiceChat.PressedLeaveCall ->
+                VoiceChat.PressedLeaveCall ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
                             let
                                 local : LocalState
                                 local =
@@ -3677,8 +3720,17 @@ updateLoaded msg model =
                                 (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
                                 loggedIn
                                 (VoiceChat.leaveVoiceChatCmds local.calls)
+                        )
+                        model
 
-                        VoiceChat.PressedDownloadRecording roomId ->
+                VoiceChat.PressedDownloadRecording roomId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
                             case SeqDict.get roomId loggedIn.voiceChat.recordings of
                                 Just (Nonempty recording rest) ->
                                     ( { loggedIn
@@ -3701,8 +3753,17 @@ updateLoaded msg model =
 
                                 Nothing ->
                                     ( loggedIn, Command.none )
+                        )
+                        model
 
-                        VoiceChat.PressedChannelHeaderVoiceChatButton roomId ->
+                VoiceChat.PressedChannelHeaderVoiceChatButton roomId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
                             ( { loggedIn
                                 | voiceChat =
                                     { voiceChat
@@ -3716,8 +3777,13 @@ updateLoaded msg model =
                               }
                             , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
                             )
-                )
-                model
+                        )
+                        model
+
+                VoiceChat.PressedCopyError text ->
+                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+                    , Ports.copyToClipboard text
+                    )
 
         GotVoiceChatRecording bytes ->
             FrontendExtra.updateLoggedIn
@@ -3726,7 +3792,7 @@ updateLoaded msg model =
                         voiceChat =
                             loggedIn.voiceChat
                     in
-                    case Bytes.Decode.decode (VoiceChat.decodeVoiceChatRecorder bytes) bytes |> Debug.log "asdf" of
+                    case Bytes.Decode.decode (VoiceChat.decodeVoiceChatRecorder bytes) bytes of
                         Just ( connectionId, recording ) ->
                             ( { loggedIn
                                 | voiceChat =

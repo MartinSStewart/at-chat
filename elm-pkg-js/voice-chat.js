@@ -4,139 +4,145 @@ exports.init = async function init(app) {
     let localStreamPreview = null;
 
     async function startConnection(peerUserId, shouldOffer, audioInput, videoInput) {
-        stopConnection(peerUserId);
-
-        const pc = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-        });
-
-
         try {
-            let devices2 = await navigator.mediaDevices.enumerateDevices();
-            let localStream =
-                await navigator.mediaDevices.getUserMedia(
-                    { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
-                    , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
-                    });
-            let devices = await navigator.mediaDevices.enumerateDevices();
 
-            let defaultDevices = [];
-            localStream.getTracks().forEach(function (track) {
-                defaultDevices.push(track.getSettings().deviceId);
-                pc.addTrack(track, localStream);
+            stopConnection(peerUserId);
+
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
             });
 
-            app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
-        } catch (e) {
-            app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
-            return;
-        }
 
-
-//        let mediaRecorder = new MediaRecorder(localStream);
-//
-//        let startTime = Date.now();
-//        console.log("Start", startTime);
-//
-//        mediaRecorder.addEventListener("dataavailable", async (e) => {
-//            let endTime = Date.now();
-//            const peerIdBytes = new TextEncoder().encode(peerUserId);
-//            const typeBytes = new TextEncoder().encode(e.data.type);
-//            const dataBuffer = await e.data.arrayBuffer();
-//            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + 8 + 8 + dataBuffer.byteLength);
-//            const view = new DataView(result);
-//            const bytes = new Uint8Array(result);
-//
-//            view.setUint8(0, peerIdBytes.length);
-//            bytes.set(peerIdBytes, 1);
-//            let offset = 1 + peerIdBytes.length;
-//            view.setUint8(offset, typeBytes.length);
-//            offset += 1;
-//            bytes.set(typeBytes, offset);
-//            offset += typeBytes.length;
-//
-//            view.setFloat64(offset, startTime);
-//            offset += 8;
-//            view.setFloat64(offset, endTime);
-//            offset += 8;
-//
-//            bytes.set(new Uint8Array(dataBuffer), offset);
-//            app.ports.got_recorded_data.send(new DataView(result));
-//        });
-//        mediaRecorder.start();
-
-
-
-        console.log("Voice chat: startConnection", peerUserId);
-
-        const videoNode = document.getElementById(peerUserId);
-
-        pc.ontrack = function (event) {
-            console.log("Voice chat: ontrack", peerUserId, event.streams);
-
-            let remoteStream;
-            if (event.streams && event.streams[0]) {
-                remoteStream = event.streams[0];
-                videoNode.srcObject = remoteStream;
-            } else {
-                // Fallback: build a stream from the single track.
-                remoteStream = new MediaStream();
-                remoteStream.addTrack(event.track);
-                videoNode.srcObject = remoteStream;
-            }
-            if (event.track.kind === "audio" && !audioStreams.has(peerUserId)) {
-                handleAudioStream(remoteStream, peerUserId);
-            }
-            const playPromise = videoNode.play();
-            if (playPromise && typeof playPromise.catch === "function") {
-                playPromise.catch(function (err) {
-                    console.error("Voice chat: audio play() rejected", err);
-                });
-            }
-        };
-
-        pc.oniceconnectionstatechange = function () {
-            console.log("Voice chat: ICE state", peerUserId, pc.iceConnectionState);
-        };
-        pc.onconnectionstatechange = function () {
-            console.log("Voice chat: PC state", peerUserId, pc.connectionState);
-        };
-
-        pc.onicecandidate = function (event) {
-            if (event.candidate) {
-                app.ports.voice_chat_from_js.send(
-                    { tag: "got-signal"
-                    , args: [ peerUserId, { tag: "ice", args: [ event.candidate ] }]
-                    });
-            }
-        };
-
-        const conn = {
-            pc: pc,
-            videoNode: videoNode,
-            remoteDescriptionSet: false,
-            queuedIceCandidates: [],
-            signalChain: Promise.resolve()
-        };
-        connections.set(peerUserId, conn);
-
-        const pending = pendingSignals.get(peerUserId) || [];
-        pendingSignals.set(peerUserId, []);
-        for (let i = 0; i < pending.length; i++) {
-            await handleSignalInternal(conn, peerUserId, pending[i]);
-        }
-
-        if (shouldOffer) {
             try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                app.ports.voice_chat_from_js.send(
-                    { tag: "got-signal"
-                    , args: [ peerUserId, { tag: "offer", args: [ offer ] }]
-                    });
+                let devices2 = await navigator.mediaDevices.enumerateDevices();
+                let localStream =
+                    await navigator.mediaDevices.getUserMedia(
+                        { audio: audioInput ? { deviceId: audioInput } : devices2.some(a => a.kind === "audioinput")
+                        , video: videoInput ? { deviceId: videoInput } : devices2.some(a => a.kind === "videoinput")
+                        });
+                let devices = await navigator.mediaDevices.enumerateDevices();
+
+                let defaultDevices = [];
+                localStream.getTracks().forEach(function (track) {
+                    defaultDevices.push(track.getSettings().deviceId);
+                    pc.addTrack(track, localStream);
+                });
+
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
             } catch (e) {
-                console.error("Voice chat: failed to create offer", e);
+                app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
+                return;
             }
+
+
+    //        let mediaRecorder = new MediaRecorder(localStream);
+    //
+    //        let startTime = Date.now();
+    //        console.log("Start", startTime);
+    //
+    //        mediaRecorder.addEventListener("dataavailable", async (e) => {
+    //            let endTime = Date.now();
+    //            const peerIdBytes = new TextEncoder().encode(peerUserId);
+    //            const typeBytes = new TextEncoder().encode(e.data.type);
+    //            const dataBuffer = await e.data.arrayBuffer();
+    //            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + 8 + 8 + dataBuffer.byteLength);
+    //            const view = new DataView(result);
+    //            const bytes = new Uint8Array(result);
+    //
+    //            view.setUint8(0, peerIdBytes.length);
+    //            bytes.set(peerIdBytes, 1);
+    //            let offset = 1 + peerIdBytes.length;
+    //            view.setUint8(offset, typeBytes.length);
+    //            offset += 1;
+    //            bytes.set(typeBytes, offset);
+    //            offset += typeBytes.length;
+    //
+    //            view.setFloat64(offset, startTime);
+    //            offset += 8;
+    //            view.setFloat64(offset, endTime);
+    //            offset += 8;
+    //
+    //            bytes.set(new Uint8Array(dataBuffer), offset);
+    //            app.ports.got_recorded_data.send(new DataView(result));
+    //        });
+    //        mediaRecorder.start();
+
+
+
+            console.log("Voice chat: startConnection", peerUserId);
+
+            const videoNode = document.getElementById(peerUserId);
+
+            pc.ontrack = function (event) {
+                console.log("Voice chat: ontrack", peerUserId, event.streams);
+
+                let remoteStream;
+                if (event.streams && event.streams[0]) {
+                    remoteStream = event.streams[0];
+                    videoNode.srcObject = remoteStream;
+                } else {
+                    // Fallback: build a stream from the single track.
+                    remoteStream = new MediaStream();
+                    remoteStream.addTrack(event.track);
+                    videoNode.srcObject = remoteStream;
+                }
+                if (event.track.kind === "audio" && !audioStreams.has(peerUserId)) {
+                    handleAudioStream(remoteStream, peerUserId);
+                }
+                const playPromise = videoNode.play();
+                if (playPromise && typeof playPromise.catch === "function") {
+                    playPromise.catch(function (err) {
+                        console.error("Voice chat: audio play() rejected", err);
+                    });
+                }
+            };
+
+            pc.oniceconnectionstatechange = function () {
+                console.log("Voice chat: ICE state", peerUserId, pc.iceConnectionState);
+            };
+            pc.onconnectionstatechange = function () {
+                console.log("Voice chat: PC state", peerUserId, pc.connectionState);
+            };
+
+            pc.onicecandidate = function (event) {
+                if (event.candidate) {
+                    app.ports.voice_chat_from_js.send(
+                        { tag: "got-signal"
+                        , args: [ peerUserId, { tag: "ice", args: [ event.candidate ] }]
+                        });
+                }
+            };
+
+            const conn = {
+                pc: pc,
+                videoNode: videoNode,
+                remoteDescriptionSet: false,
+                queuedIceCandidates: [],
+                signalChain: Promise.resolve()
+            };
+            connections.set(peerUserId, conn);
+
+            const pending = pendingSignals.get(peerUserId) || [];
+            pendingSignals.set(peerUserId, []);
+            for (let i = 0; i < pending.length; i++) {
+                await handleSignalInternal(conn, peerUserId, pending[i]);
+            }
+
+            if (shouldOffer) {
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    app.ports.voice_chat_from_js.send(
+                        { tag: "got-signal"
+                        , args: [ peerUserId, { tag: "offer", args: [ offer ] }]
+                        });
+                } catch (e) {
+                    console.error("Voice chat: failed to create offer", e);
+                }
+            }
+        }
+        catch (e) {
+            app.ports.voice_chat_from_js.send( { tag: "start-connection-error" , args: [ e.toString() ] });
         }
     }
 
