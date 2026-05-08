@@ -348,6 +348,9 @@ videoNodes route windowSize model local =
         padding =
             0
 
+        spacing =
+            8
+
         videoPosAndSize : Int -> Int -> ( Int, Int, Int )
         videoPosAndSize total index =
             case total of
@@ -357,13 +360,13 @@ videoNodes route windowSize model local =
                 2 ->
                     let
                         width2 =
-                            voiceChatWidth - 24 // 2
+                            (voiceChatWidth - padding * 2 - spacing) // 2
                     in
                     if index == 0 then
                         ( voiceChatX + padding, voiceChatY + padding, width2 )
 
                     else
-                        ( voiceChatX + padding + width2, voiceChatY + padding, width2 )
+                        ( voiceChatX + padding + spacing + width2, voiceChatY + padding, width2 )
 
                 _ ->
                     ( padding + index * 20, voiceChatY + padding, voiceChatWidth // total )
@@ -446,12 +449,26 @@ videoNode id isHidden ( x, y, width ) isSpeaking =
     )
 
 
+green : Ui.Color
+green =
+    Ui.rgb 60 160 70
+
+
+red : Ui.Color
+red =
+    Ui.rgb 200 60 60
+
+
 view : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
 view windowSize roomId localUser calls model =
     let
         ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
         ongoingCall =
             SeqDict.get roomId calls.voiceChats
+
+        hasJoined2 : Bool
+        hasJoined2 =
+            hasJoined roomId calls
     in
     Ui.el
         [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
@@ -459,7 +476,7 @@ view windowSize roomId localUser calls model =
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
         , MyUi.noShrinking
-        , Ui.inFront (Ui.el [ Ui.paddingXY 16 7 ] (voiceChatButton roomId localUser calls))
+        , Ui.inFront (Ui.el [ Ui.paddingXY 16 0 ] (voiceChatButton roomId localUser calls))
         , Ui.inFront
             (Ui.row
                 [ Ui.alignBottom
@@ -470,20 +487,26 @@ view windowSize roomId localUser calls model =
                 ]
                 [ MyUi.rowButton
                     (Dom.id "guild_startVoiceChat")
-                    (if hasJoined roomId calls then
+                    (if hasJoined2 then
                         PressedLeaveCall
 
                      else
                         PressedJoinCall roomId
                     )
                     [ Ui.spacing 8
-                    , Ui.background (Ui.rgb 60 160 70)
+                    , Ui.background
+                        (if hasJoined2 then
+                            red
+
+                         else
+                            green
+                        )
                     , Ui.rounded 99
                     , Ui.height Ui.fill
                     , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
                     ]
                     [ Ui.html Icons.phone
-                    , (case ( hasJoined roomId calls, ongoingCall ) of
+                    , (case ( hasJoined2, ongoingCall ) of
                         ( True, Nothing ) ->
                             "End Call"
 
@@ -595,7 +618,7 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
                 Ui.rgb 60 70 100
 
              else
-                Ui.rgb 200 60 60
+                red
             )
         , Ui.Font.color MyUi.white
         , if isEnabled then

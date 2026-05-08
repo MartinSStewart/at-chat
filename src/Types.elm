@@ -157,7 +157,6 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
-    , voiceChat : VoiceChat.Model
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
@@ -212,6 +211,7 @@ type alias LoggedIn2 =
     , profilePictureEditor : ImageEditor.Model
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
+    , voiceChat : VoiceChat.Model
     }
 
 

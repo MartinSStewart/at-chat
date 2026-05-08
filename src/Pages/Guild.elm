@@ -3225,7 +3225,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         showVoiceChat =
             case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserIdB ->
-                    if SeqSet.member (DmRoomId otherUserIdB) model.voiceChat.expanded then
+                    if SeqSet.member (DmRoomId otherUserIdB) loggedIn.voiceChat.expanded then
                         Just (DmRoomId otherUserIdB)
 
                     else
@@ -3240,7 +3240,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ case showVoiceChat of
             Just roomId ->
-                VoiceChat.view model.windowSize roomId local.localUser local.calls model.voiceChat
+                VoiceChat.view model.windowSize roomId local.localUser local.calls loggedIn.voiceChat
                     |> Ui.map VoiceChatMsg
 
             Nothing ->
