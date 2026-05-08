@@ -1963,7 +1963,7 @@ parseMarkdownLink source index =
                     Just closeParen ->
                         let
                             urlText =
-                                String.slice (afterBracket + 1) closeParen source
+                                String.slice (afterBracket + 1) closeParen source |> String.trim
                         in
                         case ( String.Nonempty.fromString alias, Url.fromString urlText ) of
                             ( Just nonemptyAlias, Just url ) ->
