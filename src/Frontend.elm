@@ -160,7 +160,7 @@ subscriptions model =
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
-        , VoiceChat.voiceChatFromJs GotVoiceChatSignalFromJs
+        , VoiceChat.fromJs GotVoiceChatSignalFromJs
         , VoiceChat.gotRecordedData GotVoiceChatRecording
         , case model of
             Loading _ ->
@@ -3470,7 +3470,7 @@ updateLoaded msg model =
             case result of
                 Ok event ->
                     case event of
-                        VoiceChat.GotSignal connectionId signal ->
+                        VoiceChat.FromJs_GotSignal connectionId signal ->
                             FrontendExtra.updateLoggedIn
                                 (\loggedIn ->
                                     FrontendExtra.handleLocalChange
@@ -3481,12 +3481,12 @@ updateLoaded msg model =
                                 )
                                 model
 
-                        VoiceChat.GotUserMediaDevices mediaDevices defaultDevices ->
+                        VoiceChat.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
                             ( { model | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices defaultDevices model.voiceChat }
                             , Command.none
                             )
 
-                        VoiceChat.GotUserMediaDevicesError error ->
+                        VoiceChat.FromJs_GotUserMediaDevicesError error ->
                             let
                                 voiceChat =
                                     model.voiceChat
@@ -3495,7 +3495,7 @@ updateLoaded msg model =
                             , Command.none
                             )
 
-                        VoiceChat.IsSpeakingChanged connectionId isSpeaking ->
+                        VoiceChat.FromJs_SpeakingChanged connectionId isSpeaking ->
                             let
                                 voiceChat : VoiceChat.Model
                                 voiceChat =
@@ -3606,12 +3606,12 @@ updateLoaded msg model =
             case voiceChatMsg of
                 VoiceChat.SelectedAudioInputDevice deviceId ->
                     ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetInput True deviceId)
+                    , VoiceChat.toJs (VoiceChat.ToJs_SetInput True deviceId)
                     )
 
                 VoiceChat.SelectedVideoInputDevice deviceId ->
                     ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetInput False deviceId)
+                    , VoiceChat.toJs (VoiceChat.ToJs_SetInput False deviceId)
                     )
 
                 VoiceChat.PressedToggleMute ->
@@ -3621,7 +3621,7 @@ updateLoaded msg model =
                             not voiceChat.audioInputEnabled
                     in
                     ( { model | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetAudioInputEnabled audioInputEnabled)
+                    , VoiceChat.toJs (VoiceChat.ToJs_SetAudioInputEnabled audioInputEnabled)
                     )
 
                 VoiceChat.PressedTogglePauseVideo ->
@@ -3631,7 +3631,7 @@ updateLoaded msg model =
                             not voiceChat.videoInputEnabled
                     in
                     ( { model | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
-                    , VoiceChat.voiceChatToJs (VoiceChat.Js_SetVideoInputEnabled videoInputEnabled)
+                    , VoiceChat.toJs (VoiceChat.ToJs_SetVideoInputEnabled videoInputEnabled)
                     )
 
                 VoiceChat.PressedJoinCall roomId ->
@@ -3651,8 +3651,8 @@ updateLoaded msg model =
                                         Just nonempty ->
                                             List.map
                                                 (\otherSession ->
-                                                    VoiceChat.voiceChatToJs
-                                                        (VoiceChat.Js_Start
+                                                    VoiceChat.toJs
+                                                        (VoiceChat.ToJs_Start
                                                             (VoiceChat.startArgs
                                                                 model.clientId
                                                                 { roomId = roomId, otherClientId = otherSession }
@@ -3664,7 +3664,7 @@ updateLoaded msg model =
                                                 |> Command.batch
 
                                         Nothing ->
-                                            VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+                                            VoiceChat.toJs VoiceChat.ToJs_GetMediaDevices
                                     , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
                                     ]
                                 )

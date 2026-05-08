@@ -2,6 +2,7 @@ port module VoiceChat exposing
     ( AudioTrackData
     , ConnectionId
     , DeviceKind(..)
+    , FromJs(..)
     , Ice
     , Local
     , LocalChange(..)
@@ -17,13 +18,13 @@ port module VoiceChat exposing
     , Signal(..)
     , StartData
     , StartLocalStreamData
+    , ToJs(..)
     , Track(..)
     , VideoTrackData
-    , VoiceChatFromJs(..)
-    , VoiceChatToJs(..)
     , decodeVoiceChatRecorder
     , displayMode
     , displayModeChangeCmd
+    , fromJs
     , gotRecordedData
     , gotUserMediaDevices
     , init
@@ -32,11 +33,10 @@ port module VoiceChat exposing
     , leaveVoiceChatCmds
     , serverChangeCmd
     , startArgs
+    , toJs
     , videoNodes
+    , view
     , voiceChatButton
-    , voiceChatFromJs
-    , voiceChatToJs
-    , voiceChatView
     )
 
 import Bytes exposing (Bytes)
@@ -255,16 +255,16 @@ displayModeChangeCmd displayModeOld displayModeNew model =
             Command.none
 
         ( True, False ) ->
-            voiceChatToJs Js_StopLocalStream
+            toJs ToJs_StopLocalStream
 
         ( False, True ) ->
-            Js_StartLocalStream
+            ToJs_StartLocalStream
                 { audioInput = model.selectedAudioInputDevice
                 , videoInput = model.selectedVideoInputDevice
                 , audioInputEnabled = model.audioInputEnabled
                 , videoInputEnabled = model.videoInputEnabled
                 }
-                |> voiceChatToJs
+                |> toJs
 
 
 showLocalVideo : DisplayMode -> Bool
@@ -446,8 +446,8 @@ videoNode id isHidden ( x, y, width ) isSpeaking =
     )
 
 
-voiceChatView : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
-voiceChatView windowSize roomId localUser calls model =
+view : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
+view windowSize roomId localUser calls model =
     let
         ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
         ongoingCall =
@@ -692,8 +692,8 @@ leaveVoiceChatCmds model =
                     NonemptySet.toList voiceChat
                         |> List.map
                             (\sessionIdHash2 ->
-                                voiceChatToJs
-                                    (Js_Stop { roomId = currentRoom, otherClientId = sessionIdHash2 })
+                                toJs
+                                    (ToJs_Stop { roomId = currentRoom, otherClientId = sessionIdHash2 })
                             )
                         |> Command.batch
 
@@ -736,7 +736,7 @@ serverChangeCmd change clientId local model =
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
-                        voiceChatToJs (Js_Start (startArgs clientId connectionId model))
+                        toJs (ToJs_Start (startArgs clientId connectionId model))
 
                     else
                         Command.none
@@ -745,10 +745,10 @@ serverChangeCmd change clientId local model =
                     Command.none
 
         Server_Left _ connectionId ->
-            voiceChatToJs (Js_Stop connectionId)
+            toJs (ToJs_Stop connectionId)
 
         Server_SignalReceived connectionId signal ->
-            voiceChatToJs (Js_Signal connectionId signal)
+            toJs (ToJs_Signal connectionId signal)
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
@@ -757,16 +757,16 @@ port voice_chat_to_js : Json.Encode.Value -> Cmd msg
 port voice_chat_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
-type VoiceChatToJs
-    = Js_Start StartData
-    | Js_Stop ConnectionId
-    | Js_Signal ConnectionId Signal
-    | Js_SetAudioInputEnabled Bool
-    | Js_SetInput Bool (IdString MediaDeviceId)
-    | Js_SetVideoInputEnabled Bool
-    | Js_GetMediaDevices
-    | Js_StartLocalStream StartLocalStreamData
-    | Js_StopLocalStream
+type ToJs
+    = ToJs_Start StartData
+    | ToJs_Stop ConnectionId
+    | ToJs_Signal ConnectionId Signal
+    | ToJs_SetAudioInputEnabled Bool
+    | ToJs_SetInput Bool (IdString MediaDeviceId)
+    | ToJs_SetVideoInputEnabled Bool
+    | ToJs_GetMediaDevices
+    | ToJs_StartLocalStream StartLocalStreamData
+    | ToJs_StopLocalStream
 
 
 type alias StartLocalStreamData =
@@ -809,52 +809,52 @@ startDataCodec =
         |> Codec.buildObject
 
 
-voiceChatToJsCodec : Codec VoiceChatToJs
+voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
         (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream value ->
             case value of
-                Js_Start a ->
+                ToJs_Start a ->
                     eStart a
 
-                Js_Stop a ->
+                ToJs_Stop a ->
                     eStop a
 
-                Js_Signal a b ->
+                ToJs_Signal a b ->
                     eSignal a b
 
-                Js_SetAudioInputEnabled a ->
+                ToJs_SetAudioInputEnabled a ->
                     eSetMuted a
 
-                Js_SetInput a b ->
+                ToJs_SetInput a b ->
                     eSetAudioInput a b
 
-                Js_SetVideoInputEnabled a ->
+                ToJs_SetVideoInputEnabled a ->
                     eSetVideoPaused a
 
-                Js_GetMediaDevices ->
+                ToJs_GetMediaDevices ->
                     eGetMediaDevices
 
-                Js_StartLocalStream a ->
+                ToJs_StartLocalStream a ->
                     eStartLocalStream a
 
-                Js_StopLocalStream ->
+                ToJs_StopLocalStream ->
                     eStopLocalStream
         )
-        |> Codec.variant1 "start" Js_Start startDataCodec
-        |> Codec.variant1 "stop" Js_Stop connectionIdCodec
-        |> Codec.variant2 "signal" Js_Signal connectionIdCodec signalCodec
-        |> Codec.variant1 "set-audio-input-enabled" Js_SetAudioInputEnabled Codec.bool
-        |> Codec.variant2 "set-input" Js_SetInput Codec.bool IdString.codec
-        |> Codec.variant1 "set-video-input-enabled" Js_SetVideoInputEnabled Codec.bool
-        |> Codec.variant0 "get-media-devices" Js_GetMediaDevices
-        |> Codec.variant1 "start-local-stream" Js_StartLocalStream startLocalStreamDataCodec
-        |> Codec.variant0 "stop-local-stream" Js_StopLocalStream
+        |> Codec.variant1 "start" ToJs_Start startDataCodec
+        |> Codec.variant1 "stop" ToJs_Stop connectionIdCodec
+        |> Codec.variant2 "signal" ToJs_Signal connectionIdCodec signalCodec
+        |> Codec.variant1 "set-audio-input-enabled" ToJs_SetAudioInputEnabled Codec.bool
+        |> Codec.variant2 "set-input" ToJs_SetInput Codec.bool IdString.codec
+        |> Codec.variant1 "set-video-input-enabled" ToJs_SetVideoInputEnabled Codec.bool
+        |> Codec.variant0 "get-media-devices" ToJs_GetMediaDevices
+        |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
+        |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
         |> Codec.buildCustom
 
 
-voiceChatToJs : VoiceChatToJs -> Command FrontendOnly toMsg msg
-voiceChatToJs msg =
+toJs : ToJs -> Command FrontendOnly toMsg msg
+toJs msg =
     Command.sendToJs
         "voice_chat_to_js"
         voice_chat_to_js
@@ -877,34 +877,34 @@ type MediaDeviceId
     = MediaDeviceId Never
 
 
-type VoiceChatFromJs
-    = GotSignal ConnectionId Signal
-    | GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
-    | GotUserMediaDevicesError String
-    | IsSpeakingChanged (Maybe ConnectionId) Bool
+type FromJs
+    = FromJs_GotSignal ConnectionId Signal
+    | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
+    | FromJs_GotUserMediaDevicesError String
+    | FromJs_SpeakingChanged (Maybe ConnectionId) Bool
 
 
-voiceChatFromJsCodec : Codec VoiceChatFromJs
+voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
         (\aEncoder cEncoder dEncoder eEncoder value ->
             case value of
-                GotSignal a b ->
+                FromJs_GotSignal a b ->
                     aEncoder a b
 
-                GotUserMediaDevices a b ->
+                FromJs_GotUserMediaDevices a b ->
                     cEncoder a b
 
-                GotUserMediaDevicesError string ->
+                FromJs_GotUserMediaDevicesError string ->
                     dEncoder string
 
-                IsSpeakingChanged a b ->
+                FromJs_SpeakingChanged a b ->
                     eEncoder a b
         )
-        |> Codec.variant2 "got-signal" GotSignal connectionIdCodec signalCodec
-        |> Codec.variant2 "got-media-devices" GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
-        |> Codec.variant1 "got-media-devices-error" GotUserMediaDevicesError Codec.string
-        |> Codec.variant2 "is-speaking-changed" IsSpeakingChanged (Codec.nullable connectionIdCodec) Codec.bool
+        |> Codec.variant2 "got-signal" FromJs_GotSignal connectionIdCodec signalCodec
+        |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
+        |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
+        |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged (Codec.nullable connectionIdCodec) Codec.bool
         |> Codec.buildCustom
 
 
@@ -996,8 +996,8 @@ deviceKindCodec =
     Codec.enum Codec.string [ ( "audioinput", AudioInput ), ( "audiooutput", AudioOutput ), ( "videoinput", VideoInput ) ]
 
 
-voiceChatFromJs : (Result String VoiceChatFromJs -> msg) -> Subscription FrontendOnly msg
-voiceChatFromJs msg =
+fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg
+fromJs msg =
     Subscription.fromJs
         "voice_chat_from_js"
         voice_chat_from_js

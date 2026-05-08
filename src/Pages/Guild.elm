@@ -3240,7 +3240,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ case showVoiceChat of
             Just roomId ->
-                VoiceChat.voiceChatView model.windowSize roomId local.localUser local.calls model.voiceChat
+                VoiceChat.view model.windowSize roomId local.localUser local.calls model.voiceChat
                     |> Ui.map VoiceChatMsg
 
             Nothing ->
