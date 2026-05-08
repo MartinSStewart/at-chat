@@ -168,6 +168,9 @@ basicFormattingTests =
             "Animated! <a:z_:444>"
             [ { isAnimated = True, id = discordId, name = emojiName } ]
             RichText.customEmojisFromDiscord
+        , fromNonemptyStringTest
+            "[url has leading space]( https://example.com/)"
+            (Nonempty (MarkdownLink (NonemptyString 'u' "rl has leading space") (unsafeUrl "https://example.com/")) [])
         ]
 
 
