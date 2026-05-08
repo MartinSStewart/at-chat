@@ -543,22 +543,28 @@ update msg model =
                     ( model, Command.none )
 
                 ( True, _ ) ->
-                    updateLoaded msg loaded
-                        |> Tuple.mapFirst
-                            (\loaded2 ->
-                                case loaded2.loginStatus of
-                                    LoggedIn loggedIn ->
-                                        { loaded2
-                                            | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
-                                        }
-                                            |> Loaded
+                    let
+                        ( loadedNew, cmd ) =
+                            updateLoaded msg loaded
+                    in
+                    ( case loadedNew.loginStatus of
+                        LoggedIn loggedIn ->
+                            { loadedNew
+                                | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
+                            }
+                                |> Loaded
 
-                                    NotLoggedIn _ ->
-                                        Loaded loaded2
-                            )
+                        NotLoggedIn _ ->
+                            Loaded loadedNew
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    )
 
                 _ ->
-                    updateLoaded msg loaded |> Tuple.mapFirst Loaded
+                    let
+                        ( loadedNew, cmd ) =
+                            updateLoaded msg loaded
+                    in
+                    ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ] )
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3721,22 +3727,7 @@ updateLoaded msg model =
                                         SeqSet.insert roomId voiceChat.expanded
                             }
                       }
-                    , VoiceChat.Js_StartLocalStream
-                        { audioInput = voiceChat.selectedAudioInputDevice
-                        , videoInput = voiceChat.selectedVideoInputDevice
-                        , audioInputEnabled = voiceChat.audioInputEnabled
-                        , videoInputEnabled = voiceChat.videoInputEnabled
-                        }
-                        |> VoiceChat.voiceChatToJs
-                      --case voiceChat.userMediaDevices of
-                      --    MediaDevicesNotLoaded ->
-                      --        VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
-                      --
-                      --    HasMediaDevices _ ->
-                      --        Command.none
-                      --
-                      --    FailedToGetMediaDevices _ ->
-                      --        VoiceChat.voiceChatToJs VoiceChat.Js_GetMediaDevices
+                    , Command.none
                     )
 
         GotVoiceChatRecording bytes ->
@@ -3768,6 +3759,19 @@ updateLoaded msg model =
 
                 Nothing ->
                     ( model, Command.none )
+
+
+checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
+checkCallDisplayModeChange modelOld modelNew =
+    case ( modelOld.loginStatus, modelNew.loginStatus ) of
+        ( LoggedIn loggedInOld, LoggedIn loggedInNew ) ->
+            VoiceChat.displayModeChangeCmd
+                (VoiceChat.displayMode modelOld.route modelOld.voiceChat (Local.model loggedInOld.localState |> .calls))
+                (VoiceChat.displayMode modelNew.route modelNew.voiceChat (Local.model loggedInNew.localState |> .calls))
+                modelNew.voiceChat
+
+        _ ->
+            Command.none
 
 
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg

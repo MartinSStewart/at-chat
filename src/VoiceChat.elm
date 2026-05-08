@@ -22,6 +22,8 @@ port module VoiceChat exposing
     , VoiceChatFromJs(..)
     , VoiceChatToJs(..)
     , decodeVoiceChatRecorder
+    , displayMode
+    , displayModeChangeCmd
     , gotRecordedData
     , gotUserMediaDevices
     , init
@@ -236,6 +238,88 @@ iceCodec =
         |> Codec.buildObject
 
 
+type DisplayMode
+    = NoVideo
+    | ShowLocalVideo
+    | ShowLocalVideoAndCall
+    | ShowLocalVideoAndCallThumbnail
+
+
+displayModeChangeCmd : DisplayMode -> DisplayMode -> Model -> Command FrontendOnly toMsg msg
+displayModeChangeCmd displayModeOld displayModeNew model =
+    case ( showLocalVideo displayModeOld, showLocalVideo displayModeNew ) of
+        ( True, True ) ->
+            Command.none
+
+        ( False, False ) ->
+            Command.none
+
+        ( True, False ) ->
+            voiceChatToJs Js_StopLocalStream
+
+        ( False, True ) ->
+            Js_StartLocalStream
+                { audioInput = model.selectedAudioInputDevice
+                , videoInput = model.selectedVideoInputDevice
+                , audioInputEnabled = model.audioInputEnabled
+                , videoInputEnabled = model.videoInputEnabled
+                }
+                |> voiceChatToJs
+
+
+showLocalVideo : DisplayMode -> Bool
+showLocalVideo displayMode2 =
+    case displayMode2 of
+        NoVideo ->
+            False
+
+        ShowLocalVideo ->
+            True
+
+        ShowLocalVideoAndCall ->
+            True
+
+        ShowLocalVideoAndCallThumbnail ->
+            True
+
+
+displayMode : Route -> Model -> Local -> DisplayMode
+displayMode route model local =
+    let
+        viewingRoomId : Maybe RoomId
+        viewingRoomId =
+            case Route.toGuildOrDmId route of
+                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
+                    DmRoomId otherUserId |> Just
+
+                _ ->
+                    Nothing
+    in
+    case viewingRoomId of
+        Just viewingRoomId2 ->
+            if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
+                case SeqDict.get viewingRoomId2 local.voiceChats of
+                    Just sessions ->
+                        ShowLocalVideoAndCall
+
+                    Nothing ->
+                        ShowLocalVideo
+
+            else if SeqSet.member viewingRoomId2 model.expanded then
+                ShowLocalVideo
+
+            else
+                NoVideo
+
+        Nothing ->
+            case local.currentRoom of
+                Just currentRoom ->
+                    ShowLocalVideoAndCallThumbnail
+
+                Nothing ->
+                    NoVideo
+
+
 videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html msg
 videoNodes route windowSize model local =
     let
@@ -335,6 +419,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking =
         , Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt x ++ "px")
         , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Attributes.style "pointer-events" "none"
         , Html.Attributes.style
             "opacity"
             (if isHidden then
