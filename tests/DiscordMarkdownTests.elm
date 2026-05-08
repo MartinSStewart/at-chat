@@ -171,6 +171,9 @@ basicFormattingTests =
         , fromNonemptyStringTest
             "[url has leading space]( https://example.com/)"
             (Nonempty (MarkdownLink (NonemptyString 'u' "rl has leading space") (unsafeUrl "https://example.com/")) [])
+        , fromNonemptyStringTest
+            "[url has leading line break](\nhttps://example.com/)"
+            (Nonempty (MarkdownLink (NonemptyString 'u' "rl has leading line break") (unsafeUrl "https://example.com/")) [])
         ]
 
 
