@@ -235,6 +235,16 @@ exports.init = async function init(app) {
                 });
             }
         });
+
+        const videoNode = document.getElementById("local-video");
+        if (videoNode.srcObject) {
+            let tracks = videoNode.srcObject.getTracks();
+            tracks.forEach((track) => {
+                if (track.kind === "audio") {
+                    track.enabled = enabled;
+                }
+            });
+        }
     }
 
     function setVideoInputEnabled(enabled) {
@@ -247,6 +257,16 @@ exports.init = async function init(app) {
                 });
             }
         });
+
+        const videoNode = document.getElementById("local-video");
+        if (videoNode.srcObject) {
+            let tracks = videoNode.srcObject.getTracks();
+            tracks.forEach((track) => {
+                if (track.kind === "video") {
+                    track.enabled = enabled;
+                }
+            });
+        }
     }
 
     async function setInput(isAudioInput, deviceId) {
@@ -305,10 +325,8 @@ exports.init = async function init(app) {
             }
         } else if (msg.tag === "start-local-stream") {
             const args = msg.args[0];
-            startLocalStream(args)
+            startLocalStream(args);
 
-//            setAudioInputEnabled(args.audioInputEnabled);
-//            setVideoInputEnabled(args.videoInputEnabled);
         } else if (msg.tag === "stop-local-stream") {
             stopLocalStream();
         }
@@ -359,6 +377,10 @@ exports.init = async function init(app) {
 
         const videoNode = document.getElementById("local-video");
         videoNode.srcObject = localStreamPreview;
+        
+        setAudioInputEnabled(args.audioInputEnabled);
+        setVideoInputEnabled(args.videoInputEnabled);
+
         videoNode.play();
         handleAudioStream(localStreamPreview, "local-video");
     }

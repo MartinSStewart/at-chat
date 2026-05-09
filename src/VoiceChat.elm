@@ -454,6 +454,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking =
              else
                 "0 solid aliceblue"
             )
+        , Html.Attributes.style "border-radius" "8px"
         ]
         []
     )
