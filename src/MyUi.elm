@@ -130,7 +130,7 @@ errorBox htmlId onPress error =
             , Ui.paddingWith { left = 4, right = 0, top = 2, bottom = 2 }
             ]
             (Ui.text error)
-        , rowButton
+        , elButton
             htmlId
             (onPress error)
             [ Ui.width Ui.shrink
@@ -139,7 +139,7 @@ errorBox htmlId onPress error =
             , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
             , Ui.spacing 4
             ]
-            [ Ui.html Icons.copy, Ui.text "Copy" ]
+            (Ui.html Icons.copy)
         ]
 
 

@@ -123,7 +123,7 @@ exports.init = async function init(app) {
                 await handleSignalInternal(conn, args.peerUserId, pending[i]);
             }
 
-            if (shouldOffer) {
+            if (args.shouldOffer) {
                 try {
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
@@ -273,7 +273,12 @@ exports.init = async function init(app) {
         }
 
         let stream = await navigator.mediaDevices.getUserMedia(config);
-        let tracks = stream.getAudioTracks();
+        let tracks;
+        if (isAudioInput) {
+            tracks = stream.getAudioTracks();
+        } else {
+            tracks = stream.getVideoTracks();
+        }
         let track = tracks[0];
         connections.forEach(function (conn) {
             if (conn.pc) {
