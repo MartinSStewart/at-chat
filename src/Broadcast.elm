@@ -38,6 +38,7 @@ import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -114,18 +115,23 @@ discordGuildConnections : Discord.Id Discord.GuildId -> BackendModel -> List Cli
 discordGuildConnections guildId model =
     case SeqDict.get guildId model.discordGuilds of
         Just guild ->
-            List.concatMap
-                (\member ->
-                    case SeqDict.get member model.discordUsers of
-                        Just (FullData discordUser) ->
-                            List.concatMap
-                                (\( _, clientIds ) -> List.Nonempty.toList clientIds)
-                                (userConnections discordUser.linkedTo model)
+            MembersAndOwner.membersAndOwner guild.membersAndOwner
+                |> List.filterMap
+                    (\member ->
+                        case SeqDict.get member model.discordUsers of
+                            Just (FullData discordUser) ->
+                                Just discordUser.linkedTo
 
-                        _ ->
-                            []
-                )
-                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                            _ ->
+                                Nothing
+                    )
+                |> List.Extra.unique
+                |> List.concatMap
+                    (\linkedTo ->
+                        List.concatMap
+                            (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                            (userConnections linkedTo model)
+                    )
 
         Nothing ->
             []
@@ -137,16 +143,21 @@ discordDmConnections channelId model =
         Just channel ->
             NonemptyDict.keys channel.members
                 |> List.Nonempty.toList
-                |> List.concatMap
+                |> List.filterMap
                     (\member ->
                         case SeqDict.get member model.discordUsers of
                             Just (FullData discordUser) ->
-                                List.concatMap
-                                    (\( _, clientIds ) -> List.Nonempty.toList clientIds)
-                                    (userConnections discordUser.linkedTo model)
+                                Just discordUser.linkedTo
 
                             _ ->
-                                []
+                                Nothing
+                    )
+                |> List.Extra.unique
+                |> List.concatMap
+                    (\linkedTo ->
+                        List.concatMap
+                            (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                            (userConnections linkedTo model)
                     )
 
         Nothing ->
