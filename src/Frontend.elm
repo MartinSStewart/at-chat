@@ -3817,6 +3817,44 @@ updateLoaded msg model =
                         )
                         model
 
+                VoiceChat.MouseEnterVideoNode connectionId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn | voiceChat = { voiceChat | videoHover = Just connectionId } }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                VoiceChat.MouseExitVideoNode connectionId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn
+                                | voiceChat =
+                                    { voiceChat
+                                        | videoHover =
+                                            if voiceChat.videoHover == Just connectionId then
+                                                Nothing
+
+                                            else
+                                                voiceChat.videoHover
+                                    }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
         GotVoiceChatRecording bytes ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->

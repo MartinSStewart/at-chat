@@ -97,6 +97,8 @@ type Msg
     | PressedChannelHeaderVoiceChatButton RoomId
     | PressedCopyError String
     | ChangedVolume ConnectionId Float
+    | MouseEnterVideoNode LocalOrConnection
+    | MouseExitVideoNode LocalOrConnection
 
 
 type alias Local =
@@ -117,6 +119,7 @@ type alias Model =
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
+    , videoHover : Maybe LocalOrConnection
     }
 
 
@@ -155,6 +158,7 @@ initModel =
     , localIsSpeaking = False
     , startConnectionError = Nothing
     , volume = SeqDict.empty
+    , videoHover = Nothing
     }
 
 
@@ -427,7 +431,7 @@ videoNodes route windowSize model local =
                             total =
                                 NonemptySet.size sessions + 1
                         in
-                        videoNode isMobile localVideoNodeId False (videoPosAndSize total 0) model.localIsSpeaking Nothing
+                        videoNode isMobile IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -437,25 +441,25 @@ videoNodes route windowSize model local =
                                     in
                                     videoNode
                                         isMobile
-                                        (connectionIdToString connectionId)
+                                        (IsConnection connectionId)
                                         False
                                         (videoPosAndSize total (index + 1))
                                         (SeqSet.member connectionId model.isSpeaking)
-                                        (Just ( connectionId, SeqDict.get session model.volume |> Maybe.withDefault 1 ))
+                                        model
                                 )
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode isMobile localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking Nothing ]
+                        [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else if SeqSet.member viewingRoomId2 model.expanded then
-                [ videoNode isMobile localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking Nothing ]
+                [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else
-                [ videoNode isMobile localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking Nothing ]
+                [ videoNode isMobile IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
         Nothing ->
-            [ videoNode isMobile localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking Nothing ]
+            [ videoNode isMobile IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
     )
         |> Html.Keyed.node "div" []
 
@@ -465,33 +469,51 @@ aspectRatio =
     16 / 9
 
 
-videoNode : Bool -> String -> Bool -> ( Int, Int, Int ) -> Bool -> Maybe ( ConnectionId, Float ) -> ( String, Html Msg )
-videoNode isMobile id isHidden ( x, y, width ) isSpeaking maybeVolume =
+videoNode :
+    Bool
+    -> LocalOrConnection
+    -> Bool
+    -> ( Int, Int, Int )
+    -> Bool
+    -> Model
+    -> ( String, Html Msg )
+videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
     let
         height : Float
         height =
             toFloat width / aspectRatio
-    in
-    ( id
-    , Html.div
-        []
-        [ Html.video
-            [ Html.Attributes.style "width" (String.fromInt width ++ "px")
-            , Html.Attributes.style "height" (String.fromFloat height ++ "px")
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "left" (String.fromInt x ++ "px")
-            , Html.Attributes.style "top" (String.fromInt y ++ "px")
-            , Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.style
-                "opacity"
-                (if isHidden then
-                    "0.1"
 
-                 else
-                    "1"
-                )
-            , Html.Attributes.id id
+        idString =
+            case id of
+                IsLocal ->
+                    localVideoNodeId
+
+                IsConnection connectionId ->
+                    connectionIdToString connectionId
+    in
+    ( idString
+    , Html.div
+        [ Html.Attributes.style "width" (String.fromInt width ++ "px")
+        , Html.Attributes.style "height" (String.fromFloat height ++ "px")
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (String.fromInt x ++ "px")
+        , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Events.onMouseEnter (MouseEnterVideoNode id)
+        , Html.Events.onMouseLeave (MouseExitVideoNode id)
+        , Html.Attributes.style
+            "opacity"
+            (if isHidden then
+                "0.1"
+
+             else
+                "1"
+            )
+        ]
+        [ Html.video
+            [ Html.Attributes.id idString
             , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+            , Html.Attributes.style "width" (String.fromInt width ++ "px")
+            , Html.Attributes.style "height" (String.fromFloat height ++ "px")
             , Html.Attributes.style
                 "outline"
                 (if isSpeaking then
@@ -501,15 +523,19 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking maybeVolume =
                     "0 solid aliceblue"
                 )
             , Html.Attributes.style "border-radius" "8px"
+            , Html.Attributes.style "pointer-events" "none"
             ]
             []
-        , case maybeVolume of
-            Just ( connectionId, volume ) ->
-                if isHidden then
+        , case id of
+            IsConnection connectionId ->
+                if model.videoHover /= Just id || isHidden then
                     Html.text ""
 
                 else
                     let
+                        volume =
+                            SeqDict.get connectionId.otherClientId model.volume |> Maybe.withDefault 1
+
                         sliderHeight : Int
                         sliderHeight =
                             80
@@ -528,14 +554,15 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking maybeVolume =
                             4
 
                         containerHeight =
-                            sliderHeight + iconSize + spacing + sliderBottomMargin + padding * 2 |> Debug.log "af"
+                            sliderHeight + iconSize + spacing + sliderBottomMargin + padding * 2
                     in
                     Html.div
                         [ Html.Attributes.style "position" "absolute"
-                        , Html.Attributes.style "left" (String.fromInt (x + 8) ++ "px")
+                        , Html.Attributes.style "left" (String.fromInt 8 ++ "px")
+                        , Html.Attributes.style "z-index" "999"
                         , Html.Attributes.style
                             "top"
-                            (String.fromInt (y + round height - containerHeight - 8) ++ "px")
+                            (String.fromInt (round height - containerHeight - 8) ++ "px")
                         , Html.Attributes.style "display" "flex"
                         , Html.Attributes.style "flex-direction" "column"
                         , Html.Attributes.style "align-items" "center"
@@ -567,12 +594,11 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking maybeVolume =
                             , Html.Attributes.style "appearance" "slider-vertical"
                             , Html.Attributes.style "-webkit-appearance" "slider-vertical"
                             , Html.Attributes.style "width" (String.fromInt iconSize ++ "px")
-                            , Html.Attributes.style "pointer-events" "auto"
                             ]
                             []
                         ]
 
-            Nothing ->
+            IsLocal ->
                 Html.text ""
         ]
     )
@@ -1373,6 +1399,12 @@ isPressMsg msg =
             True
 
         ChangedVolume _ _ ->
+            False
+
+        MouseEnterVideoNode connectionId ->
+            False
+
+        MouseExitVideoNode connectionId ->
             False
 
 
