@@ -13,7 +13,7 @@ module Pages.Go exposing
 import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom
-import Effect.Command exposing (FrontendOnly)
+import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
 import Html
@@ -21,6 +21,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import MyUi
+import Ports
 import Set exposing (Set)
 import Svg
 import Svg.Attributes
@@ -65,6 +66,7 @@ type alias GameModel =
     , whiteTime : Float
     , lastTick : Maybe Time.Posix
     , board : Dict ( Int, Int ) Stone
+    , lastMove : Maybe ( Int, Int )
     , history : List Snapshot
     , viewingMovesBack : Int
     , currentPlayer : Stone
@@ -245,6 +247,7 @@ startGame width height handicap komi timeControl =
                 0
     , lastTick = Nothing
     , board = board
+    , lastMove = Nothing
     , history = []
     , viewingMovesBack = 0
     , currentPlayer = startingPlayer
@@ -641,6 +644,7 @@ tryPlace x y model =
             applyIncrement stone
                 { model
                     | board = boardAfterCapture
+                    , lastMove = Just ( x, y )
                     , history = currentSnapshot model :: model.history
                     , viewingMovesBack = 0
                     , currentPlayer = opponent
@@ -912,11 +916,11 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Command FrontendOnly toMsg Msg )
 update msg model =
     case model of
         Setup setup ->
-            updateSetup msg setup
+            ( updateSetup msg setup, Command.none )
 
         Game game ->
             updateGame msg game
@@ -1002,48 +1006,63 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-updateGame : Msg -> GameModel -> Model
+updateGame : Msg -> GameModel -> ( Model, Command FrontendOnly toMsg Msg )
 updateGame msg model =
     case msg of
         PressedCell x y ->
-            Game <|
-                if isViewingPast model then
-                    jumpToLatest model
+            if isViewingPast model then
+                ( Game (jumpToLatest model), Command.none )
 
-                else
-                    case model.phase of
-                        Playing _ ->
-                            tryPlace x y model
+            else
+                case model.phase of
+                    Playing _ ->
+                        let
+                            updated : GameModel
+                            updated =
+                                tryPlace x y model
 
-                        Marking _ ->
-                            cycleTerritory x y model
+                            placed : Bool
+                            placed =
+                                updated.lastMove /= model.lastMove
+                        in
+                        ( Game updated
+                        , if placed then
+                            Ports.playSound "click"
 
-                        Confirming _ ->
-                            model
+                          else
+                            Command.none
+                        )
 
-                        Scored _ ->
-                            model
+                    Marking _ ->
+                        ( Game (cycleTerritory x y model), Command.none )
+
+                    Confirming _ ->
+                        ( Game model, Command.none )
+
+                    Scored _ ->
+                        ( Game model, Command.none )
 
         PressedPass ->
-            Game <|
-                if isViewingPast model then
-                    jumpToLatest model
+            if isViewingPast model then
+                ( Game (jumpToLatest model), Command.none )
 
-                else
-                    case model.phase of
-                        Playing _ ->
-                            performPass model
+            else
+                case model.phase of
+                    Playing _ ->
+                        ( Game (applyIncrement model.currentPlayer (performPass model))
+                        , Command.none
+                        )
 
-                        _ ->
-                            model
+                    _ ->
+                        ( Game model, Command.none )
 
         PressedDoneMarking ->
             case model.phase of
                 Marking r ->
-                    Game { model | phase = Confirming r, lastError = Nothing }
+                    ( Game { model | phase = Confirming r, lastError = Nothing }, Command.none )
 
                 _ ->
-                    Game model
+                    ( Game model, Command.none )
 
         PressedAgree ->
             case model.phase of
@@ -1052,7 +1071,7 @@ updateGame msg model =
                         ( b, w ) =
                             computeScore model
                     in
-                    Game
+                    ( Game
                         { model
                             | phase =
                                 Scored
@@ -1062,26 +1081,30 @@ updateGame msg model =
                                     }
                             , lastError = Nothing
                         }
+                    , Command.none
+                    )
 
                 _ ->
-                    Game model
+                    ( Game model, Command.none )
 
         PressedDisagree ->
             case model.phase of
                 Confirming r ->
-                    Game
+                    ( Game
                         { model
                             | phase = Playing { previousPlayerPassed = False }
                             , currentPlayer = otherStone r.markingPlayer
                             , territoryMarks = Dict.empty
                             , lastError = Just "Marking rejected. Resume play."
                         }
+                    , Command.none
+                    )
 
                 _ ->
-                    Game model
+                    ( Game model, Command.none )
 
         PressedReset ->
-            init
+            ( init, Command.none )
 
         ChangedViewingMove moveNumber ->
             let
@@ -1093,48 +1116,52 @@ updateGame msg model =
                 clamped =
                     clamp 0 total moveNumber
             in
-            Game { model | viewingMovesBack = total - clamped, lastError = Nothing }
+            ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none )
 
         PressedArrowLeft ->
-            Game
+            ( Game
                 { model
                     | viewingMovesBack = min (List.length model.history) (model.viewingMovesBack + 1)
                     , lastError = Nothing
                 }
+            , Command.none
+            )
 
         PressedArrowRight ->
-            Game
+            ( Game
                 { model
                     | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
                     , lastError = Nothing
                 }
+            , Command.none
+            )
 
         ChangedWidthInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedHeightInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedHandicapInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedKomiInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedMainTimeInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         ChangedIncrementInput _ ->
-            Game model
+            ( Game model, Command.none )
 
         SelectedSize _ ->
-            Game model
+            ( Game model, Command.none )
 
         PressedStartGame ->
-            Game model
+            ( Game model, Command.none )
 
         Tick now ->
-            Game (tickClock now model)
+            ( Game (tickClock now model), Command.none )
 
 
 cellPx : Int
@@ -1631,6 +1658,7 @@ boardView model =
             ++ starPointShapes model.width model.height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
+            ++ lastMoveMarker viewing model
             ++ (if clickable then
                     clickTargets model.width model.height
 
@@ -1721,6 +1749,23 @@ starPoints width height =
             , ( 3, 15 )
             , ( 9, 15 )
             , ( 15, 15 )
+            ]
+
+        _ ->
+            []
+
+
+lastMoveMarker : Bool -> GameModel -> List (Svg.Svg Msg)
+lastMoveMarker viewingPast model =
+    case ( viewingPast, model.lastMove ) of
+        ( False, Just ( x, y ) ) ->
+            [ Svg.circle
+                [ Svg.Attributes.cx (String.fromInt (x * cellPx + cellPx // 2))
+                , Svg.Attributes.cy (String.fromInt (y * cellPx + cellPx // 2))
+                , Svg.Attributes.r (String.fromInt (cellPx // 6))
+                , Svg.Attributes.fill "rebeccapurple"
+                ]
+                []
             ]
 
         _ ->

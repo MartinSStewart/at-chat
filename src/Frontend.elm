@@ -1175,7 +1175,11 @@ updateLoaded msg model =
                 _ ->
                     case ( model.route, Pages.Go.keyMsg key ) of
                         ( GoRoute, Just goMsg ) ->
-                            ( { model | goModel = Pages.Go.update goMsg model.goModel }, Command.none )
+                            let
+                                ( goModel2, goCmd ) =
+                                    Pages.Go.update goMsg model.goModel
+                            in
+                            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
 
                         _ ->
                             ( model, Command.none )
@@ -1843,7 +1847,11 @@ updateLoaded msg model =
             )
 
         GoMsg goMsg ->
-            ( { model | goModel = Pages.Go.update goMsg model.goModel }, Command.none )
+            let
+                ( goModel2, goCmd ) =
+                    Pages.Go.update goMsg model.goModel
+            in
+            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
 
         UserNameEditableMsg editableMsg ->
             handleEditable
