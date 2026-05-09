@@ -424,7 +424,7 @@ videoNodes route windowSize model local =
                             total =
                                 NonemptySet.size sessions + 1
                         in
-                        videoNode localVideoNodeId False (videoPosAndSize total 0) model.localIsSpeaking
+                        videoNode isMobile localVideoNodeId False (videoPosAndSize total 0) model.localIsSpeaking
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -433,6 +433,7 @@ videoNodes route windowSize model local =
                                             { roomId = viewingRoomId2, otherClientId = session }
                                     in
                                     videoNode
+                                        isMobile
                                         (connectionIdToString connectionId)
                                         False
                                         (videoPosAndSize total (index + 1))
@@ -441,16 +442,16 @@ videoNodes route windowSize model local =
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking ]
+                        [ videoNode isMobile localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking ]
 
             else if SeqSet.member viewingRoomId2 model.expanded then
-                [ videoNode localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking ]
+                [ videoNode isMobile localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking ]
 
             else
-                [ videoNode localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking ]
+                [ videoNode isMobile localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking ]
 
         Nothing ->
-            [ videoNode localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking ]
+            [ videoNode isMobile localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking ]
     )
         |> Html.Keyed.node "div" []
 
@@ -460,37 +461,41 @@ aspectRatio =
     16 / 9
 
 
-videoNode : String -> Bool -> ( Int, Int, Int ) -> Bool -> ( String, Html msg )
-videoNode id isHidden ( x, y, width ) isSpeaking =
+videoNode : Bool -> String -> Bool -> ( Int, Int, Int ) -> Bool -> ( String, Html msg )
+videoNode isMobile id isHidden ( x, y, width ) isSpeaking =
     ( id
-    , Html.video
-        [ Html.Attributes.style "width" (String.fromInt width ++ "px")
-        , Html.Attributes.style "height" (String.fromFloat (toFloat width / aspectRatio) ++ "px")
-        , Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" (String.fromInt x ++ "px")
-        , Html.Attributes.style "top" (String.fromInt y ++ "px")
-        , Html.Attributes.style "pointer-events" "none"
-        , Html.Attributes.style
-            "opacity"
-            (if isHidden then
-                "0.1"
-
-             else
-                "1"
-            )
-        , Html.Attributes.id id
-        , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
-        , Html.Attributes.style
-            "outline"
-            (if isSpeaking then
-                "4px solid aliceblue"
-
-             else
-                "0 solid aliceblue"
-            )
-        , Html.Attributes.style "border-radius" "8px"
-        ]
+    , Html.div
         []
+        [ Html.video
+            [ Html.Attributes.style "width" (String.fromInt width ++ "px")
+            , Html.Attributes.style "height" (String.fromFloat (toFloat width / aspectRatio) ++ "px")
+            , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "left" (String.fromInt x ++ "px")
+            , Html.Attributes.style "top" (String.fromInt y ++ "px")
+            , Html.Attributes.style "pointer-events" "none"
+            , Html.Attributes.style
+                "opacity"
+                (if isHidden then
+                    "0.1"
+
+                 else
+                    "1"
+                )
+            , Html.Attributes.id id
+            , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+            , Html.Attributes.style
+                "outline"
+                (if isSpeaking then
+                    "4px solid aliceblue"
+
+                 else
+                    "0 solid aliceblue"
+                )
+            , Html.Attributes.style "border-radius" "8px"
+            ]
+            []
+        , Html.div [] []
+        ]
     )
 
 
