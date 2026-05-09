@@ -462,6 +462,11 @@ red =
     Ui.rgb 200 60 60
 
 
+redBorder : Ui.Color
+redBorder =
+    Ui.rgb 202 92 92
+
+
 view : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
 view windowSize roomId localUser calls model =
     let
@@ -472,6 +477,9 @@ view windowSize roomId localUser calls model =
         hasJoined2 : Bool
         hasJoined2 =
             hasJoined roomId calls
+
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
     in
     Ui.el
         [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
@@ -481,70 +489,87 @@ view windowSize roomId localUser calls model =
         , MyUi.noShrinking
         , Ui.inFront (Ui.el [ Ui.paddingXY 16 0 ] (voiceChatButton roomId localUser calls))
         , Ui.inFront
-            (Ui.row
-                [ Ui.alignBottom
-                , Ui.alignRight
-                , Ui.width Ui.shrink
-                , Ui.padding 16
-                , Ui.spacing 8
-                ]
+            (Ui.column
+                [ Ui.alignBottom ]
                 [ case model.startConnectionError of
                     Just error ->
                         MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error
 
                     Nothing ->
                         Ui.none
-                , MyUi.rowButton
-                    (Dom.id "guild_startVoiceChat")
-                    (if hasJoined2 then
-                        PressedLeaveCall
+                , (if isMobile then
+                    Ui.column
 
-                     else
-                        PressedJoinCall roomId
-                    )
-                    [ Ui.spacing 8
-                    , Ui.background
-                        (if hasJoined2 then
-                            red
+                   else
+                    Ui.row
+                  )
+                    [ Ui.contentBottom
+                    , if isMobile then
+                        Ui.padding 8
 
-                         else
-                            green
-                        )
-                    , Ui.rounded 99
-                    , Ui.height Ui.fill
-                    , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
+                      else
+                        Ui.padding 16
+                    , Ui.spacing 8
                     ]
-                    [ Ui.html Icons.phone
-                    , (case ( hasJoined2, ongoingCall ) of
-                        ( True, Nothing ) ->
-                            "End Call"
+                    [ mediaDeviceSelectors isMobile roomId model
+                    , Ui.row
+                        [ Ui.alignRight
+                        , Ui.width Ui.shrink
+                        , Ui.spacing 8
+                        ]
+                        [ MyUi.rowButton
+                            (Dom.id "guild_startVoiceChat")
+                            (if hasJoined2 then
+                                PressedLeaveCall
 
-                        ( True, Just _ ) ->
-                            "Leave Call"
+                             else
+                                PressedJoinCall roomId
+                            )
+                            [ Ui.spacing 8
+                            , Ui.background
+                                (if hasJoined2 then
+                                    red
 
-                        ( False, Nothing ) ->
-                            "Start Call"
+                                 else
+                                    green
+                                )
+                            , Ui.rounded 99
+                            , Ui.height Ui.fill
+                            , Ui.paddingWith { left = 12, right = 16, top = 0, bottom = 0 }
+                            ]
+                            [ Ui.html Icons.phone
+                            , (case ( hasJoined2, ongoingCall ) of
+                                ( True, Nothing ) ->
+                                    "End\u{00A0}Call"
 
-                        ( False, Just _ ) ->
-                            "Join Call"
-                      )
-                        |> Ui.text
-                        |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
+                                ( True, Just _ ) ->
+                                    "Leave\u{00A0}Call"
+
+                                ( False, Nothing ) ->
+                                    "Start\u{00A0}Call"
+
+                                ( False, Just _ ) ->
+                                    "Join\u{00A0}Call"
+                              )
+                                |> Ui.text
+                                |> Ui.el [ Ui.move { x = 0, y = 1, z = 0 } ]
+                            ]
+                        , voiceChatControlButton
+                            "guild_voiceChatMute"
+                            (Ui.html Icons.microphone)
+                            model.audioInputEnabled
+                            PressedToggleMute
+                        , voiceChatControlButton
+                            "guild_voiceChatPauseVideo"
+                            (Ui.html Icons.camera)
+                            model.videoInputEnabled
+                            PressedTogglePauseVideo
+                        ]
                     ]
-                , voiceChatControlButton
-                    "guild_voiceChatMute"
-                    (Ui.html Icons.microphone)
-                    model.audioInputEnabled
-                    PressedToggleMute
-                , voiceChatControlButton
-                    "guild_voiceChatPauseVideo"
-                    (Ui.el [ Ui.move { x = 2, y = 0, z = 0 } ] (Ui.html Icons.camera))
-                    model.videoInputEnabled
-                    PressedTogglePauseVideo
                 ]
             )
         ]
-        (mediaDeviceSelectors roomId model)
+        Ui.none
 
 
 voiceChatButton : RoomId -> LocalUser -> Local -> Element Msg
@@ -620,8 +645,17 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
         onPress
         [ Ui.width (Ui.px 40)
         , Ui.height (Ui.px 40)
-        , Ui.padding 8
+        , Ui.contentCenterX
+        , Ui.contentCenterY
         , Ui.rounded 20
+        , Ui.border 1
+        , Ui.borderColor
+            (if isEnabled then
+                MyUi.inputBorder
+
+             else
+                redBorder
+            )
         , Ui.background
             (if isEnabled then
                 Ui.rgb 60 70 100
@@ -642,7 +676,7 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
                     (Ui.html Icons.diagonalSlash)
                 )
         ]
-        (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] iconHtml)
+        iconHtml
 
 
 type Track
@@ -1097,16 +1131,15 @@ connectionIdCodec =
         Codec.string
 
 
-mediaDeviceSelectors : RoomId -> Model -> Element Msg
-mediaDeviceSelectors roomId model =
+mediaDeviceSelectors : Bool -> RoomId -> Model -> Element Msg
+mediaDeviceSelectors isMobile roomId model =
     case model.userMediaDevices of
         MediaDevicesNotLoaded ->
             Ui.none
 
         FailedToGetMediaDevices error ->
             Ui.el
-                [ Ui.padding 16
-                , Ui.alignBottom
+                [ Ui.alignBottom
                 , Ui.Font.color MyUi.font1
                 ]
                 (Ui.text ("Failed to get media devices: " ++ error))
@@ -1122,11 +1155,10 @@ mediaDeviceSelectors roomId model =
                     List.filter (\d -> d.kind == VideoInput) devices
             in
             Ui.column
-                [ Ui.padding 16
-                , Ui.spacing 12
+                [ Ui.spacing 8
                 , Ui.alignBottom
-                , Ui.width (Ui.px 400)
                 , Ui.widthMax 400
+                , Ui.attrIf isMobile Ui.alignRight
                 ]
                 [ case SeqDict.get roomId model.recordings of
                     Just _ ->
@@ -1137,8 +1169,8 @@ mediaDeviceSelectors roomId model =
 
                     Nothing ->
                         Ui.none
-                , deviceDropdown "Microphone" audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
-                , deviceDropdown "Camera" videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
+                , deviceDropdown isMobile "Microphone" Icons.microphone audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
+                , deviceDropdown isMobile "Camera" Icons.camera videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
                 ]
 
 
@@ -1173,11 +1205,18 @@ isPressMsg msg =
             True
 
 
-deviceDropdown : String -> List MediaDevice -> Maybe (IdString MediaDeviceId) -> (IdString MediaDeviceId -> msg) -> Element msg
-deviceDropdown labelText devices selected onSelect =
-    Ui.column
-        [ Ui.spacing 4, Ui.Font.color MyUi.font1 ]
-        [ Ui.text labelText
+deviceDropdown :
+    Bool
+    -> String
+    -> Html msg
+    -> List MediaDevice
+    -> Maybe (IdString MediaDeviceId)
+    -> (IdString MediaDeviceId -> msg)
+    -> Element msg
+deviceDropdown isMobile labelText icon devices selected onSelect =
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.html icon
         , Ui.html
             (Html.select
                 [ Html.Attributes.value
@@ -1190,13 +1229,26 @@ deviceDropdown labelText devices selected onSelect =
                     )
                 , Html.Events.onInput (\text -> IdString.fromString text |> onSelect)
                 , Html.Attributes.style "width" "100%"
-                , Html.Attributes.style "padding" "7px 8px"
+                , Html.Attributes.style "padding"
+                    (if isMobile then
+                        "4px"
+
+                     else
+                        "7px 8px"
+                    )
                 , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
                 , Html.Attributes.style "border-radius" "4px"
-                , Html.Attributes.style "font-size" "16px"
+                , Html.Attributes.style "font-size"
+                    (if isMobile then
+                        "14px"
+
+                     else
+                        "16px"
+                    )
                 , Html.Attributes.style "background-color" "rgb(32,40,70)"
                 , Html.Attributes.style "color" "rgb(255,255,255)"
                 , Html.Attributes.style "cursor" "pointer"
+                , Html.Attributes.attribute "aria-label" labelText
                 ]
                 (List.map
                     (\device ->
