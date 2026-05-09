@@ -329,6 +329,11 @@ exports.init = async function init(app) {
 
         } else if (msg.tag === "stop-local-stream") {
             stopLocalStream();
+        } else if (msg.tag === "set-volume") {
+            const videoEl = document.getElementById(msg.args[0]);
+            if (videoEl) {
+                videoEl.volume = msg.args[1];
+            }
         }
     });
 

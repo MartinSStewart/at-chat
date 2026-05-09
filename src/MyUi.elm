@@ -822,6 +822,12 @@ a:visited {
   opacity: 0;
   transition: opacity 0.2s;
   pointer-events: none;
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 16px;
+  height: 100px;
 }
 .video-container:hover .video-volume-control {
   opacity: 1;
