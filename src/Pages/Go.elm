@@ -1027,7 +1027,7 @@ updateGame msg model =
                         in
                         ( Game updated
                         , if placed then
-                            Ports.playSound "click"
+                            Ports.playSound "pop"
 
                           else
                             Command.none
@@ -1762,7 +1762,7 @@ lastMoveMarker viewingPast model =
             [ Svg.circle
                 [ Svg.Attributes.cx (String.fromInt (x * cellPx + cellPx // 2))
                 , Svg.Attributes.cy (String.fromInt (y * cellPx + cellPx // 2))
-                , Svg.Attributes.r (String.fromInt (cellPx // 6))
+                , Svg.Attributes.r (String.fromInt (cellPx // 8))
                 , Svg.Attributes.fill "rebeccapurple"
                 ]
                 []

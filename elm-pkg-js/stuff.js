@@ -358,25 +358,6 @@ exports.init = async function init(app)
         //app.ports.load_sounds_from_js.send(null);
     });
     app.ports.play_sound.subscribe((a) => {
-        if (a === "click") {
-            try {
-                if (!context) {
-                    context = new AudioContext();
-                }
-                const now = context.currentTime;
-                const osc = context.createOscillator();
-                const gain = context.createGain();
-                osc.type = "square";
-                osc.frequency.setValueAtTime(2200, now);
-                osc.frequency.exponentialRampToValueAtTime(900, now + 0.03);
-                gain.gain.setValueAtTime(0.15, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-                osc.connect(gain).connect(context.destination);
-                osc.start(now);
-                osc.stop(now + 0.07);
-            } catch (error) { }
-            return;
-        }
         try {
             const source = context.createBufferSource();
             if (sounds[a]) {
