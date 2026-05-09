@@ -352,8 +352,21 @@ videoNodes route windowSize model local =
         voiceChatY =
             MyUi.channelHeaderHeight
 
-        voiceChatWidth =
-            Coord.xRaw windowSize - voiceChatX |> min 500
+        maxWidth : Int
+        maxWidth =
+            Coord.xRaw windowSize - voiceChatX
+
+        --|> min (ceiling (toFloat voiceChatHeight * 16 / 9))
+        maxHeight : Int
+        maxHeight =
+            viewHeight windowSize
+                - voiceChatY
+                - (if isMobile then
+                    150
+
+                   else
+                    120
+                  )
 
         padding =
             0
@@ -365,21 +378,37 @@ videoNodes route windowSize model local =
         videoPosAndSize total index =
             case total of
                 1 ->
-                    ( voiceChatX + padding, voiceChatY + padding, voiceChatWidth - padding * 2 )
+                    let
+                        width =
+                            min (round (toFloat maxHeight * aspectRatio)) maxWidth - padding * 2
+
+                        voiceChatX2 =
+                            voiceChatX + (maxWidth - width) // 2
+                    in
+                    ( voiceChatX2
+                    , voiceChatY + padding
+                    , width
+                    )
 
                 2 ->
                     let
+                        width =
+                            min (round (toFloat maxHeight * aspectRatio * 2)) maxWidth
+
+                        voiceChatX2 =
+                            voiceChatX + (maxWidth - width) // 2
+
                         width2 =
-                            (voiceChatWidth - padding * 2 - spacing) // 2
+                            (width - padding * 2 - spacing) // 2
                     in
                     if index == 0 then
-                        ( voiceChatX + padding, voiceChatY + padding, width2 )
+                        ( voiceChatX2 + padding, voiceChatY + padding, width2 )
 
                     else
-                        ( voiceChatX + padding + spacing + width2, voiceChatY + padding, width2 )
+                        ( voiceChatX2 + padding + spacing + width2, voiceChatY + padding, width2 )
 
                 _ ->
-                    ( padding + index * 20, voiceChatY + padding, voiceChatWidth // total )
+                    ( padding + index * 20, voiceChatY + padding, maxWidth // total )
 
         isMobile : Bool
         isMobile =
@@ -426,12 +455,17 @@ videoNodes route windowSize model local =
         |> Html.Keyed.node "div" []
 
 
+aspectRatio : Float
+aspectRatio =
+    16 / 9
+
+
 videoNode : String -> Bool -> ( Int, Int, Int ) -> Bool -> ( String, Html msg )
 videoNode id isHidden ( x, y, width ) isSpeaking =
     ( id
     , Html.video
         [ Html.Attributes.style "width" (String.fromInt width ++ "px")
-        , Html.Attributes.style "height" (String.fromFloat (toFloat width * 9 / 16) ++ "px")
+        , Html.Attributes.style "height" (String.fromFloat (toFloat width / aspectRatio) ++ "px")
         , Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt x ++ "px")
         , Html.Attributes.style "top" (String.fromInt y ++ "px")
@@ -475,6 +509,11 @@ redBorder =
     Ui.rgb 202 92 92
 
 
+viewHeight : Coord CssPixels -> Int
+viewHeight windowSize =
+    round (toFloat (Coord.yRaw windowSize * 2) / 3)
+
+
 view : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
 view windowSize roomId localUser calls model =
     let
@@ -490,7 +529,7 @@ view windowSize roomId localUser calls model =
             MyUi.isMobile { windowSize = windowSize }
     in
     Ui.el
-        [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
+        [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3

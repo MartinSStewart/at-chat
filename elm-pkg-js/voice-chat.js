@@ -381,6 +381,7 @@ exports.init = async function init(app) {
 
         const videoNode = document.getElementById("local-video");
         videoNode.srcObject = localStreamPreview;
+        videoNode.volume = 0;
 
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
