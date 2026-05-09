@@ -115,17 +115,18 @@ discordGuildConnections : Discord.Id Discord.GuildId -> BackendModel -> List Cli
 discordGuildConnections guildId model =
     case SeqDict.get guildId model.discordGuilds of
         Just guild ->
-            MembersAndOwner.membersAndOwner guild.membersAndOwner
-                |> List.filterMap
-                    (\member ->
-                        case SeqDict.get member model.discordUsers of
-                            Just (FullData discordUser) ->
-                                Just discordUser.linkedTo
+            List.foldl
+                (\member set ->
+                    case SeqDict.get member model.discordUsers of
+                        Just (FullData discordUser) ->
+                            SeqSet.insert discordUser.linkedTo set
 
-                            _ ->
-                                Nothing
-                    )
-                |> List.Extra.unique
+                        _ ->
+                            set
+                )
+                SeqSet.empty
+                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                |> SeqSet.toList
                 |> List.concatMap
                     (\linkedTo ->
                         List.concatMap
@@ -142,17 +143,17 @@ discordDmConnections channelId model =
     case SeqDict.get channelId model.discordDmChannels of
         Just channel ->
             NonemptyDict.keys channel.members
-                |> List.Nonempty.toList
-                |> List.filterMap
-                    (\member ->
+                |> List.Nonempty.foldl
+                    (\member set ->
                         case SeqDict.get member model.discordUsers of
                             Just (FullData discordUser) ->
-                                Just discordUser.linkedTo
+                                SeqSet.insert discordUser.linkedTo set
 
                             _ ->
-                                Nothing
+                                set
                     )
-                |> List.Extra.unique
+                    SeqSet.empty
+                |> SeqSet.toList
                 |> List.concatMap
                     (\linkedTo ->
                         List.concatMap
