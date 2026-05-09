@@ -758,54 +758,107 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                 Err "Backend doesn't have the Discord guild"
                     )
                 , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
-                , RecordedTestExtra.writeMessage admin 100 "Hello from at-chat with two linked accounts"
-                , T.andThen
-                    200
-                    (\data ->
-                        let
-                            messageEvent : String
-                            messageEvent =
-                                """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"Hello from at-chat with two linked accounts","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
-                        in
-                        case
-                            ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
-                            , RecordedTestExtra.websocketByDiscordToken RecordedTestExtra.secondDiscordToken data
-                            )
-                        of
-                            ( Just ( firstConnection, _ ), Just ( secondConnection, _ ) ) ->
-                                [ T.websocketSendString 100 firstConnection messageEvent
-                                , T.websocketSendString 100 secondConnection messageEvent
-                                ]
+                , T.collapsableGroup
+                    "First message"
+                    [ RecordedTestExtra.writeMessage admin 100 "Hello from at-chat with two linked accounts"
+                    , T.andThen
+                        200
+                        (\data ->
+                            let
+                                messageEvent : String
+                                messageEvent =
+                                    """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"Hello from at-chat with two linked accounts","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                            in
+                            case
+                                ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
+                                , RecordedTestExtra.websocketByDiscordToken RecordedTestExtra.secondDiscordToken data
+                                )
+                            of
+                                ( Just ( firstConnection, _ ), Just ( secondConnection, _ ) ) ->
+                                    [ T.websocketSendString 100 firstConnection messageEvent
+                                    , T.websocketSendString 100 secondConnection messageEvent
+                                    ]
 
-                            _ ->
-                                [ T.checkState 0 (\_ -> Err "Couldn't find both Discord websocket connections") ]
-                    )
-                , T.checkState
-                    200
-                    (\data ->
-                        case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
-                            Just guild ->
-                                case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
-                                    Just channel ->
-                                        case Array.length channel.messages of
-                                            1 ->
-                                                Ok ()
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Couldn't find both Discord websocket connections") ]
+                        )
+                    , T.checkState
+                        200
+                        (\data ->
+                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                                Just guild ->
+                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                        Just channel ->
+                                            case Array.length channel.messages of
+                                                1 ->
+                                                    Ok ()
 
-                                            count ->
-                                                Err ("Expected the guild's channel to contain exactly one message but got " ++ String.fromInt count)
+                                                count ->
+                                                    Err ("Expected the guild's channel to contain exactly one message but got " ++ String.fromInt count)
 
-                                    Nothing ->
-                                        Err "Channel not found in guild"
+                                        Nothing ->
+                                            Err "Channel not found in guild"
 
-                            Nothing ->
-                                Err "Discord guild not found"
-                    )
-                , admin.checkView
-                    100
-                    (\html ->
-                        Test.Html.Query.findAll [ Test.Html.Selector.exactText "Hello from at-chat with two linked accounts" ] html
-                            |> Test.Html.Query.count (Expect.equal 1)
-                    )
+                                Nothing ->
+                                    Err "Discord guild not found"
+                        )
+                    , admin.checkView
+                        100
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "Hello from at-chat with two linked accounts" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    ]
+                , T.collapsableGroup
+                    "Second message"
+                    [ T.andThen
+                        200
+                        (\data ->
+                            let
+                                messageEvent : String
+                                messageEvent =
+                                    """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"This is message 2","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                            in
+                            case
+                                ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
+                                , RecordedTestExtra.websocketByDiscordToken RecordedTestExtra.secondDiscordToken data
+                                )
+                            of
+                                ( Just ( firstConnection, _ ), Just ( secondConnection, _ ) ) ->
+                                    [ T.websocketSendString 100 firstConnection messageEvent
+                                    , T.websocketSendString 100 secondConnection messageEvent
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Couldn't find both Discord websocket connections") ]
+                        )
+                    , T.checkState
+                        200
+                        (\data ->
+                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                                Just guild ->
+                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                        Just channel ->
+                                            case Array.length channel.messages of
+                                                1 ->
+                                                    Ok ()
+
+                                                count ->
+                                                    Err ("Expected the guild's channel to contain exactly one message but got " ++ String.fromInt count)
+
+                                        Nothing ->
+                                            Err "Channel not found in guild"
+
+                                Nothing ->
+                                    Err "Discord guild not found"
+                        )
+                    , admin.checkView
+                        100
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "This is message 2" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    ]
                 ]
             )
         ]
