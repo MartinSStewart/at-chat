@@ -818,6 +818,19 @@ a:hover {
 a:visited {
   color: rgb(206,193,225);
 }
+.video-volume-control {
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.video-container:hover .video-volume-control {
+  opacity: 1;
+  pointer-events: auto;
+}
+.video-container-mobile .video-volume-control {
+  opacity: 1;
+  pointer-events: auto;
+}
 html, body {
   overscroll-behavior: none;
 }

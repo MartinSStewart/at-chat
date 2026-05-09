@@ -465,13 +465,22 @@ videoNode : Bool -> String -> Bool -> ( Int, Int, Int ) -> Bool -> ( String, Htm
 videoNode isMobile id isHidden ( x, y, width ) isSpeaking =
     ( id
     , Html.div
-        []
+        [ Html.Attributes.class
+            (if isMobile then
+                "video-container video-container-mobile"
+
+             else
+                "video-container"
+            )
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.style "left" (String.fromInt x ++ "px")
+        , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Attributes.style "width" (String.fromInt width ++ "px")
+        , Html.Attributes.style "height" (String.fromFloat (toFloat width / aspectRatio) ++ "px")
+        ]
         [ Html.video
-            [ Html.Attributes.style "width" (String.fromInt width ++ "px")
-            , Html.Attributes.style "height" (String.fromFloat (toFloat width / aspectRatio) ++ "px")
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "left" (String.fromInt x ++ "px")
-            , Html.Attributes.style "top" (String.fromInt y ++ "px")
+            [ Html.Attributes.style "width" "100%"
+            , Html.Attributes.style "height" "100%"
             , Html.Attributes.style "pointer-events" "none"
             , Html.Attributes.style
                 "opacity"
@@ -494,7 +503,21 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking =
             , Html.Attributes.style "border-radius" "8px"
             ]
             []
-        , Html.div [] []
+        , Html.input
+            [ Html.Attributes.type_ "range"
+            , Html.Attributes.attribute "min" "0"
+            , Html.Attributes.attribute "max" "1"
+            , Html.Attributes.attribute "step" "0.01"
+            , Html.Attributes.attribute "value" "1"
+            , Html.Attributes.attribute "oninput"
+                ("var v=document.getElementById('" ++ id ++ "');if(v){v.volume=this.value;}")
+            , Html.Attributes.class "video-volume-control"
+            , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "bottom" "8px"
+            , Html.Attributes.style "right" "8px"
+            , Html.Attributes.style "width" "100px"
+            ]
+            []
         ]
     )
 
