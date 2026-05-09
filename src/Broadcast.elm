@@ -38,6 +38,7 @@ import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -114,18 +115,24 @@ discordGuildConnections : Discord.Id Discord.GuildId -> BackendModel -> List Cli
 discordGuildConnections guildId model =
     case SeqDict.get guildId model.discordGuilds of
         Just guild ->
-            List.concatMap
-                (\member ->
+            List.foldl
+                (\member set ->
                     case SeqDict.get member model.discordUsers of
                         Just (FullData discordUser) ->
-                            List.concatMap
-                                (\( _, clientIds ) -> List.Nonempty.toList clientIds)
-                                (userConnections discordUser.linkedTo model)
+                            SeqSet.insert discordUser.linkedTo set
 
                         _ ->
-                            []
+                            set
                 )
+                SeqSet.empty
                 (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                |> SeqSet.toList
+                |> List.concatMap
+                    (\linkedTo ->
+                        List.concatMap
+                            (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                            (userConnections linkedTo model)
+                    )
 
         Nothing ->
             []
@@ -136,17 +143,22 @@ discordDmConnections channelId model =
     case SeqDict.get channelId model.discordDmChannels of
         Just channel ->
             NonemptyDict.keys channel.members
-                |> List.Nonempty.toList
-                |> List.concatMap
-                    (\member ->
+                |> List.Nonempty.foldl
+                    (\member set ->
                         case SeqDict.get member model.discordUsers of
                             Just (FullData discordUser) ->
-                                List.concatMap
-                                    (\( _, clientIds ) -> List.Nonempty.toList clientIds)
-                                    (userConnections discordUser.linkedTo model)
+                                SeqSet.insert discordUser.linkedTo set
 
                             _ ->
-                                []
+                                set
+                    )
+                    SeqSet.empty
+                |> SeqSet.toList
+                |> List.concatMap
+                    (\linkedTo ->
+                        List.concatMap
+                            (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                            (userConnections linkedTo model)
                     )
 
         Nothing ->
