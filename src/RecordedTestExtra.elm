@@ -16,6 +16,7 @@ module RecordedTestExtra exposing
     , connectTwoUsersAndJoinNewGuild
     , createThread
     , currentDiscordUserId
+    , currentDiscordUserIdString
     , decodeCustomRequest
     , desktopWindow
     , discordUserAuth
@@ -38,12 +39,16 @@ module RecordedTestExtra exposing
     , isOp2
     , joeEmail
     , linkDiscordAndLogin
+    , linkSecondDiscordAccount
     , mobileWindow
     , noMissingMessages
     , regeneratedServerSecretValue
     , safariIphone
     , scrollToMiddle
     , scrollToTop
+    , secondDiscordToken
+    , secondDiscordUserId
+    , secondDiscordUserIdString
     , sessionId0
     , sessionId1
     , sessionId2
@@ -53,6 +58,7 @@ module RecordedTestExtra exposing
     , stringToJson
     , userEmail
     , voiceChatTest
+    , websocketByDiscordToken
     , writeMessage
     , writeMessageMobile
     )
@@ -799,6 +805,50 @@ isOp2 data =
             False
 
 
+op2TokenDecoder : Json.Decode.Decoder String
+op2TokenDecoder =
+    Json.Decode.field "op" Json.Decode.int
+        |> Json.Decode.andThen
+            (\op ->
+                if op == 2 then
+                    Json.Decode.at [ "d", "token" ] Json.Decode.string
+
+                else
+                    Json.Decode.fail "not op 2"
+            )
+
+
+websocketByDiscordToken :
+    String
+    -> T.Data frontendModel backendModel
+    -> Maybe ( Websocket.Connection, T.WebsocketState )
+websocketByDiscordToken token data =
+    SeqDict.toList data.websockets
+        |> List.filterMap
+            (\( ( requestedBy, connection ), websocketState ) ->
+                if requestedBy == RequestedByBackend && websocketState.closedAt == Nothing then
+                    let
+                        sentTokens : List String
+                        sentTokens =
+                            Array.toList websocketState.dataSent
+                                |> List.filterMap
+                                    (\msg ->
+                                        Json.Decode.decodeString op2TokenDecoder msg.data
+                                            |> Result.toMaybe
+                                    )
+                    in
+                    if List.member token sentTokens then
+                        Just ( connection, websocketState )
+
+                    else
+                        Nothing
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
 discordUserAuth : Discord.UserAuth
 discordUserAuth =
     { token = "legit-token"
@@ -887,6 +937,79 @@ linkDiscordAndLogin sessionId name emailAddress isNewAccount discordOp0Ready dis
         )
 
 
+{-| Links a second Discord account to the currently logged in user, using a
+different token and user id than the first link. The resulting Discord account
+will appear as a member of the same guilds as the first account because the
+provided ready data is reused with the user id substituted.
+-}
+linkSecondDiscordAccount :
+    SessionId
+    -> String
+    -> String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+linkSecondDiscordAccount sessionId discordOp0Ready discordOp0ReadySupplemental =
+    let
+        secondAuth : Discord.UserAuth
+        secondAuth =
+            { discordUserAuth | token = secondDiscordToken }
+
+        -- Reuse the existing ready/supplemental data, but pretend it belongs
+        -- to a second Discord user that shares the same guild membership.
+        secondReady : String
+        secondReady =
+            String.replace currentDiscordUserIdString secondDiscordUserIdString discordOp0Ready
+
+        secondSupplemental : String
+        secondSupplemental =
+            String.replace currentDiscordUserIdString secondDiscordUserIdString discordOp0ReadySupplemental
+    in
+    T.connectFrontend
+        100
+        sessionId
+        ("/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec secondAuth)
+        desktopWindow
+        (\userB ->
+            [ userB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+            , T.andThen
+                120
+                (\data ->
+                    case findUntouchedBackendWebsocket data of
+                        Just connection ->
+                            [ T.websocketSendString 100 connection """{"t":null,"s":null,"op":10,"d":{"heartbeat_interval":41250,"_trace":["[\\"gateway-prd-arm-us-east1-d-swb5\\",{\\"micros\\":0.0}]"]}}""" ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Couldn't find newly opened Discord websocket") ]
+                )
+            , T.andThen
+                120
+                (\data ->
+                    case websocketByDiscordToken secondDiscordToken data of
+                        Just ( connection, _ ) ->
+                            [ T.websocketSendString 100 connection secondReady
+                            , T.websocketSendString 100 connection secondSupplemental
+                            ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Second Discord websocket didn't send OP2 with the expected token") ]
+                )
+            ]
+        )
+
+
+findUntouchedBackendWebsocket : T.Data frontendModel backendModel -> Maybe Websocket.Connection
+findUntouchedBackendWebsocket data =
+    SeqDict.toList data.websockets
+        |> List.filterMap
+            (\( ( requestedBy, connection ), websocketState ) ->
+                if requestedBy == RequestedByBackend && websocketState.closedAt == Nothing && Array.isEmpty websocketState.dataSent then
+                    Just connection
+
+                else
+                    Nothing
+            )
+        |> List.head
+
+
 infoEndpointResponse : String
 infoEndpointResponse =
     """{"s":"unknown","v":136,"h":["ce04ec5a052111b470b778b6adec9470dd0ab1d2","881990760d6345c8ebcecb11eeb3d7c3caa48d52","5bf58bad725a2b57b8b04c61329291b3ddc57f89","121b2b6733a1d45f0aa03a86227cb260fa0aca63","dc23f82c404f7f9881562c94f59dddf1f291d0b5","a7f4d07c436ed96853c669d38f8591f0d64d57cd"],"o":"a12","p":15}"""
@@ -901,6 +1024,11 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
                     StringHttpResponse
                         { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
                         """{"id":"184437096813953035","username":"at28727","avatar":"7c40cb63ea11096169c5a4dcb5825a3d","discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT2","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"a@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}"""
+
+                else if List.Extra.count (\a -> a == ( "Authorization", secondDiscordToken )) headers == 1 && body == Nothing then
+                    StringHttpResponse
+                        { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                        ("""{"id":\"""" ++ secondDiscordUserIdString ++ """","username":"at-second","avatar":null,"discriminator":"0","public_flags":0,"flags":0,"banner":null,"accent_color":null,"global_name":"AT Second","avatar_decoration_data":null,"collectibles":null,"display_name_styles":null,"banner_color":null,"clan":null,"primary_guild":null,"mfa_enabled":false,"locale":"en-US","premium_type":0,"email":"second@a.se","verified":true,"phone":null,"nsfw_allowed":null,"linked_users":[],"bio":"","authenticator_types":[],"age_verification_status":1}""")
 
                 else
                     StringHttpResponse
@@ -1685,7 +1813,27 @@ allAttackerLocalChanges =
 
 currentDiscordUserId : Discord.Id Discord.UserId
 currentDiscordUserId =
-    Unsafe.uint64 "184437096813953035" |> Discord.idFromUInt64
+    Unsafe.uint64 currentDiscordUserIdString |> Discord.idFromUInt64
+
+
+currentDiscordUserIdString : String
+currentDiscordUserIdString =
+    "184437096813953035"
+
+
+secondDiscordUserId : Discord.Id Discord.UserId
+secondDiscordUserId =
+    Unsafe.uint64 secondDiscordUserIdString |> Discord.idFromUInt64
+
+
+secondDiscordUserIdString : String
+secondDiscordUserIdString =
+    "555555555555555555"
+
+
+secondDiscordToken : String
+secondDiscordToken =
+    "legit-token-2"
 
 
 botTestGuild : Discord.Id Discord.GuildId
