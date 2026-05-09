@@ -329,6 +329,13 @@ exports.init = async function init(app) {
 
         } else if (msg.tag === "stop-local-stream") {
             stopLocalStream();
+        } else if (msg.tag === "set-volume") {
+            const peerUserId = msg.args[0];
+            const volume = msg.args[1];
+            const entry = audioStreams.get(peerUserId);
+            if (entry && entry.gainNode) {
+                entry.gainNode.gain.value = Math.max(0, volume);
+            }
         }
     });
 
@@ -405,6 +412,20 @@ exports.init = async function init(app) {
         analyserNode.fftSize = AUDIO_WINDOW_SIZE;
         mediaStreamSource.connect(analyserNode);
 
+        let gainNode = null;
+        if (peerUserId !== "local-video") {
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = 1;
+            mediaStreamSource.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Mute native audio playback since we route through Web Audio for volume control.
+            const videoNode = document.getElementById(peerUserId);
+            if (videoNode) {
+                videoNode.muted = true;
+            }
+        }
+
         const bufferLength = analyserNode.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
 
@@ -413,6 +434,7 @@ exports.init = async function init(app) {
             analyserNode,
             audioContext,
             mediaStreamSource,
+            gainNode,
             isSpeaking: false,
             stopped: false
         };
@@ -448,6 +470,9 @@ exports.init = async function init(app) {
             streamData.stopped = true;
             try { streamData.mediaStreamSource.disconnect(); } catch (e) {}
             try { streamData.analyserNode.disconnect(); } catch (e) {}
+            if (streamData.gainNode) {
+                try { streamData.gainNode.disconnect(); } catch (e) {}
+            }
             try { streamData.audioContext.close(); } catch (e) {}
             audioStreams.delete(peerUserId);
             if (streamData.isSpeaking) {
