@@ -3797,6 +3797,26 @@ updateLoaded msg model =
                     , Ports.copyToClipboard text
                     )
 
+                VoiceChat.ChangedVolume connectionId volume ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn
+                                | voiceChat =
+                                    { voiceChat
+                                        | volume =
+                                            SeqDict.insert connectionId.otherClientId volume voiceChat.volume
+                                    }
+                              }
+                            , VoiceChat.toJs (VoiceChat.ToJs_SetVolume connectionId volume)
+                            )
+                        )
+                        model
+
         GotVoiceChatRecording bytes ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -5928,6 +5948,7 @@ view model =
                                       else
                                         Ui.noAttr
                                     , VoiceChat.videoNodes loaded.route loaded.windowSize loggedIn.voiceChat local.calls
+                                        |> Html.map VoiceChatMsg
                                         |> Ui.html
                                         |> Ui.inFront
                                     ]
