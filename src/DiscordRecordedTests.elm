@@ -817,7 +817,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                             let
                                 messageEvent : String
                                 messageEvent =
-                                    """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"This is message 2","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                                    """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"1234567890","flags":0,"embeds":[],"edited_timestamp":null,"content":"This is message 2","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
                             in
                             case
                                 ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
@@ -840,11 +840,11 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                                     case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
                                         Just channel ->
                                             case Array.length channel.messages of
-                                                1 ->
+                                                2 ->
                                                     Ok ()
 
                                                 count ->
-                                                    Err ("Expected the guild's channel to contain exactly one message but got " ++ String.fromInt count)
+                                                    Err ("Expected the guild's channel to contain exactly two messages but got " ++ String.fromInt count)
 
                                         Nothing ->
                                             Err "Channel not found in guild"
