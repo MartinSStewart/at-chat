@@ -115,6 +115,7 @@ type alias Model =
     , expanded : SeqSet RoomId
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
+    , volume : SeqDict ( Id UserId, ClientId ) Float
     }
 
 
@@ -152,6 +153,7 @@ initModel =
     , expanded = SeqSet.empty
     , localIsSpeaking = False
     , startConnectionError = Nothing
+    , volume = SeqDict.empty
     }
 
 
@@ -885,6 +887,7 @@ type ToJs
     | ToJs_GetMediaDevices
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
+    | ToJs_SetVolume ConnectionId Float
 
 
 type alias StartLocalStreamData =
@@ -941,7 +944,7 @@ startDataCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream value ->
+        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
             case value of
                 ToJs_Start a ->
                     eStart a
@@ -969,6 +972,9 @@ voiceChatToJsCodec =
 
                 ToJs_StopLocalStream ->
                     eStopLocalStream
+
+                ToJs_SetVolume a b ->
+                    eSetVolume a b
         )
         |> Codec.variant1 "start" ToJs_Start startDataCodec
         |> Codec.variant1 "stop" ToJs_Stop connectionIdCodec
@@ -979,6 +985,7 @@ voiceChatToJsCodec =
         |> Codec.variant0 "get-media-devices" ToJs_GetMediaDevices
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
+        |> Codec.variant2 "set-volume" ToJs_SetVolume connectionIdCodec Codec.float
         |> Codec.buildCustom
 
 
