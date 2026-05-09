@@ -6,6 +6,7 @@ port module VoiceChat exposing
     , Ice
     , Local
     , LocalChange(..)
+    , LocalOrConnection(..)
     , MediaDevice
     , MediaDeviceId
     , MediaDevicesStatus(..)
@@ -33,6 +34,7 @@ port module VoiceChat exposing
     , leaveVoiceChatCmds
     , serverChangeCmd
     , startArgs
+    , startLocalStream
     , toJs
     , videoNodes
     , view
@@ -323,6 +325,11 @@ displayMode route model local =
                     NoVideo
 
 
+localVideoNodeId : String
+localVideoNodeId =
+    "local-video"
+
+
 videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html msg
 videoNodes route windowSize model local =
     let
@@ -388,7 +395,7 @@ videoNodes route windowSize model local =
                             total =
                                 NonemptySet.size sessions + 1
                         in
-                        videoNode "local-video" False (videoPosAndSize total 0) False
+                        videoNode localVideoNodeId False (videoPosAndSize total 0) model.localIsSpeaking
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -405,16 +412,16 @@ videoNodes route windowSize model local =
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode "local-video" False (videoPosAndSize 1 0) False ]
+                        [ videoNode localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking ]
 
             else if SeqSet.member viewingRoomId2 model.expanded then
-                [ videoNode "local-video" False (videoPosAndSize 1 0) False ]
+                [ videoNode localVideoNodeId False (videoPosAndSize 1 0) model.localIsSpeaking ]
 
             else
-                [ videoNode "local-video" True (videoPosAndSize 1 0) False ]
+                [ videoNode localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking ]
 
         Nothing ->
-            [ videoNode "local-video" True (videoPosAndSize 1 0) False ]
+            [ videoNode localVideoNodeId True (videoPosAndSize 1 0) model.localIsSpeaking ]
     )
         |> Html.Keyed.node "div" []
 
@@ -843,6 +850,17 @@ type alias StartLocalStreamData =
     }
 
 
+startLocalStream : Model -> Command FrontendOnly toMsg msg
+startLocalStream model =
+    ToJs_StartLocalStream
+        { audioInput = model.selectedAudioInputDevice
+        , videoInput = model.selectedVideoInputDevice
+        , audioInputEnabled = model.audioInputEnabled
+        , videoInputEnabled = model.videoInputEnabled
+        }
+        |> toJs
+
+
 startLocalStreamDataCodec : Codec StartLocalStreamData
 startLocalStreamDataCodec =
     Codec.object StartLocalStreamData
@@ -947,8 +965,29 @@ type FromJs
     = FromJs_GotSignal ConnectionId Signal
     | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | FromJs_GotUserMediaDevicesError String
-    | FromJs_SpeakingChanged (Maybe ConnectionId) Bool
+    | FromJs_SpeakingChanged LocalOrConnection Bool
     | FromJs_StartConnectionError String
+
+
+type LocalOrConnection
+    = IsLocal
+    | IsConnection ConnectionId
+
+
+localOrConnectionCodec : Codec LocalOrConnection
+localOrConnectionCodec =
+    Codec.custom
+        (\aEncoder bEncoder value ->
+            case value of
+                IsLocal ->
+                    aEncoder
+
+                IsConnection a ->
+                    bEncoder a
+        )
+        |> Codec.variant0 localVideoNodeId IsLocal
+        |> Codec.variant1 "is-connection" IsConnection connectionIdCodec
+        |> Codec.buildCustom
 
 
 voiceChatFromJsCodec : Codec FromJs
@@ -974,7 +1013,7 @@ voiceChatFromJsCodec =
         |> Codec.variant2 "got-signal" FromJs_GotSignal connectionIdCodec signalCodec
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
-        |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged (Codec.nullable connectionIdCodec) Codec.bool
+        |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
         |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
         |> Codec.buildCustom
 

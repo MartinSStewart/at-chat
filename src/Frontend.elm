@@ -3502,7 +3502,7 @@ updateLoaded msg model =
                                     ( { loggedIn
                                         | voiceChat =
                                             case connectionId of
-                                                Just connection2 ->
+                                                VoiceChat.IsConnection connection2 ->
                                                     { voiceChat
                                                         | isSpeaking =
                                                             if isSpeaking then
@@ -3512,7 +3512,7 @@ updateLoaded msg model =
                                                                 SeqSet.remove connection2 voiceChat.isSpeaking
                                                     }
 
-                                                Nothing ->
+                                                VoiceChat.IsLocal ->
                                                     { voiceChat | localIsSpeaking = isSpeaking }
                                       }
                                     , Command.none
@@ -3616,9 +3616,15 @@ updateLoaded msg model =
                                 voiceChat : VoiceChat.Model
                                 voiceChat =
                                     loggedIn.voiceChat
+
+                                voiceChat2 =
+                                    { voiceChat | selectedAudioInputDevice = Just deviceId }
                             in
-                            ( { loggedIn | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
-                            , VoiceChat.toJs (VoiceChat.ToJs_SetInput True deviceId)
+                            ( { loggedIn | voiceChat = voiceChat2 }
+                            , Command.batch
+                                [ VoiceChat.toJs (VoiceChat.ToJs_SetInput True deviceId)
+                                , VoiceChat.startLocalStream voiceChat2
+                                ]
                             )
                         )
                         model
@@ -3630,9 +3636,15 @@ updateLoaded msg model =
                                 voiceChat : VoiceChat.Model
                                 voiceChat =
                                     loggedIn.voiceChat
+
+                                voiceChat2 =
+                                    { voiceChat | selectedVideoInputDevice = Just deviceId }
                             in
-                            ( { loggedIn | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }
-                            , VoiceChat.toJs (VoiceChat.ToJs_SetInput False deviceId)
+                            ( { loggedIn | voiceChat = voiceChat2 }
+                            , Command.batch
+                                [ VoiceChat.toJs (VoiceChat.ToJs_SetInput False deviceId)
+                                , VoiceChat.startLocalStream voiceChat2
+                                ]
                             )
                         )
                         model
