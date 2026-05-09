@@ -38,7 +38,6 @@ import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
-import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))

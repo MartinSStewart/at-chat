@@ -16,7 +16,6 @@ module RecordedTestExtra exposing
     , connectTwoUsersAndJoinNewGuild
     , createThread
     , currentDiscordUserId
-    , currentDiscordUserIdString
     , decodeCustomRequest
     , desktopWindow
     , discordUserAuth
@@ -48,7 +47,6 @@ module RecordedTestExtra exposing
     , scrollToTop
     , secondDiscordToken
     , secondDiscordUserId
-    , secondDiscordUserIdString
     , sessionId0
     , sessionId1
     , sessionId2
@@ -805,8 +803,8 @@ isOp2 data =
             False
 
 
-op2TokenDecoder : Json.Decode.Decoder String
-op2TokenDecoder =
+decodeOp2Token : Json.Decode.Decoder String
+decodeOp2Token =
     Json.Decode.field "op" Json.Decode.int
         |> Json.Decode.andThen
             (\op ->
@@ -833,7 +831,7 @@ websocketByDiscordToken token data =
                             Array.toList websocketState.dataSent
                                 |> List.filterMap
                                     (\msg ->
-                                        Json.Decode.decodeString op2TokenDecoder msg.data
+                                        Json.Decode.decodeString decodeOp2Token msg.data
                                             |> Result.toMaybe
                                     )
                     in

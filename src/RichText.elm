@@ -1750,7 +1750,7 @@ parseLoop source index users modifiers accText revNodes =
                             parseLoop source (index + 1) users modifiers (accText ++ "[") revNodes
 
                 else
-                    case parseMarkdownLink source (index + 1) of
+                    case parseMarkdownLink False source (index + 1) of
                         Just ( alias, url, nextIndex ) ->
                             parseLoop source nextIndex users modifiers "" (MarkdownLink alias url :: flushText accText revNodes)
 
@@ -1940,8 +1940,8 @@ findSingleBacktick source index =
         findSingleBacktick source (index + 1)
 
 
-parseMarkdownLink : String -> Int -> Maybe ( NonemptyString, Url, Int )
-parseMarkdownLink source index =
+parseMarkdownLink : Bool -> String -> Int -> Maybe ( NonemptyString, Url, Int )
+parseMarkdownLink isDiscord source index =
     let
         len =
             String.length source
@@ -1963,7 +1963,13 @@ parseMarkdownLink source index =
                     Just closeParen ->
                         let
                             urlText =
-                                String.slice (afterBracket + 1) closeParen source |> String.trim
+                                String.slice (afterBracket + 1) closeParen source
+                                    |> (if isDiscord then
+                                            String.trim
+
+                                        else
+                                            identity
+                                       )
                         in
                         case ( String.Nonempty.fromString alias, Url.fromString urlText ) of
                             ( Just nonemptyAlias, Just url ) ->
@@ -4300,7 +4306,7 @@ discordParseLoop customEmojis source index modifiers accText revNodes =
                             revNodes
 
             "[" ->
-                case parseMarkdownLink source (index + 1) of
+                case parseMarkdownLink True source (index + 1) of
                     Just ( alias, url, nextIndex ) ->
                         discordParseLoop
                             customEmojis
