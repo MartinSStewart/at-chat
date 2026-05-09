@@ -48,6 +48,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
+import Pages.Go
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -150,6 +151,12 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
+        , case model of
+            Loaded loaded ->
+                Pages.Go.subscriptions loaded.goModel |> Subscription.map GoMsg
+
+            Loading _ ->
+                Subscription.none
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
@@ -330,6 +337,7 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
+            , goModel = Pages.Go.init
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
@@ -1165,7 +1173,16 @@ updateLoaded msg model =
                         model
 
                 _ ->
-                    ( model, Command.none )
+                    case ( model.route, Pages.Go.keyMsg key ) of
+                        ( GoRoute, Just goMsg ) ->
+                            let
+                                ( goModel2, goCmd ) =
+                                    Pages.Go.update goMsg model.goModel
+                            in
+                            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+
+                        _ ->
+                            ( model, Command.none )
 
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
             showReactionEmojiSelector guildOrDmId threadRoute model
@@ -1828,6 +1845,13 @@ updateLoaded msg model =
             ( { model | aiChatModel = aiChatModel2 }
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
+
+        GoMsg goMsg ->
+            let
+                ( goModel2, goCmd ) =
+                    Pages.Go.update goMsg model.goModel
+            in
+            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
 
         UserNameEditableMsg editableMsg ->
             handleEditable
@@ -5825,6 +5849,13 @@ view model =
                                     _ ->
                                         errorPage loaded "Admin access required to view this page"
                             )
+
+                    GoRoute ->
+                        Pages.Go.view loaded.goModel
+                            |> Ui.map GoMsg
+                            |> FrontendExtra.layout loaded
+                                [ Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.loginStatus)
+                                ]
 
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel

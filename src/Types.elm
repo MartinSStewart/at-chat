@@ -83,6 +83,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
+import Pages.Go
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
@@ -152,6 +153,7 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
+    , goModel : Pages.Go.Model
     , scrollbarWidth : Int
     , userAgent : UserAgent
     , pageHasFocus : Bool
@@ -441,6 +443,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
+    | GoMsg Pages.Go.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
