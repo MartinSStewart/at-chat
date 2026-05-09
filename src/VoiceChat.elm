@@ -509,31 +509,56 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking maybeVolume =
                     Html.text ""
 
                 else
-                    Html.input
-                        [ Html.Attributes.type_ "range"
-                        , Html.Attributes.min "0"
-                        , Html.Attributes.max "1"
-                        , Html.Attributes.step "0.01"
-                        , Html.Attributes.value (String.fromFloat volume)
-                        , Html.Events.onInput
-                            (\str ->
-                                ChangedVolume
-                                    connectionId
-                                    (String.toFloat str |> Maybe.withDefault 1)
-                            )
-                        , Html.Attributes.style "position" "absolute"
+                    let
+                        sliderHeight : Int
+                        sliderHeight =
+                            80
+
+                        iconSize : Int
+                        iconSize =
+                            20
+                    in
+                    Html.div
+                        [ Html.Attributes.style "position" "absolute"
                         , Html.Attributes.style "left" (String.fromInt (x + 8) ++ "px")
                         , Html.Attributes.style "top" (String.fromInt (y + 8) ++ "px")
-                        , Html.Attributes.style "height" (String.fromFloat (height - 16) ++ "px")
-                        , Html.Attributes.style "writing-mode" "vertical-lr"
-                        , Html.Attributes.style "direction" "rtl"
-                        , Html.Attributes.style "appearance" "slider-vertical"
-                        , Html.Attributes.style "-webkit-appearance" "slider-vertical"
-                        , Html.Attributes.style "width" "20px"
-                        , Html.Attributes.style "pointer-events" "auto"
+                        , Html.Attributes.style "display" "flex"
+                        , Html.Attributes.style "flex-direction" "column"
+                        , Html.Attributes.style "align-items" "center"
+                        , Html.Attributes.style "gap" "4px"
+                        , Html.Attributes.style "padding" "4px"
+                        , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+                        , Html.Attributes.style "border-radius" "6px"
+                        , Html.Attributes.style "color" "white"
                         , Html.Attributes.style "z-index" "1"
                         ]
-                        []
+                        [ Html.div
+                            [ Html.Attributes.style "width" (String.fromInt iconSize ++ "px")
+                            , Html.Attributes.style "height" (String.fromInt iconSize ++ "px")
+                            ]
+                            [ Icons.volume ]
+                        , Html.input
+                            [ Html.Attributes.type_ "range"
+                            , Html.Attributes.min "0"
+                            , Html.Attributes.max "1"
+                            , Html.Attributes.step "0.01"
+                            , Html.Attributes.value (String.fromFloat volume)
+                            , Html.Events.onInput
+                                (\str ->
+                                    ChangedVolume
+                                        connectionId
+                                        (String.toFloat str |> Maybe.withDefault 1)
+                                )
+                            , Html.Attributes.style "height" (String.fromInt sliderHeight ++ "px")
+                            , Html.Attributes.style "writing-mode" "vertical-lr"
+                            , Html.Attributes.style "direction" "rtl"
+                            , Html.Attributes.style "appearance" "slider-vertical"
+                            , Html.Attributes.style "-webkit-appearance" "slider-vertical"
+                            , Html.Attributes.style "width" "20px"
+                            , Html.Attributes.style "pointer-events" "auto"
+                            ]
+                            []
+                        ]
 
             Nothing ->
                 Html.text ""
