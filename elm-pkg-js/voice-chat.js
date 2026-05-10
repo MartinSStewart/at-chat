@@ -307,6 +307,11 @@ exports.init = async function init(app) {
             setInput(msg.args[0], msg.args[1]);
         } else if (msg.tag === "set-video-input-enabled") {
             setVideoInputEnabled(msg.args[0]);
+        } else if (msg.tag === "set-volume") {
+            const conn = connections.get(msg.args[0]);
+            if (conn) {
+                conn.videoNode.volume = msg.args[1];
+            }
         } else if (msg.tag === "get-media-devices") {
             try {
                 let stream = await getDevices();

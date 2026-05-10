@@ -524,79 +524,102 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
                 )
             , Html.Attributes.style "border-radius" "8px"
             , Html.Attributes.style "pointer-events" "none"
+            , Html.Attributes.attribute
+                "volume"
+                (case id of
+                    IsConnection connectionId ->
+                        SeqDict.get connectionId.otherClientId model.volume |> Maybe.withDefault 1 |> String.fromFloat
+
+                    IsLocal ->
+                        "0"
+                )
             ]
             []
         , case id of
             IsConnection connectionId ->
-                if model.videoHover /= Just id || isHidden then
-                    Html.text ""
+                let
+                    volume =
+                        SeqDict.get connectionId.otherClientId model.volume |> Maybe.withDefault 1
 
-                else
-                    let
-                        volume =
-                            SeqDict.get connectionId.otherClientId model.volume |> Maybe.withDefault 1
+                    sliderHeight : Int
+                    sliderHeight =
+                        80
 
-                        sliderHeight : Int
-                        sliderHeight =
-                            80
+                    iconSize : Int
+                    iconSize =
+                        20
 
-                        iconSize : Int
-                        iconSize =
-                            20
+                    spacing =
+                        4
 
-                        spacing =
-                            4
+                    padding =
+                        4
 
-                        padding =
-                            4
+                    sliderBottomMargin =
+                        4
 
-                        sliderBottomMargin =
-                            4
+                    containerHeight =
+                        sliderHeight + iconSize + spacing + sliderBottomMargin + padding * 2
 
-                        containerHeight =
-                            sliderHeight + iconSize + spacing + sliderBottomMargin + padding * 2
-                    in
-                    Html.div
-                        [ Html.Attributes.style "position" "absolute"
-                        , Html.Attributes.style "left" (String.fromInt 8 ++ "px")
-                        , Html.Attributes.style "z-index" "999"
-                        , Html.Attributes.style
-                            "top"
-                            (String.fromInt (round height - containerHeight - 8) ++ "px")
-                        , Html.Attributes.style "display" "flex"
-                        , Html.Attributes.style "flex-direction" "column"
-                        , Html.Attributes.style "align-items" "center"
-                        , Html.Attributes.style "gap" (String.fromInt spacing ++ "px")
-                        , Html.Attributes.style "padding" (String.fromInt padding ++ "px")
-                        , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
-                        , Html.Attributes.style "border-radius" "6px"
-                        , Html.Attributes.style "color" "white"
+                    isVisible =
+                        model.videoHover == Just id && not isHidden
+                in
+                Html.div
+                    [ Html.Attributes.style "position" "absolute"
+                    , Html.Attributes.style "left" (String.fromInt 8 ++ "px")
+                    , Html.Attributes.style "z-index" "999"
+                    , Html.Attributes.style
+                        "top"
+                        (String.fromInt (round height - containerHeight - 8) ++ "px")
+                    , Html.Attributes.style "display" "flex"
+                    , Html.Attributes.style "flex-direction" "column"
+                    , Html.Attributes.style "align-items" "center"
+                    , Html.Attributes.style "gap" (String.fromInt spacing ++ "px")
+                    , Html.Attributes.style "padding" (String.fromInt padding ++ "px")
+                    , Html.Attributes.style "background-color" "rgba(0,0,0,0.4)"
+                    , Html.Attributes.style "border-radius" "6px"
+                    , Html.Attributes.style "color" "white"
+                    , Html.Attributes.style "opacity"
+                        (if isVisible then
+                            "1"
+
+                         else
+                            "0"
+                        )
+                    , Html.Attributes.style "pointer-events"
+                        (if isVisible then
+                            "auto"
+
+                         else
+                            "none"
+                        )
+                    , Html.Attributes.style "transition" "opacity 0.2s ease-in-out"
+                    ]
+                    [ Html.div
+                        [ Html.Attributes.style "width" (String.fromInt iconSize ++ "px")
+                        , Html.Attributes.style "height" (String.fromInt iconSize ++ "px")
                         ]
-                        [ Html.div
-                            [ Html.Attributes.style "width" (String.fromInt iconSize ++ "px")
-                            , Html.Attributes.style "height" (String.fromInt iconSize ++ "px")
-                            ]
-                            [ Icons.volume ]
-                        , Html.input
-                            [ Html.Attributes.type_ "range"
-                            , Html.Attributes.min "0"
-                            , Html.Attributes.max "2"
-                            , Html.Attributes.step "0.01"
-                            , Html.Attributes.style "margin-bottom" (String.fromInt sliderBottomMargin ++ "px")
-                            , Html.Attributes.value (String.fromFloat volume)
-                            , Html.Events.onInput
-                                (\str ->
-                                    ChangedVolume
-                                        connectionId
-                                        (String.toFloat str |> Maybe.withDefault 1)
-                                )
-                            , Html.Attributes.style "height" (String.fromInt sliderHeight ++ "px")
-                            , Html.Attributes.style "appearance" "slider-vertical"
-                            , Html.Attributes.style "-webkit-appearance" "slider-vertical"
-                            , Html.Attributes.style "width" (String.fromInt iconSize ++ "px")
-                            ]
-                            []
+                        [ Icons.volume ]
+                    , Html.input
+                        [ Html.Attributes.type_ "range"
+                        , Html.Attributes.min "0"
+                        , Html.Attributes.max "1"
+                        , Html.Attributes.step "0.01"
+                        , Html.Attributes.style "margin-bottom" (String.fromInt sliderBottomMargin ++ "px")
+                        , Html.Attributes.value (String.fromFloat volume)
+                        , Html.Events.onInput
+                            (\str ->
+                                ChangedVolume
+                                    connectionId
+                                    (String.toFloat str |> Maybe.withDefault 1)
+                            )
+                        , Html.Attributes.style "height" (String.fromInt sliderHeight ++ "px")
+                        , Html.Attributes.style "appearance" "slider-vertical"
+                        , Html.Attributes.style "-webkit-appearance" "slider-vertical"
+                        , Html.Attributes.style "width" (String.fromInt iconSize ++ "px")
                         ]
+                        []
+                    ]
 
             IsLocal ->
                 Html.text ""
