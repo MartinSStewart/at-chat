@@ -2417,9 +2417,6 @@ routeToViewing route local =
         AiChatRoute ->
             StopViewingChannel
 
-        GoRoute ->
-            StopViewingChannel
-
         SlackOAuthRedirect _ ->
             StopViewingChannel
 

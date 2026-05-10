@@ -94,6 +94,7 @@ import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Sticker exposing (StickerData)
@@ -153,7 +154,6 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , goModel : Pages.Go.Model
     , scrollbarWidth : Int
     , userAgent : UserAgent
     , pageHasFocus : Bool
@@ -214,6 +214,8 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
+    , goGames : SeqDict (Id UserId) Pages.Go.Model
+    , goExpanded : SeqSet (Id UserId)
     }
 
 
@@ -337,6 +339,7 @@ type alias BackendModel =
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , goGames : SeqDict DmChannelId Pages.Go.Model
     }
 
 
@@ -443,7 +446,8 @@ type FrontendMsg
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
-    | GoMsg Pages.Go.Msg
+    | GoMsg (Id UserId) Pages.Go.Msg
+    | PressedToggleGoPanel (Id UserId)
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
@@ -538,6 +542,8 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
+    | GoToBackendMsg (Id UserId) Pages.Go.Msg
+    | GoRequestStateMsg (Id UserId)
 
 
 type BackendMsg
@@ -681,6 +687,8 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
+    | GoToFrontendMsg (Id UserId) Pages.Go.Msg
+    | GoStateToFrontend (Id UserId) (Maybe Pages.Go.Model)
 
 
 type alias LoginData =

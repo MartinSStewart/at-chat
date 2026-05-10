@@ -156,7 +156,19 @@ subscriptions model =
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , case model of
             Loaded loaded ->
-                Pages.Go.subscriptions loaded.goModel |> Subscription.map GoMsg
+                case loaded.loginStatus of
+                    LoggedIn loggedIn ->
+                        loggedIn.goGames
+                            |> SeqDict.toList
+                            |> List.map
+                                (\( otherUserId, goModel ) ->
+                                    Pages.Go.subscriptions goModel
+                                        |> Subscription.map (GoMsg otherUserId)
+                                )
+                            |> Subscription.batch
+
+                    NotLoggedIn _ ->
+                        Subscription.none
 
             Loading _ ->
                 Subscription.none
@@ -341,7 +353,6 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , goModel = Pages.Go.init
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
@@ -440,6 +451,8 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
+            , goGames = SeqDict.empty
+            , goExpanded = SeqSet.empty
             }
     in
     ( loggedIn
@@ -1183,15 +1196,25 @@ updateLoaded msg model =
                         model
 
                 _ ->
-                    case ( model.route, Pages.Go.keyMsg key ) of
-                        ( GoRoute, Just goMsg ) ->
-                            let
-                                ( goModel2, goCmd ) =
-                                    Pages.Go.update goMsg model.goModel
-                            in
-                            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+                    case Pages.Go.keyMsg key of
+                        Just goMsg ->
+                            case Route.toGuildOrDmId model.route of
+                                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
+                                    case model.loginStatus of
+                                        LoggedIn loggedIn ->
+                                            if SeqSet.member otherUserId loggedIn.goExpanded then
+                                                handleGoMsg otherUserId goMsg model
 
-                        _ ->
+                                            else
+                                                ( model, Command.none )
+
+                                        NotLoggedIn _ ->
+                                            ( model, Command.none )
+
+                                _ ->
+                                    ( model, Command.none )
+
+                        Nothing ->
                             ( model, Command.none )
 
         MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute _ ->
@@ -1856,12 +1879,28 @@ updateLoaded msg model =
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
 
-        GoMsg goMsg ->
-            let
-                ( goModel2, goCmd ) =
-                    Pages.Go.update goMsg model.goModel
-            in
-            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+        GoMsg otherUserId goMsg ->
+            handleGoMsg otherUserId goMsg model
+
+        PressedToggleGoPanel otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | goExpanded =
+                            if SeqSet.member otherUserId loggedIn.goExpanded then
+                                SeqSet.remove otherUserId loggedIn.goExpanded
+
+                            else
+                                SeqSet.insert otherUserId loggedIn.goExpanded
+                      }
+                    , if SeqSet.member otherUserId loggedIn.goExpanded then
+                        Command.none
+
+                      else
+                        Lamdera.sendToBackend (GoRequestStateMsg otherUserId)
+                    )
+                )
+                model
 
         UserNameEditableMsg editableMsg ->
             handleEditable
@@ -5921,6 +5960,41 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
+        GoToFrontendMsg otherUserId goMsg ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        currentModel : Pages.Go.Model
+                        currentModel =
+                            SeqDict.get otherUserId loggedIn.goGames
+                                |> Maybe.withDefault Pages.Go.init
+
+                        ( goModel2, goCmd ) =
+                            Pages.Go.update goMsg currentModel
+                    in
+                    ( { loggedIn | goGames = SeqDict.insert otherUserId goModel2 loggedIn.goGames }
+                    , Command.map never (GoMsg otherUserId) goCmd
+                    )
+                )
+                model
+
+        GoStateToFrontend otherUserId maybeGoModel ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | goGames =
+                            case maybeGoModel of
+                                Just goModel ->
+                                    SeqDict.insert otherUserId goModel loggedIn.goGames
+
+                                Nothing ->
+                                    SeqDict.remove otherUserId loggedIn.goGames
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
 
 view : FrontendModel -> Browser.Document FrontendMsg
 view model =
@@ -6106,13 +6180,6 @@ view model =
                                         errorPage loaded "Admin access required to view this page"
                             )
 
-                    GoRoute ->
-                        Pages.Go.view loaded.goModel
-                            |> Ui.map GoMsg
-                            |> FrontendExtra.layout loaded
-                                [ Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.loginStatus)
-                                ]
-
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel
                             |> Ui.map AiChatMsg
@@ -6293,3 +6360,94 @@ routeToInitialDataRequest route =
 
         _ ->
             InitialLoadRequested_None
+
+
+handleGoMsg : Id UserId -> Pages.Go.Msg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleGoMsg otherUserId goMsg model =
+    FrontendExtra.updateLoggedIn
+        (\loggedIn ->
+            let
+                currentModel : Pages.Go.Model
+                currentModel =
+                    SeqDict.get otherUserId loggedIn.goGames
+                        |> Maybe.withDefault Pages.Go.init
+
+                ( goModel2, goCmd ) =
+                    Pages.Go.update goMsg currentModel
+
+                wasStartGame : Bool
+                wasStartGame =
+                    Pages.Go.isStartGameMsg goMsg
+                        && (case currentModel of
+                                Pages.Go.Setup _ ->
+                                    True
+
+                                Pages.Go.Game _ ->
+                                    False
+                           )
+                        && (case goModel2 of
+                                Pages.Go.Game _ ->
+                                    True
+
+                                Pages.Go.Setup _ ->
+                                    False
+                           )
+
+                ( loggedIn2, startCmd ) =
+                    if wasStartGame then
+                        case
+                            String.Nonempty.fromString
+                                "🎯 Started a Go game"
+                                |> Maybe.map
+                                    (\nonempty ->
+                                        FrontendExtra.handleLocalChange
+                                            model.time
+                                            (Local_SendMessage
+                                                model.time
+                                                (GuildOrDmId_Dm otherUserId)
+                                                nonempty
+                                                (NoThreadWithMaybeMessage Nothing)
+                                                SeqDict.empty
+                                                |> Just
+                                            )
+                                            { loggedIn
+                                                | goGames = SeqDict.insert otherUserId goModel2 loggedIn.goGames
+                                            }
+                                            Command.none
+                                    )
+                        of
+                            Just result ->
+                                result
+
+                            Nothing ->
+                                ( { loggedIn | goGames = SeqDict.insert otherUserId goModel2 loggedIn.goGames }
+                                , Command.none
+                                )
+
+                    else
+                        ( { loggedIn | goGames = SeqDict.insert otherUserId goModel2 loggedIn.goGames }
+                        , Command.none
+                        )
+
+                shouldSync : Bool
+                shouldSync =
+                    case goMsg of
+                        Pages.Go.Tick _ ->
+                            False
+
+                        _ ->
+                            True
+            in
+            ( loggedIn2
+            , Command.batch
+                [ Command.map never (GoMsg otherUserId) goCmd
+                , startCmd
+                , if shouldSync then
+                    Lamdera.sendToBackend (GoToBackendMsg otherUserId goMsg)
+
+                  else
+                    Command.none
+                ]
+            )
+        )
+        model

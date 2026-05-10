@@ -48,6 +48,7 @@ import NonemptyDict
 import NonemptySet
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
+import Pages.Go
 import Pagination
 import PersonName
 import Postmark
@@ -226,6 +227,7 @@ init =
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
+      , goGames = SeqDict.empty
       }
     , Command.none
     )
@@ -4639,6 +4641,50 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        GoToBackendMsg otherUserId goMsg ->
+            asDmUser
+                model
+                sessionId
+                { otherUserId = otherUserId }
+                (\session _ _ dmChannelId _ ->
+                    let
+                        currentGame : Pages.Go.Model
+                        currentGame =
+                            SeqDict.get dmChannelId model.goGames
+                                |> Maybe.withDefault Pages.Go.init
+
+                        ( goModel2, _ ) =
+                            Pages.Go.update goMsg currentGame
+                    in
+                    ( { model | goGames = SeqDict.insert dmChannelId goModel2 model.goGames }
+                    , Command.batch
+                        [ sendToUserClients
+                            Nothing
+                            otherUserId
+                            (GoToFrontendMsg session.userId goMsg)
+                            model
+                        , sendToUserClients
+                            (Just clientId)
+                            session.userId
+                            (GoToFrontendMsg otherUserId goMsg)
+                            model
+                        ]
+                    )
+                )
+
+        GoRequestStateMsg otherUserId ->
+            asDmUser
+                model
+                sessionId
+                { otherUserId = otherUserId }
+                (\_ _ _ dmChannelId _ ->
+                    ( model
+                    , Lamdera.sendToFrontend
+                        clientId
+                        (GoStateToFrontend otherUserId (SeqDict.get dmChannelId model.goGames))
+                    )
+                )
+
 
 textToDiscordRichText :
     NonemptyString
@@ -5873,6 +5919,35 @@ asDmUser model sessionId { otherUserId } func =
 
         Nothing ->
             ( model, Command.none )
+
+
+sendToUserClients : Maybe ClientId -> Id UserId -> ToFrontend -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
+sendToUserClients clientToSkip targetUserId toFrontend model =
+    SeqDict.foldl
+        (\sessionId session acc ->
+            if session.userId == targetUserId then
+                case SeqDict.get sessionId model.connections of
+                    Just clientIds ->
+                        NonemptyDict.foldl
+                            (\clientId2 _ acc2 ->
+                                if Just clientId2 == clientToSkip then
+                                    acc2
+
+                                else
+                                    Lamdera.sendToFrontend clientId2 toFrontend :: acc2
+                            )
+                            acc
+                            clientIds
+
+                    Nothing ->
+                        acc
+
+            else
+                acc
+        )
+        []
+        model.sessions
+        |> Command.batch
 
 
 usersHaveSharedGuilds : Id UserId -> Id UserId -> BackendModel -> Bool

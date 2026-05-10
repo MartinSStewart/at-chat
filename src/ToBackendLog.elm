@@ -24,6 +24,8 @@ type ToBackendLog
     | ToBackendLog_LinkDiscordRequest
     | ToBackendLog_ProfilePictureEditorToBackend
     | ToBackendLog_AdminDataRequest
+    | ToBackendLog_GoToBackendMsg
+    | ToBackendLog_GoRequestStateMsg
     | ToBackendLog_Local_Invalid
     | ToBackendLog_Local_Admin
     | ToBackendLog_Local_SendMessage
@@ -110,6 +112,12 @@ toBackendLogToString log =
 
         ToBackendLog_AdminDataRequest ->
             "AdminDataRequest"
+
+        ToBackendLog_GoToBackendMsg ->
+            "GoToBackendMsg"
+
+        ToBackendLog_GoRequestStateMsg ->
+            "GoRequestStateMsg"
 
         ToBackendLog_Local_Invalid ->
             "Local_Invalid"

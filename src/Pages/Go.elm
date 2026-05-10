@@ -1,9 +1,10 @@
 module Pages.Go exposing
-    ( Model
-    , Msg
+    ( Model(..)
+    , Msg(..)
     , Stone(..)
     , deadStones
     , init
+    , isStartGameMsg
     , keyMsg
     , subscriptions
     , update
@@ -288,6 +289,16 @@ type Msg
     | SelectedSize SizeSelection
     | PressedStartGame
     | Tick Time.Posix
+
+
+isStartGameMsg : Msg -> Bool
+isStartGameMsg msg =
+    case msg of
+        PressedStartGame ->
+            True
+
+        _ ->
+            False
 
 
 keyMsg : String -> Maybe Msg
@@ -1463,7 +1474,7 @@ gameView model =
 
             Nothing ->
                 Ui.none
-        , Ui.el [ Ui.Font.size 14 ] (Ui.text "One device, two players. Pass twice to score. Arrow keys or slider to review past moves.")
+        , Ui.el [ Ui.Font.size 14 ] (Ui.text "Pass twice to score. Arrow keys or slider to review past moves.")
         ]
 
 

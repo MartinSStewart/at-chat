@@ -38,7 +38,6 @@ type Route
     | DmRoute DmRouteData
     | DiscordDmRoute DiscordDmRouteData
     | AiChatRoute
-    | GoRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
@@ -128,9 +127,6 @@ decode url =
 
         [ "ai-chat" ] ->
             AiChatRoute
-
-        [ "go" ] ->
-            GoRoute
 
         "g" :: guildId :: rest ->
             case Id.fromString guildId of
@@ -352,9 +348,6 @@ encode route =
                 AiChatRoute ->
                     ( [ "ai-chat" ], [] )
 
-                GoRoute ->
-                    ( [ "go" ], [] )
-
                 GuildRoute guildId maybeChannelId ->
                     case maybeChannelId of
                         ChannelRoute channelId thread ->
@@ -514,9 +507,6 @@ requiresLogin route =
             True
 
         AiChatRoute ->
-            False
-
-        GoRoute ->
             False
 
         GuildRoute _ _ ->

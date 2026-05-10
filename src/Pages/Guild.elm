@@ -53,6 +53,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
+import Pages.Go
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
@@ -3027,6 +3028,7 @@ privateChatWithYourself local =
         , Ui.clipWithEllipsis
         ]
         (Ui.text "Private chat with yourself")
+    , goButton local.localUser.session.userId
     , VoiceChat.voiceChatButton (DmRoomId local.localUser.session.userId) local.localUser local.calls
         |> Ui.map VoiceChatMsg
     ]
@@ -3042,8 +3044,29 @@ privateChatWith otherUserId local name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
+    , goButton otherUserId
     , VoiceChat.voiceChatButton (DmRoomId otherUserId) local.localUser local.calls |> Ui.map VoiceChatMsg
     ]
+
+
+goButton : Id UserId -> Element FrontendMsg
+goButton otherUserId =
+    MyUi.elButton
+        (Dom.id "guild_goGame")
+        (PressedToggleGoPanel otherUserId)
+        [ Ui.width (Ui.px 44)
+        , Ui.paddingXY 4 0
+        , Ui.height Ui.fill
+        , Ui.alignRight
+        ]
+        (Ui.el
+            [ Ui.centerY
+            , Ui.Font.size 18
+            , Ui.Font.weight 700
+            , Ui.contentCenterX
+            ]
+            (Ui.text "Go")
+        )
 
 
 discordPrivateChatWith : String -> List (Element FrontendMsg)
@@ -3233,6 +3256,19 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 _ ->
                     Nothing
+
+        showGo : Maybe (Id UserId)
+        showGo =
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Dm otherUserIdB ->
+                    if SeqSet.member otherUserIdB loggedIn.goExpanded then
+                        Just otherUserIdB
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3266,6 +3302,27 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 , showFilesButton
                                 ]
                     )
+        , case showGo of
+            Just otherUserId ->
+                let
+                    goModel : Pages.Go.Model
+                    goModel =
+                        SeqDict.get otherUserId loggedIn.goGames
+                            |> Maybe.withDefault Pages.Go.init
+                in
+                Pages.Go.view goModel
+                    |> Ui.map (GoMsg otherUserId)
+                    |> Ui.el
+                        [ Ui.height (Ui.px (Coord.yRaw model.windowSize * 2 // 3))
+                        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                        , Ui.borderColor MyUi.border2
+                        , Ui.background MyUi.background3
+                        , MyUi.noShrinking
+                        , Ui.scrollable
+                        ]
+
+            Nothing ->
+                Ui.none
         , Ui.el
             [ emojiSelector
                 isMobile

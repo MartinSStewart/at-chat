@@ -1343,3 +1343,9 @@ toBackendLog toBackend =
 
         AdminDataRequest _ ->
             ToBackendLog_AdminDataRequest
+
+        GoToBackendMsg _ _ ->
+            ToBackendLog_GoToBackendMsg
+
+        GoRequestStateMsg _ ->
+            ToBackendLog_GoRequestStateMsg
