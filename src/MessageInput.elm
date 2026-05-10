@@ -35,7 +35,7 @@ import Json.Decode
 import Json.Decode.Extra
 import List.Extra
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (LocalState, LocalUser)
+import LocalState exposing (LocalState)
 import MembersAndOwner
 import MyUi
 import NonemptyDict
@@ -51,7 +51,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
-import User exposing (DiscordFrontendUser, FrontendUser)
+import User exposing (DiscordFrontendUser, FrontendUser, LocalUser)
 
 
 type alias MentionUserDropdown =

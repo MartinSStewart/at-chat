@@ -24,7 +24,6 @@ module LocalState exposing
     , LoadingDiscordChannel(..)
     , LoadingDiscordChannelStep(..)
     , LocalState
-    , LocalUser
     , LogWithTime
     , PrivateVapidKey(..)
     , ServerSecretStatus(..)
@@ -71,9 +70,7 @@ module LocalState exposing
     , editMessageHelper
     , editMessageHelperNoThread
     , getDiscordGuildAndChannel
-    , getDiscordUser
     , getGuildAndChannel
-    , getUser
     , guildOrDmIdToMessage
     , guildOrDmIdToMessages
     , guildOrDmIdToMessagesCount
@@ -111,7 +108,6 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
-import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -142,16 +138,14 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
-import Sticker exposing (StickerData)
 import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import ToBackendLog exposing (ToBackendLogData)
 import UInt64
 import Unsafe
 import Url exposing (Url)
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
-import UserAgent exposing (UserAgent)
-import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import User exposing (BackendUser, DiscordFrontendUser, FrontendUser, LocalUser)
+import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 import VoiceChat
 
@@ -168,20 +162,6 @@ type alias LocalState =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     , calls : VoiceChat.Local
-    }
-
-
-type alias LocalUser =
-    { session : UserSession
-    , user : FrontendCurrentUser
-    , otherUsers : SeqDict (Id UserId) FrontendUser
-    , otherDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
-    , linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
-    , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
-      timezone : Time.Zone
-    , userAgent : UserAgent
-    , stickers : SeqDict (Id StickerId) StickerData
-    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 
@@ -744,25 +724,6 @@ type PrivateVapidKey
 --
 --                Nothing ->
 --                    Nothing
-
-
-getUser : Id UserId -> LocalUser -> Maybe FrontendUser
-getUser userId localUser =
-    if localUser.session.userId == userId then
-        User.backendToFrontend localUser.user |> Just
-
-    else
-        SeqDict.get userId localUser.otherUsers
-
-
-getDiscordUser : Discord.Id Discord.UserId -> LocalUser -> Maybe DiscordFrontendUser
-getDiscordUser userId localUser =
-    case SeqDict.get userId localUser.linkedDiscordUsers of
-        Just user ->
-            User.discordCurrentUserToFrontend user |> Just
-
-        Nothing ->
-            SeqDict.get userId localUser.otherDiscordUsers
 
 
 createThreadMessageBackend :

@@ -10,6 +10,7 @@ import Ease
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task exposing (Task)
+import MyUi
 import Pages.Guild
 import Ports
 import Types exposing (FrontendMsg(..), ScrollPosition(..))
@@ -27,14 +28,14 @@ smoothScroll targetId =
                     Dom.setViewportOf
                         Pages.Guild.conversationContainerId
                         0
-                        (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
+                        (viewport.y + element.y - MyUi.channelHeaderHeight)
 
                 else
                     smoothScrollY
                         0
                         viewport.x
                         viewport.y
-                        (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
+                        (viewport.y + element.y - MyUi.channelHeaderHeight)
             )
 
 

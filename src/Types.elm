@@ -108,7 +108,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (RoomId, VoiceChatSubscription)
+import VoiceChat exposing (FromJs, RoomId)
 
 
 type FrontendModel
@@ -159,7 +159,6 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
-    , voiceChat : VoiceChat.Model
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
@@ -214,6 +213,7 @@ type alias LoggedIn2 =
     , profilePictureEditor : ImageEditor.Model
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
+    , voiceChat : VoiceChat.Model
     }
 
 
@@ -492,8 +492,8 @@ type FrontendMsg
     | TextSelectionChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
-    | PressedVoiceChatButton RoomId
-    | GotVoiceChatSignalFromJs (Result String VoiceChatSubscription)
+    | GotVoiceChatSignalFromJs (Result String FromJs)
+    | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
 
 

@@ -2,7 +2,6 @@ module Pages.Guild exposing
     ( DmChannelSelection(..)
     , HighlightMessage(..)
     , IsHovered(..)
-    , channelHeaderHeight
     , channelMessageHtmlId
     , channelTextInputId
     , conversationContainerId
@@ -22,8 +21,7 @@ import Array exposing (Array)
 import Array.Extra
 import Bitwise
 import ChannelName
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
+import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
@@ -43,7 +41,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmoji
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
+import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
 import Maybe.Extra
 import MembersAndOwner exposing (IsMember(..), MembersAndOwner)
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
@@ -90,7 +88,7 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
-import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel(..))
+import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
 import VoiceChat exposing (RoomId(..))
 
@@ -545,7 +543,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     , Ui.background MyUi.background1
                     ]
                     [ Ui.column
-                        [ Ui.height Ui.fill, Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize)) ]
+                        [ Ui.height Ui.fill, Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize)) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy False model local
@@ -636,7 +634,7 @@ guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 dmChannelView { otherUserId, threadRoute } loggedIn local model =
-    case LocalState.getUser otherUserId local.localUser of
+    case User.getUser otherUserId local.localUser of
         Just otherUser ->
             let
                 dmChannel : FrontendDmChannel
@@ -720,7 +718,7 @@ discordDmChannelView routeData loggedIn local model =
                     |> SeqDict.toList
                     |> List.filterMap
                         (\( userId, _ ) ->
-                            case LocalState.getDiscordUser userId local.localUser of
+                            case User.getDiscordUser userId local.localUser of
                                 Just user ->
                                     PersonName.toString user.name |> Just
 
@@ -760,23 +758,13 @@ conversationWidth model =
     else
         Coord.xRaw model.windowSize
             - ((GuildIcon.fullWidth + 1)
-                + channelColumnWidth model.windowSize
+                + MyUi.channelColumnWidth model.windowSize
                 + memberColumnWidth
                 + User.profileImageSize
                 + (messagePaddingX * 2)
                 + profileImagePaddingRight
                 + model.scrollbarWidth
               )
-
-
-channelColumnWidth : Coord CssPixels -> Int
-channelColumnWidth windowSize =
-    clamp 200 300 (toFloat (Coord.xRaw windowSize) * 0.2 |> round)
-
-
-channelAndGuildColumnWidth : Coord CssPixels -> Int
-channelAndGuildColumnWidth windowSize =
-    channelColumnWidth windowSize + 58
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
@@ -873,7 +861,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -929,7 +917,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1056,7 +1044,7 @@ discordGuildView model routeData loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
-                                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1123,7 +1111,7 @@ guildErrorPage error local model =
             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
             [ Ui.column
                 [ Ui.height Ui.fill
-                , Ui.width (Ui.px (channelAndGuildColumnWidth model.windowSize))
+                , Ui.width (Ui.px (MyUi.channelAndGuildColumnWidth model.windowSize))
                 ]
                 [ Ui.row
                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -1237,7 +1225,7 @@ memberColumnMobile canScroll2 localUser membersAndOwner =
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border2
             , Ui.background MyUi.background3
-            , Ui.height (Ui.px channelHeaderHeight)
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
             , MyUi.noShrinking
             ]
             [ headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
@@ -1290,7 +1278,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId membersAndOw
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border2
             , Ui.background MyUi.background3
-            , Ui.height (Ui.px channelHeaderHeight)
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
             , MyUi.noShrinking
             ]
             [ headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
@@ -1340,7 +1328,7 @@ memberLabel isMobile localUser userId =
         , Ui.Font.color MyUi.font3
         , Ui.clipWithEllipsis
         ]
-        (case LocalState.getUser userId localUser of
+        (case User.getUser userId localUser of
             Just user ->
                 [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
 
@@ -1369,7 +1357,7 @@ discordMemberLabel isMobile localUser currentUserId userId =
         , Ui.Font.color MyUi.font3
         , Ui.clipWithEllipsis
         ]
-        (case LocalState.getDiscordUser userId localUser of
+        (case User.getDiscordUser userId localUser of
             Just user ->
                 [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
 
@@ -2930,7 +2918,7 @@ channelHeader isMobile2 includeShowMembers content =
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
-        , Ui.height (Ui.px channelHeaderHeight)
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
         , MyUi.noShrinking
         ]
         (if isMobile2 then
@@ -2970,11 +2958,6 @@ headerBackButton htmlId onPress =
         , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
         ]
         (Ui.html (Icons.arrowLeft 16))
-
-
-channelHeaderHeight : number
-channelHeaderHeight =
-    38
 
 
 scrollable : Bool -> Ui.Attribute msg
@@ -3044,7 +3027,8 @@ privateChatWithYourself local =
         , Ui.clipWithEllipsis
         ]
         (Ui.text "Private chat with yourself")
-    , voiceChatButton (DmRoomId local.localUser.session.userId) local
+    , VoiceChat.voiceChatButton (DmRoomId local.localUser.session.userId) local.localUser local.calls
+        |> Ui.map VoiceChatMsg
     ]
 
 
@@ -3058,7 +3042,7 @@ privateChatWith otherUserId local name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
-    , voiceChatButton (DmRoomId otherUserId) local
+    , VoiceChat.voiceChatButton (DmRoomId otherUserId) local.localUser local.calls |> Ui.map VoiceChatMsg
     ]
 
 
@@ -3073,75 +3057,6 @@ discordPrivateChatWith name =
         (Ui.text "Private chat with ")
     , Ui.text name
     ]
-
-
-voiceChatButton : RoomId -> LocalState -> Element FrontendMsg
-voiceChatButton voiceChatId local =
-    let
-        hasJoined =
-            VoiceChat.hasJoined voiceChatId local.calls
-
-        joined : Element msg
-        joined =
-            VoiceChat.joinedUsers voiceChatId local.calls
-                |> SeqDict.toList
-                |> List.map
-                    (\( userId, clientIds ) ->
-                        let
-                            count =
-                                NonemptySet.size clientIds
-                        in
-                        Ui.el
-                            [ case ( count > 1, OneOrGreater.fromInt count ) of
-                                ( True, Just count2 ) ->
-                                    GuildIcon.notificationHelper
-                                        MyUi.background1
-                                        MyUi.white
-                                        MyUi.border1
-                                        2
-                                        -2
-                                        count2
-
-                                _ ->
-                                    Ui.noAttr
-                            ]
-                            (case LocalState.getUser userId local.localUser of
-                                Just user ->
-                                    User.profileImage user.icon
-
-                                Nothing ->
-                                    User.profileImage Nothing
-                            )
-                    )
-                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
-    in
-    Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
-        [ joined
-        , MyUi.elButton
-            (Dom.id "guild_voiceChat")
-            (PressedVoiceChatButton voiceChatId)
-            [ Ui.width (Ui.px 44)
-            , Ui.paddingXY 4 0
-            , Ui.height Ui.fill
-            ]
-            (Ui.row
-                [ Ui.spacing 2, Ui.centerY ]
-                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-                , if hasJoined then
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 40 190 80)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                  else
-                    Ui.none
-                ]
-            )
-        ]
 
 
 emojiSelector :
@@ -3168,7 +3083,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 Coord.xRaw model.windowSize - paddingX * 2
 
             else
-                Coord.xRaw model.windowSize - channelAndGuildColumnWidth model.windowSize - paddingX * 2
+                Coord.xRaw model.windowSize - MyUi.channelAndGuildColumnWidth model.windowSize - paddingX * 2
     in
     case loggedIn.showEmojiSelector of
         EmojiSelectorHidden ->
@@ -3227,7 +3142,7 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
         EmojiSelectorForEditMessage position _ ->
             let
                 y =
-                    Coord.yRaw position - Emoji.selectorHeight - channelHeaderHeight
+                    Coord.yRaw position - Emoji.selectorHeight - MyUi.channelHeaderHeight
             in
             Ui.inFront
                 (Emoji.selector
@@ -3256,71 +3171,6 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                         ]
                     |> Ui.map EmojiSelectorMsg
                 )
-
-
-voiceChatView : Coord CssPixels -> RoomId -> LocalState -> LoadedFrontend -> Element FrontendMsg
-voiceChatView windowSize roomId local model =
-    Ui.el
-        [ Ui.height (Ui.px (round (toFloat (Coord.yRaw windowSize * 2) / 3)))
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-        , Ui.borderColor MyUi.border2
-        , Ui.background MyUi.background3
-        , MyUi.noShrinking
-        , Ui.inFront (Ui.el [ Ui.paddingXY 16 7 ] (voiceChatButton roomId local))
-        , Ui.inFront
-            (Ui.row
-                [ Ui.alignBottom
-                , Ui.alignRight
-                , Ui.width Ui.shrink
-                , Ui.padding 16
-                , Ui.spacing 8
-                ]
-                [ voiceChatControlButton
-                    "guild_voiceChatMute"
-                    (Ui.html Icons.microphone)
-                    model.voiceChat.isMuted
-                    (VoiceChatMsg VoiceChat.PressedToggleMute)
-                , voiceChatControlButton
-                    "guild_voiceChatPauseVideo"
-                    (Ui.el [ Ui.move { x = 2, y = 0, z = 0 } ] (Ui.html Icons.camera))
-                    model.voiceChat.isVideoPaused
-                    (VoiceChatMsg VoiceChat.PressedTogglePauseVideo)
-                ]
-            )
-        ]
-        (VoiceChat.mediaDeviceSelectors model.voiceChat |> Ui.map VoiceChatMsg)
-
-
-voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
-voiceChatControlButton htmlId iconHtml isOff onPress =
-    MyUi.elButton
-        (Dom.id htmlId)
-        onPress
-        [ Ui.width (Ui.px 40)
-        , Ui.height (Ui.px 40)
-        , Ui.padding 8
-        , Ui.rounded 20
-        , Ui.background
-            (if isOff then
-                Ui.rgb 200 60 60
-
-             else
-                Ui.rgb 60 70 100
-            )
-        , Ui.Font.color MyUi.white
-        , if isOff then
-            Ui.inFront
-                (Ui.el
-                    [ Ui.width Ui.fill
-                    , Ui.height Ui.fill
-                    ]
-                    (Ui.html Icons.diagonalSlash)
-                )
-
-          else
-            Ui.noAttr
-        ]
-        (Ui.el [ Ui.width (Ui.px 24), Ui.height (Ui.px 24) ] iconHtml)
 
 
 conversationView :
@@ -3371,11 +3221,12 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Nothing
 
+        showVoiceChat : Maybe RoomId
         showVoiceChat =
-            case ( local.calls.currentRoom, guildOrDmIdNoThread ) of
-                ( Just (DmRoomId otherUserIdA), GuildOrDmId_Dm otherUserIdB ) ->
-                    if otherUserIdA == otherUserIdB then
-                        local.calls.currentRoom
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Dm otherUserIdB ->
+                    if SeqSet.member (DmRoomId otherUserIdB) loggedIn.voiceChat.expanded then
+                        Just (DmRoomId otherUserIdB)
 
                     else
                         Nothing
@@ -3389,7 +3240,8 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ case showVoiceChat of
             Just roomId ->
-                voiceChatView model.windowSize roomId local model
+                VoiceChat.view model.windowSize roomId local.localUser local.calls loggedIn.voiceChat
+                    |> Ui.map VoiceChatMsg
 
             Nothing ->
                 channelHeader
@@ -6106,7 +5958,7 @@ channelColumnContainer header content =
                 , Ui.Font.color MyUi.font1
                 , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.border1
-                , Ui.height (Ui.px channelHeaderHeight)
+                , Ui.height (Ui.px MyUi.channelHeaderHeight)
                 , MyUi.noShrinking
                 , Ui.clipWithEllipsis
                 ]
@@ -6422,7 +6274,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                             (not isMobile)
                             (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId threadRoute))
                         , Ui.clipWithEllipsis
-                        , Ui.height (Ui.px channelHeaderHeight)
+                        , Ui.height (Ui.px MyUi.channelHeaderHeight)
                         , MyUi.hoverText name
                         , Ui.contentCenterY
                         , MyUi.noShrinking
@@ -6530,7 +6382,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                             (not isMobile)
                             (Ui.Events.onMouseLeave (MouseExitedDiscordChannelName routeData.guildId channelId threadRoute))
                         , Ui.clipWithEllipsis
-                        , Ui.height (Ui.px channelHeaderHeight)
+                        , Ui.height (Ui.px MyUi.channelHeaderHeight)
                         , MyUi.hoverText name
                         , Ui.contentCenterY
                         , MyUi.noShrinking
@@ -6639,7 +6491,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
             (not isMobile)
             (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId NoThread))
         , Ui.clipWithEllipsis
-        , Ui.height (Ui.px channelHeaderHeight)
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
         , MyUi.hoverText (ChannelName.toString channel.name)
         , Ui.contentCenterY
         , MyUi.noShrinking
@@ -6736,7 +6588,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
             (not isMobile)
             (Ui.Events.onMouseLeave (MouseExitedDiscordChannelName routeData.guildId channelId NoThread))
         , Ui.clipWithEllipsis
-        , Ui.height (Ui.px channelHeaderHeight)
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
         , MyUi.hoverText (ChannelName.toString channel.name)
         , Ui.contentCenterY
         , MyUi.noShrinking
@@ -6926,7 +6778,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
         ]
         ((List.filterMap
             (\( otherUserId, dmChannel ) ->
-                case LocalState.getUser otherUserId localUser of
+                case User.getUser otherUserId localUser of
                     Just otherUser ->
                         ( case Array.Extra.last dmChannel.messages of
                             Just (MessageLoaded message2) ->
@@ -7271,7 +7123,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                 ]
                 (case members2 of
                     [] ->
-                        case LocalState.getDiscordUser currentUserId localUser of
+                        case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
                                 [ User.profileImage otherUser.icon
                                 , Ui.column
@@ -7286,14 +7138,14 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
                     rest ->
                         [ List.filterMap
-                            (\userId -> LocalState.getDiscordUser userId localUser |> Maybe.map .icon)
+                            (\userId -> User.getDiscordUser userId localUser |> Maybe.map .icon)
                             members2
                             |> User.multipleProfileImages
                         , Ui.column
                             []
                             [ List.filterMap
                                 (\userId ->
-                                    case LocalState.getDiscordUser userId localUser of
+                                    case User.getDiscordUser userId localUser of
                                         Just otherUser ->
                                             PersonName.toString otherUser.name |> Just
 

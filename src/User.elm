@@ -7,18 +7,20 @@ module User exposing
     , FrontendCurrentUser
     , FrontendUser
     , LastDmViewed(..)
+    , LocalUser
     , NotificationLevel(..)
     , addDirectMention
     , addDiscordDirectMention
     , addNewCustomEmojis
     , addNewStickers
     , addRecentlyUsedEmoji
-    , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
     , commonlyUsedEmojis
     , discordCurrentUserToFrontend
     , discordFullDataUserToFrontendCurrentUser
+    , getDiscordUser
+    , getUser
     , init
     , linkDiscordDataCodec
     , multipleProfileImages
@@ -62,6 +64,8 @@ import SeqSet exposing (SeqSet)
 import Sticker exposing (StickerData)
 import Ui exposing (Element)
 import Ui.Font
+import UserAgent exposing (UserAgent)
+import UserSession exposing (UserSession)
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -423,6 +427,25 @@ setIcon icon user =
     { user | icon = Just icon }
 
 
+getUser : Id UserId -> LocalUser -> Maybe FrontendUser
+getUser userId localUser =
+    if localUser.session.userId == userId then
+        backendToFrontend localUser.user |> Just
+
+    else
+        SeqDict.get userId localUser.otherUsers
+
+
+getDiscordUser : Discord.Id Discord.UserId -> LocalUser -> Maybe DiscordFrontendUser
+getDiscordUser userId localUser =
+    case SeqDict.get userId localUser.linkedDiscordUsers of
+        Just user ->
+            discordCurrentUserToFrontend user |> Just
+
+        Nothing ->
+            SeqDict.get userId localUser.otherDiscordUsers
+
+
 type EmailNotifications
     = CheckEvery5Minutes
 
@@ -505,6 +528,20 @@ type alias DiscordFrontendCurrentUser =
     , needsAuthAgain : Bool
     , linkedAt : Time.Posix
     , isLoadingData : DiscordUserLoadingData
+    }
+
+
+type alias LocalUser =
+    { session : UserSession
+    , user : FrontendCurrentUser
+    , otherUsers : SeqDict (Id UserId) FrontendUser
+    , otherDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    , linkedDiscordUsers : SeqDict (Discord.Id Discord.UserId) DiscordFrontendCurrentUser
+    , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
+      timezone : Time.Zone
+    , userAgent : UserAgent
+    , stickers : SeqDict (Id StickerId) StickerData
+    , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     }
 
 

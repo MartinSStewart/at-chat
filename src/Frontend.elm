@@ -4,6 +4,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
+import Bytes.Decode
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -17,6 +18,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -59,6 +61,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqSet
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -106,7 +109,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (MediaDevicesStatus(..), RoomId)
+import VoiceChat exposing (MediaDevicesStatus(..))
 
 
 app :
@@ -164,7 +167,8 @@ subscriptions model =
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
-        , VoiceChat.voiceChatFromJs GotVoiceChatSignalFromJs
+        , VoiceChat.fromJs GotVoiceChatSignalFromJs
+        , VoiceChat.gotRecordedData GotVoiceChatRecording
         , case model of
             Loading _ ->
                 Subscription.none
@@ -343,7 +347,6 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
-            , voiceChat = VoiceChat.initModel
             , toFrontendLogs = Nothing
             }
 
@@ -436,6 +439,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , profilePictureEditor = ImageEditor.init
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
+            , voiceChat = VoiceChat.initModel
             }
     in
     ( loggedIn
@@ -547,22 +551,28 @@ update msg model =
                     ( model, Command.none )
 
                 ( True, _ ) ->
-                    updateLoaded msg loaded
-                        |> Tuple.mapFirst
-                            (\loaded2 ->
-                                case loaded2.loginStatus of
-                                    LoggedIn loggedIn ->
-                                        { loaded2
-                                            | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
-                                        }
-                                            |> Loaded
+                    let
+                        ( loadedNew, cmd ) =
+                            updateLoaded msg loaded
+                    in
+                    ( case loadedNew.loginStatus of
+                        LoggedIn loggedIn ->
+                            { loadedNew
+                                | loginStatus = LoggedIn { loggedIn | previousTextInputFocus = Nothing }
+                            }
+                                |> Loaded
 
-                                    NotLoggedIn _ ->
-                                        Loaded loaded2
-                            )
+                        NotLoggedIn _ ->
+                            Loaded loadedNew
+                    , Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ]
+                    )
 
                 _ ->
-                    updateLoaded msg loaded |> Tuple.mapFirst Loaded
+                    let
+                        ( loadedNew, cmd ) =
+                            updateLoaded msg loaded
+                    in
+                    ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ] )
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3001,7 +3011,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             case
                                 ( Route.toGuildOrDmId model.route
-                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
+                                , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
                                 )
                             of
                                 ( Just ( guildOrDmId, threadRoute ), True ) ->
@@ -3480,47 +3490,76 @@ updateLoaded msg model =
         DomFocusChanged ( maybeHtmlId, maybeRange ) ->
             textInputFocusChanged maybeHtmlId maybeRange model
 
-        PressedVoiceChatButton otherUserId ->
-            pressedVoiceChatButton otherUserId model
-
         GotVoiceChatSignalFromJs result ->
-            case result of
-                Ok event ->
-                    case event of
-                        VoiceChat.GotSignal connectionId signal ->
-                            FrontendExtra.updateLoggedIn
-                                (\loggedIn ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case result of
+                        Ok event ->
+                            case event of
+                                VoiceChat.FromJs_GotSignal connectionId signal ->
                                     FrontendExtra.handleLocalChange
                                         model.time
                                         (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
                                         loggedIn
                                         Command.none
-                                )
-                                model
 
-                        VoiceChat.GotMediaStreamTracks _ ->
-                            ( model, Command.none )
+                                VoiceChat.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
+                                    ( { loggedIn | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat }
+                                    , Command.none
+                                    )
 
-                        VoiceChat.GotUserMediaDevices mediaDevices defaultDevices ->
-                            ( { model | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices defaultDevices model.voiceChat }
-                            , Command.none
-                            )
+                                VoiceChat.FromJs_GotUserMediaDevicesError error ->
+                                    let
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn | voiceChat = { voiceChat | userMediaDevices = FailedToGetMediaDevices error } }
+                                    , Command.none
+                                    )
 
-                        VoiceChat.GotUserMediaDevicesError error ->
+                                VoiceChat.FromJs_SpeakingChanged connectionId isSpeaking ->
+                                    let
+                                        voiceChat : VoiceChat.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn
+                                        | voiceChat =
+                                            case connectionId of
+                                                VoiceChat.IsConnection connection2 ->
+                                                    { voiceChat
+                                                        | isSpeaking =
+                                                            if isSpeaking then
+                                                                SeqSet.insert connection2 voiceChat.isSpeaking
+
+                                                            else
+                                                                SeqSet.remove connection2 voiceChat.isSpeaking
+                                                    }
+
+                                                VoiceChat.IsLocal ->
+                                                    { voiceChat | localIsSpeaking = isSpeaking }
+                                      }
+                                    , Command.none
+                                    )
+
+                                VoiceChat.FromJs_StartConnectionError string ->
+                                    let
+                                        voiceChat : VoiceChat.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+                                    in
+                                    ( { loggedIn | voiceChat = { voiceChat | startConnectionError = Just string } }
+                                    , Command.none
+                                    )
+
+                        Err error ->
                             let
-                                voiceChat =
-                                    model.voiceChat
+                                _ =
+                                    Debug.log "voice chat port didn't decode" error
                             in
-                            ( { model | voiceChat = { voiceChat | userMediaDevices = FailedToGetMediaDevices error } }
-                            , Command.none
-                            )
-
-                Err error ->
-                    let
-                        _ =
-                            Debug.log "voice chat port didn't decode" error
-                    in
-                    ( model, Command.none )
+                            ( loggedIn, Command.none )
+                )
+                model
 
         PressedToggleAttachedFileSpoiler guildOrDmId { removeSpoiler, fileId } ->
             FrontendExtra.updateLoggedIn
@@ -3593,38 +3632,299 @@ updateLoaded msg model =
                 model
 
         VoiceChatMsg voiceChatMsg ->
-            let
-                voiceChat =
-                    model.voiceChat
-            in
             case voiceChatMsg of
                 VoiceChat.SelectedAudioInputDevice deviceId ->
-                    ( { model | voiceChat = { voiceChat | selectedAudioInputDevice = Just deviceId } }
-                    , VoiceChat.setAudioInput deviceId
-                    )
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
+                                voiceChat2 =
+                                    { voiceChat | selectedAudioInputDevice = Just deviceId }
+                            in
+                            ( { loggedIn | voiceChat = voiceChat2 }
+                            , Command.batch
+                                [ VoiceChat.toJs (VoiceChat.ToJs_SetInput True deviceId)
+                                , VoiceChat.startLocalStream voiceChat2
+                                ]
+                            )
+                        )
+                        model
 
                 VoiceChat.SelectedVideoInputDevice deviceId ->
-                    ( { model | voiceChat = { voiceChat | selectedVideoInputDevice = Just deviceId } }, Command.none )
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
+                                voiceChat2 =
+                                    { voiceChat | selectedVideoInputDevice = Just deviceId }
+                            in
+                            ( { loggedIn | voiceChat = voiceChat2 }
+                            , Command.batch
+                                [ VoiceChat.toJs (VoiceChat.ToJs_SetInput False deviceId)
+                                , VoiceChat.startLocalStream voiceChat2
+                                ]
+                            )
+                        )
+                        model
 
                 VoiceChat.PressedToggleMute ->
-                    let
-                        newMuted : Bool
-                        newMuted =
-                            not voiceChat.isMuted
-                    in
-                    ( { model | voiceChat = { voiceChat | isMuted = newMuted } }
-                    , VoiceChat.setMuted newMuted
-                    )
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
+                                audioInputEnabled : Bool
+                                audioInputEnabled =
+                                    not voiceChat.audioInputEnabled
+                            in
+                            ( { loggedIn | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
+                            , VoiceChat.toJs (VoiceChat.ToJs_SetAudioInputEnabled audioInputEnabled)
+                            )
+                        )
+                        model
 
                 VoiceChat.PressedTogglePauseVideo ->
-                    let
-                        newPaused : Bool
-                        newPaused =
-                            not voiceChat.isVideoPaused
-                    in
-                    ( { model | voiceChat = { voiceChat | isVideoPaused = newPaused } }
-                    , VoiceChat.setVideoPaused newPaused
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+
+                                videoInputEnabled : Bool
+                                videoInputEnabled =
+                                    not voiceChat.videoInputEnabled
+                            in
+                            ( { loggedIn | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
+                            , VoiceChat.toJs (VoiceChat.ToJs_SetVideoInputEnabled videoInputEnabled)
+                            )
+                        )
+                        model
+
+                VoiceChat.PressedJoinCall roomId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
+                                loggedIn
+                                (case SeqDict.get roomId local.calls.voiceChats of
+                                    Just nonempty ->
+                                        List.map
+                                            (\otherSession ->
+                                                VoiceChat.toJs
+                                                    (VoiceChat.ToJs_Start
+                                                        (VoiceChat.startArgs
+                                                            model.clientId
+                                                            { roomId = roomId, otherClientId = otherSession }
+                                                            loggedIn.voiceChat
+                                                        )
+                                                    )
+                                            )
+                                            (NonemptySet.toList nonempty)
+                                            |> Command.batch
+
+                                    Nothing ->
+                                        VoiceChat.toJs VoiceChat.ToJs_GetMediaDevices
+                                )
+                        )
+                        model
+
+                VoiceChat.PressedLeaveCall ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
+                                loggedIn
+                                (VoiceChat.leaveVoiceChatCmds local.calls)
+                        )
+                        model
+
+                VoiceChat.PressedDownloadRecording roomId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            case SeqDict.get roomId loggedIn.voiceChat.recordings of
+                                Just (Nonempty recording rest) ->
+                                    ( { loggedIn
+                                        | voiceChat =
+                                            { voiceChat
+                                                | recordings =
+                                                    case List.Nonempty.fromList rest of
+                                                        Just nonempty ->
+                                                            SeqDict.insert roomId nonempty voiceChat.recordings
+
+                                                        Nothing ->
+                                                            SeqDict.remove roomId voiceChat.recordings
+                                            }
+                                      }
+                                    , Effect.File.Download.bytes
+                                        ("recording " ++ UserAgent.browserToString model.userAgent.browser)
+                                        recording.mimeType
+                                        recording.data
+                                    )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                VoiceChat.PressedChannelHeaderVoiceChatButton roomId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn
+                                | voiceChat =
+                                    { voiceChat
+                                        | expanded =
+                                            if SeqSet.member roomId voiceChat.expanded then
+                                                SeqSet.remove roomId voiceChat.expanded
+
+                                            else
+                                                SeqSet.insert roomId voiceChat.expanded
+                                    }
+                              }
+                            , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                            )
+                        )
+                        model
+
+                VoiceChat.PressedCopyError text ->
+                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+                    , Ports.copyToClipboard text
                     )
+
+                VoiceChat.ChangedVolume connectionId volume ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn
+                                | voiceChat =
+                                    { voiceChat
+                                        | volume =
+                                            SeqDict.insert connectionId.otherClientId volume voiceChat.volume
+                                    }
+                              }
+                            , VoiceChat.toJs (VoiceChat.ToJs_SetVolume connectionId volume)
+                            )
+                        )
+                        model
+
+                VoiceChat.MouseEnterVideoNode connectionId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn | voiceChat = { voiceChat | videoHover = Just connectionId } }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                VoiceChat.MouseExitVideoNode connectionId ->
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                voiceChat : VoiceChat.Model
+                                voiceChat =
+                                    loggedIn.voiceChat
+                            in
+                            ( { loggedIn
+                                | voiceChat =
+                                    { voiceChat
+                                        | videoHover =
+                                            if voiceChat.videoHover == Just connectionId then
+                                                Nothing
+
+                                            else
+                                                voiceChat.videoHover
+                                    }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+        GotVoiceChatRecording bytes ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        voiceChat =
+                            loggedIn.voiceChat
+                    in
+                    case Bytes.Decode.decode (VoiceChat.decodeVoiceChatRecorder bytes) bytes of
+                        Just ( connectionId, recording ) ->
+                            ( { loggedIn
+                                | voiceChat =
+                                    { voiceChat
+                                        | recordings =
+                                            SeqDict.update
+                                                connectionId.roomId
+                                                (\maybe ->
+                                                    case maybe of
+                                                        Just nonempty ->
+                                                            List.Nonempty.cons recording nonempty |> Just
+
+                                                        Nothing ->
+                                                            Nonempty recording [] |> Just
+                                                )
+                                                voiceChat.recordings
+                                    }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+
+checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
+checkCallDisplayModeChange modelOld modelNew =
+    case ( modelOld.loginStatus, modelNew.loginStatus ) of
+        ( LoggedIn loggedInOld, LoggedIn loggedInNew ) ->
+            VoiceChat.displayModeChangeCmd
+                (VoiceChat.displayMode modelOld.route loggedInOld.voiceChat (Local.model loggedInOld.localState |> .calls))
+                (VoiceChat.displayMode modelNew.route loggedInNew.voiceChat (Local.model loggedInNew.localState |> .calls))
+                loggedInNew.voiceChat
+
+        _ ->
+            Command.none
 
 
 removePartialStickers : Maybe TextInputFocus -> HtmlId -> String -> Command FrontendOnly toMsg msg
@@ -3804,7 +4104,7 @@ pageUpOrDownScroll isUp model =
               else
                 0.9
              )
-                * (toFloat (Coord.yRaw model.windowSize) - Pages.Guild.channelHeaderHeight)
+                * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight)
             )
         , Dom.getViewportOf Pages.Guild.conversationContainerId
             |> Task.attempt PageUpGotViewport
@@ -4291,53 +4591,6 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
               }
             , Command.none
             )
-
-
-pressedVoiceChatButton : RoomId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-pressedVoiceChatButton roomId model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            let
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-            in
-            if VoiceChat.hasJoined roomId local.calls then
-                FrontendExtra.handleLocalChange
-                    model.time
-                    (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
-                    loggedIn
-                    (Command.batch
-                        [ VoiceChat.leaveVoiceChatCmds local.calls
-                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                        ]
-                    )
-
-            else
-                FrontendExtra.handleLocalChange
-                    model.time
-                    (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
-                    loggedIn
-                    (Command.batch
-                        [ case SeqDict.get roomId local.calls.voiceChats of
-                            Just nonempty ->
-                                List.map
-                                    (\otherSession ->
-                                        VoiceChat.voiceChatStart
-                                            model.clientId
-                                            { roomId = roomId, otherClientId = otherSession }
-                                            model.voiceChat
-                                    )
-                                    (NonemptySet.toList nonempty)
-                                    |> Command.batch
-
-                            Nothing ->
-                                VoiceChat.getMediaDevices
-                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                        ]
-                    )
-        )
-        model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5586,7 +5839,7 @@ updateLoadedFromBackend msg model =
                                         voiceChatChange
                                         model.clientId
                                         local.calls
-                                        model.voiceChat
+                                        loggedIn.voiceChat
                                     )
 
                                 _ ->
@@ -5756,7 +6009,10 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.audioNodes local.calls |> Ui.html |> Ui.inFront
+                                    , VoiceChat.videoNodes loaded.route loaded.windowSize loggedIn.voiceChat local.calls
+                                        |> Html.map VoiceChatMsg
+                                        |> Ui.html
+                                        |> Ui.inFront
                                     ]
                                     (page loggedIn local)
 
