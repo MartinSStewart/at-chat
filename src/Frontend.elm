@@ -154,12 +154,6 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
-        , case model of
-            Loaded loaded ->
-                Pages.Go.subscriptions loaded.goModel |> Subscription.map GoMsg
-
-            Loading _ ->
-                Subscription.none
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
@@ -341,7 +335,6 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , goModel = Pages.Go.init
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
@@ -440,6 +433,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
+            , currentDmGoMatch = Nothing
             }
     in
     ( loggedIn
@@ -1183,13 +1177,27 @@ updateLoaded msg model =
                         model
 
                 _ ->
-                    case ( model.route, Pages.Go.keyMsg key ) of
-                        ( DmRoute _, Just goMsg ) ->
-                            let
-                                goModel2 =
-                                    Pages.Go.pressedKey key model.goModel
-                            in
-                            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+                    case model.route of
+                        DmRoute dmData ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    ( loggedIn, Command.none )
+                                 --let
+                                 --    local : LocalState
+                                 --    local =
+                                 --        Local.model loggedIn.localState
+                                 --in
+                                 -- --SeqDict.updateIfExists dmData.otherUserId (\dmChannel ->
+                                 -- --                                        { dmChannel | goMatches = dmChannel.goMatches}
+                                 --local.dmChannels of
+                                 --    Just dmChannel ->
+                                 --        dmChannel
+                                 --            ( { model | goModel = Pages.Go.pressedKey key model.goModel }, Command.none )
+                                 --
+                                 --    Nothing ->
+                                 --        ( model, Command.none )
+                                )
+                                model
 
                         _ ->
                             ( model, Command.none )
@@ -1857,11 +1865,22 @@ updateLoaded msg model =
             )
 
         GoMsg goMsg ->
-            let
-                ( goModel2, goCmd ) =
-                    Pages.Go.update goMsg model.goModel
-            in
-            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.currentDmGoMatch of
+                        Just goMatch ->
+                            let
+                                ( goModel2, goCmd, maybeChange ) =
+                                    Pages.Go.update goMsg goMatch.model
+                            in
+                            ( { loggedIn | currentDmGoMatch = Just { goMatch | model = goModel2 } }
+                            , Command.map never GoMsg goCmd
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
         UserNameEditableMsg editableMsg ->
             handleEditable
@@ -3910,6 +3929,36 @@ updateLoaded msg model =
 
                         Nothing ->
                             ( loggedIn, Command.none )
+                )
+                model
+
+        PressedToggleGoMatchTab otherUserId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    { loggedIn
+                        | currentDmGoMatch =
+                            case loggedIn.currentDmGoMatch of
+                                Just goMatch ->
+                                    if goMatch.otherUserId == otherUserId then
+                                        Nothing
+
+                                    else
+                                        let
+                                            local : LocalState
+                                            local =
+                                                Local.model loggedIn.localState
+                                        in
+                                        Just
+                                            { otherUserId = otherUserId
+                                            , model =
+                                                case SeqDict.get otherUserId local.dmChannels of
+                                                    Just dmChannel ->
+                                                        dmChannel.currentGoMatch
+
+                                                    Nothing ->
+                                                        Pages.Go.init
+                                            }
+                    }
                 )
                 model
 
@@ -6105,13 +6154,6 @@ view model =
                                     _ ->
                                         errorPage loaded "Admin access required to view this page"
                             )
-
-                    GoRoute ->
-                        Pages.Go.view loaded.goModel
-                            |> Ui.map GoMsg
-                            |> FrontendExtra.layout loaded
-                                [ Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.loginStatus)
-                                ]
 
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel

@@ -1340,6 +1340,9 @@ isPressMsg msg =
         GotVoiceChatRecording _ ->
             False
 
+        PressedToggleGoMatchTab id ->
+            True
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

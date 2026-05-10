@@ -3042,6 +3042,7 @@ privateChatWith otherUserId local name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
+    , MyUi.elButton (Dom.id "guild_openGoMatch") (PressedToggleGoMatchTab otherUserId) [] (Ui.text "Go")
     , VoiceChat.voiceChatButton (DmRoomId otherUserId) local.localUser local.calls |> Ui.map VoiceChatMsg
     ]
 

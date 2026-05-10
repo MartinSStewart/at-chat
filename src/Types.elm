@@ -213,6 +213,7 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
+    , currentDmGoMatch : Maybe { otherUserId : Id UserId, model : Pages.Go.Model }
     }
 
 
@@ -494,6 +495,7 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
+    | PressedToggleGoMatchTab (Id UserId)
 
 
 type ScrollPosition
