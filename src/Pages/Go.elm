@@ -1,10 +1,14 @@
 module Pages.Go exposing
-    ( Model
+    ( LocalChange(..)
+    , LocalChangeWithTime
+    , Model
     , Msg
+    , ServerChange
     , Stone(..)
+    , ValidatedSetup
     , deadStones
     , init
-    , keyMsg
+    , pressedKey
     , subscriptions
     , update
     , view
@@ -22,6 +26,7 @@ import Html.Events
 import Icons
 import MyUi
 import Ports
+import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Svg
 import Svg.Attributes
@@ -58,10 +63,7 @@ type alias TimeControl =
 
 
 type alias GameModel =
-    { width : Int
-    , height : Int
-    , komi : Float
-    , timeControl : Maybe TimeControl
+    { setup : ValidatedSetup
     , blackTime : Float
     , whiteTime : Float
     , lastTick : Maybe Time.Posix
@@ -76,6 +78,103 @@ type alias GameModel =
     , territoryMarks : Dict ( Int, Int ) Stone
     , lastError : Maybe String
     }
+
+
+type BoardSize
+    = BoardSize Int
+
+
+boardSize9 : BoardSize
+boardSize9 =
+    BoardSize 9
+
+
+boardSize13 : BoardSize
+boardSize13 =
+    BoardSize 13
+
+
+boardSize19 : BoardSize
+boardSize19 =
+    BoardSize 19
+
+
+boardSizeFromString : String -> Result String BoardSize
+boardSizeFromString text =
+    case String.toInt (String.trim text) of
+        Just n ->
+            if n < minDimension then
+                Err ("Minimum dimension is " ++ String.fromInt minDimension)
+
+            else if n > maxDimension then
+                Err ("Maximum dimension is " ++ String.fromInt maxDimension)
+
+            else
+                Ok (BoardSize n)
+
+        Nothing ->
+            Err "Enter a number"
+
+
+boardSizeToInt : BoardSize -> Int
+boardSizeToInt (BoardSize a) =
+    a
+
+
+type alias ValidatedSetup =
+    { width : BoardSize
+    , height : BoardSize
+    , handicap : Int
+    , komiHalfPoints : KomiHalfPoints
+    , timeControl : Maybe TimeControl
+    }
+
+
+type KomiHalfPoints
+    = KomiHalfPoints Int
+
+
+komiHalfPointsFromString : String -> Result String KomiHalfPoints
+komiHalfPointsFromString input =
+    let
+        trimmed : String
+        trimmed =
+            String.trim input
+    in
+    if trimmed == "" then
+        Ok (KomiHalfPoints 0)
+
+    else
+        case String.toFloat trimmed of
+            Just n ->
+                let
+                    halfStones =
+                        round (n * 2)
+                in
+                if abs (toFloat halfStones - n) < 0.0001 then
+                    Ok (KomiHalfPoints halfStones)
+
+                else
+                    Err "Value must be a value such as 0.5, 1, 2.5"
+
+            Nothing ->
+                Err "Enter a number"
+
+
+komiHalfPointsToString : KomiHalfPoints -> String
+komiHalfPointsToString (KomiHalfPoints a) =
+    String.fromInt (a // 2)
+        ++ (if modBy 2 a == 0 then
+                ""
+
+            else
+                ".5"
+           )
+
+
+komiHalfPointsToFloat : KomiHalfPoints -> Float
+komiHalfPointsToFloat (KomiHalfPoints a) =
+    toFloat a / 2
 
 
 type alias SetupModel =
@@ -121,9 +220,15 @@ maxHandicap =
     9
 
 
-handicapPositions : Int -> Int -> Int -> List ( Int, Int )
-handicapPositions handicap width height =
+handicapPositions : ValidatedSetup -> List ( Int, Int )
+handicapPositions setup =
     let
+        width =
+            boardSizeToInt setup.width
+
+        height =
+            boardSizeToInt setup.height
+
         margin : Int
         margin =
             if min width height >= 13 then
@@ -169,7 +274,7 @@ handicapPositions handicap width height =
 
         positions : List ( Int, Int )
         positions =
-            case handicap of
+            case setup.handicap of
                 0 ->
                     []
 
@@ -206,12 +311,12 @@ handicapPositions handicap width height =
         |> Set.toList
 
 
-startGame : Int -> Int -> Int -> Float -> Maybe TimeControl -> GameModel
-startGame width height handicap komi timeControl =
+startGame : ValidatedSetup -> GameModel
+startGame setup =
     let
         positions : List ( Int, Int )
         positions =
-            handicapPositions handicap width height
+            handicapPositions setup
 
         board : Dict ( Int, Int ) Stone
         board =
@@ -227,19 +332,16 @@ startGame width height handicap komi timeControl =
             else
                 White
     in
-    { width = width
-    , height = height
-    , komi = komi
-    , timeControl = timeControl
+    { setup = setup
     , blackTime =
-        case timeControl of
+        case setup.timeControl of
             Just tc ->
                 tc.mainTime
 
             Nothing ->
                 0
     , whiteTime =
-        case timeControl of
+        case setup.timeControl of
             Just tc ->
                 tc.mainTime
 
@@ -277,8 +379,6 @@ type Msg
     | PressedAgree
     | PressedDisagree
     | ChangedViewingMove Int
-    | PressedArrowLeft
-    | PressedArrowRight
     | ChangedWidthInput String
     | ChangedHeightInput String
     | ChangedHandicapInput String
@@ -290,24 +390,28 @@ type Msg
     | Tick Time.Posix
 
 
-keyMsg : String -> Maybe Msg
-keyMsg key =
-    case key of
-        "ArrowLeft" ->
-            Just PressedArrowLeft
+type LocalChange
+    = PlaceStone Int Int
+    | PassTurn
+    | MarkTerritory Int Int
+    | FinishedMarking
+    | AcceptTerritory
+    | RejectTerritory
 
-        "ArrowRight" ->
-            Just PressedArrowRight
 
-        _ ->
-            Nothing
+type alias LocalChangeWithTime =
+    { time : Time.Posix, change : LocalChange }
+
+
+type alias ServerChange =
+    { stone : Stone, change : LocalChangeWithTime }
 
 
 subscriptions : Model -> Subscription FrontendOnly Msg
 subscriptions model =
     case model of
         Game game ->
-            case ( game.timeControl, game.phase ) of
+            case ( game.setup.timeControl, game.phase ) of
                 ( Just _, Playing _ ) ->
                     if isViewingPast game then
                         Subscription.none
@@ -342,8 +446,15 @@ stoneName stone =
             "White"
 
 
-neighbors : Int -> Int -> ( Int, Int ) -> List ( Int, Int )
-neighbors width height ( x, y ) =
+neighbors : ValidatedSetup -> ( Int, Int ) -> List ( Int, Int )
+neighbors setup ( x, y ) =
+    let
+        width =
+            boardSizeToInt setup.width
+
+        height =
+            boardSizeToInt setup.height
+    in
     [ ( x - 1, y ), ( x + 1, y ), ( x, y - 1 ), ( x, y + 1 ) ]
         |> List.filter (\( a, b ) -> a >= 0 && a < width && b >= 0 && b < height)
 
@@ -354,26 +465,25 @@ type alias GroupInfo =
     }
 
 
-groupAt : Int -> Int -> Dict ( Int, Int ) Stone -> ( Int, Int ) -> GroupInfo
-groupAt width height board start =
+groupAt : ValidatedSetup -> Dict ( Int, Int ) Stone -> ( Int, Int ) -> GroupInfo
+groupAt setup board start =
     case Dict.get start board of
         Nothing ->
             { stones = Set.empty, liberties = Set.empty }
 
         Just stone ->
-            floodFill width height board stone [ start ] (Set.singleton start) Set.empty
+            floodFill setup board stone [ start ] (Set.singleton start) Set.empty
 
 
 floodFill :
-    Int
-    -> Int
+    ValidatedSetup
     -> Dict ( Int, Int ) Stone
     -> Stone
     -> List ( Int, Int )
     -> Set ( Int, Int )
     -> Set ( Int, Int )
     -> GroupInfo
-floodFill width height board stone queue stones liberties =
+floodFill setup board stone queue stones liberties =
     case queue of
         [] ->
             { stones = stones, liberties = liberties }
@@ -399,28 +509,27 @@ floodFill width height board stone queue stones liberties =
                                             ( q, s, l )
                         )
                         ( rest, stones, liberties )
-                        (neighbors width height pos)
+                        (neighbors setup pos)
             in
-            floodFill width height board stone newQueue newStones newLiberties
+            floodFill setup board stone newQueue newStones newLiberties
 
 
-findRegion : Int -> Int -> Dict ( Int, Int ) Stone -> ( Int, Int ) -> Set ( Int, Int )
-findRegion width height board start =
+findRegion : ValidatedSetup -> Dict ( Int, Int ) Stone -> ( Int, Int ) -> Set ( Int, Int )
+findRegion setup board start =
     if Dict.member start board then
         Set.empty
 
     else
-        regionFlood width height board [ start ] (Set.singleton start)
+        regionFlood setup board [ start ] (Set.singleton start)
 
 
 regionFlood :
-    Int
-    -> Int
+    ValidatedSetup
     -> Dict ( Int, Int ) Stone
     -> List ( Int, Int )
     -> Set ( Int, Int )
     -> Set ( Int, Int )
-regionFlood width height board queue visited =
+regionFlood setup board queue visited =
     case queue of
         [] ->
             visited
@@ -437,9 +546,9 @@ regionFlood width height board queue visited =
                                 ( n :: q, Set.insert n v )
                         )
                         ( rest, visited )
-                        (neighbors width height pos)
+                        (neighbors setup pos)
             in
-            regionFlood width height board newQueue newVisited
+            regionFlood setup board newQueue newVisited
 
 
 currentSnapshot : GameModel -> Snapshot
@@ -453,7 +562,7 @@ currentSnapshot model =
 
 applyIncrement : Stone -> GameModel -> GameModel
 applyIncrement mover model =
-    case model.timeControl of
+    case model.setup.timeControl of
         Just tc ->
             case mover of
                 Black ->
@@ -510,7 +619,7 @@ timeoutPass model =
 
 tickClock : Time.Posix -> GameModel -> GameModel
 tickClock now model =
-    case model.timeControl of
+    case model.setup.timeControl of
         Nothing ->
             model
 
@@ -607,7 +716,7 @@ tryPlace x y model =
                                     let
                                         group : GroupInfo
                                         group =
-                                            groupAt model.width model.height b n
+                                            groupAt model.setup b n
                                     in
                                     if Set.isEmpty group.liberties then
                                         ( Set.foldl Dict.remove b group.stones
@@ -624,11 +733,11 @@ tryPlace x y model =
                                 ( b, captures )
                     )
                     ( boardWithStone, 0 )
-                    (neighbors model.width model.height ( x, y ))
+                    (neighbors model.setup ( x, y ))
 
             myGroup : GroupInfo
             myGroup =
-                groupAt model.width model.height boardAfterCapture ( x, y )
+                groupAt model.setup boardAfterCapture ( x, y )
 
             recentBoards : List (Dict ( Int, Int ) Stone)
             recentBoards =
@@ -687,7 +796,7 @@ cycleTerritory x y model =
         let
             region : Set ( Int, Int )
             region =
-                findRegion model.width model.height model.board ( x, y )
+                findRegion model.setup model.board ( x, y )
 
             currentOwner : Maybe Stone
             currentOwner =
@@ -753,13 +862,12 @@ computeScore model =
                 model.board
     in
     ( toFloat (blackTerritory + model.blackCaptures + 2 * deadWhite)
-    , toFloat (whiteTerritory + model.whiteCaptures + 2 * deadBlack) + model.komi
+    , toFloat (whiteTerritory + model.whiteCaptures + 2 * deadBlack) + komiHalfPointsToFloat model.setup.komiHalfPoints
     )
 
 
 type alias DeadContext =
-    { width : Int
-    , height : Int
+    { setup : ValidatedSetup
     , board : Dict ( Int, Int ) Stone
     , territoryMarks : Dict ( Int, Int ) Stone
     }
@@ -770,7 +878,7 @@ isStoneDead ctx pos stone =
     let
         group : GroupInfo
         group =
-            groupAt ctx.width ctx.height ctx.board pos
+            groupAt ctx.setup ctx.board pos
 
         liberties : List ( Int, Int )
         liberties =
@@ -788,13 +896,7 @@ isStoneDead ctx pos stone =
                 liberties
 
 
-deadStones :
-    { width : Int
-    , height : Int
-    , board : Dict ( Int, Int ) Stone
-    , territoryMarks : Dict ( Int, Int ) Stone
-    }
-    -> Set ( Int, Int )
+deadStones : DeadContext -> Set ( Int, Int )
 deadStones ctx =
     Dict.foldl
         (\pos stone acc ->
@@ -810,8 +912,7 @@ deadStones ctx =
 
 gameDeadContext : GameModel -> DeadContext
 gameDeadContext model =
-    { width = model.width
-    , height = model.height
+    { setup = model.setup
     , board = model.board
     , territoryMarks = model.territoryMarks
     }
@@ -820,23 +921,6 @@ gameDeadContext model =
 deadStonePositions : GameModel -> Set ( Int, Int )
 deadStonePositions model =
     deadStones (gameDeadContext model)
-
-
-parseDimension : String -> Result String Int
-parseDimension input =
-    case String.toInt (String.trim input) of
-        Just n ->
-            if n < minDimension then
-                Err ("Minimum dimension is " ++ String.fromInt minDimension)
-
-            else if n > maxDimension then
-                Err ("Maximum dimension is " ++ String.fromInt maxDimension)
-
-            else
-                Ok n
-
-        Nothing ->
-            Err "Enter a number"
 
 
 parseHandicap : String -> Result String Int
@@ -860,25 +944,6 @@ parseHandicap input =
 
                 else
                     Ok n
-
-            Nothing ->
-                Err "Enter a number"
-
-
-parseKomi : String -> Result String Float
-parseKomi input =
-    let
-        trimmed : String
-        trimmed =
-            String.trim input
-    in
-    if trimmed == "" then
-        Ok 0
-
-    else
-        case String.toFloat trimmed of
-            Just n ->
-                Ok n
 
             Nothing ->
                 Err "Enter a number"
@@ -916,34 +981,68 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Msg -> Model -> ( Model, Command FrontendOnly toMsg Msg )
+update : Msg -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChangeWithTime )
 update msg model =
     case model of
         Setup setup ->
-            ( updateSetup msg setup, Command.none )
+            ( updateSetup msg setup, Command.none, Nothing )
 
         Game game ->
-            updateGame msg game
+            let
+                ( game2, cmd, maybeChange ) =
+                    updateGame msg game
+            in
+            ( game2, cmd, Maybe.map (\change -> { time = Debug.todo "", change = change }) maybeChange )
 
 
-startWithSettings : Int -> Int -> SetupModel -> Model
+pressedKey : String -> Model -> Model
+pressedKey key model =
+    case model of
+        Setup setupModel ->
+            model
+
+        Game game ->
+            case key of
+                "ArrowLeft" ->
+                    Game
+                        { game
+                            | viewingMovesBack = min (List.length game.history) (game.viewingMovesBack + 1)
+                            , lastError = Nothing
+                        }
+
+                "ArrowRight" ->
+                    Game
+                        { game
+                            | viewingMovesBack = max 0 (game.viewingMovesBack - 1)
+                            , lastError = Nothing
+                        }
+
+
+startWithSettings : BoardSize -> BoardSize -> SetupModel -> Model
 startWithSettings w h model =
     case parseHandicap model.handicapInput of
         Err err ->
             Setup { model | error = Just ("Handicap: " ++ err) }
 
         Ok handicap ->
-            case parseKomi model.komiInput of
+            case komiHalfPointsFromString model.komiInput of
                 Err err ->
                     Setup { model | error = Just ("Komi: " ++ err) }
 
-                Ok komi ->
+                Ok komiHalfPoints ->
                     case parseTimeControl model of
                         Err err ->
                             Setup { model | error = Just err }
 
                         Ok timeControl ->
-                            Game (startGame w h handicap komi timeControl)
+                            { width = w
+                            , height = h
+                            , handicap = handicap
+                            , komiHalfPoints = komiHalfPoints
+                            , timeControl = timeControl
+                            }
+                                |> startGame
+                                |> Game
 
 
 updateSetup : Msg -> SetupModel -> Model
@@ -982,20 +1081,20 @@ updateSetup msg model =
             Setup model
 
 
-selectedDimensions : SetupModel -> Result String ( Int, Int )
+selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
 selectedDimensions model =
     case model.sizeSelection of
         Standard9 ->
-            Ok ( 9, 9 )
+            Ok ( boardSize9, boardSize9 )
 
         Standard13 ->
-            Ok ( 13, 13 )
+            Ok ( boardSize13, boardSize13 )
 
         Standard19 ->
-            Ok ( 19, 19 )
+            Ok ( boardSize19, boardSize19 )
 
         CustomSize ->
-            case ( parseDimension model.widthInput, parseDimension model.heightInput ) of
+            case ( boardSizeFromString model.widthInput, boardSizeFromString model.heightInput ) of
                 ( Ok w, Ok h ) ->
                     Ok ( w, h )
 
@@ -1006,12 +1105,12 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-updateGame : Msg -> GameModel -> ( Model, Command FrontendOnly toMsg Msg )
+updateGame : Msg -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
 updateGame msg model =
     case msg of
         PressedCell x y ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), Command.none )
+                ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
                 case model.phase of
@@ -1031,38 +1130,40 @@ updateGame msg model =
 
                           else
                             Command.none
+                        , PlaceStone x y |> Just
                         )
 
                     Marking _ ->
-                        ( Game (cycleTerritory x y model), Command.none )
+                        ( Game (cycleTerritory x y model), Command.none, MarkTerritory x y |> Just )
 
                     Confirming _ ->
-                        ( Game model, Command.none )
+                        ( Game model, Command.none, Nothing )
 
                     Scored _ ->
-                        ( Game model, Command.none )
+                        ( Game model, Command.none, Nothing )
 
         PressedPass ->
             if isViewingPast model then
-                ( Game (jumpToLatest model), Command.none )
+                ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
                 case model.phase of
                     Playing _ ->
                         ( Game (applyIncrement model.currentPlayer (performPass model))
                         , Command.none
+                        , Just PassTurn
                         )
 
                     _ ->
-                        ( Game model, Command.none )
+                        ( Game model, Command.none, Nothing )
 
         PressedDoneMarking ->
             case model.phase of
                 Marking r ->
-                    ( Game { model | phase = Confirming r, lastError = Nothing }, Command.none )
+                    ( Game { model | phase = Confirming r, lastError = Nothing }, Command.none, Just FinishedMarking )
 
                 _ ->
-                    ( Game model, Command.none )
+                    ( Game model, Command.none, Nothing )
 
         PressedAgree ->
             case model.phase of
@@ -1082,10 +1183,11 @@ updateGame msg model =
                             , lastError = Nothing
                         }
                     , Command.none
+                    , Just AcceptTerritory
                     )
 
                 _ ->
-                    ( Game model, Command.none )
+                    ( Game model, Command.none, Nothing )
 
         PressedDisagree ->
             case model.phase of
@@ -1098,13 +1200,14 @@ updateGame msg model =
                             , lastError = Just "Marking rejected. Resume play."
                         }
                     , Command.none
+                    , Just RejectTerritory
                     )
 
                 _ ->
-                    ( Game model, Command.none )
+                    ( Game model, Command.none, Nothing )
 
         PressedReset ->
-            ( init, Command.none )
+            ( init, Command.none, Nothing )
 
         ChangedViewingMove moveNumber ->
             let
@@ -1116,52 +1219,34 @@ updateGame msg model =
                 clamped =
                     clamp 0 total moveNumber
             in
-            ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none )
-
-        PressedArrowLeft ->
-            ( Game
-                { model
-                    | viewingMovesBack = min (List.length model.history) (model.viewingMovesBack + 1)
-                    , lastError = Nothing
-                }
-            , Command.none
-            )
-
-        PressedArrowRight ->
-            ( Game
-                { model
-                    | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
-                    , lastError = Nothing
-                }
-            , Command.none
-            )
+            ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none, Nothing )
 
         ChangedWidthInput _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         ChangedHeightInput _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         ChangedHandicapInput _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         ChangedKomiInput _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         ChangedMainTimeInput _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         ChangedIncrementInput _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         SelectedSize _ ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         PressedStartGame ->
-            ( Game model, Command.none )
+            ( Game model, Command.none, Nothing )
 
         Tick now ->
-            ( Game (tickClock now model), Command.none )
+            ( Game (tickClock now model), Command.none, Nothing )
 
 
 cellPx : Int
@@ -1386,7 +1471,7 @@ formatClock seconds =
 
 clockView : GameModel -> Element Msg
 clockView model =
-    case model.timeControl of
+    case model.setup.timeControl of
         Nothing ->
             Ui.none
 
@@ -1446,9 +1531,9 @@ gameView model =
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ]
             (Ui.text
                 ("Go ("
-                    ++ String.fromInt model.width
+                    ++ String.fromInt (boardSizeToInt model.setup.width)
                     ++ " x "
-                    ++ String.fromInt model.height
+                    ++ String.fromInt (boardSizeToInt model.setup.height)
                     ++ ")"
                 )
             )
@@ -1500,7 +1585,7 @@ statusView model =
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText)
         , Ui.text ("Black has captured: " ++ String.fromInt snapshot.blackCaptures)
         , Ui.text ("White has captured: " ++ String.fromInt snapshot.whiteCaptures)
-        , Ui.text ("Komi: " ++ formatScore model.komi)
+        , Ui.text ("Komi: " ++ komiHalfPointsToString model.setup.komiHalfPoints)
         ]
 
 
@@ -1600,13 +1685,19 @@ historyView model =
 boardView : GameModel -> Element Msg
 boardView model =
     let
+        width =
+            boardSizeToInt model.setup.width
+
+        height =
+            boardSizeToInt model.setup.height
+
         widthPx : Int
         widthPx =
-            model.width * cellPx
+            width * cellPx
 
         heightPx : Int
         heightPx =
-            model.height * cellPx
+            height * cellPx
 
         viewing : Bool
         viewing =
@@ -1654,13 +1745,13 @@ boardView model =
         , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt widthPx ++ " " ++ String.fromInt heightPx)
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
-        (gridLines model.width model.height
-            ++ starPointShapes model.width model.height
+        (gridLines width height
+            ++ starPointShapes width height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ lastMoveMarker viewing model
             ++ (if clickable then
-                    clickTargets model.width model.height
+                    clickTargets width height
 
                 else
                     []

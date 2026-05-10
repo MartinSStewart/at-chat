@@ -1184,10 +1184,10 @@ updateLoaded msg model =
 
                 _ ->
                     case ( model.route, Pages.Go.keyMsg key ) of
-                        ( GoRoute, Just goMsg ) ->
+                        ( DmRoute _, Just goMsg ) ->
                             let
-                                ( goModel2, goCmd ) =
-                                    Pages.Go.update goMsg model.goModel
+                                goModel2 =
+                                    Pages.Go.pressedKey key model.goModel
                             in
                             ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
 

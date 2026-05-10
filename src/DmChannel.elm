@@ -26,6 +26,7 @@ import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), 
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
+import Pages.Go
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ToBeFilledInByBackend(..))
@@ -36,6 +37,7 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
+    , goMatch : SeqDict (Id ChannelMessageId) Pages.Go.Model
     }
 
 
@@ -74,6 +76,7 @@ backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
+    , goMatch = SeqDict.empty
     }
 
 

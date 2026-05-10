@@ -153,7 +153,6 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , goModel : Pages.Go.Model
     , scrollbarWidth : Int
     , userAgent : UserAgent
     , pageHasFocus : Bool
