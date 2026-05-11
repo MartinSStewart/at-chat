@@ -53,6 +53,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
+import Pages.Go
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
@@ -1645,7 +1646,7 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
             ]
-            [ channelHeader isMobile False (Ui.text "Invite member to guild")
+            [ channelHeader isMobile False (Ui.text "Invite member to guild") Nothing
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
@@ -2911,38 +2912,47 @@ decodeMessageView value =
     }
 
 
-channelHeader : Bool -> Bool -> Element FrontendMsg -> Element FrontendMsg
-channelHeader isMobile2 includeShowMembers content =
-    Ui.row
-        [ Ui.contentCenterY
-        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+channelHeader : Bool -> Bool -> Element FrontendMsg -> Maybe (Element FrontendMsg) -> Element FrontendMsg
+channelHeader isMobile2 includeShowMembers content tabContent =
+    Ui.column
+        [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
-        , Ui.height (Ui.px MyUi.channelHeaderHeight)
-        , MyUi.noShrinking
         ]
-        (if isMobile2 then
-            [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
-            , Ui.el [ Ui.centerY ] content
-            , if includeShowMembers then
-                MyUi.elButton
-                    (Dom.id "guild_showMembers")
-                    PressedShowMembers
-                    [ Ui.alignRight
-                    , Ui.width (Ui.px (24 + 24))
-                    , Ui.height Ui.fill
-                    , Ui.paddingXY 12 0
-                    , Ui.contentCenterY
-                    ]
-                    (Ui.html Icons.users)
-
-              else
-                Ui.none
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.height (Ui.px MyUi.channelHeaderHeight)
+            , MyUi.noShrinking
             ]
+            (if isMobile2 then
+                [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
+                , Ui.el [ Ui.centerY ] content
+                , if includeShowMembers then
+                    MyUi.elButton
+                        (Dom.id "guild_showMembers")
+                        PressedShowMembers
+                        [ Ui.alignRight
+                        , Ui.width (Ui.px (24 + 24))
+                        , Ui.height Ui.fill
+                        , Ui.paddingXY 12 0
+                        , Ui.contentCenterY
+                        ]
+                        (Ui.html Icons.users)
 
-         else
-            [ Ui.el [ Ui.paddingXY 16 0 ] content ]
-        )
+                  else
+                    Ui.none
+                ]
+
+             else
+                [ Ui.el [ Ui.paddingXY 16 0 ] content ]
+            )
+        , case tabContent of
+            Just tabContent2 ->
+                tabContent2
+
+            Nothing ->
+                Ui.none
+        ]
 
 
 headerBackButton : HtmlId -> msg -> Element msg
@@ -3226,52 +3236,34 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 Nothing ->
                     Nothing
-
-        showVoiceChat : Maybe RoomId
-        showVoiceChat =
-            case guildOrDmIdNoThread of
-                GuildOrDmId_Dm otherUserIdB ->
-                    if SeqSet.member (DmRoomId otherUserIdB) loggedIn.voiceChat.expanded then
-                        Just (DmRoomId otherUserIdB)
-
-                    else
-                        Nothing
-
-                _ ->
-                    Nothing
     in
     Ui.column
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ case showVoiceChat of
-            Just roomId ->
-                VoiceChat.view model.windowSize roomId local.localUser local.calls loggedIn.voiceChat
-                    |> Ui.map VoiceChatMsg
+        [ channelHeader
+            isMobile
+            True
+            (case guildOrDmIdNoThread of
+                GuildOrDmId_Dm otherUserId ->
+                    Ui.row
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
+                        (if otherUserId == local.localUser.session.userId then
+                            privateChatWithYourself local
 
-            Nothing ->
-                channelHeader
-                    isMobile
-                    True
-                    (case guildOrDmIdNoThread of
-                        GuildOrDmId_Dm otherUserId ->
-                            Ui.row
-                                [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                                (if otherUserId == local.localUser.session.userId then
-                                    privateChatWithYourself local
+                         else
+                            privateChatWith otherUserId local name
+                        )
 
-                                 else
-                                    privateChatWith otherUserId local name
-                                )
-
-                        GuildOrDmId_Guild _ _ ->
-                            Ui.row
-                                [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                                [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
-                                , Ui.text name
-                                , showFilesButton
-                                ]
-                    )
+                GuildOrDmId_Guild _ _ ->
+                    Ui.row
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                        , Ui.text name
+                        , showFilesButton
+                        ]
+            )
+            (channelHeaderTabView guildOrDmIdNoThread local loggedIn model)
         , Ui.el
             [ emojiSelector
                 isMobile
@@ -3503,6 +3495,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                         , showFilesButton
                         ]
             )
+            Nothing
         , Ui.el
             [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
@@ -3727,6 +3720,35 @@ peopleAreTypingView allUsers channel currentUserId model =
             ]
 
 
+channelHeaderTabView : GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
+channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
+    let
+        showVoiceChat : Maybe RoomId
+        showVoiceChat =
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Dm otherUserIdB ->
+                    if SeqSet.member (DmRoomId otherUserIdB) loggedIn.voiceChat.expanded then
+                        Just (DmRoomId otherUserIdB)
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+    in
+    case ( showVoiceChat, loggedIn.currentDmGoMatch ) of
+        ( _, Just goMatch ) ->
+            Pages.Go.view goMatch.model |> Ui.map GoMsg |> Just
+
+        ( Just roomId, Nothing ) ->
+            VoiceChat.view model.windowSize roomId local.calls loggedIn.voiceChat
+                |> Ui.map VoiceChatMsg
+                |> Just
+
+        ( Nothing, Nothing ) ->
+            Nothing
+
+
 threadConversationView :
     Id ThreadMessageId
     -> GuildOrDmId
@@ -3800,6 +3822,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         , showFilesButton
                         ]
             )
+            (channelHeaderTabView guildOrDmIdNoThread local loggedIn model)
         , Ui.el
             [ emojiSelector
                 isMobile
@@ -4030,6 +4053,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                         , showFilesButton
                         ]
             )
+            Nothing
         , Ui.el
             [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
@@ -7234,7 +7258,7 @@ newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView isMobile2 guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.alignTop ]
-        [ channelHeader isMobile2 False (Ui.text "Create new channel")
+        [ channelHeader isMobile2 False (Ui.text "Create new channel") Nothing
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)

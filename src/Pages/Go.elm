@@ -157,10 +157,11 @@ komiHalfPointsFromString input =
         case String.toFloat trimmed of
             Just n ->
                 let
+                    halfStones : Int
                     halfStones =
                         round (n * 2)
                 in
-                if abs (toFloat halfStones - n) < 0.0001 then
+                if abs (toFloat halfStones - (n * 2)) < 0.0001 then
                     Ok (KomiHalfPoints halfStones)
 
                 else

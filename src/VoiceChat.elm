@@ -511,7 +511,7 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
         , Html.Attributes.style
             "opacity"
             (if isHidden then
-                "0.1"
+                "0"
 
              else
                 "1"
@@ -655,8 +655,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
-view windowSize roomId localUser calls model =
+view : Coord CssPixels -> RoomId -> Local -> Model -> Element Msg
+view windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
         ongoingCall =
@@ -675,7 +675,6 @@ view windowSize roomId localUser calls model =
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
         , MyUi.noShrinking
-        , Ui.inFront (Ui.el [ Ui.paddingXY 16 0 ] (voiceChatButton roomId localUser calls))
         , Ui.inFront
             (Ui.column
                 [ Ui.alignBottom ]
