@@ -31,6 +31,7 @@ import EmailAddress
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileData, FileId)
+import Go
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
@@ -1004,6 +1005,9 @@ update msg model =
 
                                                                 CallEnded _ _ ->
                                                                     members
+
+                                                                GoMatchStarted posix userId seqDict ->
+                                                                    members
                                                         )
                                                         channel.members
                                                         messages2
@@ -1928,6 +1932,9 @@ discordStartThread discordUser channel channelId threadId messageId model =
 
                         CallEnded _ _ ->
                             "Call ended"
+
+                        GoMatchStarted posix userId seqDict ->
+                            "Go match started"
 
                 Nothing ->
                     "Thread"
@@ -4539,7 +4546,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_VoiceChatChange voiceChatLocalChange ->
-                    handleVoiceChatToBackend time changeId clientId sessionId voiceChatLocalChange model
+                    handleVoiceChatChange time changeId clientId sessionId voiceChatLocalChange model
+
+                Local_Go otherUserId goChange ->
+                    asDmUser
+                        model
+                        sessionId
+                        otherUserId
+                        (\session user otherUser dmChannel dmChannelId ->
+                            case goChange of
+                                Go.StartMatch start ->
+                                    ( model, Command.none )
+
+                                Go.Action actionWithTime ->
+                                    ( model, Command.none )
+                        )
 
         TwoFactorToBackend toBackend2 ->
             asUser
@@ -4685,7 +4706,7 @@ emojiOrCustomEmojiToDiscord customEmojis emoji =
                     Err ()
 
 
-handleVoiceChatToBackend :
+handleVoiceChatChange :
     Time.Posix
     -> ChangeId
     -> ClientId
@@ -4693,7 +4714,7 @@ handleVoiceChatToBackend :
     -> VoiceChat.LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
+handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
         VoiceChat.Local_Join _ voiceChatId ->
             case voiceChatId of

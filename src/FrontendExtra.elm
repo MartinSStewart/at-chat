@@ -18,6 +18,7 @@ import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileData, FileId)
+import Go
 import Html exposing (Html)
 import Html.Events
 import Icons
@@ -2253,6 +2254,34 @@ changeUpdate localMsg local =
 
                         VoiceChat.Local_Signal _ _ ->
                             local
+
+                Local_Go { otherUserId } goChange ->
+                    { local
+                        | dmChannels =
+                            SeqDict.update
+                                otherUserId
+                                (\maybe ->
+                                    let
+                                        dmChannel : FrontendDmChannel
+                                        dmChannel =
+                                            Maybe.withDefault DmChannel.frontendInit maybe
+                                    in
+                                    case goChange of
+                                        Go.StartMatch setup ->
+                                            { dmChannel
+                                                | currentGoMatch =
+                                                    { matchId = Id ChannelMessageId
+                                                    , setup = setup
+                                                    , actions = Array.empty
+                                                    }
+                                            }
+                                                |> Just
+
+                                        Go.Action actionWithTime ->
+                                            0
+                                )
+                                local2.dmChannels
+                    }
 
         ServerChange serverChange ->
             case serverChange of

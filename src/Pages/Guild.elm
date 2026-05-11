@@ -2047,6 +2047,9 @@ maybeRepliedTo message channel =
         CallEnded _ _ ->
             Nothing
 
+        GoMatchStarted posix userId seqDict ->
+            Nothing
+
 
 discordConversationViewHelper :
     Id ChannelMessageId
@@ -3274,6 +3277,76 @@ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn mo
                 )
 
 
+replyToHeader :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> Maybe (Id messageId)
+    -> SeqDict userId { a | name : PersonName }
+    -> { b | messages : Array (MessageState messageId2 userId) }
+    -> Element FrontendMsg
+replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
+    case replyTo of
+        Just messageIndex ->
+            case DmChannel.getArray messageIndex channel.messages of
+                Just (MessageLoaded message) ->
+                    case message of
+                        UserTextMessage data ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just data.createdBy) allUsers
+
+                        UserJoinedMessage _ userId _ ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+
+                        DeletedMessage _ ->
+                            Ui.none
+
+                        CallStarted _ userId _ ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+
+                        CallEnded _ _ ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) Nothing allUsers
+
+                        GoMatchStarted posix userId seqDict ->
+                            replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
+
+                _ ->
+                    Ui.none
+
+        Nothing ->
+            Ui.none
+
+
+replyToHeaderHelper : msg -> Maybe userId -> SeqDict userId { a | name : PersonName } -> Element msg
+replyToHeaderHelper onPress userId allUsers =
+    Ui.Prose.paragraph
+        [ Ui.Font.color MyUi.font2
+        , Ui.background MyUi.background2
+        , Ui.paddingXY 32 10
+        , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+        , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
+        , Ui.borderColor MyUi.border1
+        , Ui.inFront
+            (MyUi.elButton
+                (Dom.id "guild_closeReplyToHeader")
+                onPress
+                [ Ui.width (Ui.px 32)
+                , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
+                , Ui.alignRight
+                ]
+                (Ui.html Icons.x)
+            )
+        , Ui.inFront
+            (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
+        ]
+        [ Ui.text "Reply to "
+        , case userId of
+            Just userId2 ->
+                Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId2 allUsers))
+
+            Nothing ->
+                Ui.text "message"
+        ]
+        |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmId
@@ -3426,31 +3499,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 Nothing ->
                     Ui.noAttr
             ]
-            [ case replyTo of
-                Just messageIndex ->
-                    case DmChannel.getArray messageIndex channel.messages of
-                        Just (MessageLoaded message) ->
-                            case message of
-                                UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just data.createdBy) allUsers
-
-                                UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just userId) allUsers
-
-                                DeletedMessage _ ->
-                                    Ui.none
-
-                                CallStarted _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) (Just userId) allUsers
-
-                                CallEnded _ _ ->
-                                    replyToHeader (PressedCloseReplyTo ( GuildOrDmId guildOrDmIdNoThread, NoThread )) Nothing allUsers
-
-                        _ ->
-                            Ui.none
-
-                Nothing ->
-                    Ui.none
+            [ replyToHeader ( GuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -3653,31 +3702,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 Nothing ->
                     Ui.noAttr
             ]
-            [ case replyTo of
-                Just messageIndex ->
-                    case DmChannel.getArray messageIndex channel.messages of
-                        Just (MessageLoaded message) ->
-                            case message of
-                                UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just data.createdBy) allUsers
-
-                                UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
-
-                                DeletedMessage _ ->
-                                    Ui.none
-
-                                CallStarted _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
-
-                                CallEnded _ _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
-
-                        _ ->
-                            Ui.none
-
-                Nothing ->
-                    Ui.none
+            [ replyToHeader ( DiscordGuildOrDmId guildOrDmIdNoThread, NoThread ) replyTo allUsers channel
             , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
                 Ok () ->
                     MessageInput.view
@@ -4021,31 +4046,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 Nothing ->
                     Ui.noAttr
             ]
-            [ case replyTo of
-                Just messageIndex ->
-                    case DmChannel.getArray (Id.changeType messageIndex) channel.messages of
-                        Just (MessageLoaded message) ->
-                            case message of
-                                UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just data.createdBy) allUsers
-
-                                UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
-
-                                DeletedMessage _ ->
-                                    Ui.none
-
-                                CallStarted _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
-
-                                CallEnded _ _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
-
-                        _ ->
-                            Ui.none
-
-                Nothing ->
-                    Ui.none
+            [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -4235,31 +4236,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 Nothing ->
                     Ui.noAttr
             ]
-            [ case replyTo of
-                Just messageIndex ->
-                    case DmChannel.getArray (Id.changeType messageIndex) channel.messages of
-                        Just (MessageLoaded message) ->
-                            case message of
-                                UserTextMessage data ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just data.createdBy) allUsers
-
-                                UserJoinedMessage _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
-
-                                DeletedMessage _ ->
-                                    Ui.none
-
-                                CallStarted _ userId _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) (Just userId) allUsers
-
-                                CallEnded _ _ ->
-                                    replyToHeader (PressedCloseReplyTo guildOrDmId) Nothing allUsers
-
-                        _ ->
-                            Ui.none
-
-                Nothing ->
-                    Ui.none
+            [ replyToHeader guildOrDmId replyTo allUsers channel
             , MessageInput.view
                 (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
@@ -4525,39 +4502,6 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
             Ui.none
 
 
-replyToHeader : msg -> Maybe userId -> SeqDict userId { a | name : PersonName } -> Element msg
-replyToHeader onPress userId allUsers =
-    Ui.Prose.paragraph
-        [ Ui.Font.color MyUi.font2
-        , Ui.background MyUi.background2
-        , Ui.paddingXY 32 10
-        , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-        , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
-        , Ui.borderColor MyUi.border1
-        , Ui.inFront
-            (MyUi.elButton
-                (Dom.id "guild_closeReplyToHeader")
-                onPress
-                [ Ui.width (Ui.px 32)
-                , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
-                , Ui.alignRight
-                ]
-                (Ui.html Icons.x)
-            )
-        , Ui.inFront
-            (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
-        ]
-        [ Ui.text "Reply to "
-        , case userId of
-            Just userId2 ->
-                Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId2 allUsers))
-
-            Nothing ->
-                Ui.text "message"
-        ]
-        |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
-
-
 dropdownButtonId : Int -> HtmlId
 dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
@@ -4778,6 +4722,9 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         CallEnded _ _ ->
             Ui.none
 
+        GoMatchStarted posix userId seqDict ->
+            Ui.none
+
 
 threadMessageEditingView :
     Bool
@@ -4901,6 +4848,9 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
             Ui.none
 
         CallEnded _ _ ->
+            Ui.none
+
+        GoMatchStarted posix userId seqDict ->
             Ui.none
 
 
@@ -5271,6 +5221,28 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     ]
                 )
 
+        GoMatchStarted time userId reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageIndex
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    []
+                    [ goMatchStarted userId allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    , messageIdView messageIndex
+                    ]
+                )
+
 
 threadMessageView :
     Bool
@@ -5374,6 +5346,18 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 localUser.customEmojis
                 isHovered
                 (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
+
+        GoMatchStarted time userId reactions ->
+            threadMessageContainer
+                highlight
+                messageIndex
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row [] [ goMatchStarted userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
 
 isHoveredToAnimationMode : IsHovered -> AnimationMode
@@ -5583,6 +5567,9 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis
         Just ( repliedToIndex, CallEnded _ _ ) ->
             replyToHeaderAboveMessageHelper isMobile repliedToIndex callEnded
 
+        Just ( repliedToIndex, GoMatchStarted _ userId _ ) ->
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
+
         Nothing ->
             Ui.none
 
@@ -5666,6 +5653,19 @@ callStarted userId allUsers =
         , Ui.el
             []
             (Ui.text " started a call")
+        ]
+
+
+goMatchStarted : userId -> SeqDict userId { a | name : PersonName } -> Element msg
+goMatchStarted userId allUsers =
+    Ui.Prose.paragraph
+        [ Ui.paddingXY 0 4 ]
+        [ User.toString userId allUsers
+            |> Ui.text
+            |> Ui.el [ Ui.Font.bold ]
+        , Ui.el
+            []
+            (Ui.text " started a Go match")
         ]
 
 
@@ -6000,6 +6000,14 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
 
                             CallEnded _ _ ->
                                 [ Html.text "Call ended" ]
+
+                            GoMatchStarted posix userId seqDict ->
+                                [ Html.span
+                                    []
+                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    , Html.text " started a call"
+                                    ]
+                                ]
 
                     _ ->
                         []
@@ -7087,6 +7095,9 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 CallEnded _ _ ->
                                     "Call ended"
 
+                                GoMatchStarted posix userId seqDict ->
+                                    "Go match started"
+
                         MessageUnloaded ->
                             ""
     in
@@ -7204,6 +7215,9 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
                                 CallEnded _ _ ->
                                     "Call ended"
+
+                                GoMatchStarted posix userId seqDict ->
+                                    "Go match started"
 
                         MessageUnloaded ->
                             ""

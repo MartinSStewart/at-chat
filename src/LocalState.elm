@@ -395,6 +395,9 @@ messageToString allUsers3 message =
         CallEnded _ _ ->
             "Call ended"
 
+        GoMatchStarted posix userId seqDict ->
+            "Go match started"
+
 
 messageDeleted : String
 messageDeleted =
@@ -806,6 +809,9 @@ createMessageBackend message channel =
 
                 CallEnded _ _ ->
                     channel.lastTypedAt
+
+                GoMatchStarted posix userId seqDict ->
+                    channel.lastTypedAt
       }
     )
 
@@ -876,6 +882,9 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 CallEnded _ _ ->
                     Ok ( messageId2, channel2 )
 
+                GoMatchStarted posix userId seqDict ->
+                    Ok ( messageId2, channel2 )
+
         Err error ->
             Err error
 
@@ -922,6 +931,9 @@ createDiscordMessageBackend messageId message channel =
                         channel.lastTypedAt
 
                     CallEnded _ _ ->
+                        channel.lastTypedAt
+
+                    GoMatchStarted posix userId seqDict ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1012,6 +1024,9 @@ createMessageFrontend message channel =
                     channel.lastTypedAt
 
                 CallEnded _ _ ->
+                    channel.lastTypedAt
+
+                GoMatchStarted posix userId seqDict ->
                     channel.lastTypedAt
     }
 
@@ -2172,6 +2187,9 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (CallEnded _ _) ->
                                     []
 
+                                Just (GoMatchStarted _ startedBy _) ->
+                                    [ startedBy ]
+
                                 Nothing ->
                                     []
                            )
@@ -2230,6 +2248,9 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 CallEnded _ _ ->
                                     []
 
+                                GoMatchStarted posix startedBy seqDict ->
+                                    [ startedBy ]
+
                         _ ->
                             []
                    )
@@ -2262,6 +2283,9 @@ repliedToUserId maybeRepliedTo channel =
                         CallEnded _ _ ->
                             Nothing
 
+                        GoMatchStarted posix startedBy seqDict ->
+                            Just startedBy
+
                 Nothing ->
                     Nothing
 
@@ -2290,6 +2314,9 @@ repliedToUserIdFrontend maybeRepliedTo channel =
 
                         CallEnded _ _ ->
                             Nothing
+
+                        GoMatchStarted posix startedBy seqDict ->
+                            Just startedBy
 
                 _ ->
                     Nothing
@@ -2597,6 +2624,9 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
                                             CallEnded time reactions ->
                                                 CallEnded_NoReply time reactions
+
+                                            GoMatchStarted time userId reactions ->
+                                                GoMatchStarted_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
 
@@ -2632,6 +2662,9 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
                                         CallEnded time reactions ->
                                             CallEnded_NoReply time reactions
+
+                                        GoMatchStarted time startedBy reactions ->
+                                            GoMatchStarted_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
 
@@ -2690,6 +2723,9 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
 
                                 CallEnded time reactions ->
                                     CallEnded_NoReply time reactions
+
+                                GoMatchStarted time startedBy reactions ->
+                                    GoMatchStarted_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply
 

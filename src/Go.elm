@@ -2,6 +2,7 @@ module Go exposing
     ( Action(..)
     , ActionWithTime
     , GameState
+    , LocalChange(..)
     , Model
     , Msg
     , ServerChange

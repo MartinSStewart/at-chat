@@ -829,3 +829,4 @@ type LocalChange
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange VoiceChat.LocalChange
+    | Local_Go { otherUserId : Id UserId } Go.LocalChange

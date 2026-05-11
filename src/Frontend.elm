@@ -1900,9 +1900,11 @@ updateLoaded msg model =
                                                 Go.init
                                         )
                             in
-                            ( { loggedIn | currentDmGoMatch = Just { otherUserId = dmRoute.otherUserId, model = goModel2 } }
-                            , Command.map never GoMsg goCmd
-                            )
+                            FrontendExtra.handleLocalChange
+                                model.time
+                                (Maybe.map Local_Go maybeChange)
+                                { loggedIn | currentDmGoMatch = Just { otherUserId = dmRoute.otherUserId, model = goModel2 } }
+                                (Command.map never GoMsg goCmd)
 
                         _ ->
                             ( loggedIn, Command.none )

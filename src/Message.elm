@@ -41,6 +41,7 @@ type Message messageId userId
     | DeletedMessage Time.Posix
     | CallStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | CallEnded Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | GoMatchStarted Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 maxEmbeds : number
@@ -231,6 +232,9 @@ addEmbed ( url, result ) message =
         CallEnded _ _ ->
             message
 
+        GoMatchStarted posix userId seqDict ->
+            message
+
 
 type MessageState messageId userId
     = MessageLoaded (Message messageId userId)
@@ -260,6 +264,7 @@ type MessageNoReply userId
     | DeletedMessage_NoReply Time.Posix
     | CallStarted_NoReply Time.Posix userId (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
     | CallEnded_NoReply Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
+    | GoMatchStarted_NoReply Time.Posix (SeqDict EmojiOrCustomEmoji (NonemptySet userId))
 
 
 type alias UserTextMessageDataNoReply userId =
@@ -290,6 +295,9 @@ createdAt message =
         CallEnded time _ ->
             time
 
+        GoMatchStarted time userId seqDict ->
+            time
+
 
 addReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId
 addReactionEmoji userId emoji message =
@@ -308,6 +316,9 @@ addReactionEmoji userId emoji message =
 
         CallEnded time reactions ->
             CallEnded time (addReactionEmojiHelper userId emoji reactions)
+
+        GoMatchStarted time startedBy reactions ->
+            GoMatchStarted time startedBy (addReactionEmojiHelper userId emoji reactions)
 
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
@@ -345,6 +356,9 @@ removeReactionEmoji userId emoji message =
         CallEnded time reactions ->
             CallEnded time (removeReactionEmojiHelper userId emoji reactions)
 
+        GoMatchStarted time startedBy reactions ->
+            GoMatchStarted time startedBy (removeReactionEmojiHelper userId emoji reactions)
+
 
 removeReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 removeReactionEmojiHelper userId emoji reactions =
@@ -379,4 +393,7 @@ reactionEmojis message =
             reactions
 
         CallEnded _ reactions ->
+            reactions
+
+        GoMatchStarted posix userId reactions ->
             reactions
