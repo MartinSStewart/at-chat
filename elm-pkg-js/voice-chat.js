@@ -341,14 +341,23 @@ exports.init = async function init(app) {
         let devices = await navigator.mediaDevices.enumerateDevices();
         let hasMic = devices.some(a => a.kind === "audioinput");
         let hasCamera = devices.some(a => a.kind === "videoinput");
+        if (!hasMic && !hasCamera) {
+            return new MediaStream();
+        }
         return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
     }
 
     async function getUserMedia(args) {
-        let devices2 = await navigator.mediaDevices.enumerateDevices();
+        let devices = await navigator.mediaDevices.enumerateDevices();
+
+        let hasMic = devices.some(a => a.kind === "audioinput");
+        let hasCamera = devices.some(a => a.kind === "videoinput");
+        if (!hasMic && !hasCamera) {
+            return new MediaStream();
+        }
         let config =
-            { audio: args.audioInput ? { deviceId: { exact: args.audioInput } } : devices2.some(a => a.kind === "audioinput")
-            , video: args.videoInput ? { deviceId: { exact: args.videoInput } } : devices2.some(a => a.kind === "videoinput")
+            { audio: args.audioInput ? { deviceId: { exact: args.audioInput } } : hasMic
+            , video: args.videoInput ? { deviceId: { exact: args.videoInput } } : hasCamera
             };
         return await navigator.mediaDevices.getUserMedia(config);
     }
