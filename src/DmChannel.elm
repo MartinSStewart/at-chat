@@ -22,7 +22,7 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord
-import Go exposing (CurrentGuildMatch)
+import Go exposing (CurrentGoMatch)
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
@@ -64,7 +64,7 @@ type alias FrontendDmChannel =
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     , pastGoMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
-    , currentGoMatch : Maybe CurrentGuildMatch
+    , currentGoMatch : Maybe CurrentGoMatch
     }
 
 

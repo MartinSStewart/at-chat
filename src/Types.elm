@@ -214,7 +214,7 @@ type alias LoggedIn2 =
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
     , dmChannelHeaderTabs : SeqDict (Id UserId) DmChannelHeaderTab
-    , currentDmGoMatch : Maybe { otherUserId : Id UserId, model : Go.Model }
+    , currentDmGoMatch : SeqDict (Id UserId) Go.Model
     }
 
 

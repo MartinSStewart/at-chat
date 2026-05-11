@@ -433,7 +433,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
-            , currentDmGoMatch = Nothing
+            , currentDmGoMatch = SeqDict.empty
             , dmChannelHeaderTabs = SeqDict.empty
             }
     in
@@ -1179,24 +1179,32 @@ updateLoaded msg model =
 
                 _ ->
                     case model.route of
-                        DmRoute dmData ->
+                        DmRoute dmRoute ->
                             FrontendExtra.updateLoggedIn
                                 (\loggedIn ->
-                                    ( loggedIn, Command.none )
-                                 --let
-                                 --    local : LocalState
-                                 --    local =
-                                 --        Local.model loggedIn.localState
-                                 --in
-                                 -- --SeqDict.updateIfExists dmData.otherUserId (\dmChannel ->
-                                 -- --                                        { dmChannel | goMatches = dmChannel.goMatches}
-                                 --local.dmChannels of
-                                 --    Just dmChannel ->
-                                 --        dmChannel
-                                 --            ( { model | goModel = Go.pressedKey key model.goModel }, Command.none )
-                                 --
-                                 --    Nothing ->
-                                 --        ( model, Command.none )
+                                    let
+                                        local =
+                                            Local.model loggedIn.localState
+
+                                        dmChannel : FrontendDmChannel
+                                        dmChannel =
+                                            SeqDict.get dmRoute.otherUserId local.dmChannels
+                                                |> Maybe.withDefault DmChannel.frontendInit
+                                    in
+                                    ( case ( SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch, dmChannel.currentGoMatch ) of
+                                        ( Just goMatch, Just state ) ->
+                                            { loggedIn
+                                                | currentDmGoMatch =
+                                                    SeqDict.insert
+                                                        dmRoute.otherUserId
+                                                        (Go.pressedKey key state goMatch)
+                                                        loggedIn.currentDmGoMatch
+                                            }
+
+                                        _ ->
+                                            loggedIn
+                                    , Command.none
+                                    )
                                 )
                                 model
 
@@ -1882,22 +1890,17 @@ updateLoaded msg model =
                                             |> Maybe.withDefault DmChannel.frontendInit
                                             |> .currentGoMatch
                                         )
-                                        (case loggedIn.currentDmGoMatch of
-                                            Just goMatch ->
-                                                if goMatch.otherUserId == dmRoute.otherUserId then
-                                                    goMatch.model
-
-                                                else
-                                                    Go.init
-
-                                            _ ->
-                                                Go.init
+                                        (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch
+                                            |> Maybe.withDefault Go.init
                                         )
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Maybe.map (Local_Go { otherUserId = dmRoute.otherUserId }) maybeChange)
-                                { loggedIn | currentDmGoMatch = Just { otherUserId = dmRoute.otherUserId, model = goModel2 } }
+                                { loggedIn
+                                    | currentDmGoMatch =
+                                        SeqDict.insert dmRoute.otherUserId goModel2 loggedIn.currentDmGoMatch
+                                }
                                 (Command.map never GoMsg goCmd)
 
                         _ ->

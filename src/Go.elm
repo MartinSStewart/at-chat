@@ -1,7 +1,7 @@
 module Go exposing
     ( Action(..)
     , ActionWithTime
-    , CurrentGuildMatch
+    , CurrentGoMatch
     , GameState
     , LocalChange(..)
     , Model
@@ -53,7 +53,7 @@ type Phase
     | Scored { markingPlayer : Stone, blackScore : Float, whiteScore : Float }
 
 
-type alias CurrentGuildMatch =
+type alias CurrentGoMatch =
     { matchId : Id ChannelMessageId, setup : ValidatedSetup, actions : Array ActionWithTime }
 
 
@@ -987,7 +987,7 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Time.Posix -> Msg -> Maybe CurrentGuildMatch -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+update : Time.Posix -> Msg -> Maybe CurrentGoMatch -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
 update time msg state model =
     case ( model, state ) of
         ( Game game, Just state2 ) ->
@@ -1011,11 +1011,11 @@ update time msg state model =
             ( model, Command.none, Nothing )
 
 
-pressedKey : String -> GameState -> Model -> Model
+pressedKey : String -> CurrentGoMatch -> Model -> Model
 pressedKey key state model =
     case key of
         "ArrowLeft" ->
-            stepBack state model
+            stepBack (foldActions state.actions state.setup) model
 
         "ArrowRight" ->
             stepForward model
@@ -1338,7 +1338,7 @@ cellPx =
     40
 
 
-view : Maybe CurrentGuildMatch -> Model -> Element Msg
+view : Maybe CurrentGoMatch -> Model -> Element Msg
 view state model =
     case ( model, state ) of
         ( Game game, Just state2 ) ->
@@ -1838,7 +1838,7 @@ boardView setup state model =
             ++ starPointShapes width height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
-            ++ lastMoveMarker viewing state model
+            ++ lastMoveMarker viewing state
             ++ (if clickable then
                     clickTargets width height
 
@@ -1935,8 +1935,8 @@ starPoints width height =
             []
 
 
-lastMoveMarker : Bool -> GameState -> GameModel -> List (Svg.Svg Msg)
-lastMoveMarker viewingPast state model =
+lastMoveMarker : Bool -> GameState -> List (Svg.Svg Msg)
+lastMoveMarker viewingPast state =
     case ( viewingPast, state.lastMove ) of
         ( False, Just ( x, y ) ) ->
             [ Svg.circle
