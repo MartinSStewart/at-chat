@@ -1876,6 +1876,7 @@ updateLoaded msg model =
 
                                 ( goModel2, goCmd, maybeChange ) =
                                     Go.update
+                                        model.time
                                         goMsg
                                         (case
                                             SeqDict.get dmRoute.otherUserId local.dmChannels
@@ -1902,7 +1903,7 @@ updateLoaded msg model =
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Maybe.map Local_Go maybeChange)
+                                (Maybe.map (Local_Go { otherUserId = dmRoute.otherUserId }) maybeChange)
                                 { loggedIn | currentDmGoMatch = Just { otherUserId = dmRoute.otherUserId, model = goModel2 } }
                                 (Command.map never GoMsg goCmd)
 
@@ -3331,6 +3332,9 @@ updateLoaded msg model =
                                                                             CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
+                                                                            GoMatchStarted_NoReply posix seqDict ->
+                                                                                Nothing
+
                                                                     MessageUnloaded_NoReply ->
                                                                         Nothing
                                                             )
@@ -3421,6 +3425,9 @@ updateLoaded msg model =
                                                                                 Nothing
 
                                                                             CallEnded_NoReply _ _ ->
+                                                                                Nothing
+
+                                                                            GoMatchStarted_NoReply posix seqDict ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->

@@ -423,7 +423,7 @@ type alias ActionWithTime =
 
 
 type LocalChange
-    = StartMatch ValidatedSetup
+    = StartMatch Time.Posix ValidatedSetup
     | Action ActionWithTime
 
 
@@ -984,11 +984,11 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Msg -> Maybe GameState -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
-update msg state model =
+update : Time.Posix -> Msg -> Maybe GameState -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+update time msg state model =
     case model of
         Setup setup ->
-            updateSetup msg setup
+            updateSetup time msg setup
 
         LoadingGame _ ->
             ( model, Command.none, Nothing )
@@ -1084,8 +1084,8 @@ validateSetup model =
             Err err
 
 
-updateSetup : Msg -> SetupModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
-updateSetup msg model =
+updateSetup : Time.Posix -> Msg -> SetupModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+updateSetup time msg model =
     case msg of
         ChangedWidthInput input ->
             ( Setup { model | widthInput = input, error = Nothing }, Command.none, Nothing )
@@ -1111,7 +1111,7 @@ updateSetup msg model =
         PressedStartGame ->
             case validateSetup model of
                 Ok setup ->
-                    ( LoadingGame setup, Command.none, Just (StartMatch setup) )
+                    ( LoadingGame setup, Command.none, Just (StartMatch time setup) )
 
                 Err error ->
                     ( Setup { model | error = Just error }, Command.none, Nothing )

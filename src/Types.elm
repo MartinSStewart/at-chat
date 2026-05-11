@@ -789,6 +789,7 @@ type ServerChange
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange VoiceChat.ServerChange
+    | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
 
 
 type LocalChange

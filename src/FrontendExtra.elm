@@ -200,6 +200,14 @@ pendingChangesText localChange =
                 VoiceChat.Local_Signal _ _ ->
                     "Voice chat state change"
 
+        Local_Go record change ->
+            case change of
+                Go.StartMatch posix validatedSetup ->
+                    "Started Go match"
+
+                Go.Action actionWithTime ->
+                    "Made a move in Go"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -2256,32 +2264,7 @@ changeUpdate localMsg local =
                             local
 
                 Local_Go { otherUserId } goChange ->
-                    { local
-                        | dmChannels =
-                            SeqDict.update
-                                otherUserId
-                                (\maybe ->
-                                    let
-                                        dmChannel : FrontendDmChannel
-                                        dmChannel =
-                                            Maybe.withDefault DmChannel.frontendInit maybe
-                                    in
-                                    case goChange of
-                                        Go.StartMatch setup ->
-                                            { dmChannel
-                                                | currentGoMatch =
-                                                    { matchId = Id ChannelMessageId
-                                                    , setup = setup
-                                                    , actions = Array.empty
-                                                    }
-                                            }
-                                                |> Just
-
-                                        Go.Action actionWithTime ->
-                                            0
-                                )
-                                local2.dmChannels
-                    }
+                    goChangeUpdate local.localUser.session.userId otherUserId goChange local
 
         ServerChange serverChange ->
             case serverChange of
@@ -3367,6 +3350,62 @@ changeUpdate localMsg local =
 
                         VoiceChat.Server_SignalReceived _ _ ->
                             local
+
+                Server_Go changeBy { otherUserId } goChange ->
+                    goChangeUpdate changeBy otherUserId goChange local
+
+
+goChangeUpdate :
+    Id UserId
+    -> Id UserId
+    -> Go.LocalChange
+    -> LocalState
+    -> LocalState
+goChangeUpdate changeBy otherUserId goChange local =
+    { local
+        | dmChannels =
+            SeqDict.update
+                otherUserId
+                (\maybe ->
+                    let
+                        dmChannel : FrontendDmChannel
+                        dmChannel =
+                            Maybe.withDefault DmChannel.frontendInit maybe
+                    in
+                    (case goChange of
+                        Go.StartMatch createdAt setup ->
+                            let
+                                dmChannel2 : FrontendDmChannel
+                                dmChannel2 =
+                                    LocalState.createChannelMessageFrontend
+                                        (GoMatchStarted createdAt changeBy SeqDict.empty)
+                                        dmChannel
+                            in
+                            { dmChannel2
+                                | currentGoMatch =
+                                    { matchId = DmChannel.latestMessageId dmChannel2
+                                    , setup = setup
+                                    , actions = Array.empty
+                                    }
+                                        |> Just
+                            }
+
+                        Go.Action actionWithTime ->
+                            case dmChannel.currentGoMatch of
+                                Just goMatch ->
+                                    { dmChannel
+                                        | currentGoMatch =
+                                            { goMatch | actions = Array.push actionWithTime goMatch.actions }
+                                                |> Just
+                                    }
+
+                                Nothing ->
+                                    dmChannel
+                    )
+                        |> Just
+                )
+                local.dmChannels
+    }
 
 
 otherUserLeaveCall : Time.Posix -> VoiceChat.ConnectionId -> LocalState -> LocalState
