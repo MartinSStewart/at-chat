@@ -1878,16 +1878,9 @@ updateLoaded msg model =
                                     Go.update
                                         model.time
                                         goMsg
-                                        (case
-                                            SeqDict.get dmRoute.otherUserId local.dmChannels
-                                                |> Maybe.withDefault DmChannel.frontendInit
-                                                |> .currentGoMatch
-                                         of
-                                            Just goMatch ->
-                                                Go.foldActions goMatch.actions goMatch.setup |> Just
-
-                                            Nothing ->
-                                                Nothing
+                                        (SeqDict.get dmRoute.otherUserId local.dmChannels
+                                            |> Maybe.withDefault DmChannel.frontendInit
+                                            |> .currentGoMatch
                                         )
                                         (case loggedIn.currentDmGoMatch of
                                             Just goMatch ->

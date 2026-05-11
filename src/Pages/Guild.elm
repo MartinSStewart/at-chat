@@ -3845,13 +3845,7 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
     case maybeTab of
         Just ( otherUserId, DmChannelHeaderTab_Go ) ->
             Go.view
-                (case SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch of
-                    Just goMatch ->
-                        Go.foldActions goMatch.actions goMatch.setup |> Just
-
-                    Nothing ->
-                        Nothing
-                )
+                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch)
                 (case loggedIn.currentDmGoMatch of
                     Just goMatch ->
                         if goMatch.otherUserId == otherUserId then

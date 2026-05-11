@@ -1,6 +1,7 @@
 module Go exposing
     ( Action(..)
     , ActionWithTime
+    , CurrentGuildMatch
     , GameState
     , LocalChange(..)
     , Model
@@ -52,6 +53,10 @@ type Phase
     | Scored { markingPlayer : Stone, blackScore : Float, whiteScore : Float }
 
 
+type alias CurrentGuildMatch =
+    { matchId : Id ChannelMessageId, setup : ValidatedSetup, actions : Array ActionWithTime }
+
+
 type alias Snapshot =
     { board : Dict ( Int, Int ) Stone
     , currentPlayer : Stone
@@ -82,8 +87,7 @@ type alias GameState =
 
 
 type alias GameModel =
-    { setup : ValidatedSetup
-    , viewingMovesBack : Int
+    { viewingMovesBack : Int
     , lastError : Maybe String
     , id : Id ChannelMessageId
     }
@@ -208,7 +212,6 @@ type SizeSelection
 
 type Model
     = Setup SetupModel
-    | LoadingGame ValidatedSetup
     | Game GameModel
 
 
@@ -322,10 +325,9 @@ handicapPositions setup =
         |> Set.toList
 
 
-startGame : Id ChannelMessageId -> ValidatedSetup -> GameModel
-startGame id setup =
-    { setup = setup
-    , viewingMovesBack = 0
+startGame : Id ChannelMessageId -> GameModel
+startGame id =
+    { viewingMovesBack = 0
     , lastError = Nothing
     , id = id
     }
@@ -599,6 +601,7 @@ performPass setup model =
                     { model
                         | currentPlayer = otherStone model.currentPlayer
                         , phase = Playing { previousPlayerPassed = True }
+                        , lastMove = Nothing
                     }
 
         _ ->
@@ -984,26 +987,28 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Time.Posix -> Msg -> Maybe GameState -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+update : Time.Posix -> Msg -> Maybe CurrentGuildMatch -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
 update time msg state model =
-    case model of
-        Setup setup ->
+    case ( model, state ) of
+        ( Game game, Just state2 ) ->
+            let
+                ( game2, cmd, maybeChange ) =
+                    updateGame msg state2.setup (foldActions state2.actions state2.setup) game
+            in
+            ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
+
+        ( Setup _, Just state2 ) ->
+            let
+                ( game2, cmd, maybeChange ) =
+                    updateGame msg state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
+            in
+            ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
+
+        ( Setup setup, Nothing ) ->
             updateSetup time msg setup
 
-        LoadingGame _ ->
+        ( Game _, Nothing ) ->
             ( model, Command.none, Nothing )
-
-        Game game ->
-            case state of
-                Just state2 ->
-                    let
-                        ( game2, cmd, maybeChange ) =
-                            updateGame msg state2 game
-                    in
-                    ( game2, cmd, Maybe.map (\change -> Action { time = Time.millisToPosix 0, change = change }) maybeChange )
-
-                Nothing ->
-                    ( model, Command.none, Nothing )
 
 
 pressedKey : String -> GameState -> Model -> Model
@@ -1032,9 +1037,6 @@ stepBack state model =
                     , lastError = Nothing
                 }
 
-        LoadingGame validatedSetup ->
-            model
-
 
 stepForward : Model -> Model
 stepForward model =
@@ -1048,9 +1050,6 @@ stepForward model =
                     | viewingMovesBack = max 0 (game.viewingMovesBack - 1)
                     , lastError = Nothing
                 }
-
-        LoadingGame validatedSetup ->
-            model
 
 
 validateSetup : SetupModel -> Result String ValidatedSetup
@@ -1111,7 +1110,7 @@ updateSetup time msg model =
         PressedStartGame ->
             case validateSetup model of
                 Ok setup ->
-                    ( LoadingGame setup, Command.none, Just (StartMatch time setup) )
+                    ( Setup model, Command.none, Just (StartMatch time setup) )
 
                 Err error ->
                     ( Setup { model | error = Just error }, Command.none, Nothing )
@@ -1201,8 +1200,8 @@ updateAction setup { change, time } model =
                     model
 
 
-updateGame : Msg -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
-updateGame msg state model =
+updateGame : Msg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+updateGame msg setup state model =
     case msg of
         PressedCell x y ->
             if isViewingPast model then
@@ -1211,7 +1210,7 @@ updateGame msg state model =
             else
                 case state.phase of
                     Playing _ ->
-                        case tryPlace model.setup x y state of
+                        case tryPlace setup x y state of
                             Ok updated ->
                                 let
                                     placed : Bool
@@ -1339,22 +1338,20 @@ cellPx =
     40
 
 
-view : Maybe GameState -> Model -> Element Msg
+view : Maybe CurrentGuildMatch -> Model -> Element Msg
 view state model =
-    case model of
-        Setup setup ->
+    case ( model, state ) of
+        ( Game game, Just state2 ) ->
+            gameView state2.setup (foldActions state2.actions state2.setup) game
+
+        ( Setup _, Just state2 ) ->
+            gameView state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
+
+        ( Setup setup, Nothing ) ->
             setupView setup
 
-        Game game ->
-            case state of
-                Just state2 ->
-                    gameView state2 game
-
-                Nothing ->
-                    Ui.text "Game error"
-
-        LoadingGame validatedSetup ->
-            Ui.text "Loading game..."
+        ( Game _, Nothing ) ->
+            Ui.text "Game error"
 
 
 setupView : SetupModel -> Element Msg
@@ -1562,9 +1559,9 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : GameState -> GameModel -> Element Msg
-clockView state model =
-    case model.setup.timeControl of
+clockView : GameState -> ValidatedSetup -> Element Msg
+clockView state setup =
+    case setup.timeControl of
         Nothing ->
             Ui.none
 
@@ -1612,8 +1609,8 @@ isPlayingPhase state =
             False
 
 
-gameView : GameState -> GameModel -> Element Msg
-gameView state model =
+gameView : ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView setup state model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
@@ -1624,15 +1621,15 @@ gameView state model =
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ]
             (Ui.text
                 ("Go ("
-                    ++ String.fromInt (boardSizeToInt model.setup.width)
+                    ++ String.fromInt (boardSizeToInt setup.width)
                     ++ " x "
-                    ++ String.fromInt (boardSizeToInt model.setup.height)
+                    ++ String.fromInt (boardSizeToInt setup.height)
                     ++ ")"
                 )
             )
-        , statusView state model
-        , clockView state model
-        , boardView state model
+        , statusView setup state model
+        , clockView state setup
+        , boardView setup state model
         , historyView state model
         , controlsView state
         , case model.lastError of
@@ -1641,12 +1638,11 @@ gameView state model =
 
             Nothing ->
                 Ui.none
-        , Ui.el [ Ui.Font.size 14 ] (Ui.text "One device, two players. Pass twice to score. Arrow keys or slider to review past moves.")
         ]
 
 
-statusView : GameState -> GameModel -> Element msg
-statusView state model =
+statusView : ValidatedSetup -> GameState -> GameModel -> Element msg
+statusView setup state model =
     let
         snapshot : Snapshot
         snapshot =
@@ -1678,7 +1674,7 @@ statusView state model =
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText)
         , Ui.text ("Black has captured: " ++ String.fromInt snapshot.blackCaptures)
         , Ui.text ("White has captured: " ++ String.fromInt snapshot.whiteCaptures)
-        , Ui.text ("Komi: " ++ komiHalfPointsToString model.setup.komiHalfPoints)
+        , Ui.text ("Komi: " ++ komiHalfPointsToString setup.komiHalfPoints)
         ]
 
 
@@ -1775,14 +1771,14 @@ historyView state model =
             ]
 
 
-boardView : GameState -> GameModel -> Element Msg
-boardView state model =
+boardView : ValidatedSetup -> GameState -> GameModel -> Element Msg
+boardView setup state model =
     let
         width =
-            boardSizeToInt model.setup.width
+            boardSizeToInt setup.width
 
         height =
-            boardSizeToInt model.setup.height
+            boardSizeToInt setup.height
 
         widthPx : Int
         widthPx =
@@ -1830,7 +1826,7 @@ boardView state model =
                 Set.empty
 
             else
-                deadStonePositions model.setup state
+                deadStonePositions setup state
     in
     Svg.svg
         [ Svg.Attributes.width (String.fromInt widthPx)
