@@ -2350,6 +2350,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     case OneToOne.first threadId channel.linkedMessageIds of
                                                         Just messageId ->
                                                             let
+                                                                threadExists : Bool
+                                                                threadExists =
+                                                                    SeqDict.member threadId channel.threads
+
                                                                 thread : DiscordBackendThread
                                                                 thread =
                                                                     SeqDict.get threadId channel.threads
@@ -2358,6 +2362,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 discordThreadId : Discord.Id Discord.ChannelId
                                                                 discordThreadId =
                                                                     Discord.idToUInt64 messageId |> Discord.idFromUInt64
+
+                                                                -- Optimistically reserve a thread entry so a rapid
+                                                                -- follow-up send doesn't trigger a second
+                                                                -- discordStartThread HTTP request. Otherwise the
+                                                                -- second request races the first and Discord can
+                                                                -- produce a duplicate first-message broadcast.
+                                                                channelWithReservedThread : DiscordBackendChannel
+                                                                channelWithReservedThread =
+                                                                    if threadExists then
+                                                                        channel
+
+                                                                    else
+                                                                        { channel
+                                                                            | threads =
+                                                                                SeqDict.insert
+                                                                                    threadId
+                                                                                    Thread.discordBackendInit
+                                                                                    channel.threads
+                                                                        }
                                                             in
                                                             ( { model
                                                                 | pendingDiscordCreateMessages =
@@ -2366,20 +2389,34 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                         ( clientId, changeId )
                                                                         model.pendingDiscordCreateMessages
                                                                 , sendMessageRateLimits = sendMessageRateLimits
-                                                              }
-                                                            , (case SeqDict.get threadId channel.threads of
-                                                                Just _ ->
-                                                                    Task.succeed ()
+                                                                , discordGuilds =
+                                                                    if threadExists then
+                                                                        model.discordGuilds
 
-                                                                Nothing ->
-                                                                    discordStartThread
-                                                                        discordUser
-                                                                        channel
-                                                                        channelId
-                                                                        threadId
-                                                                        messageId
-                                                                        model
-                                                                        |> Task.map (\_ -> ())
+                                                                    else
+                                                                        SeqDict.insert
+                                                                            guildId
+                                                                            { guild
+                                                                                | channels =
+                                                                                    SeqDict.insert
+                                                                                        channelId
+                                                                                        channelWithReservedThread
+                                                                                        guild.channels
+                                                                            }
+                                                                            model.discordGuilds
+                                                              }
+                                                            , (if threadExists then
+                                                                Task.succeed ()
+
+                                                               else
+                                                                discordStartThread
+                                                                    discordUser
+                                                                    channel
+                                                                    channelId
+                                                                    threadId
+                                                                    messageId
+                                                                    model
+                                                                    |> Task.map (\_ -> ())
                                                               )
                                                                 |> Task.andThen
                                                                     (\() ->

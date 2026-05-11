@@ -944,4 +944,332 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     --            ]
     --        )
     --    ]
+    , RecordedTestExtra.startTest
+        "Linked Discord user starts thread from message"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\user ->
+                [ user.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        [ T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":4,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-03-26T10:56:15.024000+00:00\",\"pinned\":false,\"nonce\":\"1486680174970798080\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"705745250815311942\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Thread start message\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_UPDATE\",\"s\":5,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-03-26T10:56:15.024000+00:00\",\"pinned\":false,\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"705745250815311942\",\"flags\":32,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"Thread start message\",\"components\":[],\"channel_type\":0,\"channel_id\":\"1072828564317159465\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"THREAD_CREATE\",\"s\":8,\"op\":0,\"d\":{\"type\":11,\"total_message_sent\":0,\"thread_metadata\":{\"locked\":false,\"create_timestamp\":\"2026-03-26T10:56:30.898915+00:00\",\"auto_archive_duration\":4320,\"archived\":false,\"archive_timestamp\":\"2026-03-26T10:56:30.898915+00:00\"},\"rate_limit_per_user\":0,\"parent_id\":\"1072828564317159465\",\"owner_id\":\"184437096813953035\",\"name\":\"Custom thread name\",\"message_count\":0,\"member_ids_preview\":[\"184437096813953035\"],\"member_count\":1,\"member\":{\"user_id\":\"184437096813953035\",\"muted\":false,\"mute_config\":null,\"join_timestamp\":\"2026-03-26T10:56:31.471913+00:00\",\"id\":\"705745250815311942\",\"flags\":1},\"last_message_id\":null,\"id\":\"705745250815311942\",\"guild_id\":\"705745250815311942\",\"flags\":0}}"
+                        , T.websocketSendString
+                            100
+                            connection
+                            "{\"t\":\"MESSAGE_CREATE\",\"s\":9,\"op\":0,\"d\":{\"type\":0,\"tts\":false,\"timestamp\":\"2026-03-26T10:56:31.678000+00:00\",\"position\":0,\"pinned\":false,\"nonce\":\"1486680244629798912\",\"mentions\":[],\"mention_roles\":[],\"mention_everyone\":false,\"member\":{\"roles\":[],\"premium_since\":null,\"pending\":false,\"nick\":null,\"mute\":false,\"joined_at\":\"2020-05-01T11:39:39.915000+00:00\",\"flags\":0,\"deaf\":false,\"communication_disabled_until\":null,\"banner\":null,\"avatar\":null},\"id\":\"1486680245363802275\",\"flags\":0,\"embeds\":[],\"edited_timestamp\":null,\"content\":\"First message inside thread\",\"components\":[],\"channel_type\":11,\"channel_id\":\"705745250815311942\",\"author\":{\"username\":\"at28727\",\"public_flags\":0,\"primary_guild\":null,\"id\":\"184437096813953035\",\"global_name\":\"AT2\",\"display_name_styles\":null,\"discriminator\":\"0\",\"collectibles\":null,\"clan\":null,\"avatar_decoration_data\":null,\"avatar\":\"7c40cb63ea11096169c5a4dcb5825a3d\"},\"attachments\":[],\"guild_id\":\"705745250815311942\"}}"
+                        , T.checkState
+                            200
+                            (\data ->
+                                case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                                    Just guild ->
+                                        case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                            Just channel ->
+                                                case Array.length channel.messages of
+                                                    1 ->
+                                                        case SeqDict.get (Id.fromInt 0) channel.threads of
+                                                            Just thread ->
+                                                                if Array.length thread.messages == 1 then
+                                                                    Ok ()
+
+                                                                else
+                                                                    Err ("Expected thread to contain exactly 1 message but got " ++ String.fromInt (Array.length thread.messages))
+
+                                                            Nothing ->
+                                                                Err "Thread not found on backend"
+
+                                                    count ->
+                                                        Err ("Expected channel to contain exactly 1 parent message but got " ++ String.fromInt count)
+
+                                            Nothing ->
+                                                Err "Channel not found in guild"
+
+                                    Nothing ->
+                                        Err "Discord guild not found"
+                            )
+                        , user.checkView
+                            100
+                            (\html ->
+                                Test.Html.Query.findAll [ Test.Html.Selector.exactText "First message inside thread" ] html
+                                    |> Test.Html.Query.count (Expect.equal 1)
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Linked Discord user starts thread via at-chat"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , T.collapsableGroup
+                    "Send parent message"
+                    [ RecordedTestExtra.writeMessage admin 100 "Parent message"
+                    , T.andThen
+                        200
+                        (\data ->
+                            case RecordedTestExtra.websocketByDiscordToken "legit-token" data of
+                                Just ( connection, _ ) ->
+                                    [ T.websocketSendString
+                                        100
+                                        connection
+                                        """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"Parent message","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                                    ]
+
+                                Nothing ->
+                                    [ T.checkState 0 (\_ -> Err "Couldn't find Discord websocket connection") ]
+                        )
+                    , T.checkState
+                        200
+                        (\data ->
+                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                                Just guild ->
+                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                        Just channel ->
+                                            if Array.length channel.messages == 1 then
+                                                Ok ()
+
+                                            else
+                                                Err ("Expected 1 parent message but got " ++ String.fromInt (Array.length channel.messages))
+
+                                        Nothing ->
+                                            Err "Channel not found"
+
+                                Nothing ->
+                                    Err "Discord guild not found"
+                        )
+                    ]
+                , T.collapsableGroup
+                    "Create thread and send first thread message"
+                    [ RecordedTestExtra.createThread admin (Id.fromInt 0)
+                    , RecordedTestExtra.writeMessage admin 100 "First thread message"
+                    , T.andThen
+                        200
+                        (\data ->
+                            case RecordedTestExtra.websocketByDiscordToken "legit-token" data of
+                                Just ( connection, _ ) ->
+                                    [ T.websocketSendString
+                                        100
+                                        connection
+                                        """{"t":"THREAD_CREATE","s":43,"op":0,"d":{"type":11,"total_message_sent":0,"thread_metadata":{"locked":false,"create_timestamp":"2026-04-29T00:00:00.000000+00:00","auto_archive_duration":4320,"archived":false,"archive_timestamp":"2026-04-29T00:00:00.000000+00:00"},"rate_limit_per_user":0,"parent_id":"1072828564317159465","owner_id":"184437096813953035","name":"Thread","member_ids_preview":["184437096813953035"],"member_count":1,"last_message_id":null,"id":"123456789012345678","guild_id":"705745250815311942","flags":0}}"""
+                                    , T.websocketSendString
+                                        100
+                                        connection
+                                        """{"t":"MESSAGE_CREATE","s":44,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:01.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"999999999999999999","flags":0,"embeds":[],"edited_timestamp":null,"content":"First thread message","components":[],"channel_type":11,"channel_id":"123456789012345678","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                                    ]
+
+                                Nothing ->
+                                    [ T.checkState 0 (\_ -> Err "Couldn't find Discord websocket connection") ]
+                        )
+                    , T.checkState
+                        200
+                        (\data ->
+                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                                Just guild ->
+                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                        Just channel ->
+                                            case SeqDict.get (Id.fromInt 0) channel.threads of
+                                                Just thread ->
+                                                    if Array.length thread.messages == 1 then
+                                                        Ok ()
+
+                                                    else
+                                                        Err ("Expected thread to contain exactly 1 message but got " ++ String.fromInt (Array.length thread.messages))
+
+                                                Nothing ->
+                                                    Err "Thread was not created on backend"
+
+                                        Nothing ->
+                                            Err "Channel not found"
+
+                                Nothing ->
+                                    Err "Discord guild not found"
+                        )
+                    , admin.checkView
+                        100
+                        (\html ->
+                            Test.Html.Query.findAll [ Test.Html.Selector.exactText "First thread message" ] html
+                                |> Test.Html.Query.count (Expect.equal 1)
+                        )
+                    ]
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Rapid thread message sends only call discordStartThread once"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , RecordedTestExtra.writeMessage admin 100 "Parent message"
+                , T.andThen
+                    200
+                    (\data ->
+                        case RecordedTestExtra.websocketByDiscordToken "legit-token" data of
+                            Just ( connection, _ ) ->
+                                [ T.websocketSendString
+                                    100
+                                    connection
+                                    """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"123456789012345678","flags":0,"embeds":[],"edited_timestamp":null,"content":"Parent message","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Couldn't find Discord websocket connection") ]
+                    )
+                , RecordedTestExtra.createThread admin (Id.fromInt 0)
+                , RecordedTestExtra.writeMessage admin 100 "First thread message"
+                , RecordedTestExtra.writeMessage admin 100 "Second thread message"
+                , T.checkState
+                    300
+                    (\data ->
+                        let
+                            startThreadCalls : Int
+                            startThreadCalls =
+                                List.length
+                                    (List.filter
+                                        (\request ->
+                                            case ( request.url, RecordedTestExtra.decodeCustomRequest request ) of
+                                                ( "http://localhost:3000/file/internal/custom-request", Just customRequest ) ->
+                                                    (customRequest.method == "POST")
+                                                        && String.endsWith "/threads" customRequest.url
+
+                                                _ ->
+                                                    False
+                                        )
+                                        data.httpRequests
+                                    )
+                        in
+                        if startThreadCalls == 1 then
+                            Ok ()
+
+                        else
+                            Err ("Expected exactly 1 discordStartThread HTTP call but got " ++ String.fromInt startThreadCalls)
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Two linked Discord accounts in same guild produce single thread message"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.linkSecondDiscordAccount
+                    RecordedTestExtra.sessionId0
+                    discordOp0Ready
+                    discordOp0ReadySupplemental
+                , admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                , T.collapsableGroup
+                    "Linked user starts thread on Discord"
+                    [ T.andThen
+                        200
+                        (\data ->
+                            let
+                                parentMessageEvent : String
+                                parentMessageEvent =
+                                    """{"t":"MESSAGE_CREATE","s":42,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"700000000000000000","flags":0,"embeds":[],"edited_timestamp":null,"content":"Parent message for thread","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+
+                                parentEdit : String
+                                parentEdit =
+                                    """{"t":"MESSAGE_UPDATE","s":43,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:00.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"700000000000000000","flags":32,"embeds":[],"edited_timestamp":null,"content":"Parent message for thread","components":[],"channel_type":0,"channel_id":"1072828564317159465","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+
+                                threadCreate : String
+                                threadCreate =
+                                    """{"t":"THREAD_CREATE","s":44,"op":0,"d":{"type":11,"total_message_sent":0,"thread_metadata":{"locked":false,"create_timestamp":"2026-04-29T00:00:00.000000+00:00","auto_archive_duration":4320,"archived":false,"archive_timestamp":"2026-04-29T00:00:00.000000+00:00"},"rate_limit_per_user":0,"parent_id":"1072828564317159465","owner_id":"184437096813953035","name":"Thread","member_ids_preview":["184437096813953035"],"member_count":1,"last_message_id":null,"id":"700000000000000000","guild_id":"705745250815311942","flags":0}}"""
+
+                                threadMessage : String
+                                threadMessage =
+                                    """{"t":"MESSAGE_CREATE","s":45,"op":0,"d":{"type":0,"tts":false,"timestamp":"2026-04-29T00:00:01.000000+00:00","pinned":false,"mentions":[],"mention_roles":[],"mention_everyone":false,"member":{"roles":[],"premium_since":null,"pending":false,"nick":null,"mute":false,"joined_at":"2025-10-11T19:44:51.312000+00:00","flags":0,"deaf":false,"communication_disabled_until":null,"banner":null,"avatar":null},"id":"711111111111111111","flags":0,"embeds":[],"edited_timestamp":null,"content":"Message in thread","components":[],"channel_type":11,"channel_id":"700000000000000000","author":{"username":"at28727","public_flags":0,"primary_guild":null,"id":"184437096813953035","global_name":"AT2","display_name_styles":null,"discriminator":"0","collectibles":null,"clan":null,"avatar_decoration_data":null,"avatar":"7c40cb63ea11096169c5a4dcb5825a3d"},"attachments":[],"guild_id":"705745250815311942"}}"""
+                            in
+                            case
+                                ( RecordedTestExtra.websocketByDiscordToken "legit-token" data
+                                , RecordedTestExtra.websocketByDiscordToken RecordedTestExtra.secondDiscordToken data
+                                )
+                            of
+                                ( Just ( firstConnection, _ ), Just ( secondConnection, _ ) ) ->
+                                    [ T.websocketSendString 100 firstConnection parentMessageEvent
+                                    , T.websocketSendString 100 secondConnection parentMessageEvent
+                                    , T.websocketSendString 100 firstConnection parentEdit
+                                    , T.websocketSendString 100 secondConnection parentEdit
+                                    , T.websocketSendString 100 firstConnection threadCreate
+                                    , T.websocketSendString 100 secondConnection threadCreate
+                                    , T.websocketSendString 100 firstConnection threadMessage
+                                    , T.websocketSendString 100 secondConnection threadMessage
+                                    ]
+
+                                _ ->
+                                    [ T.checkState 0 (\_ -> Err "Couldn't find both Discord websocket connections") ]
+                        )
+                    , T.checkState
+                        200
+                        (\data ->
+                            case SeqDict.get RecordedTestExtra.botTestGuild data.backend.discordGuilds of
+                                Just guild ->
+                                    case SeqDict.get RecordedTestExtra.botTestGuild_ChannelA guild.channels of
+                                        Just channel ->
+                                            case Array.length channel.messages of
+                                                1 ->
+                                                    case SeqDict.get (Id.fromInt 0) channel.threads of
+                                                        Just thread ->
+                                                            if Array.length thread.messages == 1 then
+                                                                Ok ()
+
+                                                            else
+                                                                Err ("Expected thread to contain exactly 1 message but got " ++ String.fromInt (Array.length thread.messages))
+
+                                                        Nothing ->
+                                                            Err "Thread was not created on backend"
+
+                                                count ->
+                                                    Err ("Expected channel to contain exactly 1 parent message but got " ++ String.fromInt count)
+
+                                        Nothing ->
+                                            Err "Channel not found in guild"
+
+                                Nothing ->
+                                    Err "Discord guild not found"
+                        )
+                    ]
+                ]
+            )
+        ]
     ]

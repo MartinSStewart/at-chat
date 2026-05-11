@@ -1073,6 +1073,18 @@ handleCustomRequest discordStickerPacks { method, url, headers, body } =
             ( "PUT", [ "discord.com", "api", "v9", "channels", _, "thread-members", "@me" ] ) ->
                 StringHttpResponse { url = url, statusCode = 204, statusText = "OK", headers = Dict.empty } ""
 
+            ( "POST", [ "discord.com", "api", "v9", "channels", channelId, "messages", messageId, "threads" ] ) ->
+                StringHttpResponse
+                    { url = url, statusCode = 200, statusText = "OK", headers = Dict.empty }
+                    ("""{"id":\""""
+                        ++ messageId
+                        ++ """","type":11,"guild_id":\""""
+                        ++ "705745250815311942"
+                        ++ """","parent_id":\""""
+                        ++ channelId
+                        ++ """","owner_id":"184437096813953035","name":"Thread","last_message_id":null,"message_count":0,"member_count":1,"rate_limit_per_user":0,"thread_metadata":{"archived":false,"auto_archive_duration":4320,"archive_timestamp":"2026-04-29T00:00:00.000000+00:00","locked":false,"create_timestamp":"2026-04-29T00:00:00.000000+00:00"},"total_message_sent":0,"flags":0,"member_ids_preview":["184437096813953035"]}"""
+                    )
+
             _ ->
                 let
                     _ =
@@ -1446,6 +1458,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AddCustomEmojisToUser _ ->
                     False
 
+                Local_Go _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -1622,6 +1637,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
+                            True
+
+                        Types.Server_Go _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
