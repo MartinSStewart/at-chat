@@ -434,6 +434,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
             , currentDmGoMatch = Nothing
+            , dmChannelHeaderTabs = SeqDict.empty
             }
     in
     ( loggedIn
@@ -3811,30 +3812,6 @@ updateLoaded msg model =
                         )
                         model
 
-                VoiceChat.PressedChannelHeaderVoiceChatButton roomId ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                voiceChat : VoiceChat.Model
-                                voiceChat =
-                                    loggedIn.voiceChat
-                            in
-                            ( { loggedIn
-                                | voiceChat =
-                                    { voiceChat
-                                        | expanded =
-                                            if SeqSet.member roomId voiceChat.expanded then
-                                                SeqSet.remove roomId voiceChat.expanded
-
-                                            else
-                                                SeqSet.insert roomId voiceChat.expanded
-                                    }
-                              }
-                            , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                            )
-                        )
-                        model
-
                 VoiceChat.PressedCopyError text ->
                     ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
                     , Ports.copyToClipboard text
@@ -3958,14 +3935,43 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedChannelHeaderTab otherUserId tab ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | dmChannelHeaderTabs =
+                            SeqDict.update
+                                otherUserId
+                                (\maybe ->
+                                    if maybe == Just tab then
+                                        Nothing
+
+                                    else
+                                        Just tab
+                                )
+                                loggedIn.dmChannelHeaderTabs
+                      }
+                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                    )
+                )
+                model
+
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
 checkCallDisplayModeChange modelOld modelNew =
     case ( modelOld.loginStatus, modelNew.loginStatus ) of
         ( LoggedIn loggedInOld, LoggedIn loggedInNew ) ->
             VoiceChat.displayModeChangeCmd
-                (VoiceChat.displayMode modelOld.route loggedInOld.voiceChat (Local.model loggedInOld.localState |> .calls))
-                (VoiceChat.displayMode modelNew.route loggedInNew.voiceChat (Local.model loggedInNew.localState |> .calls))
+                (VoiceChat.displayMode
+                    modelOld.route
+                    loggedInOld.dmChannelHeaderTabs
+                    (Local.model loggedInOld.localState |> .calls)
+                )
+                (VoiceChat.displayMode
+                    modelNew.route
+                    loggedInNew.dmChannelHeaderTabs
+                    (Local.model loggedInNew.localState |> .calls)
+                )
                 loggedInNew.voiceChat
 
         _ ->
@@ -6054,7 +6060,12 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.videoNodes loaded.route loaded.windowSize loggedIn.voiceChat local.calls
+                                    , VoiceChat.videoNodes
+                                        loaded.route
+                                        loggedIn.dmChannelHeaderTabs
+                                        loaded.windowSize
+                                        loggedIn.voiceChat
+                                        local.calls
                                         |> Html.map VoiceChatMsg
                                         |> Ui.html
                                         |> Ui.inFront

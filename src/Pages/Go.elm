@@ -10,7 +10,6 @@ module Pages.Go exposing
     , foldActions
     , init
     , pressedKey
-    , subscriptions
     , update
     , view
     )
@@ -82,7 +81,6 @@ type alias GameState =
 
 type alias GameModel =
     { setup : ValidatedSetup
-    , state : GameState
     , viewingMovesBack : Int
     , lastError : Maybe String
     , id : Id ChannelMessageId
@@ -325,7 +323,6 @@ handicapPositions setup =
 startGame : Id ChannelMessageId -> ValidatedSetup -> GameModel
 startGame id setup =
     { setup = setup
-    , state = initGameState setup
     , viewingMovesBack = 0
     , lastError = Nothing
     , id = id
@@ -430,28 +427,6 @@ type LocalChange
 
 type alias ServerChange =
     { userId : Id UserId, change : LocalChange }
-
-
-subscriptions : Model -> Subscription FrontendOnly Msg
-subscriptions model =
-    case model of
-        Game game ->
-            case ( game.setup.timeControl, game.state.phase ) of
-                ( Just _, Playing _ ) ->
-                    if isViewingPast game then
-                        Subscription.none
-
-                    else
-                        Time.every (Duration.milliseconds 250) Tick
-
-                _ ->
-                    Subscription.none
-
-        Setup _ ->
-            Subscription.none
-
-        LoadingGame validatedSetup ->
-            Subscription.none
 
 
 otherStone : Stone -> Stone

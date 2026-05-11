@@ -2,6 +2,7 @@ port module VoiceChat exposing
     ( AudioTrackData
     , ConnectionId
     , DeviceKind(..)
+    , DmChannelHeaderTab(..)
     , FromJs(..)
     , Ice
     , Local
@@ -28,6 +29,7 @@ port module VoiceChat exposing
     , fromJs
     , gotRecordedData
     , gotUserMediaDevices
+    , hasJoined
     , init
     , initModel
     , isPressMsg
@@ -38,7 +40,6 @@ port module VoiceChat exposing
     , toJs
     , videoNodes
     , view
-    , voiceChatButton
     )
 
 import Bytes exposing (Bytes)
@@ -94,7 +95,6 @@ type Msg
     | PressedJoinCall RoomId
     | PressedLeaveCall
     | PressedDownloadRecording RoomId
-    | PressedChannelHeaderVoiceChatButton RoomId
     | PressedCopyError String
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
@@ -115,7 +115,6 @@ type alias Model =
     , videoInputEnabled : Bool
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
-    , expanded : SeqSet RoomId
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
@@ -154,7 +153,6 @@ initModel =
     , videoInputEnabled = True
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
-    , expanded = SeqSet.empty
     , localIsSpeaking = False
     , startConnectionError = Nothing
     , volume = SeqDict.empty
@@ -295,8 +293,13 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Route -> Model -> Local -> DisplayMode
-displayMode route model local =
+type DmChannelHeaderTab
+    = DmChannelHeaderTab_VoiceChat
+    | DmChannelHeaderTab_Go
+
+
+displayMode : Route -> SeqDict (Id UserId) DmChannelHeaderTab -> Local -> DisplayMode
+displayMode route tabs local =
     let
         viewingRoomId : Maybe RoomId
         viewingRoomId =
@@ -308,16 +311,20 @@ displayMode route model local =
                     Nothing
     in
     case viewingRoomId of
-        Just viewingRoomId2 ->
-            if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
-                case SeqDict.get viewingRoomId2 local.voiceChats of
+        Just (DmRoomId viewingRoomId2) ->
+            let
+                isTabExpanded =
+                    SeqDict.get viewingRoomId2 tabs == Just DmChannelHeaderTab_VoiceChat
+            in
+            if Just (DmRoomId viewingRoomId2) == local.currentRoom && isTabExpanded then
+                case SeqDict.get (DmRoomId viewingRoomId2) local.voiceChats of
                     Just sessions ->
                         ShowLocalVideoAndCall
 
                     Nothing ->
                         ShowLocalVideo
 
-            else if SeqSet.member viewingRoomId2 model.expanded then
+            else if isTabExpanded then
                 ShowLocalVideo
 
             else
@@ -337,8 +344,8 @@ localVideoNodeId =
     "local-video"
 
 
-videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html Msg
-videoNodes route windowSize model local =
+videoNodes : Route -> SeqDict (Id UserId) DmChannelHeaderTab -> Coord CssPixels -> Model -> Local -> Html Msg
+videoNodes route tabs windowSize model local =
     let
         viewingRoomId : Maybe RoomId
         viewingRoomId =
@@ -422,8 +429,12 @@ videoNodes route windowSize model local =
             MyUi.isMobile { windowSize = windowSize }
     in
     (case viewingRoomId of
-        Just viewingRoomId2 ->
-            if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
+        Just ((DmRoomId otherUserId) as viewingRoomId2) ->
+            let
+                isTabExpanded =
+                    SeqDict.get otherUserId tabs == Just DmChannelHeaderTab_VoiceChat
+            in
+            if Just viewingRoomId2 == local.currentRoom && isTabExpanded then
                 case SeqDict.get viewingRoomId2 local.voiceChats of
                     Just sessions ->
                         let
@@ -452,7 +463,7 @@ videoNodes route windowSize model local =
                     Nothing ->
                         [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
-            else if SeqSet.member viewingRoomId2 model.expanded then
+            else if isTabExpanded then
                 [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else
@@ -759,72 +770,6 @@ view windowSize roomId calls model =
         Ui.none
 
 
-voiceChatButton : RoomId -> LocalUser -> Local -> Element Msg
-voiceChatButton voiceChatId localUser calls =
-    let
-        joined : Element msg
-        joined =
-            joinedUsers voiceChatId calls
-                |> SeqDict.toList
-                |> List.map
-                    (\( userId, clientIds ) ->
-                        let
-                            count =
-                                NonemptySet.size clientIds
-                        in
-                        Ui.el
-                            [ case ( count > 1, OneOrGreater.fromInt count ) of
-                                ( True, Just count2 ) ->
-                                    GuildIcon.notificationHelper
-                                        MyUi.background1
-                                        MyUi.white
-                                        MyUi.border1
-                                        2
-                                        -2
-                                        count2
-
-                                _ ->
-                                    Ui.noAttr
-                            ]
-                            (case User.getUser userId localUser of
-                                Just user ->
-                                    User.profileImage user.icon
-
-                                Nothing ->
-                                    User.profileImage Nothing
-                            )
-                    )
-                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
-    in
-    Ui.row
-        [ Ui.width Ui.shrink, Ui.spacing 8 ]
-        [ joined
-        , MyUi.elButton
-            (Dom.id "guild_voiceChat")
-            (PressedChannelHeaderVoiceChatButton voiceChatId)
-            [ Ui.width (Ui.px 44)
-            , Ui.paddingXY 4 0
-            , Ui.height Ui.fill
-            ]
-            (Ui.row
-                [ Ui.spacing 2, Ui.centerY ]
-                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-                , if hasJoined voiceChatId calls then
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 40 190 80)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                  else
-                    Ui.none
-                ]
-            )
-        ]
-
-
 voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
 voiceChatControlButton htmlId iconHtml isEnabled onPress =
     MyUi.elButton
@@ -955,31 +900,6 @@ leaveVoiceChatCmds model =
 
         Nothing ->
             Command.none
-
-
-joinedUsers : RoomId -> Local -> SeqDict (Id UserId) (NonemptySet ClientId)
-joinedUsers roomId model =
-    case SeqDict.get roomId model.voiceChats of
-        Just voiceChat ->
-            NonemptySet.foldl
-                (\( userId, clientId ) dict ->
-                    SeqDict.update
-                        userId
-                        (\maybe ->
-                            case maybe of
-                                Just nonempty ->
-                                    NonemptySet.insert clientId nonempty |> Just
-
-                                Nothing ->
-                                    NonemptySet.singleton clientId |> Just
-                        )
-                        dict
-                )
-                SeqDict.empty
-                voiceChat
-
-        Nothing ->
-            SeqDict.empty
 
 
 serverChangeCmd : ServerChange -> ClientId -> Local -> Model -> Command FrontendOnly toBackend msg
@@ -1422,7 +1342,7 @@ isPressMsg msg =
         PressedDownloadRecording _ ->
             True
 
-        PressedChannelHeaderVoiceChatButton _ ->
+        PressedChannelHeaderTab _ ->
             True
 
         PressedCopyError string ->

@@ -28,6 +28,7 @@ import Discord
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Lamdera exposing (ClientId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
@@ -65,20 +66,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types
-    exposing
-        ( Drag(..)
-        , EditMessage
-        , EmojiSelector(..)
-        , FrontendMsg(..)
-        , GuildChannelNameHover(..)
-        , LoadedFrontend
-        , LoggedIn2
-        , MessageHover(..)
-        , NewChannelForm
-        , NewGuildForm
-        , ScrollPosition(..)
-        )
+import Types exposing (DmChannelHeaderTab(..), Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -3039,8 +3027,7 @@ privateChatWithYourself local =
         (Ui.text "Private chat with yourself")
     , Ui.el
         [ Ui.width Ui.shrink, Ui.alignRight ]
-        (VoiceChat.voiceChatButton (DmRoomId local.localUser.session.userId) local.localUser local.calls)
-        |> Ui.map VoiceChatMsg
+        (voiceChatButton local.localUser.session.userId local.localUser local.calls)
     ]
 
 
@@ -3057,9 +3044,99 @@ privateChatWith otherUserId local name =
     , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight ]
         [ MyUi.elButton (Dom.id "guild_openGoMatch") (PressedToggleGoMatchTab otherUserId) [] (Ui.text "Go")
-        , VoiceChat.voiceChatButton (DmRoomId otherUserId) local.localUser local.calls |> Ui.map VoiceChatMsg
+        , voiceChatButton otherUserId local.localUser local.calls
         ]
     ]
+
+
+voiceChatButton : Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg
+voiceChatButton otherUserId localUser calls =
+    let
+        joinedUsers : SeqDict (Id UserId) (NonemptySet ClientId)
+        joinedUsers =
+            case SeqDict.get (DmRoomId otherUserId) calls.voiceChats of
+                Just voiceChat ->
+                    NonemptySet.foldl
+                        (\( userId, clientId ) dict ->
+                            SeqDict.update
+                                userId
+                                (\maybe ->
+                                    case maybe of
+                                        Just nonempty ->
+                                            NonemptySet.insert clientId nonempty |> Just
+
+                                        Nothing ->
+                                            NonemptySet.singleton clientId |> Just
+                                )
+                                dict
+                        )
+                        SeqDict.empty
+                        voiceChat
+
+                Nothing ->
+                    SeqDict.empty
+
+        joined : Element msg
+        joined =
+            joinedUsers
+                |> SeqDict.toList
+                |> List.map
+                    (\( userId, clientIds ) ->
+                        let
+                            count =
+                                NonemptySet.size clientIds
+                        in
+                        Ui.el
+                            [ case ( count > 1, OneOrGreater.fromInt count ) of
+                                ( True, Just count2 ) ->
+                                    GuildIcon.notificationHelper
+                                        MyUi.background1
+                                        MyUi.white
+                                        MyUi.border1
+                                        2
+                                        -2
+                                        count2
+
+                                _ ->
+                                    Ui.noAttr
+                            ]
+                            (case User.getUser userId localUser of
+                                Just user ->
+                                    User.profileImage user.icon
+
+                                Nothing ->
+                                    User.profileImage Nothing
+                            )
+                    )
+                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
+    in
+    Ui.row
+        [ Ui.width Ui.shrink, Ui.spacing 8 ]
+        [ joined
+        , MyUi.elButton
+            (Dom.id "guild_voiceChat")
+            (PressedChannelHeaderTab otherUserId DmChannelHeaderTab_VoiceChat)
+            [ Ui.width (Ui.px 44)
+            , Ui.paddingXY 4 0
+            , Ui.height Ui.fill
+            ]
+            (Ui.row
+                [ Ui.spacing 2, Ui.centerY ]
+                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+                , if VoiceChat.hasJoined (DmRoomId otherUserId) calls then
+                    Ui.el
+                        [ Ui.width (Ui.px 8)
+                        , Ui.height (Ui.px 8)
+                        , Ui.background (Ui.rgb 40 190 80)
+                        , Ui.rounded 4
+                        ]
+                        Ui.none
+
+                  else
+                    Ui.none
+                ]
+            )
+        ]
 
 
 discordPrivateChatWith : String -> List (Element FrontendMsg)
@@ -3723,29 +3800,34 @@ peopleAreTypingView allUsers channel currentUserId model =
 channelHeaderTabView : GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
 channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
     let
-        showVoiceChat : Maybe RoomId
-        showVoiceChat =
+        maybeTab : Maybe ( Id UserId, DmChannelHeaderTab )
+        maybeTab =
             case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserIdB ->
-                    if SeqSet.member (DmRoomId otherUserIdB) loggedIn.voiceChat.expanded then
-                        Just (DmRoomId otherUserIdB)
-
-                    else
-                        Nothing
+                    SeqDict.get otherUserIdB loggedIn.dmChannelHeaderTabs |> Maybe.map (Tuple.pair otherUserIdB)
 
                 _ ->
                     Nothing
     in
-    case ( showVoiceChat, loggedIn.currentDmGoMatch ) of
-        ( _, Just goMatch ) ->
+    case maybeTab of
+        Just ( otherUserId, DmChannelHeaderTab_Go ) ->
+            let
+                goMatch =
+                    case SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch of
+                        Just goMatch ->
+                            Pages.Go.foldActions goMatch.actions goMatch.setup
+
+                        Nothing ->
+                            Pages.Go.init
+            in
             Pages.Go.view goMatch.model |> Ui.map GoMsg |> Just
 
-        ( Just roomId, Nothing ) ->
-            VoiceChat.view model.windowSize roomId local.calls loggedIn.voiceChat
+        Just ( otherUserId, DmChannelHeaderTab_VoiceChat ) ->
+            VoiceChat.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
                 |> Ui.map VoiceChatMsg
                 |> Just
 
-        ( Nothing, Nothing ) ->
+        Nothing ->
             Nothing
 
 

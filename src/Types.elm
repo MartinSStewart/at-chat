@@ -108,7 +108,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (FromJs, RoomId)
+import VoiceChat exposing (DmChannelHeaderTab, FromJs, RoomId)
 
 
 type FrontendModel
@@ -213,6 +213,7 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
+    , dmChannelHeaderTabs : SeqDict (Id UserId) DmChannelHeaderTab
     , currentDmGoMatch : Maybe { otherUserId : Id UserId, model : Pages.Go.Model }
     }
 
@@ -496,6 +497,7 @@ type FrontendMsg
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
     | PressedToggleGoMatchTab (Id UserId)
+    | PressedChannelHeaderTab (Id UserId) DmChannelHeaderTab
 
 
 type ScrollPosition
