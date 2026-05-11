@@ -3935,7 +3935,7 @@ updateLoaded msg model =
         PressedToggleGoMatchTab otherUserId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    { loggedIn
+                    ( { loggedIn
                         | currentDmGoMatch =
                             case loggedIn.currentDmGoMatch of
                                 Just goMatch ->
@@ -3943,22 +3943,18 @@ updateLoaded msg model =
                                         Nothing
 
                                     else
-                                        let
-                                            local : LocalState
-                                            local =
-                                                Local.model loggedIn.localState
-                                        in
-                                        Just
-                                            { otherUserId = otherUserId
-                                            , model =
-                                                case SeqDict.get otherUserId local.dmChannels of
-                                                    Just dmChannel ->
-                                                        dmChannel.currentGoMatch
+                                        --let
+                                        --    local : LocalState
+                                        --    local =
+                                        --        Local.model loggedIn.localState
+                                        --in
+                                        Just { otherUserId = otherUserId, model = Pages.Go.init }
 
-                                                    Nothing ->
-                                                        Pages.Go.init
-                                            }
-                    }
+                                Nothing ->
+                                    Just { otherUserId = otherUserId, model = Pages.Go.init }
+                      }
+                    , Command.none
+                    )
                 )
                 model
 

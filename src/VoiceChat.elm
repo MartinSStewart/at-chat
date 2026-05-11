@@ -498,6 +498,14 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
         , Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt x ++ "px")
         , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Attributes.style
+            "pointer-events"
+            (if isHidden then
+                "none"
+
+             else
+                "auto"
+            )
         , Html.Events.onMouseEnter (MouseEnterVideoNode id)
         , Html.Events.onMouseLeave (MouseExitVideoNode id)
         , Html.Attributes.style
@@ -790,7 +798,7 @@ voiceChatButton voiceChatId localUser calls =
                 |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
     in
     Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
+        [ Ui.width Ui.shrink, Ui.spacing 8 ]
         [ joined
         , MyUi.elButton
             (Dom.id "guild_voiceChat")

@@ -7,6 +7,7 @@ module Pages.Go exposing
     , Stone(..)
     , ValidatedSetup
     , deadStones
+    , foldActions
     , init
     , pressedKey
     , subscriptions
@@ -14,6 +15,7 @@ module Pages.Go exposing
     , view
     )
 
+import Array exposing (Array)
 import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom
@@ -1157,6 +1159,11 @@ selectedDimensions model =
 
                 ( _, Err err ) ->
                     Err ("Height: " ++ err)
+
+
+foldActions : Array ActionWithTime -> ValidatedSetup -> GameState
+foldActions actions setup =
+    Array.foldl (updateAction setup) (initGameState setup) actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState

@@ -3027,7 +3027,9 @@ privateChatWithYourself local =
         , Ui.clipWithEllipsis
         ]
         (Ui.text "Private chat with yourself")
-    , VoiceChat.voiceChatButton (DmRoomId local.localUser.session.userId) local.localUser local.calls
+    , Ui.el
+        [ Ui.width Ui.shrink, Ui.alignRight ]
+        (VoiceChat.voiceChatButton (DmRoomId local.localUser.session.userId) local.localUser local.calls)
         |> Ui.map VoiceChatMsg
     ]
 
@@ -3042,8 +3044,11 @@ privateChatWith otherUserId local name =
         ]
         (Ui.text "Private chat with ")
     , Ui.text name
-    , MyUi.elButton (Dom.id "guild_openGoMatch") (PressedToggleGoMatchTab otherUserId) [] (Ui.text "Go")
-    , VoiceChat.voiceChatButton (DmRoomId otherUserId) local.localUser local.calls |> Ui.map VoiceChatMsg
+    , Ui.row
+        [ Ui.width Ui.shrink, Ui.alignRight ]
+        [ MyUi.elButton (Dom.id "guild_openGoMatch") (PressedToggleGoMatchTab otherUserId) [] (Ui.text "Go")
+        , VoiceChat.voiceChatButton (DmRoomId otherUserId) local.localUser local.calls |> Ui.map VoiceChatMsg
+        ]
     ]
 
 
