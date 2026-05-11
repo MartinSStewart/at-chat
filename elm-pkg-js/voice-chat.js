@@ -341,16 +341,27 @@ exports.init = async function init(app) {
         let devices = await navigator.mediaDevices.enumerateDevices();
         let hasMic = devices.some(a => a.kind === "audioinput");
         let hasCamera = devices.some(a => a.kind === "videoinput");
+        // Chrome may return an empty list from enumerateDevices() before media
+        // permission has been granted, so default to requesting audio so we
+        // don't end up calling getUserMedia({ audio: false, video: false }),
+        // which throws "At least one of audio and video must be requested".
+        if (!hasMic && !hasCamera) {
+            hasMic = true;
+        }
         return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
     }
 
     async function getUserMedia(args) {
         let devices2 = await navigator.mediaDevices.enumerateDevices();
-        let config =
-            { audio: args.audioInput ? { deviceId: { exact: args.audioInput } } : devices2.some(a => a.kind === "audioinput")
-            , video: args.videoInput ? { deviceId: { exact: args.videoInput } } : devices2.some(a => a.kind === "videoinput")
-            };
-        return await navigator.mediaDevices.getUserMedia(config);
+        let audio = args.audioInput ? { deviceId: { exact: args.audioInput } } : devices2.some(a => a.kind === "audioinput");
+        let video = args.videoInput ? { deviceId: { exact: args.videoInput } } : devices2.some(a => a.kind === "videoinput");
+        // See comment in getDevices(): on Chrome, enumerateDevices() may report
+        // no devices before permission is granted, which would otherwise result
+        // in { audio: false, video: false } and throw.
+        if (!audio && !video) {
+            audio = true;
+        }
+        return await navigator.mediaDevices.getUserMedia({ audio: audio, video: video });
     }
 
     async function stopLocalStream() {
