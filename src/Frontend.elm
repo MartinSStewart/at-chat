@@ -30,6 +30,7 @@ import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
+import Go
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -50,7 +51,6 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
-import Pages.Go
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -1193,7 +1193,7 @@ updateLoaded msg model =
                                  --local.dmChannels of
                                  --    Just dmChannel ->
                                  --        dmChannel
-                                 --            ( { model | goModel = Pages.Go.pressedKey key model.goModel }, Command.none )
+                                 --            ( { model | goModel = Go.pressedKey key model.goModel }, Command.none )
                                  --
                                  --    Nothing ->
                                  --        ( model, Command.none )
@@ -1868,17 +1868,43 @@ updateLoaded msg model =
         GoMsg goMsg ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case loggedIn.currentDmGoMatch of
-                        Just goMatch ->
+                    case model.route of
+                        DmRoute dmRoute ->
                             let
+                                local =
+                                    Local.model loggedIn.localState
+
                                 ( goModel2, goCmd, maybeChange ) =
-                                    Pages.Go.update goMsg goMatch.model
+                                    Go.update
+                                        goMsg
+                                        (case
+                                            SeqDict.get dmRoute.otherUserId local.dmChannels
+                                                |> Maybe.withDefault DmChannel.frontendInit
+                                                |> .currentGoMatch
+                                         of
+                                            Just goMatch ->
+                                                Go.foldActions goMatch.actions goMatch.setup |> Just
+
+                                            Nothing ->
+                                                Nothing
+                                        )
+                                        (case loggedIn.currentDmGoMatch of
+                                            Just goMatch ->
+                                                if goMatch.otherUserId == dmRoute.otherUserId then
+                                                    goMatch.model
+
+                                                else
+                                                    Go.init
+
+                                            _ ->
+                                                Go.init
+                                        )
                             in
-                            ( { loggedIn | currentDmGoMatch = Just { goMatch | model = goModel2 } }
+                            ( { loggedIn | currentDmGoMatch = Just { otherUserId = dmRoute.otherUserId, model = goModel2 } }
                             , Command.map never GoMsg goCmd
                             )
 
-                        Nothing ->
+                        _ ->
                             ( loggedIn, Command.none )
                 )
                 model
@@ -3906,32 +3932,6 @@ updateLoaded msg model =
 
                         Nothing ->
                             ( loggedIn, Command.none )
-                )
-                model
-
-        PressedToggleGoMatchTab otherUserId ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | currentDmGoMatch =
-                            case loggedIn.currentDmGoMatch of
-                                Just goMatch ->
-                                    if goMatch.otherUserId == otherUserId then
-                                        Nothing
-
-                                    else
-                                        --let
-                                        --    local : LocalState
-                                        --    local =
-                                        --        Local.model loggedIn.localState
-                                        --in
-                                        Just { otherUserId = otherUserId, model = Pages.Go.init }
-
-                                Nothing ->
-                                    Just { otherUserId = otherUserId, model = Pages.Go.init }
-                      }
-                    , Command.none
-                    )
                 )
                 model
 

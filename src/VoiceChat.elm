@@ -1342,9 +1342,6 @@ isPressMsg msg =
         PressedDownloadRecording _ ->
             True
 
-        PressedChannelHeaderTab _ ->
-            True
-
         PressedCopyError string ->
             True
 

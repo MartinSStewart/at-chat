@@ -66,6 +66,7 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
+import Go
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
@@ -83,7 +84,6 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
-import Pages.Go
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
@@ -214,7 +214,7 @@ type alias LoggedIn2 =
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
     , dmChannelHeaderTabs : SeqDict (Id UserId) DmChannelHeaderTab
-    , currentDmGoMatch : Maybe { otherUserId : Id UserId, model : Pages.Go.Model }
+    , currentDmGoMatch : Maybe { otherUserId : Id UserId, model : Go.Model }
     }
 
 
@@ -444,7 +444,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
-    | GoMsg Pages.Go.Msg
+    | GoMsg Go.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
@@ -496,7 +496,6 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
-    | PressedToggleGoMatchTab (Id UserId)
     | PressedChannelHeaderTab (Id UserId) DmChannelHeaderTab
 
 

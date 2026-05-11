@@ -1,6 +1,7 @@
-module Pages.Go exposing
+module Go exposing
     ( Action(..)
     , ActionWithTime
+    , GameState
     , Model
     , Msg
     , ServerChange
@@ -664,18 +665,18 @@ timeoutPass setup model =
 --                    { model | lastTick = Just now }
 
 
-viewingSnapshot : GameModel -> Snapshot
-viewingSnapshot model =
+viewingSnapshot : GameState -> GameModel -> Snapshot
+viewingSnapshot state model =
     if model.viewingMovesBack <= 0 then
-        currentSnapshot model.state
+        currentSnapshot state
 
     else
-        case List.drop (model.viewingMovesBack - 1) model.state.history |> List.head of
+        case List.drop (model.viewingMovesBack - 1) state.history |> List.head of
             Just snapshot ->
                 snapshot
 
             Nothing ->
-                currentSnapshot model.state
+                currentSnapshot state
 
 
 isViewingPast : GameModel -> Bool
@@ -982,8 +983,8 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Msg -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
-update msg model =
+update : Msg -> Maybe GameState -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+update msg state model =
     case model of
         Setup setup ->
             updateSetup msg setup
@@ -992,18 +993,23 @@ update msg model =
             ( model, Command.none, Nothing )
 
         Game game ->
-            let
-                ( game2, cmd, maybeChange ) =
-                    updateGame msg game
-            in
-            ( game2, cmd, Maybe.map (\change -> Action { time = Debug.todo "", change = change }) maybeChange )
+            case state of
+                Just state2 ->
+                    let
+                        ( game2, cmd, maybeChange ) =
+                            updateGame msg state2 game
+                    in
+                    ( game2, cmd, Maybe.map (\change -> Action { time = Time.millisToPosix 0, change = change }) maybeChange )
+
+                Nothing ->
+                    ( model, Command.none, Nothing )
 
 
-pressedKey : String -> Model -> Model
-pressedKey key model =
+pressedKey : String -> GameState -> Model -> Model
+pressedKey key state model =
     case key of
         "ArrowLeft" ->
-            stepBack model
+            stepBack state model
 
         "ArrowRight" ->
             stepForward model
@@ -1012,8 +1018,8 @@ pressedKey key model =
             model
 
 
-stepBack : Model -> Model
-stepBack model =
+stepBack : GameState -> Model -> Model
+stepBack state model =
     case model of
         Setup setupModel ->
             model
@@ -1021,7 +1027,7 @@ stepBack model =
         Game game ->
             Game
                 { game
-                    | viewingMovesBack = min (List.length game.state.history) (game.viewingMovesBack + 1)
+                    | viewingMovesBack = min (List.length state.history) (game.viewingMovesBack + 1)
                     , lastError = Nothing
                 }
 
@@ -1194,22 +1200,22 @@ updateAction setup { change, time } model =
                     model
 
 
-updateGame : Msg -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
-updateGame msg model =
+updateGame : Msg -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+updateGame msg state model =
     case msg of
         PressedCell x y ->
             if isViewingPast model then
                 ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
-                case model.state.phase of
+                case state.phase of
                     Playing _ ->
-                        case tryPlace model.setup x y model.state of
+                        case tryPlace model.setup x y state of
                             Ok updated ->
                                 let
                                     placed : Bool
                                     placed =
-                                        updated.lastMove /= model.state.lastMove
+                                        updated.lastMove /= state.lastMove
                                 in
                                 ( Game model
                                 , if placed then
@@ -1237,7 +1243,7 @@ updateGame msg model =
                 ( Game (jumpToLatest model), Command.none, Nothing )
 
             else
-                case model.state.phase of
+                case state.phase of
                     Playing _ ->
                         ( Game model
                         , Command.none
@@ -1248,7 +1254,7 @@ updateGame msg model =
                         ( Game model, Command.none, Nothing )
 
         PressedDoneMarking ->
-            case model.state.phase of
+            case state.phase of
                 Marking r ->
                     ( Game model, Command.none, Just FinishedMarking )
 
@@ -1256,7 +1262,7 @@ updateGame msg model =
                     ( Game model, Command.none, Nothing )
 
         PressedAgree ->
-            case model.state.phase of
+            case state.phase of
                 Confirming r ->
                     ( Game model
                     , Command.none
@@ -1267,7 +1273,7 @@ updateGame msg model =
                     ( Game model, Command.none, Nothing )
 
         PressedDisagree ->
-            case model.state.phase of
+            case state.phase of
                 Confirming r ->
                     ( Game model
                     , Command.none
@@ -1284,7 +1290,7 @@ updateGame msg model =
             let
                 total : Int
                 total =
-                    List.length model.state.history
+                    List.length state.history
 
                 clamped : Int
                 clamped =
@@ -1321,7 +1327,7 @@ updateGame msg model =
 
         --( Game (tickClock now model), Command.none, Nothing )
         PressedArrowLeft ->
-            ( stepBack (Game model), Command.none, Nothing )
+            ( stepBack state (Game model), Command.none, Nothing )
 
         PressedArrowRight ->
             ( stepForward (Game model), Command.none, Nothing )
@@ -1332,14 +1338,19 @@ cellPx =
     40
 
 
-view : Model -> Element Msg
-view model =
+view : Maybe GameState -> Model -> Element Msg
+view state model =
     case model of
         Setup setup ->
             setupView setup
 
         Game game ->
-            gameView game
+            case state of
+                Just state2 ->
+                    gameView state2 game
+
+                Nothing ->
+                    Ui.text "Game error"
 
         LoadingGame validatedSetup ->
             Ui.text "Loading game..."
@@ -1550,8 +1561,8 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : GameModel -> Element Msg
-clockView model =
+clockView : GameState -> GameModel -> Element Msg
+clockView state model =
     case model.setup.timeControl of
         Nothing ->
             Ui.none
@@ -1559,8 +1570,8 @@ clockView model =
         Just _ ->
             Ui.row
                 [ Ui.spacing 16, Ui.width Ui.shrink ]
-                [ clockChip "Black" model.state.blackTime (model.state.currentPlayer == Black && isPlayingPhase model)
-                , clockChip "White" model.state.whiteTime (model.state.currentPlayer == White && isPlayingPhase model)
+                [ clockChip "Black" state.blackTime (state.currentPlayer == Black && isPlayingPhase state)
+                , clockChip "White" state.whiteTime (state.currentPlayer == White && isPlayingPhase state)
                 ]
 
 
@@ -1590,9 +1601,9 @@ clockChip label seconds isActive =
         ]
 
 
-isPlayingPhase : GameModel -> Bool
-isPlayingPhase model =
-    case model.state.phase of
+isPlayingPhase : GameState -> Bool
+isPlayingPhase state =
+    case state.phase of
         Playing _ ->
             True
 
@@ -1600,8 +1611,8 @@ isPlayingPhase model =
             False
 
 
-gameView : GameModel -> Element Msg
-gameView model =
+gameView : GameState -> GameModel -> Element Msg
+gameView state model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
@@ -1618,11 +1629,11 @@ gameView model =
                     ++ ")"
                 )
             )
-        , statusView model
-        , clockView model
-        , boardView model
-        , historyView model
-        , controlsView model
+        , statusView state model
+        , clockView state model
+        , boardView state model
+        , historyView state model
+        , controlsView state
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -1633,18 +1644,18 @@ gameView model =
         ]
 
 
-statusView : GameModel -> Element msg
-statusView model =
+statusView : GameState -> GameModel -> Element msg
+statusView state model =
     let
         snapshot : Snapshot
         snapshot =
-            viewingSnapshot model
+            viewingSnapshot state model
 
         turnText : String
         turnText =
-            case model.state.phase of
+            case state.phase of
                 Playing _ ->
-                    stoneName model.state.currentPlayer ++ " to move"
+                    stoneName state.currentPlayer ++ " to move"
 
                 Marking r ->
                     stoneName r.markingPlayer
@@ -1691,12 +1702,12 @@ winnerSuffix b w =
         " (tie)"
 
 
-controlsView : GameModel -> Element Msg
-controlsView model =
+controlsView : GameState -> Element Msg
+controlsView state =
     let
         phaseButtons : List (Element Msg)
         phaseButtons =
-            case model.state.phase of
+            case state.phase of
                 Playing { previousPlayerPassed } ->
                     [ MyUi.simpleButton (Dom.id "go_pass")
                         PressedPass
@@ -1728,12 +1739,12 @@ controlsView model =
         )
 
 
-historyView : GameModel -> Element Msg
-historyView model =
+historyView : GameState -> GameModel -> Element Msg
+historyView state model =
     let
         total : Int
         total =
-            List.length model.state.history
+            List.length state.history
 
         currentMove : Int
         currentMove =
@@ -1763,8 +1774,8 @@ historyView model =
             ]
 
 
-boardView : GameModel -> Element Msg
-boardView model =
+boardView : GameState -> GameModel -> Element Msg
+boardView state model =
     let
         width =
             boardSizeToInt model.setup.width
@@ -1786,7 +1797,7 @@ boardView model =
 
         snapshot : Snapshot
         snapshot =
-            viewingSnapshot model
+            viewingSnapshot state model
 
         clickable : Bool
         clickable =
@@ -1794,7 +1805,7 @@ boardView model =
                 True
 
             else
-                case model.state.phase of
+                case state.phase of
                     Playing _ ->
                         True
 
@@ -1810,7 +1821,7 @@ boardView model =
                 Dict.empty
 
             else
-                model.state.territoryMarks
+                state.territoryMarks
 
         deadSet : Set ( Int, Int )
         deadSet =
@@ -1818,7 +1829,7 @@ boardView model =
                 Set.empty
 
             else
-                deadStonePositions model.setup model.state
+                deadStonePositions model.setup state
     in
     Svg.svg
         [ Svg.Attributes.width (String.fromInt widthPx)
@@ -1830,7 +1841,7 @@ boardView model =
             ++ starPointShapes width height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
-            ++ lastMoveMarker viewing model
+            ++ lastMoveMarker viewing state model
             ++ (if clickable then
                     clickTargets width height
 
@@ -1927,9 +1938,9 @@ starPoints width height =
             []
 
 
-lastMoveMarker : Bool -> GameModel -> List (Svg.Svg Msg)
-lastMoveMarker viewingPast model =
-    case ( viewingPast, model.state.lastMove ) of
+lastMoveMarker : Bool -> GameState -> GameModel -> List (Svg.Svg Msg)
+lastMoveMarker viewingPast state model =
+    case ( viewingPast, state.lastMove ) of
         ( False, Just ( x, y ) ) ->
             [ Svg.circle
                 [ Svg.Attributes.cx (String.fromInt (x * cellPx + cellPx // 2))

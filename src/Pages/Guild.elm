@@ -32,6 +32,7 @@ import Effect.Lamdera exposing (ClientId)
 import Emoji exposing (EmojiConfig, EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileHash, FileId, FileStatus)
+import Go
 import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName
 import Html exposing (Html)
@@ -54,7 +55,6 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import OneToOne
-import Pages.Go
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
@@ -66,7 +66,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (DmChannelHeaderTab(..), Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -79,7 +79,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (RoomId(..))
+import VoiceChat exposing (DmChannelHeaderTab(..), RoomId(..))
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -2914,7 +2914,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
             ]
             (if isMobile2 then
                 [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
-                , Ui.el [ Ui.centerY ] content
+                , content
                 , if includeShowMembers then
                     MyUi.elButton
                         (Dom.id "guild_showMembers")
@@ -2932,7 +2932,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                 ]
 
              else
-                [ Ui.el [ Ui.paddingXY 16 0 ] content ]
+                [ Ui.el [ Ui.paddingLeft 16, Ui.height Ui.fill ] content ]
             )
         , case tabContent of
             Just tabContent2 ->
@@ -3042,8 +3042,16 @@ privateChatWith otherUserId local name =
         (Ui.text "Private chat with ")
     , Ui.text name
     , Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight ]
-        [ MyUi.elButton (Dom.id "guild_openGoMatch") (PressedToggleGoMatchTab otherUserId) [] (Ui.text "Go")
+        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+        [ MyUi.elButton
+            (Dom.id "guild_openGoMatch")
+            (PressedChannelHeaderTab otherUserId DmChannelHeaderTab_Go)
+            [ MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.paddingXY 8 0
+            ]
+            (Ui.text "Go")
         , voiceChatButton otherUserId local.localUser local.calls
         ]
     ]
@@ -3324,7 +3332,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
-                        [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
                         (if otherUserId == local.localUser.session.userId then
                             privateChatWithYourself local
 
@@ -3334,7 +3342,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
-                        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
                         [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                         , Ui.text name
                         , showFilesButton
@@ -3811,16 +3819,27 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
     in
     case maybeTab of
         Just ( otherUserId, DmChannelHeaderTab_Go ) ->
-            let
-                goMatch =
-                    case SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch of
-                        Just goMatch ->
-                            Pages.Go.foldActions goMatch.actions goMatch.setup
+            Go.view
+                (case SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch of
+                    Just goMatch ->
+                        Go.foldActions goMatch.actions goMatch.setup |> Just
 
-                        Nothing ->
-                            Pages.Go.init
-            in
-            Pages.Go.view goMatch.model |> Ui.map GoMsg |> Just
+                    Nothing ->
+                        Nothing
+                )
+                (case loggedIn.currentDmGoMatch of
+                    Just goMatch ->
+                        if goMatch.otherUserId == otherUserId then
+                            goMatch.model
+
+                        else
+                            Go.init
+
+                    Nothing ->
+                        Go.init
+                )
+                |> Ui.map GoMsg
+                |> Just
 
         Just ( otherUserId, DmChannelHeaderTab_VoiceChat ) ->
             VoiceChat.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat

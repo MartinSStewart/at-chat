@@ -2,7 +2,7 @@ module GoTests exposing (tests)
 
 import Dict
 import Expect
-import Pages.Go exposing (Stone(..))
+import Go exposing (Stone(..))
 import Set
 import Test exposing (Test)
 
@@ -49,7 +49,7 @@ tests =
                             |> List.map (\p -> ( p, White ))
                             |> Dict.fromList
                 in
-                Pages.Go.deadStones
+                Go.deadStones
                     { width = width
                     , height = height
                     , board = board

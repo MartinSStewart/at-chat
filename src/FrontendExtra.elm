@@ -1340,7 +1340,7 @@ isPressMsg msg =
         GotVoiceChatRecording _ ->
             False
 
-        PressedToggleGoMatchTab id ->
+        PressedChannelHeaderTab id dmChannelHeaderTab ->
             True
 
 

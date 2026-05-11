@@ -22,11 +22,11 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord
+import Go
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
-import Pages.Go
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ToBeFilledInByBackend(..))
@@ -37,8 +37,8 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
-    , pastGoMatches : SeqDict (Id ChannelMessageId) ( Pages.Go.ValidatedSetup, Array Pages.Go.ActionWithTime )
-    , currentGoMatch : Maybe { matchId : Id ChannelMessageId, setup : Pages.Go.ValidatedSetup, actions : Array Pages.Go.ActionWithTime }
+    , pastGoMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , currentGoMatch : Maybe { matchId : Id ChannelMessageId, setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime }
     }
 
 
@@ -63,8 +63,8 @@ type alias FrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
-    , pastGoMatches : SeqDict (Id ChannelMessageId) ( Pages.Go.ValidatedSetup, Array Pages.Go.ActionWithTime )
-    , currentGoMatch : Maybe { matchId : Id ChannelMessageId, setup : Pages.Go.ValidatedSetup, actions : Array Pages.Go.ActionWithTime }
+    , pastGoMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , currentGoMatch : Maybe { matchId : Id ChannelMessageId, setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime }
     }
 
 
