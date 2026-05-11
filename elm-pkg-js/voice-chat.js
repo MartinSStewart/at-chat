@@ -146,7 +146,7 @@ exports.init = async function init(app) {
         if (!conn) return;
 
         if (conn.pc) {
-            conn.pc.getSenders().forEach((s) => s.track.stop());
+            conn.pc.getSenders().forEach((s) => { if (s.track) s.track.stop(); });
             conn.pc.ontrack = null;
             conn.pc.onnicecandidate = null;
             conn.pc.oniceconnectionstatechange = null;
@@ -223,8 +223,8 @@ exports.init = async function init(app) {
     function setAudioInputEnabled(enabled) {
         connections.forEach(function (conn) {
             if (conn.pc) {
-                const sender = conn.pc.getSenders().forEach((s) => {
-                    if (s.track.kind === "audio") {
+                conn.pc.getSenders().forEach((s) => {
+                    if (s.track && s.track.kind === "audio") {
                         s.track.enabled = enabled;
                     }
                 });
@@ -232,7 +232,7 @@ exports.init = async function init(app) {
         });
 
         const videoNode = document.getElementById("local-video");
-        if (videoNode.srcObject) {
+        if (videoNode && videoNode.srcObject) {
             let tracks = videoNode.srcObject.getTracks();
             tracks.forEach((track) => {
                 if (track.kind === "audio") {
@@ -245,8 +245,8 @@ exports.init = async function init(app) {
     function setVideoInputEnabled(enabled) {
         connections.forEach(function (conn) {
             if (conn.pc) {
-                const sender = conn.pc.getSenders().forEach((s) => {
-                    if (s.track.kind === "video") {
+                conn.pc.getSenders().forEach((s) => {
+                    if (s.track && s.track.kind === "video") {
                         s.track.enabled = enabled;
                     }
                 });
@@ -254,7 +254,7 @@ exports.init = async function init(app) {
         });
 
         const videoNode = document.getElementById("local-video");
-        if (videoNode.srcObject) {
+        if (videoNode && videoNode.srcObject) {
             let tracks = videoNode.srcObject.getTracks();
             tracks.forEach((track) => {
                 if (track.kind === "video") {
@@ -272,7 +272,13 @@ exports.init = async function init(app) {
             config = { video: { deviceId: { exact: deviceId } } };
         }
 
-        let stream = await navigator.mediaDevices.getUserMedia(config);
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(config);
+        } catch (e) {
+            console.error("Voice chat: setInput getUserMedia failed", e);
+            return;
+        }
         let tracks;
         if (isAudioInput) {
             tracks = stream.getAudioTracks();
@@ -280,13 +286,20 @@ exports.init = async function init(app) {
             tracks = stream.getVideoTracks();
         }
         let track = tracks[0];
+        if (!track) {
+            return;
+        }
         connections.forEach(function (conn) {
             if (conn.pc) {
-                const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
-                let oldTrack = sender.track;
-                track.enabled = oldTrack.enabled;
-                sender.replaceTrack(track);
-                oldTrack.stop();
+                const sender = conn.pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
+                if (sender) {
+                    let oldTrack = sender.track;
+                    track.enabled = oldTrack.enabled;
+                    sender.replaceTrack(track);
+                    oldTrack.stop();
+                } else {
+                    conn.pc.addTrack(track);
+                }
             }
         });
     }
@@ -341,16 +354,47 @@ exports.init = async function init(app) {
         let devices = await navigator.mediaDevices.enumerateDevices();
         let hasMic = devices.some(a => a.kind === "audioinput");
         let hasCamera = devices.some(a => a.kind === "videoinput");
-        return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
+        if (!hasMic && !hasCamera) {
+            return new MediaStream();
+        }
+        try {
+            return await navigator.mediaDevices.getUserMedia({ audio: hasMic, video: hasCamera });
+        } catch (e) {
+            console.error("Voice chat: getUserMedia failed in getDevices", e);
+            return new MediaStream();
+        }
     }
 
     async function getUserMedia(args) {
         let devices2 = await navigator.mediaDevices.enumerateDevices();
-        let config =
-            { audio: args.audioInput ? { deviceId: { exact: args.audioInput } } : devices2.some(a => a.kind === "audioinput")
-            , video: args.videoInput ? { deviceId: { exact: args.videoInput } } : devices2.some(a => a.kind === "videoinput")
-            };
-        return await navigator.mediaDevices.getUserMedia(config);
+        let audioConfig = args.audioInput
+            ? { deviceId: { exact: args.audioInput } }
+            : devices2.some(a => a.kind === "audioinput");
+        let videoConfig = args.videoInput
+            ? { deviceId: { exact: args.videoInput } }
+            : devices2.some(a => a.kind === "videoinput");
+
+        if (!audioConfig && !videoConfig) {
+            return new MediaStream();
+        }
+
+        try {
+            return await navigator.mediaDevices.getUserMedia({ audio: audioConfig, video: videoConfig });
+        } catch (e) {
+            console.error("Voice chat: getUserMedia failed, trying fallbacks", e);
+            if (audioConfig && videoConfig) {
+                try {
+                    return await navigator.mediaDevices.getUserMedia({ audio: audioConfig, video: false });
+                } catch (e2) {
+                    try {
+                        return await navigator.mediaDevices.getUserMedia({ audio: false, video: videoConfig });
+                    } catch (e3) {
+                        return new MediaStream();
+                    }
+                }
+            }
+            return new MediaStream();
+        }
     }
 
     async function stopLocalStream() {
@@ -392,7 +436,9 @@ exports.init = async function init(app) {
         setVideoInputEnabled(args.videoInputEnabled);
 
         videoNode.play();
-        handleAudioStream(localStreamPreview, "local-video");
+        if (localStreamPreview.getAudioTracks().length > 0) {
+            handleAudioStream(localStreamPreview, "local-video");
+        }
     }
 
     // Original code found here: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
