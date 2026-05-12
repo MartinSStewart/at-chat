@@ -1370,8 +1370,8 @@ setupView model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
-        , Ui.width Ui.shrink
         , MyUi.montserrat
+        , Ui.background MyUi.background1
         ]
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go - new game")
         , setupSection
@@ -1638,8 +1638,8 @@ gameView setup state model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
-        , Ui.width Ui.shrink
         , MyUi.montserrat
+        , Ui.background MyUi.background1
         ]
         [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ]
             (Ui.text

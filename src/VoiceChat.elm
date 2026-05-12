@@ -684,7 +684,7 @@ view windowSize roomId calls model =
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
-        , Ui.background MyUi.background3
+        , Ui.background MyUi.background1
         , MyUi.noShrinking
         , Ui.inFront
             (Ui.column
