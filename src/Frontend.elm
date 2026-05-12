@@ -3037,6 +3037,9 @@ updateLoaded msg model =
                 MessageInput.OnPasteFiles files ->
                     editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
 
+                MessageInput.OnDragOver ->
+                    ( model, Command.none )
+
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
                     , Dom.getElement MessageMenu.editMessageTextInputId
@@ -3510,6 +3513,9 @@ updateLoaded msg model =
 
                 MessageInput.OnPasteFiles files ->
                     gotFiles guildOrDmId threadRoute files model
+
+                MessageInput.OnDragOver ->
+                    ( model, Command.none )
 
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
