@@ -12,7 +12,8 @@ module Go exposing
     , currentPlayersTurn
     , deadStones
     , foldActions
-    , init
+    , initGame
+    , initSetup
     , pressedKey
     , update
     , view
@@ -94,7 +95,6 @@ type alias GameState =
 type alias GameModel =
     { viewingMovesBack : Int
     , lastError : Maybe String
-    , id : Id ChannelMessageId
     }
 
 
@@ -223,8 +223,8 @@ type Model
     | Game GameModel
 
 
-init : Model
-init =
+initSetup : Model
+initSetup =
     Setup
         { widthInput = "9"
         , heightInput = "9"
@@ -334,12 +334,9 @@ handicapPositions setup =
         |> Set.toList
 
 
-startGame : Id ChannelMessageId -> GameModel
-startGame id =
-    { viewingMovesBack = 0
-    , lastError = Nothing
-    , id = id
-    }
+initGame : Model
+initGame =
+    { viewingMovesBack = 0, lastError = Nothing } |> Game
 
 
 initGameState : ValidatedSetup -> GameState
@@ -997,9 +994,29 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Time.Posix -> Id UserId -> Id UserId -> Msg -> Maybe CurrentGoMatch -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+update :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> Msg
+    -> Maybe CurrentGoMatch
+    -> Maybe Model
+    -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
 update time creatorId otherPlayerId msg state model =
-    case ( model, state ) of
+    let
+        model2 : Model
+        model2 =
+            Maybe.withDefault
+                (case state of
+                    Just _ ->
+                        initGame
+
+                    Nothing ->
+                        initSetup
+                )
+                model
+    in
+    case ( model2, state ) of
         ( Game game, Just state2 ) ->
             let
                 ( game2, cmd, maybeChange ) =
@@ -1007,31 +1024,42 @@ update time creatorId otherPlayerId msg state model =
             in
             ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
 
-        ( Setup _, Just state2 ) ->
-            let
-                ( game2, cmd, maybeChange ) =
-                    updateGame creatorId msg state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
-            in
-            ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
-
-        ( Setup setup, Nothing ) ->
+        ( Setup setup, _ ) ->
             updateSetup time creatorId otherPlayerId msg setup
 
         ( Game _, Nothing ) ->
-            ( model, Command.none, Nothing )
+            ( model2, Command.none, Nothing )
 
 
-pressedKey : String -> CurrentGoMatch -> Model -> Model
+pressedKey : String -> Maybe CurrentGoMatch -> Maybe Model -> Model
 pressedKey key state model =
-    case key of
-        "ArrowLeft" ->
-            stepBack (foldActions state.actions state.setup) model
+    let
+        model2 : Model
+        model2 =
+            Maybe.withDefault
+                (case state of
+                    Just _ ->
+                        initGame
 
-        "ArrowRight" ->
-            stepForward model
+                    Nothing ->
+                        initSetup
+                )
+                model
+    in
+    case state of
+        Just state2 ->
+            case key of
+                "ArrowLeft" ->
+                    stepBack (foldActions state2.actions state2.setup) model2
 
-        _ ->
-            model
+                "ArrowRight" ->
+                    stepForward model2
+
+                _ ->
+                    model2
+
+        Nothing ->
+            model2
 
 
 stepBack : GameState -> Model -> Model
@@ -1140,7 +1168,7 @@ updateSetup time creatorId otherPlayerId msg model =
         PressedStartGame ->
             case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
-                    ( Setup model, Command.none, Just (StartMatch time setup) )
+                    ( initGame, Command.none, Just (StartMatch time setup) )
 
                 Err error ->
                     ( Setup { model | error = Just error }, Command.none, Nothing )
@@ -1322,7 +1350,7 @@ updateGame currentUserId msg setup state model =
                     ( Game model, Command.none, Nothing )
 
         PressedReset ->
-            ( init, Command.none, Nothing )
+            ( initSetup, Command.none, Nothing )
 
         ChangedViewingMove moveNumber ->
             let
@@ -1389,8 +1417,21 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> Id UserId -> Id UserId -> Maybe CurrentGoMatch -> Model -> Element Msg
+view : Coord CssPixels -> Id UserId -> Id UserId -> Maybe CurrentGoMatch -> Maybe Model -> Element Msg
 view windowSize currentUserId otherUserId state model =
+    let
+        model2 : Model
+        model2 =
+            Maybe.withDefault
+                (case state of
+                    Just _ ->
+                        initGame
+
+                    Nothing ->
+                        initSetup
+                )
+                model
+    in
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.scrollable
@@ -1399,19 +1440,11 @@ view windowSize currentUserId otherUserId state model =
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
         ]
-        (case ( model, state ) of
+        (case ( model2, state ) of
             ( Game game, Just state2 ) ->
                 gameView windowSize currentUserId state2.setup (foldActions state2.actions state2.setup) game
 
-            ( Setup _, Just state2 ) ->
-                gameView
-                    windowSize
-                    currentUserId
-                    state2.setup
-                    (foldActions state2.actions state2.setup)
-                    (startGame state2.matchId)
-
-            ( Setup setup, Nothing ) ->
+            ( Setup setup, _ ) ->
                 setupView (currentUserId == otherUserId) windowSize setup
 
             ( Game _, Nothing ) ->

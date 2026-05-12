@@ -3756,6 +3756,16 @@ goChangeUpdate changeBy otherUserId goChange local =
                                     , actions = Array.empty
                                     }
                                         |> Just
+                                , pastGoMatches =
+                                    case dmChannel2.currentGoMatch of
+                                        Just goMatch ->
+                                            SeqDict.insert
+                                                goMatch.matchId
+                                                ( goMatch.setup, goMatch.actions )
+                                                dmChannel2.pastGoMatches
+
+                                        Nothing ->
+                                            dmChannel2.pastGoMatches
                             }
 
                         Go.Action actionWithTime ->

@@ -1192,18 +1192,17 @@ updateLoaded msg model =
                                             SeqDict.get dmRoute.otherUserId local.dmChannels
                                                 |> Maybe.withDefault DmChannel.frontendInit
                                     in
-                                    ( case ( SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch, dmChannel.currentGoMatch ) of
-                                        ( Just goMatch, Just state ) ->
-                                            { loggedIn
-                                                | currentDmGoMatch =
-                                                    SeqDict.insert
-                                                        dmRoute.otherUserId
-                                                        (Go.pressedKey key state goMatch)
-                                                        loggedIn.currentDmGoMatch
-                                            }
-
-                                        _ ->
-                                            loggedIn
+                                    ( { loggedIn
+                                        | currentDmGoMatch =
+                                            SeqDict.insert
+                                                dmRoute.otherUserId
+                                                (Go.pressedKey
+                                                    key
+                                                    dmChannel.currentGoMatch
+                                                    (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch)
+                                                )
+                                                loggedIn.currentDmGoMatch
+                                      }
                                     , Command.none
                                     )
                                 )
@@ -1893,9 +1892,7 @@ updateLoaded msg model =
                                             |> Maybe.withDefault DmChannel.frontendInit
                                             |> .currentGoMatch
                                         )
-                                        (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch
-                                            |> Maybe.withDefault Go.init
-                                        )
+                                        (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch)
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
