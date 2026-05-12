@@ -541,19 +541,11 @@ fileDragOverlay isVisible model =
                 "0"
             )
         ]
-        (Ui.el
-            [ Ui.width Ui.shrink
-            , Ui.centerX
-            , Ui.centerY
-            ]
-            (Ui.text
-                (if canDrop then
-                    "Drop files anywhere to upload"
+        (if canDrop then
+            Ui.text "Drop files anywhere to upload"
 
-                 else
-                    "Nowhere to put this file here"
-                )
-            )
+         else
+            Ui.text "Nowhere to put this file here"
         )
 
 
