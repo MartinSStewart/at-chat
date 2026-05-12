@@ -435,6 +435,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , voiceChat = VoiceChat.initModel
             , currentDmGoMatch = SeqDict.empty
             , dmChannelHeaderTabs = SeqDict.empty
+            , fileDragOverCount = 0
             }
     in
     ( loggedIn
@@ -3037,9 +3038,6 @@ updateLoaded msg model =
                 MessageInput.OnPasteFiles files ->
                     editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
 
-                MessageInput.OnDragOver ->
-                    ( model, Command.none )
-
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
                     , Dom.getElement MessageMenu.editMessageTextInputId
@@ -3514,9 +3512,6 @@ updateLoaded msg model =
                 MessageInput.OnPasteFiles files ->
                     gotFiles guildOrDmId threadRoute files model
 
-                MessageInput.OnDragOver ->
-                    ( model, Command.none )
-
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
 
@@ -3945,6 +3940,43 @@ updateLoaded msg model =
                             ( loggedIn, Command.none )
                 )
                 model
+
+        FileDragEnter ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | fileDragOverCount = loggedIn.fileDragOverCount + 1 }
+                    , Command.none
+                    )
+                )
+                model
+
+        FileDragLeave ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | fileDragOverCount = max 0 (loggedIn.fileDragOverCount - 1) }
+                    , Command.none
+                    )
+                )
+                model
+
+        FileDropped files ->
+            let
+                modelReset =
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn -> ( { loggedIn | fileDragOverCount = 0 }, Command.none ))
+                        model
+                        |> Tuple.first
+            in
+            case ( List.Nonempty.fromList files, Route.toGuildOrDmId modelReset.route, modelReset.loginStatus ) of
+                ( Just nonemptyFiles, Just ( guildOrDmId, threadRoute ), LoggedIn loggedIn ) ->
+                    if SeqDict.member ( guildOrDmId, threadRoute ) loggedIn.editMessage then
+                        editMessage_gotFiles ( guildOrDmId, threadRoute ) nonemptyFiles modelReset
+
+                    else
+                        gotFiles guildOrDmId threadRoute nonemptyFiles modelReset
+
+                _ ->
+                    ( modelReset, Command.none )
 
         PressedChannelHeaderTab otherUserId tab ->
             FrontendExtra.updateLoggedIn

@@ -84,7 +84,6 @@ type Msg
     | PressedUploadFile
     | PressedOpenEmojiSelector
     | OnPasteFiles (Nonempty File)
-    | OnDragOver
     | TypedPageUp
     | TypedPageDown
 
@@ -125,9 +124,6 @@ isPress msg =
             True
 
         OnPasteFiles _ ->
-            False
-
-        OnDragOver ->
             False
 
         TypedPageUp ->
@@ -207,24 +203,6 @@ textarea isMobileKeyboard channelTextInputId placeholderText charsLeft text rich
                 "paste"
                 (Json.Decode.at
                     [ "clipboardData", "files" ]
-                    (Json.Decode.Extra.collection File.decoder)
-                    |> Json.Decode.andThen
-                        (\list ->
-                            case List.Nonempty.fromList list of
-                                Just nonempty ->
-                                    Json.Decode.succeed ( OnPasteFiles nonempty, True )
-
-                                Nothing ->
-                                    Json.Decode.fail ""
-                        )
-                )
-            , Html.Events.preventDefaultOn
-                "dragover"
-                (Json.Decode.succeed ( OnDragOver, True ))
-            , Html.Events.preventDefaultOn
-                "drop"
-                (Json.Decode.at
-                    [ "dataTransfer", "files" ]
                     (Json.Decode.Extra.collection File.decoder)
                     |> Json.Decode.andThen
                         (\list ->

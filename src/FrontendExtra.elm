@@ -12,6 +12,7 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
@@ -25,6 +26,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
+import Json.Decode.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
@@ -306,6 +308,13 @@ layout model attributes child =
                     NoMessageHover ->
                         Ui.noAttr
                 ]
+                    ++ (case maybeMessageId of
+                            Just _ ->
+                                fileDragDropAttributes loggedIn.fileDragOverCount
+
+                            Nothing ->
+                                []
+                       )
 
             NotLoggedIn _ ->
                 []
@@ -364,6 +373,53 @@ layout model attributes child =
                )
         )
         child
+
+
+fileDragDropAttributes : Int -> List (Ui.Attribute FrontendMsg)
+fileDragDropAttributes fileDragOverCount =
+    [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True ))
+        |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True ))
+        |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True ))
+        |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "drop"
+        (Json.Decode.at [ "dataTransfer", "files" ] (Json.Decode.Extra.collection File.decoder)
+            |> Json.Decode.map (\list -> ( FileDropped list, True ))
+        )
+        |> Ui.htmlAttribute
+    , if fileDragOverCount > 0 then
+        Ui.inFront fileDragOverlay
+
+      else
+        Ui.noAttr
+    ]
+
+
+fileDragOverlay : Element FrontendMsg
+fileDragOverlay =
+    Ui.el
+        [ Ui.background (Ui.rgba 0 0 0 0.6)
+        , Ui.height Ui.fill
+        , Ui.width Ui.fill
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.Font.color MyUi.font1
+        , Ui.Font.size 32
+        , Ui.Font.bold
+        , MyUi.htmlStyle "pointer-events" "none"
+        ]
+        (Ui.el
+            [ Ui.border 2
+            , Ui.borderColor MyUi.font1
+            , Ui.rounded 16
+            , Ui.padding 32
+            , Ui.width Ui.shrink
+            , Ui.centerX
+            , Ui.centerY
+            ]
+            (Ui.text "Drop files anywhere to upload")
+        )
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg
@@ -1351,6 +1407,15 @@ isPressMsg msg =
 
         PressedChannelHeaderTab id dmChannelHeaderTab ->
             True
+
+        FileDragEnter ->
+            False
+
+        FileDragLeave ->
+            False
+
+        FileDropped _ ->
+            False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg

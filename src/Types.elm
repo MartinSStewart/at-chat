@@ -215,6 +215,7 @@ type alias LoggedIn2 =
     , voiceChat : VoiceChat.Model
     , dmChannelHeaderTabs : SeqDict (Id UserId) DmChannelHeaderTab
     , currentDmGoMatch : SeqDict (Id UserId) Go.Model
+    , fileDragOverCount : Int
     }
 
 
@@ -497,6 +498,9 @@ type FrontendMsg
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
     | PressedChannelHeaderTab (Id UserId) DmChannelHeaderTab
+    | FileDragEnter
+    | FileDragLeave
+    | FileDropped (List File)
 
 
 type ScrollPosition
