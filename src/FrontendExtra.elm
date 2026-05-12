@@ -506,15 +506,31 @@ fileDragDropAttributes fileDragOverCount model =
 
 fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
 fileDragOverlay isVisible model =
+    let
+        canDrop : Bool
+        canDrop =
+            canDropFiles model.route /= Nothing
+
+        accentColor : Ui.Color
+        accentColor =
+            if canDrop then
+                MyUi.font1
+
+            else
+                MyUi.errorColor
+    in
     Ui.el
         [ Ui.background (Ui.rgba 0 0 0 0.6)
         , Ui.height Ui.fill
         , Ui.width Ui.fill
         , Ui.contentCenterX
         , Ui.contentCenterY
-        , Ui.Font.color MyUi.font1
+        , Ui.Font.color accentColor
         , Ui.Font.size 32
         , Ui.Font.bold
+        , Ui.borderColor accentColor
+        , MyUi.htmlStyle "border" "8px dashed"
+        , MyUi.htmlStyle "box-sizing" "border-box"
         , MyUi.htmlStyle "pointer-events" "none"
         , MyUi.htmlStyle "transition" "opacity 0.15s ease-in"
         , MyUi.htmlStyle "opacity"
@@ -526,21 +542,16 @@ fileDragOverlay isVisible model =
             )
         ]
         (Ui.el
-            [ Ui.border 2
-            , Ui.borderColor MyUi.font1
-            , Ui.rounded 16
-            , Ui.padding 32
-            , Ui.width Ui.shrink
+            [ Ui.width Ui.shrink
             , Ui.centerX
             , Ui.centerY
             ]
             (Ui.text
-                (case canDropFiles model.route of
-                    Just _ ->
-                        "Drop files anywhere to upload"
+                (if canDrop then
+                    "Drop files anywhere to upload"
 
-                    Nothing ->
-                        "Nowhere to put this file here"
+                 else
+                    "Nowhere to put this file here"
                 )
             )
         )
