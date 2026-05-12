@@ -1003,14 +1003,14 @@ update time creatorId otherPlayerId msg state model =
         ( Game game, Just state2 ) ->
             let
                 ( game2, cmd, maybeChange ) =
-                    updateGame msg state2.setup (foldActions state2.actions state2.setup) game
+                    updateGame creatorId msg state2.setup (foldActions state2.actions state2.setup) game
             in
             ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
 
         ( Setup _, Just state2 ) ->
             let
                 ( game2, cmd, maybeChange ) =
-                    updateGame msg state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
+                    updateGame creatorId msg state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
             in
             ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
 
@@ -1230,8 +1230,8 @@ updateAction setup { change, time } model =
                     model
 
 
-updateGame : Msg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
-updateGame msg setup state model =
+updateGame : Id UserId -> Msg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+updateGame currentUserId msg setup state model =
     case msg of
         PressedCell x y ->
             if isViewingPast model then
@@ -1240,24 +1240,28 @@ updateGame msg setup state model =
             else
                 case state.phase of
                     Playing _ ->
-                        case tryPlace setup x y state of
-                            Ok updated ->
-                                let
-                                    placed : Bool
-                                    placed =
-                                        updated.lastMove /= state.lastMove
-                                in
-                                ( Game model
-                                , if placed then
-                                    Ports.playSound "pop"
+                        if isLocalUsersTurn currentUserId setup state then
+                            case tryPlace setup x y state of
+                                Ok updated ->
+                                    let
+                                        placed : Bool
+                                        placed =
+                                            updated.lastMove /= state.lastMove
+                                    in
+                                    ( Game model
+                                    , if placed then
+                                        Ports.playSound "pop"
 
-                                  else
-                                    Command.none
-                                , PlaceStone x y |> Just
-                                )
+                                      else
+                                        Command.none
+                                    , PlaceStone x y |> Just
+                                    )
 
-                            Err error ->
-                                ( Game { model | lastError = Just error }, Command.none, Nothing )
+                                Err error ->
+                                    ( Game { model | lastError = Just error }, Command.none, Nothing )
+
+                        else
+                            ( Game model, Command.none, Nothing )
 
                     Marking _ ->
                         ( Game model, Command.none, MarkTerritory x y |> Just )
@@ -1275,10 +1279,14 @@ updateGame msg setup state model =
             else
                 case state.phase of
                     Playing _ ->
-                        ( Game model
-                        , Command.none
-                        , Just PassTurn
-                        )
+                        if isLocalUsersTurn currentUserId setup state then
+                            ( Game model
+                            , Command.none
+                            , Just PassTurn
+                            )
+
+                        else
+                            ( Game model, Command.none, Nothing )
 
                     _ ->
                         ( Game model, Command.none, Nothing )
@@ -1757,6 +1765,16 @@ isPlayingPhase state =
             False
 
 
+isLocalUsersTurn : Id UserId -> ValidatedSetup -> GameState -> Bool
+isLocalUsersTurn currentUserId setup state =
+    case state.currentPlayer of
+        Black ->
+            setup.blackPlayer == currentUserId
+
+        White ->
+            setup.whitePlayer == currentUserId
+
+
 gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
 gameView windowSize currentUserId setup state model =
     let
@@ -1785,7 +1803,7 @@ gameView windowSize currentUserId setup state model =
         ]
         [ statusView setup state model
         , clockView isMobile currentUserId state setup
-        , boardView windowSize setup state model
+        , boardView windowSize currentUserId setup state model
         , if isMobile then
             Ui.none
 
@@ -1931,8 +1949,8 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element Msg
-boardView windowSize setup state model =
+boardView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+boardView windowSize currentUserId setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -1997,7 +2015,7 @@ boardView windowSize setup state model =
             else
                 case state.phase of
                     Playing _ ->
-                        True
+                        isLocalUsersTurn currentUserId setup state
 
                     Marking _ ->
                         True
