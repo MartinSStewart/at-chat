@@ -3019,8 +3019,8 @@ showFilesButton =
         (Ui.html Icons.document)
 
 
-privateChatWithYourself : LocalState -> List (Element FrontendMsg)
-privateChatWithYourself local =
+privateChatWithYourself : Maybe DmChannelHeaderTab -> LocalState -> List (Element FrontendMsg)
+privateChatWithYourself currentTab local =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -3029,13 +3029,13 @@ privateChatWithYourself local =
         ]
         (Ui.text "Private chat with yourself")
     , Ui.el
-        [ Ui.width Ui.shrink, Ui.alignRight ]
-        (voiceChatButton local.localUser.session.userId local.localUser local.calls)
+        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+        (voiceChatButton currentTab local.localUser.session.userId local.localUser local.calls)
     ]
 
 
-privateChatWith : Id UserId -> LocalState -> String -> List (Element FrontendMsg)
-privateChatWith otherUserId local name =
+privateChatWith : Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> List (Element FrontendMsg)
+privateChatWith currentTab otherUserId local name =
     [ Ui.el
         [ Ui.Font.color MyUi.font3
         , Ui.width Ui.shrink
@@ -3045,23 +3045,55 @@ privateChatWith otherUserId local name =
         (Ui.text "Private chat with ")
     , Ui.text name
     , Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        [ MyUi.elButton
+        [ Ui.width Ui.shrink
+        , Ui.alignRight
+        , Ui.height Ui.fill
+        , Ui.spacing 4
+        , Ui.paddingWith { left = 0, right = 4, top = 0, bottom = 0 }
+        ]
+        [ channelHeaderTab
             (Dom.id "guild_openGoMatch")
             (PressedChannelHeaderTab otherUserId DmChannelHeaderTab_Go)
-            [ MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.paddingXY 8 0
-            ]
+            (currentTab == Just DmChannelHeaderTab_Go)
             (Ui.text "Go")
-        , voiceChatButton otherUserId local.localUser local.calls
+        , voiceChatButton currentTab otherUserId local.localUser local.calls
         ]
     ]
 
 
-voiceChatButton : Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg
-voiceChatButton otherUserId localUser calls =
+channelHeaderTab : HtmlId -> msg -> Bool -> Element msg -> Element msg
+channelHeaderTab htmlId onPress isActive content =
+    MyUi.elButton
+        htmlId
+        onPress
+        [ Ui.alignBottom
+        , Ui.width Ui.shrink
+        , Ui.height Ui.shrink
+        , Ui.paddingWith { left = 10, right = 10, top = 4, bottom = 4 }
+        , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
+        , Ui.borderColor MyUi.border1
+        , Ui.roundedWith { topLeft = 6, topRight = 6, bottomLeft = 0, bottomRight = 0 }
+        , Ui.background
+            (if isActive then
+                MyUi.background3
+
+             else
+                MyUi.background1
+            )
+        , Ui.Font.color
+            (if isActive then
+                MyUi.font1
+
+             else
+                MyUi.font3
+            )
+        , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        ]
+        content
+
+
+voiceChatButton : Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg
+voiceChatButton currentTab otherUserId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) (NonemptySet ClientId)
         joinedUsers =
@@ -3122,17 +3154,14 @@ voiceChatButton otherUserId localUser calls =
                 |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
     in
     Ui.row
-        [ Ui.width Ui.shrink, Ui.spacing 8 ]
+        [ Ui.width Ui.shrink, Ui.spacing 8, Ui.height Ui.fill, Ui.contentCenterY ]
         [ joined
-        , MyUi.elButton
+        , channelHeaderTab
             (Dom.id "guild_voiceChat")
             (PressedChannelHeaderTab otherUserId DmChannelHeaderTab_VoiceChat)
-            [ Ui.width (Ui.px 44)
-            , Ui.paddingXY 4 0
-            , Ui.height Ui.fill
-            ]
+            (currentTab == Just DmChannelHeaderTab_VoiceChat)
             (Ui.row
-                [ Ui.spacing 2, Ui.centerY ]
+                [ Ui.spacing 2, Ui.width Ui.shrink, Ui.contentCenterY ]
                 [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
                 , if VoiceChat.hasJoined (DmRoomId otherUserId) calls then
                     Ui.el
@@ -3404,13 +3433,18 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             True
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
+                    let
+                        currentTab : Maybe DmChannelHeaderTab
+                        currentTab =
+                            SeqDict.get otherUserId loggedIn.dmChannelHeaderTabs
+                    in
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself local
+                            privateChatWithYourself currentTab local
 
                          else
-                            privateChatWith otherUserId local name
+                            privateChatWith currentTab otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3615,7 +3649,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if chattingWithYourself data local then
-                            privateChatWithYourself local
+                            privateChatWithYourself Nothing local
 
                          else
                             discordPrivateChatWith name
@@ -3915,13 +3949,18 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             True
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
+                    let
+                        currentTab : Maybe DmChannelHeaderTab
+                        currentTab =
+                            SeqDict.get otherUserId loggedIn.dmChannelHeaderTabs
+                    in
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself local
+                            privateChatWithYourself currentTab local
 
                          else
-                            privateChatWith otherUserId local name
+                            privateChatWith currentTab otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -4125,7 +4164,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if chattingWithYourself data local then
-                            privateChatWithYourself local
+                            privateChatWithYourself Nothing local
 
                          else
                             discordPrivateChatWith name
