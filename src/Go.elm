@@ -1622,15 +1622,23 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : GameState -> ValidatedSetup -> Element Msg
-clockView state setup =
+clockView : Bool -> GameState -> ValidatedSetup -> Element Msg
+clockView isMobile state setup =
     case setup.timeControl of
         Nothing ->
             Ui.none
 
         Just _ ->
             Ui.row
-                [ Ui.spacing 16, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
+                [ Ui.spacing 16
+                , Ui.width Ui.shrink
+                , Ui.paddingXY 16 0
+                , if isMobile then
+                    Ui.centerX
+
+                  else
+                    Ui.noAttr
+                ]
                 [ clockChip "Black" state.blackTime (state.currentPlayer == Black && isPlayingPhase state)
                 , clockChip "White" state.whiteTime (state.currentPlayer == White && isPlayingPhase state)
                 ]
@@ -1698,9 +1706,13 @@ gameView windowSize setup state model =
         , Ui.background MyUi.background1
         ]
         [ statusView setup state model
-        , clockView state setup
+        , clockView isMobile state setup
         , boardView windowSize setup state model
-        , historyView state model
+        , if isMobile then
+            Ui.none
+
+          else
+            historyView state model
         , controlsView state
         , case model.lastError of
             Just err ->
@@ -1867,7 +1879,7 @@ boardView windowSize setup state model =
         availWidthPx : Int
         availWidthPx =
             if isMobile then
-                Coord.xRaw windowSize - 16 |> max 200
+                Coord.xRaw windowSize |> max 200
 
             else
                 Coord.xRaw windowSize - MyUi.channelAndGuildColumnWidth windowSize - 64 |> clamp 280 600
@@ -1951,7 +1963,14 @@ boardView windowSize setup state model =
                )
         )
         |> Ui.html
-        |> Ui.el [ Ui.width Ui.shrink ]
+        |> Ui.el
+            [ Ui.width Ui.shrink
+            , if isMobile then
+                Ui.centerX
+
+              else
+                Ui.noAttr
+            ]
 
 
 gridLines : Int -> Int -> List (Svg.Svg Msg)
