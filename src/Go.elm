@@ -9,6 +9,7 @@ module Go exposing
     , ServerChange
     , Stone(..)
     , ValidatedSetup
+    , currentPlayersTurn
     , deadStones
     , foldActions
     , init
@@ -42,6 +43,7 @@ import Svg.Events
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
+import Ui.Shadow
 
 
 type Stone
@@ -143,7 +145,8 @@ type alias ValidatedSetup =
     , handicap : Int
     , komiHalfPoints : KomiHalfPoints
     , timeControl : Maybe TimeControl
-    , gameCreatorPlayingAs : Stone
+    , blackPlayer : Id UserId
+    , whitePlayer : Id UserId
     }
 
 
@@ -994,8 +997,8 @@ parseTimeControl model =
                                 Ok (Just { mainTime = minutes * 60, increment = inc })
 
 
-update : Time.Posix -> Msg -> Maybe CurrentGoMatch -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
-update time msg state model =
+update : Time.Posix -> Id UserId -> Id UserId -> Msg -> Maybe CurrentGoMatch -> Model -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+update time creatorId otherPlayerId msg state model =
     case ( model, state ) of
         ( Game game, Just state2 ) ->
             let
@@ -1012,7 +1015,7 @@ update time msg state model =
             ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
 
         ( Setup setup, Nothing ) ->
-            updateSetup time msg setup
+            updateSetup time creatorId otherPlayerId msg setup
 
         ( Game _, Nothing ) ->
             ( model, Command.none, Nothing )
@@ -1059,8 +1062,8 @@ stepForward model =
                 }
 
 
-validateSetup : SetupModel -> Result String ValidatedSetup
-validateSetup model =
+validateSetup : Id UserId -> Id UserId -> SetupModel -> Result String ValidatedSetup
+validateSetup creatorId otherPlayerId model =
     case selectedDimensions model of
         Ok ( width, height ) ->
             case parseHandicap model.handicapInput of
@@ -1078,12 +1081,22 @@ validateSetup model =
                                     Err err
 
                                 Ok timeControl ->
+                                    let
+                                        ( blackPlayer, whitePlayer ) =
+                                            case model.gameCreatorPlayingAs of
+                                                Black ->
+                                                    ( creatorId, otherPlayerId )
+
+                                                White ->
+                                                    ( otherPlayerId, creatorId )
+                                    in
                                     { width = width
                                     , height = height
                                     , handicap = handicap
                                     , komiHalfPoints = komiHalfPoints
                                     , timeControl = timeControl
-                                    , gameCreatorPlayingAs = model.gameCreatorPlayingAs
+                                    , blackPlayer = blackPlayer
+                                    , whitePlayer = whitePlayer
                                     }
                                         |> Ok
 
@@ -1091,8 +1104,14 @@ validateSetup model =
             Err err
 
 
-updateSetup : Time.Posix -> Msg -> SetupModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
-updateSetup time msg model =
+updateSetup :
+    Time.Posix
+    -> Id UserId
+    -> Id UserId
+    -> Msg
+    -> SetupModel
+    -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+updateSetup time creatorId otherPlayerId msg model =
     case msg of
         ChangedWidthInput input ->
             ( Setup { model | widthInput = input, error = Nothing }, Command.none, Nothing )
@@ -1119,7 +1138,7 @@ updateSetup time msg model =
             ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Command.none, Nothing )
 
         PressedStartGame ->
-            case validateSetup model of
+            case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
                     ( Setup model, Command.none, Just (StartMatch time setup) )
 
@@ -1362,8 +1381,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> Maybe CurrentGoMatch -> Model -> Element Msg
-view windowSize state model =
+view : Coord CssPixels -> Id UserId -> Id UserId -> Maybe CurrentGoMatch -> Model -> Element Msg
+view windowSize currentUserId otherUserId state model =
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.scrollable
@@ -1374,21 +1393,26 @@ view windowSize state model =
         ]
         (case ( model, state ) of
             ( Game game, Just state2 ) ->
-                gameView windowSize state2.setup (foldActions state2.actions state2.setup) game
+                gameView windowSize currentUserId state2.setup (foldActions state2.actions state2.setup) game
 
             ( Setup _, Just state2 ) ->
-                gameView windowSize state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
+                gameView
+                    windowSize
+                    currentUserId
+                    state2.setup
+                    (foldActions state2.actions state2.setup)
+                    (startGame state2.matchId)
 
             ( Setup setup, Nothing ) ->
-                setupView windowSize setup
+                setupView (currentUserId == otherUserId) windowSize setup
 
             ( Game _, Nothing ) ->
                 Ui.text "Game error"
         )
 
 
-setupView : Coord CssPixels -> SetupModel -> Element Msg
-setupView windowSize model =
+setupView : Bool -> Coord CssPixels -> SetupModel -> Element Msg
+setupView playingAgainstSelf windowSize model =
     let
         isMobile : Bool
         isMobile =
@@ -1412,11 +1436,10 @@ setupView windowSize model =
         , MyUi.montserrat
         , Ui.background MyUi.background1
         ]
-        [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ] (Ui.text "Go - new game")
-        , setupSection
+        [ setupSection
             "Board size"
-            (Ui.Input.chooseOne Ui.column
-                [ Ui.spacing 8 ]
+            (Ui.Input.chooseOne Ui.row
+                [ Ui.spacing 24, Ui.wrap ]
                 { onChange = SelectedSize
                 , selected = Just model.sizeSelection
                 , label = Ui.Input.labelHidden "go_boardSize"
@@ -1427,7 +1450,7 @@ setupView windowSize model =
                     , Ui.Input.optionWith CustomSize
                         (sizeOptionView
                             (Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                                [ Ui.text "Custom:"
+                                [ Ui.text "Custom"
                                 , dimensionInput "go_widthInput" model.widthInput ChangedWidthInput
                                 , Ui.text "x"
                                 , dimensionInput "go_heightInput" model.heightInput ChangedHeightInput
@@ -1437,20 +1460,24 @@ setupView windowSize model =
                     ]
                 }
             )
-        , setupSection
-            "Playing as"
-            (Ui.Input.chooseOne
-                Ui.row
-                [ Ui.spacing 24 ]
-                { onChange = SelectedPlayingAs
-                , selected = Just model.gameCreatorPlayingAs
-                , label = Ui.Input.labelHidden "go_boardSize"
-                , options =
-                    [ Ui.Input.option Black (Ui.text "Black")
-                    , Ui.Input.option White (Ui.text "White")
-                    ]
-                }
-            )
+        , if playingAgainstSelf then
+            Ui.none
+
+          else
+            setupSection
+                "Playing as"
+                (Ui.Input.chooseOne
+                    Ui.row
+                    [ Ui.spacing 24 ]
+                    { onChange = SelectedPlayingAs
+                    , selected = Just model.gameCreatorPlayingAs
+                    , label = Ui.Input.labelHidden "go_boardSize"
+                    , options =
+                        [ Ui.Input.option Black (Ui.text "Black")
+                        , Ui.Input.option White (Ui.text "White")
+                        ]
+                    }
+                )
         , setupSection
             "Handicap (Black starts with this many stones; White moves first)"
             (numberInput
@@ -1622,15 +1649,15 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Bool -> GameState -> ValidatedSetup -> Element Msg
-clockView isMobile state setup =
+clockView : Bool -> Id UserId -> GameState -> ValidatedSetup -> Element Msg
+clockView isMobile currentUserId state setup =
     case setup.timeControl of
         Nothing ->
             Ui.none
 
         Just _ ->
             Ui.row
-                [ Ui.spacing 16
+                [ Ui.spacing 8
                 , Ui.width Ui.shrink
                 , Ui.paddingXY 16 0
                 , if isMobile then
@@ -1639,17 +1666,62 @@ clockView isMobile state setup =
                   else
                     Ui.noAttr
                 ]
-                [ clockChip "Black" state.blackTime (state.currentPlayer == Black && isPlayingPhase state)
-                , clockChip "White" state.whiteTime (state.currentPlayer == White && isPlayingPhase state)
+                [ clockChip
+                    (if setup.blackPlayer == currentUserId then
+                        ( "Black (you)", 170 )
+
+                     else
+                        ( "Black", 150 )
+                    )
+                    state.blackTime
+                    (state.currentPlayer == Black && isPlayingPhase state)
+                , clockChip
+                    (if setup.whitePlayer == currentUserId && setup.blackPlayer == currentUserId then
+                        ( "White (also you)", 210 )
+
+                     else if setup.whitePlayer == currentUserId then
+                        ( "White (you)", 170 )
+
+                     else
+                        ( "White", 150 )
+                    )
+                    state.whiteTime
+                    (state.currentPlayer == White && isPlayingPhase state)
                 ]
 
 
-clockChip : String -> Float -> Bool -> Element msg
-clockChip label seconds isActive =
+currentPlayersTurn : Array ActionWithTime -> Stone
+currentPlayersTurn actions =
+    Array.foldl
+        (\{ time, change } stone ->
+            case change of
+                PlaceStone _ _ ->
+                    otherStone stone
+
+                PassTurn ->
+                    otherStone stone
+
+                MarkTerritory _ _ ->
+                    stone
+
+                FinishedMarking ->
+                    otherStone stone
+
+                AcceptTerritory ->
+                    otherStone stone
+
+                RejectTerritory ->
+                    otherStone stone
+        )
+        Black
+        actions
+
+
+clockChip : ( String, Int ) -> Float -> Bool -> Element msg
+clockChip ( label, width ) seconds isActive =
     Ui.row
-        [ Ui.spacing 8
-        , Ui.padding 8
-        , Ui.width (Ui.px 150)
+        [ Ui.padding 8
+        , Ui.width (Ui.px width)
         , Ui.rounded 4
         , Ui.border 1
         , Ui.borderColor
@@ -1664,9 +1736,14 @@ clockChip label seconds isActive =
 
           else
             Ui.noAttr
+        , if isActive then
+            Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 6, color = Ui.rgba 59 153 252 0.5 } ]
+
+          else
+            Ui.noAttr
         ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text label)
-        , Ui.text (formatClock seconds)
+        [ Ui.text label
+        , Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink, Ui.alignRight ] (Ui.text (formatClock seconds))
         ]
 
 
@@ -1680,8 +1757,8 @@ isPlayingPhase state =
             False
 
 
-gameView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element Msg
-gameView windowSize setup state model =
+gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView windowSize currentUserId setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -1695,7 +1772,8 @@ gameView windowSize setup state model =
              else
                 16
             )
-        , Ui.paddingXY 0
+        , Ui.paddingXY
+            0
             (if isMobile then
                 8
 
@@ -1706,7 +1784,7 @@ gameView windowSize setup state model =
         , Ui.background MyUi.background1
         ]
         [ statusView setup state model
-        , clockView isMobile state setup
+        , clockView isMobile currentUserId state setup
         , boardView windowSize setup state model
         , if isMobile then
             Ui.none

@@ -1886,6 +1886,8 @@ updateLoaded msg model =
                                 ( goModel2, goCmd, maybeChange ) =
                                     Go.update
                                         model.time
+                                        local.localUser.session.userId
+                                        dmRoute.otherUserId
                                         goMsg
                                         (SeqDict.get dmRoute.otherUserId local.dmChannels
                                             |> Maybe.withDefault DmChannel.frontendInit
