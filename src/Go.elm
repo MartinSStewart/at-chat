@@ -15,6 +15,7 @@ module Go exposing
     , pressedKey
     , update
     , view
+    , viewHeight
     )
 
 import Array exposing (Array)
@@ -1351,27 +1352,63 @@ cellPx =
     40
 
 
+boardChromeHeight : Int
+boardChromeHeight =
+    260
+
+
+viewHeight : Coord CssPixels -> Int
+viewHeight windowSize =
+    round (toFloat (Coord.yRaw windowSize * 2) / 3)
+
+
 view : Coord CssPixels -> Maybe CurrentGoMatch -> Model -> Element Msg
 view windowSize state model =
-    case ( model, state ) of
-        ( Game game, Just state2 ) ->
-            gameView windowSize state2.setup (foldActions state2.actions state2.setup) game
+    Ui.el
+        [ Ui.height (Ui.px (viewHeight windowSize))
+        , Ui.scrollable
+        , Ui.background MyUi.background1
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
+        , MyUi.noShrinking
+        ]
+        (case ( model, state ) of
+            ( Game game, Just state2 ) ->
+                gameView windowSize state2.setup (foldActions state2.actions state2.setup) game
 
-        ( Setup _, Just state2 ) ->
-            gameView windowSize state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
+            ( Setup _, Just state2 ) ->
+                gameView windowSize state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
 
-        ( Setup setup, Nothing ) ->
-            setupView setup
+            ( Setup setup, Nothing ) ->
+                setupView windowSize setup
 
-        ( Game _, Nothing ) ->
-            Ui.text "Game error"
+            ( Game _, Nothing ) ->
+                Ui.text "Game error"
+        )
 
 
-setupView : SetupModel -> Element Msg
-setupView model =
+setupView : Coord CssPixels -> SetupModel -> Element Msg
+setupView windowSize model =
+    let
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+    in
     Ui.column
-        [ Ui.spacing 16
-        , Ui.padding 24
+        [ Ui.spacing
+            (if isMobile then
+                12
+
+             else
+                16
+            )
+        , Ui.padding
+            (if isMobile then
+                12
+
+             else
+                24
+            )
         , MyUi.montserrat
         , Ui.background MyUi.background1
         ]
@@ -1637,9 +1674,26 @@ isPlayingPhase state =
 
 gameView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element Msg
 gameView windowSize setup state model =
+    let
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+    in
     Ui.column
-        [ Ui.spacing 16
-        , Ui.paddingXY 0 16
+        [ Ui.spacing
+            (if isMobile then
+                8
+
+             else
+                16
+            )
+        , Ui.paddingXY 0
+            (if isMobile then
+                8
+
+             else
+                16
+            )
         , MyUi.montserrat
         , Ui.background MyUi.background1
         ]
@@ -1790,12 +1844,15 @@ historyView state model =
 boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element Msg
 boardView windowSize setup state model =
     let
+        isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
 
+        width : Int
         width =
             boardSizeToInt setup.width
 
+        height : Int
         height =
             boardSizeToInt setup.height
 
@@ -1806,6 +1863,33 @@ boardView windowSize setup state model =
         heightPx : Int
         heightPx =
             height * cellPx
+
+        availWidthPx : Int
+        availWidthPx =
+            if isMobile then
+                Coord.xRaw windowSize - 16 |> max 200
+
+            else
+                Coord.xRaw windowSize - MyUi.channelAndGuildColumnWidth windowSize - 64 |> clamp 280 600
+
+        availHeightPx : Int
+        availHeightPx =
+            viewHeight windowSize - boardChromeHeight |> max 180
+
+        scale : Float
+        scale =
+            min
+                (toFloat availWidthPx / toFloat widthPx)
+                (toFloat availHeightPx / toFloat heightPx)
+                |> clamp 0.35 1.5
+
+        displayWidth : Int
+        displayWidth =
+            round (toFloat widthPx * scale)
+
+        displayHeight : Int
+        displayHeight =
+            round (toFloat heightPx * scale)
 
         viewing : Bool
         viewing =
@@ -1848,21 +1932,10 @@ boardView windowSize setup state model =
                 deadStonePositions setup state
     in
     Svg.svg
-        [ Svg.Attributes.width
-            (if isMobile then
-                Coord.xRaw windowSize |> String.fromInt
-
-             else
-                String.fromInt widthPx
-            )
-        , Svg.Attributes.height
-            (if isMobile then
-                Coord.xRaw windowSize |> String.fromInt
-
-             else
-                String.fromInt widthPx
-            )
+        [ Svg.Attributes.width (String.fromInt displayWidth)
+        , Svg.Attributes.height (String.fromInt displayHeight)
         , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt widthPx ++ " " ++ String.fromInt heightPx)
+        , Svg.Attributes.preserveAspectRatio "xMidYMid meet"
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
         (gridLines width height
