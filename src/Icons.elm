@@ -18,6 +18,7 @@ module Icons exposing
     , download
     , expandContainer
     , gear
+    , go
     , hashtag
     , image
     , infinity
@@ -317,6 +318,51 @@ x =
         , Svg.Attributes.stroke "currentColor"
         ]
         [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M6 18 18 6M6 6l12 12" ] [] ]
+
+
+go : Html msg
+go =
+    Svg.svg
+        [ Svg.Attributes.viewBox "0 0 16 16"
+        , Svg.Attributes.width "20"
+        , Svg.Attributes.fill "none"
+        ]
+        [ Svg.g
+            [ Svg.Attributes.stroke "currentColor"
+            , Svg.Attributes.strokeWidth "1"
+            , Svg.Attributes.strokeLinecap "round"
+            ]
+            [ Svg.line [ Svg.Attributes.x1 "5.5", Svg.Attributes.y1 "1", Svg.Attributes.x2 "5.5", Svg.Attributes.y2 "15" ] []
+            , Svg.line [ Svg.Attributes.x1 "10.5", Svg.Attributes.y1 "1", Svg.Attributes.x2 "10.5", Svg.Attributes.y2 "15" ] []
+            , Svg.line [ Svg.Attributes.x1 "1", Svg.Attributes.y1 "5.5", Svg.Attributes.x2 "15", Svg.Attributes.y2 "5.5" ] []
+            , Svg.line [ Svg.Attributes.x1 "1", Svg.Attributes.y1 "10.5", Svg.Attributes.x2 "15", Svg.Attributes.y2 "10.5" ] []
+            ]
+        , Svg.circle
+            [ Svg.Attributes.cx "10.5"
+            , Svg.Attributes.cy "5.5"
+            , Svg.Attributes.r "2.6"
+            , Svg.Attributes.fill "#fff"
+            , Svg.Attributes.stroke "#000"
+            , Svg.Attributes.strokeWidth "0.6"
+            ]
+            []
+        , Svg.circle
+            [ Svg.Attributes.cx "5.5"
+            , Svg.Attributes.cy "10.5"
+            , Svg.Attributes.r "2.6"
+            , Svg.Attributes.fill "#fff"
+            , Svg.Attributes.stroke "#000"
+            , Svg.Attributes.strokeWidth "0.6"
+            ]
+            []
+        , Svg.circle
+            [ Svg.Attributes.cx "10.5"
+            , Svg.Attributes.cy "10.5"
+            , Svg.Attributes.r "2.6"
+            , Svg.Attributes.fill "#000"
+            ]
+            []
+        ]
 
 
 hashtag : Html msg
