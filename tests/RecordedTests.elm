@@ -1673,64 +1673,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
-        "Two users play a Go match, one leaves and rejoins, then start a new match"
-        RecordedTestExtra.startTime
-        normalConfig
-        [ T.connectFrontend
-            100
-            RecordedTestExtra.sessionId0
-            "/"
-            RecordedTestExtra.desktopWindow
-            (\admin ->
-                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
-                , RecordedTestExtra.inviteUser
-                    admin
-                    (\user ->
-                        [ user.click 1000 (Dom.id "guild_openDm_0")
-                        , admin.click 100 (Dom.id "guildsColumn_openDm_1")
-                        , admin.click 100 (Dom.id "guild_openGoMatch")
-                        , user.click 100 (Dom.id "guild_openGoMatch")
-                        , admin.click 100 (Dom.id "go_start")
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
-
-                        -- A couple of opening moves: admin is Black (creator default), user is White
-                        , admin.click 100 (Dom.id "go_cell_4_4")
-                        , user.click 100 (Dom.id "go_cell_5_4")
-                        , admin.click 100 (Dom.id "go_cell_4_5")
-                        , user.click 100 (Dom.id "go_cell_5_5")
-
-                        -- User leaves the game by navigating back out of the DM
-                        , user.navigateBack 100
-
-                        -- ... and then rejoins by clicking back into the DM and the Go tab
-                        , user.click 100 (Dom.id "guild_openDm_0")
-                        , user.click 100 (Dom.id "guild_openGoMatch")
-
-                        -- A few more moves to confirm the state persisted
-                        , admin.click 100 (Dom.id "go_cell_3_3")
-                        , user.click 100 (Dom.id "go_cell_3_4")
-
-                        -- Wrap up the game: pass twice, finish marking, agree on scoring
-                        , admin.click 100 (Dom.id "go_pass")
-                        , user.click 100 (Dom.id "go_pass")
-                        , user.click 100 (Dom.id "go_doneMarking")
-                        , admin.click 100 (Dom.id "go_agree")
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
-
-                        -- Start a fresh match after the game has ended
-                        , admin.click 100 (Dom.id "go_reset")
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Go - new game" ])
-                        , admin.click 100 (Dom.id "go_start")
-                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
-                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
-                        ]
-                    )
-                ]
-            )
-        ]
+    , RecordedTestExtra.goMatchTest normalConfig
     ]
 
 

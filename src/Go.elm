@@ -1222,7 +1222,7 @@ updateAction setup { change, time } model =
 
         FinishedMarking ->
             case model.phase of
-                Confirming r ->
+                Marking r ->
                     { model | phase = Confirming r }
 
                 _ ->

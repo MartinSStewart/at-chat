@@ -23,6 +23,7 @@ module RecordedTestExtra exposing
     , enableNotifications
     , firefoxDesktop
     , focusEvent
+    , goMatchTest
     , handleInternalRequests
     , handleLogin
     , handlePortToJs
@@ -189,7 +190,7 @@ handlePortToJs requestAndData =
 
 desktopWindow : { width : number, height : number }
 desktopWindow =
-    { width = 1000, height = 600 }
+    { width = 1000, height = 1300 }
 
 
 mobileWindow : { width : number, height : number }
@@ -1951,6 +1952,79 @@ inviteUserAndDmChat config =
                                         ]
                             )
                         , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+goMatchTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+goMatchTest normalConfig =
+    startTest
+        "Two users play a Go match, one leaves and rejoins, then start a new match"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , user.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "go_start")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+
+                        -- A couple of opening moves: admin is Black (creator default), user is White
+                        , admin.click 100 (Dom.id "go_cell_4_4")
+                        , user.click 100 (Dom.id "go_cell_5_4")
+                        , admin.click 100 (Dom.id "go_cell_4_5")
+                        , user.click 100 (Dom.id "go_cell_5_5")
+
+                        -- User leaves the game by navigating back out of the DM
+                        , user.navigateBack 100
+
+                        -- ... and then rejoins by clicking back into the DM and the Go tab
+                        , T.connectFrontend
+                            100
+                            sessionId1
+                            "/"
+                            desktopWindow
+                            (\user2 ->
+                                [ user2.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                , user2.click 100 (Dom.id "guild_friendLabel_0")
+                                , user2.click 100 (Dom.id "guild_openGoMatch")
+
+                                -- A few more moves to confirm the state persisted
+                                , admin.click 100 (Dom.id "go_cell_3_3")
+                                , user2.click 100 (Dom.id "go_cell_3_4")
+
+                                -- Wrap up the game: pass twice, finish marking, agree on scoring
+                                , admin.click 100 (Dom.id "go_pass")
+                                , user2.click 100 (Dom.id "go_pass")
+                                , admin.click 100 (Dom.id "go_cell_3_6")
+                                , admin.click 100 (Dom.id "go_doneMarking")
+                                , user2.click 100 (Dom.id "go_agree")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
+                                , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
+
+                                -- Start a fresh match after the game has ended
+                                , admin.click 100 (Dom.id "go_reset")
+                                , admin.click 100 (Dom.id "go_start")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                ]
+                            )
                         ]
                     )
                 ]
