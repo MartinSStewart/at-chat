@@ -1446,6 +1446,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AddCustomEmojisToUser _ ->
                     False
 
+                Local_Go record _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -1622,6 +1625,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
+                            True
+
+                        Types.Server_Go id record localChange ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
