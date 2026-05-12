@@ -308,13 +308,7 @@ layout model attributes child =
                     NoMessageHover ->
                         Ui.noAttr
                 ]
-                    ++ (case maybeMessageId of
-                            Just _ ->
-                                fileDragDropAttributes loggedIn.fileDragOverCount
-
-                            Nothing ->
-                                []
-                       )
+                    ++ fileDragDropAttributes loggedIn.fileDragOverCount (maybeMessageId /= Nothing)
 
             NotLoggedIn _ ->
                 []
@@ -375,8 +369,8 @@ layout model attributes child =
         child
 
 
-fileDragDropAttributes : Int -> List (Ui.Attribute FrontendMsg)
-fileDragDropAttributes fileDragOverCount =
+fileDragDropAttributes : Int -> Bool -> List (Ui.Attribute FrontendMsg)
+fileDragDropAttributes fileDragOverCount hasDestination =
     [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True ))
         |> Ui.htmlAttribute
     , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True ))
@@ -388,16 +382,12 @@ fileDragDropAttributes fileDragOverCount =
             |> Json.Decode.map (\list -> ( FileDropped list, True ))
         )
         |> Ui.htmlAttribute
-    , if fileDragOverCount > 0 then
-        Ui.inFront fileDragOverlay
-
-      else
-        Ui.noAttr
+    , Ui.inFront (fileDragOverlay (fileDragOverCount > 0) hasDestination)
     ]
 
 
-fileDragOverlay : Element FrontendMsg
-fileDragOverlay =
+fileDragOverlay : Bool -> Bool -> Element FrontendMsg
+fileDragOverlay isVisible hasDestination =
     Ui.el
         [ Ui.background (Ui.rgba 0 0 0 0.6)
         , Ui.height Ui.fill
@@ -408,6 +398,14 @@ fileDragOverlay =
         , Ui.Font.size 32
         , Ui.Font.bold
         , MyUi.htmlStyle "pointer-events" "none"
+        , MyUi.htmlStyle "transition" "opacity 0.15s ease-in"
+        , MyUi.htmlStyle "opacity"
+            (if isVisible then
+                "1"
+
+             else
+                "0"
+            )
         ]
         (Ui.el
             [ Ui.border 2
@@ -418,7 +416,14 @@ fileDragOverlay =
             , Ui.centerX
             , Ui.centerY
             ]
-            (Ui.text "Drop files anywhere to upload")
+            (Ui.text
+                (if hasDestination then
+                    "Drop files anywhere to upload"
+
+                 else
+                    "Nowhere to put this file here"
+                )
+            )
         )
 
 
