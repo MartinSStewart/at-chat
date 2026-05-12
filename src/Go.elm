@@ -29,6 +29,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import FileStatus exposing (FileHash)
 import Html
 import Html.Attributes
 import Html.Events
@@ -1417,8 +1418,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> Id UserId -> Id UserId -> Maybe CurrentGoMatch -> Maybe Model -> Element Msg
-view windowSize currentUserId otherUserId state model =
+view : Coord CssPixels -> Id UserId -> Maybe FileHash -> Id UserId -> Maybe CurrentGoMatch -> Maybe Model -> Element Msg
+view windowSize currentUserId currentUserIcon otherUserId state model =
     let
         model2 : Model
         model2 =
@@ -1442,7 +1443,7 @@ view windowSize currentUserId otherUserId state model =
         ]
         (case ( model2, state ) of
             ( Game game, Just state2 ) ->
-                gameView windowSize currentUserId state2.setup (foldActions state2.actions state2.setup) game
+                gameView windowSize currentUserId currentUserIcon state2.setup (foldActions state2.actions state2.setup) game
 
             ( Setup setup, _ ) ->
                 setupView (currentUserId == otherUserId) windowSize setup
@@ -1690,8 +1691,8 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Bool -> Id UserId -> GameState -> ValidatedSetup -> Element Msg
-clockView isMobile currentUserId state setup =
+clockView : Bool -> Id UserId -> Maybe FileHash -> GameState -> ValidatedSetup -> Element Msg
+clockView isMobile currentUserId currentUserIcon state setup =
     case setup.timeControl of
         Nothing ->
             Ui.none
@@ -1709,23 +1710,22 @@ clockView isMobile currentUserId state setup =
                 ]
                 [ clockChip
                     (if setup.blackPlayer == currentUserId then
-                        ( "Black (you)", 170 )
+                        Just currentUserIcon
 
                      else
-                        ( "Black", 150 )
+                        Nothing
                     )
+                    "Black"
                     state.blackTime
                     (state.currentPlayer == Black && isPlayingPhase state)
                 , clockChip
-                    (if setup.whitePlayer == currentUserId && setup.blackPlayer == currentUserId then
-                        ( "White (also you)", 210 )
-
-                     else if setup.whitePlayer == currentUserId then
-                        ( "White (you)", 170 )
+                    (if setup.whitePlayer == currentUserId then
+                        Just currentUserIcon
 
                      else
-                        ( "White", 150 )
+                        Nothing
                     )
+                    "White"
                     state.whiteTime
                     (state.currentPlayer == White && isPlayingPhase state)
                 ]
@@ -1758,11 +1758,12 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : ( String, Int ) -> Float -> Bool -> Element msg
-clockChip ( label, width ) seconds isActive =
+clockChip : Maybe (Maybe FileHash) -> String -> Float -> Bool -> Element msg
+clockChip localUserIcon label seconds isActive =
     Ui.row
         [ Ui.padding 8
-        , Ui.width (Ui.px width)
+        , Ui.spacing 6
+        , Ui.width (Ui.px 170)
         , Ui.rounded 4
         , Ui.border 1
         , Ui.borderColor
@@ -1784,8 +1785,39 @@ clockChip ( label, width ) seconds isActive =
             Ui.noAttr
         ]
         [ Ui.text label
+        , case localUserIcon of
+            Just icon ->
+                clockChipIcon icon
+
+            Nothing ->
+                Ui.none
         , Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink, Ui.alignRight ] (Ui.text (formatClock seconds))
         ]
+
+
+clockChipIcon : Maybe FileHash -> Element msg
+clockChipIcon maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Ui.image
+                [ Ui.rounded 9
+                , Ui.width (Ui.px 18)
+                , Ui.height (Ui.px 18)
+                , Ui.clip
+                ]
+                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+
+        Nothing ->
+            Ui.el
+                [ Ui.background (Ui.rgb 100 100 100)
+                , Ui.rounded 9
+                , Ui.width (Ui.px 18)
+                , Ui.height (Ui.px 18)
+                ]
+                Ui.none
 
 
 isPlayingPhase : GameState -> Bool
@@ -1808,8 +1840,8 @@ isLocalUsersTurn currentUserId setup state =
             setup.whitePlayer == currentUserId
 
 
-gameView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
-gameView windowSize currentUserId setup state model =
+gameView : Coord CssPixels -> Id UserId -> Maybe FileHash -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView windowSize currentUserId currentUserIcon setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -1835,7 +1867,7 @@ gameView windowSize currentUserId setup state model =
         , Ui.background MyUi.background1
         ]
         [ statusView setup state model
-        , clockView isMobile currentUserId state setup
+        , clockView isMobile currentUserId currentUserIcon state setup
         , boardView windowSize currentUserId setup state model
         , if isMobile then
             Ui.none

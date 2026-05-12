@@ -3886,6 +3886,7 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
             Go.view
                 model.windowSize
                 local.localUser.session.userId
+                local.localUser.user.icon
                 otherUserId
                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch)
                 (SeqDict.get otherUserId loggedIn.currentDmGoMatch)
