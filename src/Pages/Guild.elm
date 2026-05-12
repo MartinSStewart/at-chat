@@ -3028,9 +3028,11 @@ privateChatWithYourself currentTab local =
         , Ui.clipWithEllipsis
         ]
         (Ui.text "Private chat with yourself")
-    , Ui.el
+    , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        (voiceChatButton currentTab local.localUser.session.userId local.localUser local.calls)
+        [ goGameButton local.localUser.session.userId
+        , voiceChatButton local.localUser.session.userId local.localUser local.calls
+        ]
     ]
 
 
@@ -3045,20 +3047,23 @@ privateChatWith currentTab otherUserId local name =
         (Ui.text "Private chat with ")
     , Ui.text name
     , Ui.row
-        [ Ui.width Ui.shrink
-        , Ui.alignRight
-        , Ui.height Ui.fill
-        , Ui.spacing 4
-        , Ui.paddingWith { left = 0, right = 4, top = 0, bottom = 0 }
-        ]
-        [ channelHeaderTab
-            (Dom.id "guild_openGoMatch")
-            (PressedChannelHeaderTab otherUserId DmChannelHeaderTab_Go)
-            (currentTab == Just DmChannelHeaderTab_Go)
-            (Ui.text "Go")
-        , voiceChatButton currentTab otherUserId local.localUser local.calls
+        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+        [ goGameButton otherUserId
+        , voiceChatButton otherUserId local.localUser local.calls
         ]
     ]
+
+
+goGameButton otherUserId =
+    MyUi.elButton
+        (Dom.id "guild_openGoMatch")
+        (PressedChannelHeaderTab otherUserId DmChannelHeaderTab_Go)
+        [ MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        , Ui.height Ui.fill
+        , Ui.contentCenterY
+        , Ui.paddingXY 8 0
+        ]
+        (Ui.text "Go")
 
 
 channelHeaderTab : HtmlId -> msg -> Bool -> Element msg -> Element msg

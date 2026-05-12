@@ -140,6 +140,7 @@ type alias ValidatedSetup =
     , handicap : Int
     , komiHalfPoints : KomiHalfPoints
     , timeControl : Maybe TimeControl
+    , gameCreatorPlayingAs : Stone
     }
 
 
@@ -199,6 +200,7 @@ type alias SetupModel =
     , mainTimeInput : String
     , incrementInput : String
     , sizeSelection : SizeSelection
+    , gameCreatorPlayingAs : Stone
     , error : Maybe String
     }
 
@@ -225,6 +227,7 @@ init =
         , mainTimeInput = "10"
         , incrementInput = "5"
         , sizeSelection = Standard9
+        , gameCreatorPlayingAs = Black
         , error = Nothing
         }
 
@@ -407,6 +410,7 @@ type Msg
     | ChangedMainTimeInput String
     | ChangedIncrementInput String
     | SelectedSize SizeSelection
+    | SelectedPlayingAs Stone
     | PressedStartGame
     | Tick Time.Posix
 
@@ -1076,6 +1080,7 @@ validateSetup model =
                                     , handicap = handicap
                                     , komiHalfPoints = komiHalfPoints
                                     , timeControl = timeControl
+                                    , gameCreatorPlayingAs = model.gameCreatorPlayingAs
                                     }
                                         |> Ok
 
@@ -1106,6 +1111,9 @@ updateSetup time msg model =
 
         SelectedSize selection ->
             ( Setup { model | sizeSelection = selection, error = Nothing }, Command.none, Nothing )
+
+        SelectedPlayingAs stone ->
+            ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Command.none, Nothing )
 
         PressedStartGame ->
             case validateSetup model of
@@ -1319,6 +1327,9 @@ updateGame msg setup state model =
         SelectedSize _ ->
             ( Game model, Command.none, Nothing )
 
+        SelectedPlayingAs stone ->
+            ( Game model, Command.none, Nothing )
+
         PressedStartGame ->
             ( Game model, Command.none, Nothing )
 
@@ -1359,7 +1370,6 @@ setupView model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
-        , Ui.centerX
         , Ui.width Ui.shrink
         , MyUi.montserrat
         ]
@@ -1385,6 +1395,20 @@ setupView model =
                                 ]
                             )
                         )
+                    ]
+                }
+            )
+        , setupSection
+            "Playing as"
+            (Ui.Input.chooseOne
+                Ui.row
+                [ Ui.spacing 24 ]
+                { onChange = SelectedPlayingAs
+                , selected = Just model.gameCreatorPlayingAs
+                , label = Ui.Input.labelHidden "go_boardSize"
+                , options =
+                    [ Ui.Input.option Black (Ui.text "Black")
+                    , Ui.Input.option White (Ui.text "White")
                     ]
                 }
             )
@@ -1614,7 +1638,6 @@ gameView setup state model =
     Ui.column
         [ Ui.spacing 16
         , Ui.padding 24
-        , Ui.centerX
         , Ui.width Ui.shrink
         , MyUi.montserrat
         ]
