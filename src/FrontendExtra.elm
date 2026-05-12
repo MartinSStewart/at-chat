@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (canDropFiles, changeUpdate, editMessage_gotFiles, externalLinkWarning, gotFiles, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -12,13 +12,14 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File
+import Effect.File as File exposing (File)
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
-import FileStatus exposing (FileData, FileId)
+import FileName
+import FileStatus exposing (FileData, FileId, FileStatus(..))
 import Go
 import Html exposing (Html)
 import Html.Events
@@ -308,7 +309,7 @@ layout model attributes child =
                     NoMessageHover ->
                         Ui.noAttr
                 ]
-                    ++ fileDragDropAttributes loggedIn.fileDragOverCount (maybeMessageId /= Nothing)
+                    ++ fileDragDropAttributes loggedIn.fileDragOverCount model
 
             NotLoggedIn _ ->
                 []
@@ -369,25 +370,142 @@ layout model attributes child =
         child
 
 
-fileDragDropAttributes : Int -> Bool -> List (Ui.Attribute FrontendMsg)
-fileDragDropAttributes fileDragOverCount hasDestination =
-    [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True ))
-        |> Ui.htmlAttribute
-    , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True ))
-        |> Ui.htmlAttribute
-    , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True ))
-        |> Ui.htmlAttribute
+canDropFiles : Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
+canDropFiles route =
+    case route of
+        HomePageRoute ->
+            Nothing
+
+        AdminRoute record ->
+            Nothing
+
+        GuildRoute guildId channelRoute ->
+            case channelRoute of
+                ChannelRoute channelId threadRoute ->
+                    let
+                        threadRoute2 : ThreadRoute
+                        threadRoute2 =
+                            case threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    NoThread
+
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewThread threadId
+                    in
+                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) threadRoute2 |> Just
+
+                NewChannelRoute ->
+                    Nothing
+
+                EditChannelRoute id ->
+                    Nothing
+
+                GuildSettingsRoute ->
+                    Nothing
+
+                JoinRoute secretId ->
+                    Nothing
+
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    let
+                        threadRoute2 : ThreadRoute
+                        threadRoute2 =
+                            case threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    NoThread
+
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewThread threadId
+                    in
+                    canDropFileHelper
+                        (DiscordGuildOrDmId
+                            (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                        )
+                        threadRoute2
+                        |> Just
+
+                DiscordChannel_NewChannelRoute ->
+                    Nothing
+
+                DiscordChannel_EditChannelRoute id ->
+                    Nothing
+
+                DiscordChannel_GuildSettingsRoute ->
+                    Nothing
+
+        DmRoute routeData ->
+            let
+                threadRoute2 : ThreadRoute
+                threadRoute2 =
+                    case routeData.threadRoute of
+                        NoThreadWithFriends _ _ ->
+                            NoThread
+
+                        ViewThreadWithFriends threadId _ _ ->
+                            ViewThread threadId
+            in
+            canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm routeData.otherUserId)) threadRoute2 |> Just
+
+        DiscordDmRoute routeData ->
+            canDropFileHelper
+                (DiscordGuildOrDmId
+                    (DiscordGuildOrDmId_Dm
+                        { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                    )
+                )
+                NoThread
+                |> Just
+
+        AiChatRoute ->
+            Nothing
+
+        SlackOAuthRedirect result ->
+            Nothing
+
+        TextEditorRoute ->
+            Nothing
+
+        LinkDiscord result ->
+            Nothing
+
+
+canDropFileHelper :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> Nonempty File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+canDropFileHelper guildOrDmId threadRoute2 files model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            if SeqDict.member ( guildOrDmId, threadRoute2 ) loggedIn.editMessage then
+                editMessage_gotFiles ( guildOrDmId, threadRoute2 ) files model
+
+            else
+                gotFiles guildOrDmId threadRoute2 files model
+
+        NotLoggedIn _ ->
+            ( model, Command.none )
+
+
+fileDragDropAttributes : Int -> LoadedFrontend -> List (Ui.Attribute FrontendMsg)
+fileDragDropAttributes fileDragOverCount model =
+    [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True )) |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
     , Html.Events.preventDefaultOn "drop"
         (Json.Decode.at [ "dataTransfer", "files" ] (Json.Decode.Extra.collection File.decoder)
             |> Json.Decode.map (\list -> ( FileDropped list, True ))
         )
         |> Ui.htmlAttribute
-    , Ui.inFront (fileDragOverlay (fileDragOverCount > 0) hasDestination)
+    , Ui.inFront (fileDragOverlay (fileDragOverCount > 0) model)
     ]
 
 
-fileDragOverlay : Bool -> Bool -> Element FrontendMsg
-fileDragOverlay isVisible hasDestination =
+fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
+fileDragOverlay isVisible model =
     Ui.el
         [ Ui.background (Ui.rgba 0 0 0 0.6)
         , Ui.height Ui.fill
@@ -417,14 +535,191 @@ fileDragOverlay isVisible hasDestination =
             , Ui.centerY
             ]
             (Ui.text
-                (if hasDestination then
-                    "Drop files anywhere to upload"
+                (case canDropFiles model.route of
+                    Just _ ->
+                        "Drop files anywhere to upload"
 
-                 else
-                    "Nowhere to put this file here"
+                    Nothing ->
+                        "Nowhere to put this file here"
                 )
             )
         )
+
+
+gotFiles :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> Nonempty File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+gotFiles guildOrDmId threadRoute files model =
+    updateLoggedIn
+        (\loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
+                ( fileText, cmds, dict ) =
+                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
+                        Just dict2 ->
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        id =
+                                            Id.nextId (NonemptyDict.toSeqDict dict3)
+                                    in
+                                    ( fileText2
+                                        ++ [ RichText.attachedFilePrefix
+                                                ++ Id.toString id
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.uploadFile
+                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
+                                        local.localUser.session.sessionIdHash
+                                        ( guildOrDmId, threadRoute )
+                                        id
+                                        file2
+                                        :: cmds2
+                                    , NonemptyDict.insert
+                                        id
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            { sent = 0, size = File.size file2 }
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], dict2 )
+                                files
+
+                        Nothing ->
+                            ( List.indexedMap
+                                (\index _ ->
+                                    RichText.attachedFilePrefix
+                                        ++ Id.toString (Id.fromInt (index + 1))
+                                        ++ RichText.attachedFileSuffix
+                                )
+                                (List.Nonempty.toList files)
+                            , List.indexedMap
+                                (\index file2 ->
+                                    let
+                                        id : Id FileId
+                                        id =
+                                            Id.fromInt (index + 1)
+                                    in
+                                    FileStatus.uploadFile
+                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
+                                        local.localUser.session.sessionIdHash
+                                        ( guildOrDmId, threadRoute )
+                                        id
+                                        file2
+                                )
+                                (List.Nonempty.toList files)
+                            , List.Nonempty.indexedMap
+                                (\index file2 ->
+                                    ( Id.fromInt (index + 1)
+                                    , FileUploading
+                                        (File.name file2 |> FileName.fromString)
+                                        { sent = 0, size = File.size file2 }
+                                        (File.mime file2 |> FileStatus.contentType)
+                                    )
+                                )
+                                files
+                                |> NonemptyDict.fromNonemptyList
+                            )
+            in
+            ( { loggedIn
+                | filesToUpload =
+                    SeqDict.insert ( guildOrDmId, threadRoute ) dict loggedIn.filesToUpload
+                , drafts =
+                    case String.join " " fileText |> String.Nonempty.fromString of
+                        Just fileText2 ->
+                            SeqDict.update
+                                ( guildOrDmId, threadRoute )
+                                (\maybe ->
+                                    case maybe of
+                                        Just draft ->
+                                            String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
+                                                |> Just
+
+                                        Nothing ->
+                                            Just fileText2
+                                )
+                                loggedIn.drafts
+
+                        Nothing ->
+                            loggedIn.drafts
+              }
+            , Command.batch cmds
+            )
+        )
+        model
+
+
+editMessage_gotFiles :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> Nonempty File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+editMessage_gotFiles guildOrDmId files model =
+    updateLoggedIn
+        (\loggedIn ->
+            case SeqDict.get guildOrDmId loggedIn.editMessage of
+                Just edit ->
+                    let
+                        ( fileText, cmds, dict ) =
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        fileId : Id FileId
+                                        fileId =
+                                            Id.nextId dict3
+                                    in
+                                    ( fileText2
+                                        ++ [ " "
+                                                ++ RichText.attachedFilePrefix
+                                                ++ Id.toString fileId
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.uploadFile
+                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
+                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
+                                        guildOrDmId
+                                        fileId
+                                        file2
+                                        :: cmds2
+                                    , SeqDict.insert
+                                        fileId
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            { sent = 0, size = File.size file2 }
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], edit.attachedFiles )
+                                files
+                    in
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.insert
+                                guildOrDmId
+                                { edit
+                                    | text = edit.text ++ String.concat fileText
+                                    , attachedFiles = dict
+                                }
+                                loggedIn.editMessage
+                      }
+                    , Command.batch cmds
+                    )
+
+                Nothing ->
+                    ( loggedIn, Command.none )
+        )
+        model
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg

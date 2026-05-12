@@ -752,7 +752,7 @@ updateLoaded msg model =
                 model
 
         SelectedFilesToAttach ( guildOrDmId, threadRoute ) file files ->
-            gotFiles guildOrDmId threadRoute (Nonempty file files) model
+            FrontendExtra.gotFiles guildOrDmId threadRoute (Nonempty file files) model
 
         NewChannelFormChanged guildId newChannelForm ->
             FrontendExtra.updateLoggedIn
@@ -2031,7 +2031,7 @@ updateLoaded msg model =
                 model
 
         EditMessage_SelectedFilesToAttach guildOrDmId file files ->
-            editMessage_gotFiles guildOrDmId (Nonempty file files) model
+            FrontendExtra.editMessage_gotFiles guildOrDmId (Nonempty file files) model
 
         EditMessage_GotFileHashName guildOrDmId messageIndex fileId result ->
             FrontendExtra.updateLoggedIn
@@ -3036,7 +3036,7 @@ updateLoaded msg model =
                     ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach ( guildOrDmId, threadRoute )) )
 
                 MessageInput.OnPasteFiles files ->
-                    editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
+                    FrontendExtra.editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
 
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
@@ -3510,7 +3510,7 @@ updateLoaded msg model =
                     ( model, Effect.File.Select.files [] (SelectedFilesToAttach ( guildOrDmId, threadRoute )) )
 
                 MessageInput.OnPasteFiles files ->
-                    gotFiles guildOrDmId threadRoute files model
+                    FrontendExtra.gotFiles guildOrDmId threadRoute files model
 
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
@@ -3967,15 +3967,16 @@ updateLoaded msg model =
                         model
                         |> Tuple.first
             in
-            case ( List.Nonempty.fromList files, Route.toGuildOrDmId modelReset.route, modelReset.loginStatus ) of
-                ( Just nonemptyFiles, Just ( guildOrDmId, threadRoute ), LoggedIn loggedIn ) ->
-                    if SeqDict.member ( guildOrDmId, threadRoute ) loggedIn.editMessage then
-                        editMessage_gotFiles ( guildOrDmId, threadRoute ) nonemptyFiles modelReset
+            case List.Nonempty.fromList files of
+                Just nonemptyFiles ->
+                    case FrontendExtra.canDropFiles modelReset.route of
+                        Just func ->
+                            func nonemptyFiles modelReset
 
-                    else
-                        gotFiles guildOrDmId threadRoute nonemptyFiles modelReset
+                        Nothing ->
+                            ( modelReset, Command.none )
 
-                _ ->
+                Nothing ->
                     ( modelReset, Command.none )
 
         PressedChannelHeaderTab otherUserId tab ->
@@ -4997,182 +4998,6 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
 
         Dragging _ ->
             ( model, Command.none )
-
-
-gotFiles :
-    AnyGuildOrDmId
-    -> ThreadRoute
-    -> Nonempty File
-    -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-gotFiles guildOrDmId threadRoute files model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            let
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-
-                ( fileText, cmds, dict ) =
-                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
-                        Just dict2 ->
-                            List.Nonempty.foldl
-                                (\file2 ( fileText2, cmds2, dict3 ) ->
-                                    let
-                                        id =
-                                            Id.nextId (NonemptyDict.toSeqDict dict3)
-                                    in
-                                    ( fileText2
-                                        ++ [ RichText.attachedFilePrefix
-                                                ++ Id.toString id
-                                                ++ RichText.attachedFileSuffix
-                                           ]
-                                    , FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        local.localUser.session.sessionIdHash
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                        :: cmds2
-                                    , NonemptyDict.insert
-                                        id
-                                        (FileUploading
-                                            (File.name file2 |> FileName.fromString)
-                                            { sent = 0, size = File.size file2 }
-                                            (File.mime file2 |> FileStatus.contentType)
-                                        )
-                                        dict3
-                                    )
-                                )
-                                ( [], [], dict2 )
-                                files
-
-                        Nothing ->
-                            ( List.indexedMap
-                                (\index _ ->
-                                    RichText.attachedFilePrefix
-                                        ++ Id.toString (Id.fromInt (index + 1))
-                                        ++ RichText.attachedFileSuffix
-                                )
-                                (List.Nonempty.toList files)
-                            , List.indexedMap
-                                (\index file2 ->
-                                    let
-                                        id : Id FileId
-                                        id =
-                                            Id.fromInt (index + 1)
-                                    in
-                                    FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        local.localUser.session.sessionIdHash
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                )
-                                (List.Nonempty.toList files)
-                            , List.Nonempty.indexedMap
-                                (\index file2 ->
-                                    ( Id.fromInt (index + 1)
-                                    , FileUploading
-                                        (File.name file2 |> FileName.fromString)
-                                        { sent = 0, size = File.size file2 }
-                                        (File.mime file2 |> FileStatus.contentType)
-                                    )
-                                )
-                                files
-                                |> NonemptyDict.fromNonemptyList
-                            )
-            in
-            ( { loggedIn
-                | filesToUpload =
-                    SeqDict.insert ( guildOrDmId, threadRoute ) dict loggedIn.filesToUpload
-                , drafts =
-                    case String.join " " fileText |> String.Nonempty.fromString of
-                        Just fileText2 ->
-                            SeqDict.update
-                                ( guildOrDmId, threadRoute )
-                                (\maybe ->
-                                    case maybe of
-                                        Just draft ->
-                                            String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
-                                                |> Just
-
-                                        Nothing ->
-                                            Just fileText2
-                                )
-                                loggedIn.drafts
-
-                        Nothing ->
-                            loggedIn.drafts
-              }
-            , Command.batch cmds
-            )
-        )
-        model
-
-
-editMessage_gotFiles :
-    ( AnyGuildOrDmId, ThreadRoute )
-    -> Nonempty File
-    -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-editMessage_gotFiles guildOrDmId files model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            case SeqDict.get guildOrDmId loggedIn.editMessage of
-                Just edit ->
-                    let
-                        ( fileText, cmds, dict ) =
-                            List.Nonempty.foldl
-                                (\file2 ( fileText2, cmds2, dict3 ) ->
-                                    let
-                                        fileId : Id FileId
-                                        fileId =
-                                            Id.nextId dict3
-                                    in
-                                    ( fileText2
-                                        ++ [ " "
-                                                ++ RichText.attachedFilePrefix
-                                                ++ Id.toString fileId
-                                                ++ RichText.attachedFileSuffix
-                                           ]
-                                    , FileStatus.uploadFile
-                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
-                                        guildOrDmId
-                                        fileId
-                                        file2
-                                        :: cmds2
-                                    , SeqDict.insert
-                                        fileId
-                                        (FileUploading
-                                            (File.name file2 |> FileName.fromString)
-                                            { sent = 0, size = File.size file2 }
-                                            (File.mime file2 |> FileStatus.contentType)
-                                        )
-                                        dict3
-                                    )
-                                )
-                                ( [], [], edit.attachedFiles )
-                                files
-                    in
-                    ( { loggedIn
-                        | editMessage =
-                            SeqDict.insert
-                                guildOrDmId
-                                { edit
-                                    | text = edit.text ++ String.concat fileText
-                                    , attachedFiles = dict
-                                }
-                                loggedIn.editMessage
-                      }
-                    , Command.batch cmds
-                    )
-
-                Nothing ->
-                    ( loggedIn, Command.none )
-        )
-        model
 
 
 handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
