@@ -46,6 +46,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
+import User exposing (FrontendUser, LocalUser)
 
 
 type Stone
@@ -1418,8 +1419,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> Id UserId -> Maybe FileHash -> Id UserId -> Maybe CurrentGoMatch -> Maybe Model -> Element Msg
-view windowSize currentUserId currentUserIcon otherUserId state model =
+view : Coord CssPixels -> LocalUser -> Id UserId -> Maybe CurrentGoMatch -> Maybe Model -> Element Msg
+view windowSize localUser otherUserId state model =
     let
         model2 : Model
         model2 =
@@ -1443,10 +1444,16 @@ view windowSize currentUserId currentUserIcon otherUserId state model =
         ]
         (case ( model2, state ) of
             ( Game game, Just state2 ) ->
-                gameView windowSize currentUserId currentUserIcon state2.setup (foldActions state2.actions state2.setup) game
+                gameView
+                    windowSize
+                    localUser.session.userId
+                    localUser
+                    state2.setup
+                    (foldActions state2.actions state2.setup)
+                    game
 
             ( Setup setup, _ ) ->
-                setupView (currentUserId == otherUserId) windowSize setup
+                setupView (localUser.session.userId == otherUserId) windowSize setup
 
             ( Game _, Nothing ) ->
                 Ui.text "Game error"
@@ -1691,8 +1698,8 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Bool -> Id UserId -> Maybe FileHash -> GameState -> ValidatedSetup -> Element Msg
-clockView isMobile currentUserId currentUserIcon state setup =
+clockView : Bool -> LocalUser -> GameState -> ValidatedSetup -> Element Msg
+clockView isMobile localUser state setup =
     case setup.timeControl of
         Nothing ->
             Ui.none
@@ -1709,22 +1716,12 @@ clockView isMobile currentUserId currentUserIcon state setup =
                     Ui.noAttr
                 ]
                 [ clockChip
-                    (if setup.blackPlayer == currentUserId then
-                        Just currentUserIcon
-
-                     else
-                        Nothing
-                    )
+                    (User.getUser setup.blackPlayer localUser)
                     "Black"
                     state.blackTime
                     (state.currentPlayer == Black && isPlayingPhase state)
                 , clockChip
-                    (if setup.whitePlayer == currentUserId then
-                        Just currentUserIcon
-
-                     else
-                        Nothing
-                    )
+                    (User.getUser setup.whitePlayer localUser)
                     "White"
                     state.whiteTime
                     (state.currentPlayer == White && isPlayingPhase state)
@@ -1758,14 +1755,14 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Maybe (Maybe FileHash) -> String -> Float -> Bool -> Element msg
-clockChip localUserIcon label seconds isActive =
+clockChip : Maybe FrontendUser -> String -> Float -> Bool -> Element msg
+clockChip maybeUser label seconds isActive =
     Ui.row
-        [ Ui.padding 8
-        , Ui.spacing 6
+        [ User.profileImageRounding
         , Ui.width (Ui.px 170)
-        , Ui.rounded 4
         , Ui.border 1
+        , Ui.spacing 8
+        , Ui.paddingRight 8
         , Ui.borderColor
             (if isActive then
                 Ui.rgb 59 153 252
@@ -1784,40 +1781,15 @@ clockChip localUserIcon label seconds isActive =
           else
             Ui.noAttr
         ]
-        [ Ui.text label
-        , case localUserIcon of
-            Just icon ->
-                clockChipIcon icon
+        [ case maybeUser of
+            Just user ->
+                User.profileImage user.icon
 
             Nothing ->
-                Ui.none
+                User.profileImage Nothing
+        , Ui.text label
         , Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink, Ui.alignRight ] (Ui.text (formatClock seconds))
         ]
-
-
-clockChipIcon : Maybe FileHash -> Element msg
-clockChipIcon maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.rounded 9
-                , Ui.width (Ui.px 18)
-                , Ui.height (Ui.px 18)
-                , Ui.clip
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
-
-        Nothing ->
-            Ui.el
-                [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.rounded 9
-                , Ui.width (Ui.px 18)
-                , Ui.height (Ui.px 18)
-                ]
-                Ui.none
 
 
 isPlayingPhase : GameState -> Bool
@@ -1840,8 +1812,8 @@ isLocalUsersTurn currentUserId setup state =
             setup.whitePlayer == currentUserId
 
 
-gameView : Coord CssPixels -> Id UserId -> Maybe FileHash -> ValidatedSetup -> GameState -> GameModel -> Element Msg
-gameView windowSize currentUserId currentUserIcon setup state model =
+gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView windowSize currentUserId localUser setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -1867,7 +1839,7 @@ gameView windowSize currentUserId currentUserIcon setup state model =
         , Ui.background MyUi.background1
         ]
         [ statusView setup state model
-        , clockView isMobile currentUserId currentUserIcon state setup
+        , clockView isMobile localUser state setup
         , boardView windowSize currentUserId setup state model
         , if isMobile then
             Ui.none

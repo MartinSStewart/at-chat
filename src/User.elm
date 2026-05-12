@@ -25,6 +25,7 @@ module User exposing
     , linkDiscordDataCodec
     , multipleProfileImages
     , profileImage
+    , profileImageRounding
     , profileImageSize
     , sectionToString
     , setDiscordGuildNotificationLevel
@@ -654,12 +655,17 @@ smallProfileImageSize =
     25
 
 
+profileImageRounding : Ui.Attribute msg
+profileImageRounding =
+    Ui.rounded 8
+
+
 profileImage : Maybe FileHash -> Element msg
 profileImage maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
             Ui.image
-                [ Ui.rounded 8
+                [ profileImageRounding
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
                 , Ui.clip
@@ -672,7 +678,7 @@ profileImage maybeFileHash =
         Nothing ->
             Ui.el
                 [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.rounded 8
+                , profileImageRounding
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
                 ]
