@@ -58,7 +58,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -109,7 +109,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (DmChannelHeaderTab(..), MediaDevicesStatus(..))
+import VoiceChat exposing (MediaDevicesStatus(..))
 
 
 app :
@@ -1181,32 +1181,33 @@ updateLoaded msg model =
                 _ ->
                     case model.route of
                         DmRoute dmRoute ->
-                            FrontendExtra.updateLoggedIn
-                                (\loggedIn ->
-                                    let
-                                        local =
-                                            Local.model loggedIn.localState
+                            case dmRoute.tab of
+                                Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                                    FrontendExtra.updateLoggedIn
+                                        (\loggedIn ->
+                                            let
+                                                local =
+                                                    Local.model loggedIn.localState
 
-                                        dmChannel : FrontendDmChannel
-                                        dmChannel =
-                                            SeqDict.get dmRoute.otherUserId local.dmChannels
-                                                |> Maybe.withDefault DmChannel.frontendInit
-                                    in
-                                    ( { loggedIn
-                                        | currentDmGoMatch =
-                                            SeqDict.insert
-                                                dmRoute.otherUserId
-                                                (Go.pressedKey
-                                                    key
-                                                    dmChannel.currentGoMatch
-                                                    (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch)
-                                                )
-                                                loggedIn.currentDmGoMatch
-                                      }
-                                    , Command.none
-                                    )
-                                )
-                                model
+                                                dmChannel : FrontendDmChannel
+                                                dmChannel =
+                                                    SeqDict.get dmRoute.otherUserId local.dmChannels
+                                                        |> Maybe.withDefault DmChannel.frontendInit
+                                            in
+                                            ( { loggedIn
+                                                | currentDmGoMatch =
+                                                    SeqDict.update
+                                                        ( dmRoute.otherUserId, maybeMatchId )
+                                                        (Go.pressedKey key maybeMatchId dmChannel.goMatches)
+                                                        loggedIn.currentDmGoMatch
+                                              }
+                                            , Command.none
+                                            )
+                                        )
+                                        model
+
+                                _ ->
+                                    ( model, Command.none )
 
                         _ ->
                             ( model, Command.none )
@@ -1890,7 +1891,7 @@ updateLoaded msg model =
                                         goMsg
                                         (SeqDict.get dmRoute.otherUserId local.dmChannels
                                             |> Maybe.withDefault DmChannel.frontendInit
-                                            |> .currentGoMatch
+                                            |> .goMatches
                                         )
                                         (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch)
                             in
@@ -2288,6 +2289,7 @@ updateLoaded msg model =
                                                             { otherUserId = otherUserId
                                                             , threadRoute =
                                                                 ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab
+                                                            , tab = Nothing
                                                             }
                                                         )
 
@@ -2298,6 +2300,7 @@ updateLoaded msg model =
                                                             { otherUserId = otherUserId
                                                             , threadRoute =
                                                                 NoThreadWithFriends (Just repliedTo) HideMembersTab
+                                                            , tab = Nothing
                                                             }
                                                         )
 
@@ -2409,7 +2412,10 @@ updateLoaded msg model =
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
-                            { otherUserId = otherUserId, threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab }
+                            { otherUserId = otherUserId
+                            , threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab
+                            , tab = Nothing
+                            }
                                 |> DmRoute
                                 |> FrontendExtra.routePush model
 
@@ -2453,7 +2459,21 @@ updateLoaded msg model =
                     FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId threadRoute model) model
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
-                    openDmChannelHeaderTab guildOrDmId DmChannelHeaderTab_VoiceChat model
+                    case guildOrDmId of
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                            FrontendExtra.updateLoggedIn
+                                (\loggedIn ->
+                                    ( { loggedIn
+                                        | dmChannelHeaderTabs =
+                                            SeqDict.insert otherUserId DmChannelHeaderTab_VoiceChat loggedIn.dmChannelHeaderTabs
+                                      }
+                                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                                    )
+                                )
+                                model
+
+                        _ ->
+                            ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
                     openDmChannelHeaderTab guildOrDmId DmChannelHeaderTab_Go model
@@ -4004,25 +4024,6 @@ updateLoaded msg model =
                     )
                 )
                 model
-
-
-openDmChannelHeaderTab : AnyGuildOrDmId -> DmChannelHeaderTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-openDmChannelHeaderTab guildOrDmId tab model =
-    case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | dmChannelHeaderTabs =
-                            SeqDict.insert otherUserId tab loggedIn.dmChannelHeaderTabs
-                      }
-                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                    )
-                )
-                model
-
-        _ ->
-            ( model, Command.none )
 
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg

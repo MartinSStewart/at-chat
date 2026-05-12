@@ -4571,12 +4571,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.insert
                                                 dmChannelId
                                                 { dmChannel2
-                                                    | currentGoMatch =
-                                                        { matchId = messageId
-                                                        , setup = setup
-                                                        , actions = Array.empty
-                                                        }
-                                                            |> Just
+                                                    | goMatches =
+                                                        SeqDict.insert
+                                                            messageId
+                                                            ( setup, Array.empty )
+                                                            dmChannel2.goMatches
                                                 }
                                                 model.dmChannels
                                       }
@@ -4595,21 +4594,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ]
                                     )
 
-                                Go.Action actionWithTime ->
-                                    case dmChannel.currentGoMatch of
-                                        Just goMatch ->
+                                Go.Action matchId actionWithTime ->
+                                    case SeqDict.get matchId dmChannel.goMatches of
+                                        Just ( goSetup, actions ) ->
                                             let
+                                                isCurrentPlayer : Bool
                                                 isCurrentPlayer =
-                                                    case Go.currentPlayersTurn goMatch.actions of
+                                                    case Go.currentPlayersTurn actions of
                                                         Go.Black ->
-                                                            goMatch.setup.blackPlayer == session.userId
+                                                            goSetup.blackPlayer == session.userId
 
                                                         Go.White ->
-                                                            goMatch.setup.whitePlayer == session.userId
+                                                            goSetup.whitePlayer == session.userId
 
                                                 localMsg2 : Go.LocalChange
                                                 localMsg2 =
-                                                    Go.Action { actionWithTime | time = time }
+                                                    Go.Action matchId { actionWithTime | time = time }
                                             in
                                             if isCurrentPlayer then
                                                 ( { model
@@ -4617,9 +4617,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         SeqDict.insert
                                                             dmChannelId
                                                             { dmChannel
-                                                                | currentGoMatch =
-                                                                    { goMatch | actions = Array.push actionWithTime goMatch.actions }
-                                                                        |> Just
+                                                                | goMatches =
+                                                                    SeqDict.insert
+                                                                        matchId
+                                                                        ( goSetup, Array.push actionWithTime actions )
+                                                                        dmChannel.goMatches
                                                             }
                                                             model.dmChannels
                                                   }

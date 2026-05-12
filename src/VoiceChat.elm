@@ -2,7 +2,6 @@ port module VoiceChat exposing
     ( AudioTrackData
     , ConnectionId
     , DeviceKind(..)
-    , DmChannelHeaderTab(..)
     , FromJs(..)
     , Ice
     , Local
@@ -67,7 +66,7 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater
-import Route exposing (Route)
+import Route exposing (DmChannelHeaderTab(..), Route)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -291,11 +290,6 @@ showLocalVideo displayMode2 =
 
         ShowLocalVideoAndCallThumbnail ->
             True
-
-
-type DmChannelHeaderTab
-    = DmChannelHeaderTab_VoiceChat
-    | DmChannelHeaderTab_Go
 
 
 displayMode : Route -> SeqDict (Id UserId) DmChannelHeaderTab -> Local -> DisplayMode

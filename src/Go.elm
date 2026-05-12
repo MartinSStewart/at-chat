@@ -37,6 +37,7 @@ import Icons
 import Id exposing (ChannelMessageId, Id, UserId)
 import MyUi
 import Ports
+import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Svg
@@ -225,19 +226,18 @@ type Model
     | Game GameModel
 
 
-initSetup : Model
+initSetup : SetupModel
 initSetup =
-    Setup
-        { widthInput = "9"
-        , heightInput = "9"
-        , handicapInput = "0"
-        , komiInput = "6.5"
-        , mainTimeInput = "10"
-        , incrementInput = "5"
-        , sizeSelection = Standard9
-        , gameCreatorPlayingAs = Black
-        , error = Nothing
-        }
+    { widthInput = "9"
+    , heightInput = "9"
+    , handicapInput = "0"
+    , komiInput = "6.5"
+    , mainTimeInput = "10"
+    , incrementInput = "5"
+    , sizeSelection = Standard9
+    , gameCreatorPlayingAs = Black
+    , error = Nothing
+    }
 
 
 maxHandicap : Int
@@ -336,9 +336,9 @@ handicapPositions setup =
         |> Set.toList
 
 
-initGame : Model
+initGame : GameModel
 initGame =
-    { viewingMovesBack = 0, lastError = Nothing } |> Game
+    { viewingMovesBack = 0, lastError = Nothing }
 
 
 initGameState : ValidatedSetup -> GameState
@@ -435,7 +435,7 @@ type alias ActionWithTime =
 
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
-    | Action ActionWithTime
+    | Action (Id ChannelMessageId) ActionWithTime
 
 
 type alias ServerChange =
@@ -1001,67 +1001,111 @@ update :
     -> Id UserId
     -> Id UserId
     -> Msg
-    -> Maybe CurrentGoMatch
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
     -> Maybe Model
     -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
-update time creatorId otherPlayerId msg state model =
-    let
-        model2 : Model
-        model2 =
-            Maybe.withDefault
-                (case state of
-                    Just _ ->
-                        initGame
+update time currentUserId otherUserId msg maybeMatchId matches model =
+    --let
+    --    model2 : Model
+    --    model2 =
+    --        Maybe.withDefault
+    --            (case state of
+    --                Just _ ->
+    --                    initGame
+    --
+    --                Nothing ->
+    --                    initSetup
+    --            )
+    --            model
+    --in
+    --case ( model2, state ) of
+    --    ( Game game, Just state2 ) ->
+    --        let
+    --            ( game2, cmd, maybeChange ) =
+    --                updateGame currentUserId msg state2.setup (foldActions state2.actions state2.setup) game
+    --        in
+    --        ( game2, cmd, Maybe.map (\change -> Action state2.matchId { time = time, change = change }) maybeChange )
+    --
+    --    ( Setup setup, _ ) ->
+    --        updateSetup time currentUserId otherUserId msg setup
+    --
+    --    ( Game _, Nothing ) ->
+    --        ( model2, Command.none, Nothing )
+    case maybeMatchId of
+        Just matchId ->
+            case SeqDict.get matchId matches of
+                Just ( setup, actions ) ->
+                    let
+                        ( game2, cmd, maybeChange ) =
+                            updateGame
+                                currentUserId
+                                msg
+                                setup
+                                (foldActions actions setup)
+                                (case model of
+                                    Just (Game game) ->
+                                        game
 
-                    Nothing ->
-                        initSetup
-                )
-                model
-    in
-    case ( model2, state ) of
-        ( Game game, Just state2 ) ->
-            let
-                ( game2, cmd, maybeChange ) =
-                    updateGame creatorId msg state2.setup (foldActions state2.actions state2.setup) game
-            in
-            ( game2, cmd, Maybe.map (\change -> Action { time = time, change = change }) maybeChange )
+                                    Just (Setup _) ->
+                                        initGame
 
-        ( Setup setup, _ ) ->
-            updateSetup time creatorId otherPlayerId msg setup
+                                    Nothing ->
+                                        initGame
+                                )
+                    in
+                    ( game2
+                    , cmd
+                    , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
+                    )
 
-        ( Game _, Nothing ) ->
-            ( model2, Command.none, Nothing )
-
-
-pressedKey : String -> Maybe CurrentGoMatch -> Maybe Model -> Model
-pressedKey key state model =
-    let
-        model2 : Model
-        model2 =
-            Maybe.withDefault
-                (case state of
-                    Just _ ->
-                        initGame
-
-                    Nothing ->
-                        initSetup
-                )
-                model
-    in
-    case state of
-        Just state2 ->
-            case key of
-                "ArrowLeft" ->
-                    stepBack (foldActions state2.actions state2.setup) model2
-
-                "ArrowRight" ->
-                    stepForward model2
-
-                _ ->
-                    model2
+                Nothing ->
+                    ( Game initGame, Command.none, Nothing )
 
         Nothing ->
-            model2
+            updateSetup
+                time
+                currentUserId
+                otherUserId
+                msg
+                (case model of
+                    Just (Game game) ->
+                        initSetup
+
+                    Just (Setup setup) ->
+                        setup
+
+                    Nothing ->
+                        initSetup
+                )
+
+
+pressedKey :
+    String
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> Maybe Model
+    -> Maybe Model
+pressedKey key maybeMatchId matches model =
+    case maybeMatchId of
+        Just matchId ->
+            case ( model, SeqDict.get matchId matches ) of
+                ( Just model2, Just ( setup, actions ) ) ->
+                    case key of
+                        "ArrowLeft" ->
+                            stepBack (foldActions actions setup) model2 |> Just
+
+                        "ArrowRight" ->
+                            stepForward model2 |> Just
+
+                        _ ->
+                            model
+
+                _ ->
+                    model
+
+        Nothing ->
+            model
 
 
 stepBack : GameState -> Model -> Model
@@ -1170,7 +1214,7 @@ updateSetup time creatorId otherPlayerId msg model =
         PressedStartGame ->
             case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
-                    ( initGame, Command.none, Just (StartMatch time setup) )
+                    ( Game initGame, Command.none, Just (StartMatch time setup) )
 
                 Err error ->
                     ( Setup { model | error = Just error }, Command.none, Nothing )
@@ -1352,7 +1396,7 @@ updateGame currentUserId msg setup state model =
                     ( Game model, Command.none, Nothing )
 
         PressedReset ->
-            ( initSetup, Command.none, Nothing )
+            ( Setup initSetup, Command.none, Nothing )
 
         ChangedViewingMove moveNumber ->
             let
@@ -1419,21 +1463,15 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> LocalUser -> Id UserId -> Maybe CurrentGoMatch -> Maybe Model -> Element Msg
-view windowSize localUser otherUserId state model =
-    let
-        model2 : Model
-        model2 =
-            Maybe.withDefault
-                (case state of
-                    Just _ ->
-                        initGame
-
-                    Nothing ->
-                        initSetup
-                )
-                model
-    in
+view :
+    Coord CssPixels
+    -> LocalUser
+    -> Id UserId
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> Maybe Model
+    -> Element Msg
+view windowSize localUser otherUserId maybeMatchId matches model =
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.scrollable
@@ -1442,21 +1480,44 @@ view windowSize localUser otherUserId state model =
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
         ]
-        (case ( model2, state ) of
-            ( Game game, Just state2 ) ->
-                gameView
+        (case maybeMatchId of
+            Just matchId ->
+                case SeqDict.get matchId matches of
+                    Just ( setup, actions ) ->
+                        gameView
+                            windowSize
+                            localUser.session.userId
+                            localUser
+                            setup
+                            (foldActions actions setup)
+                            (case model of
+                                Just (Game game) ->
+                                    game
+
+                                Just (Setup _) ->
+                                    initGame
+
+                                Nothing ->
+                                    initGame
+                            )
+
+                    Nothing ->
+                        Ui.text "Match not found"
+
+            Nothing ->
+                setupView
+                    (localUser.session.userId == otherUserId)
                     windowSize
-                    localUser.session.userId
-                    localUser
-                    state2.setup
-                    (foldActions state2.actions state2.setup)
-                    game
+                    (case model of
+                        Just (Game game) ->
+                            initSetup
 
-            ( Setup setup, _ ) ->
-                setupView (localUser.session.userId == otherUserId) windowSize setup
+                        Just (Setup setup) ->
+                            setup
 
-            ( Game _, Nothing ) ->
-                Ui.text "Game error"
+                        Nothing ->
+                            initSetup
+                    )
         )
 
 

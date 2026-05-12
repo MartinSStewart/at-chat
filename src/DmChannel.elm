@@ -37,8 +37,7 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
-    , pastGoMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
-    , currentGoMatch : Maybe { matchId : Id ChannelMessageId, setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime }
+    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
     }
 
 
@@ -63,8 +62,7 @@ type alias FrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
-    , pastGoMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
-    , currentGoMatch : Maybe CurrentGoMatch
+    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
     }
 
 
@@ -79,8 +77,7 @@ backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    , pastGoMatches = SeqDict.empty
-    , currentGoMatch = Nothing
+    , goMatches = SeqDict.empty
     }
 
 
@@ -90,8 +87,7 @@ frontendInit =
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    , pastGoMatches = SeqDict.empty
-    , currentGoMatch = Nothing
+    , goMatches = SeqDict.empty
     }
 
 
@@ -108,8 +104,7 @@ toFrontend threadRoute dmChannel =
         SeqDict.map
             (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
-    , pastGoMatches = dmChannel.pastGoMatches
-    , currentGoMatch = dmChannel.currentGoMatch
+    , goMatches = dmChannel.goMatches
     }
 
 

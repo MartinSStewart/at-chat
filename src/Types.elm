@@ -91,7 +91,7 @@ import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
-import Route exposing (Route)
+import Route exposing (DmChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -108,7 +108,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (DmChannelHeaderTab, FromJs, RoomId)
+import VoiceChat exposing (FromJs, RoomId)
 
 
 type FrontendModel
@@ -214,7 +214,7 @@ type alias LoggedIn2 =
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
     , dmChannelHeaderTabs : SeqDict (Id UserId) DmChannelHeaderTab
-    , currentDmGoMatch : SeqDict (Id UserId) Go.Model
+    , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
     }
 

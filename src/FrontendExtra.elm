@@ -208,7 +208,7 @@ pendingChangesText localChange =
                 Go.StartMatch posix validatedSetup ->
                     "Started Go match"
 
-                Go.Action actionWithTime ->
+                Go.Action _ actionWithTime ->
                     "Made a move in Go"
 
 
@@ -3748,37 +3748,23 @@ goChangeUpdate changeBy otherUserId goChange local =
                                     LocalState.createChannelMessageFrontend
                                         (GoMatchStarted createdAt changeBy SeqDict.empty)
                                         dmChannel
+
+                                matchId : Id ChannelMessageId
+                                matchId =
+                                    DmChannel.latestMessageId dmChannel2
                             in
                             { dmChannel2
-                                | currentGoMatch =
-                                    { matchId = DmChannel.latestMessageId dmChannel2
-                                    , setup = setup
-                                    , actions = Array.empty
-                                    }
-                                        |> Just
-                                , pastGoMatches =
-                                    case dmChannel2.currentGoMatch of
-                                        Just goMatch ->
-                                            SeqDict.insert
-                                                goMatch.matchId
-                                                ( goMatch.setup, goMatch.actions )
-                                                dmChannel2.pastGoMatches
-
-                                        Nothing ->
-                                            dmChannel2.pastGoMatches
+                                | goMatches = SeqDict.insert matchId ( setup, Array.empty ) dmChannel2.goMatches
                             }
 
-                        Go.Action actionWithTime ->
-                            case dmChannel.currentGoMatch of
-                                Just goMatch ->
-                                    { dmChannel
-                                        | currentGoMatch =
-                                            { goMatch | actions = Array.push actionWithTime goMatch.actions }
-                                                |> Just
-                                    }
-
-                                Nothing ->
-                                    dmChannel
+                        Go.Action matchId actionWithTime ->
+                            { dmChannel
+                                | goMatches =
+                                    SeqDict.updateIfExists
+                                        matchId
+                                        (\( setup, actions ) -> ( setup, Array.push actionWithTime actions ))
+                                        dmChannel.goMatches
+                            }
                     )
                         |> Just
                 )

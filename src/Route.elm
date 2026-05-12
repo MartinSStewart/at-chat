@@ -3,6 +3,7 @@ module Route exposing
     , DiscordChannelRoute(..)
     , DiscordDmRouteData
     , DiscordGuildRouteData
+    , DmChannelHeaderTab(..)
     , DmRouteData
     , LinkDiscordError(..)
     , Route(..)
@@ -58,7 +59,12 @@ type alias DiscordDmRouteData =
 
 
 type alias DmRouteData =
-    { otherUserId : Id UserId, threadRoute : ThreadRouteWithFriends }
+    { otherUserId : Id UserId, threadRoute : ThreadRouteWithFriends, tab : Maybe DmChannelHeaderTab }
+
+
+type DmChannelHeaderTab
+    = DmChannelHeaderTab_VoiceChat
+    | DmChannelHeaderTab_Go (Maybe (Id ChannelMessageId))
 
 
 type alias DiscordGuildRouteData =
@@ -255,18 +261,57 @@ decode url =
         "d" :: userId :: rest ->
             case Id.fromString userId of
                 Just userId2 ->
+                    let
+                        goMatchId : Maybe (Id ChannelMessageId)
+                        goMatchId =
+                            case Dict.get goMatchParam url2.queryParameters of
+                                Just [ goMatchId2 ] ->
+                                    Id.fromString goMatchId2
+
+                                _ ->
+                                    Nothing
+
+                        tab : Maybe DmChannelHeaderTab
+                        tab =
+                            case Dict.get tabParam url2.queryParameters of
+                                Just [ tab2 ] ->
+                                    case tab2 of
+                                        "go" ->
+                                            DmChannelHeaderTab_Go goMatchId |> Just
+
+                                        "call" ->
+                                            DmChannelHeaderTab_VoiceChat |> Just
+
+                                        _ ->
+                                            Nothing
+
+                                _ ->
+                                    Nothing
+                    in
                     (case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
-                            { otherUserId = userId2, threadRoute = stringToThread showMembers threadMessageIndex messageIndex }
+                            { otherUserId = userId2
+                            , threadRoute = stringToThread showMembers threadMessageIndex messageIndex
+                            , tab = tab
+                            }
 
                         [ "t", threadMessageIndex ] ->
-                            { otherUserId = userId2, threadRoute = stringToThread showMembers threadMessageIndex "" }
+                            { otherUserId = userId2
+                            , threadRoute = stringToThread showMembers threadMessageIndex ""
+                            , tab = tab
+                            }
 
                         [ "m", messageIndex ] ->
-                            { otherUserId = userId2, threadRoute = NoThreadWithFriends (Id.fromString messageIndex) showMembers }
+                            { otherUserId = userId2
+                            , threadRoute = NoThreadWithFriends (Id.fromString messageIndex) showMembers
+                            , tab = tab
+                            }
 
                         _ ->
-                            { otherUserId = userId2, threadRoute = NoThreadWithFriends Nothing showMembers }
+                            { otherUserId = userId2
+                            , threadRoute = NoThreadWithFriends Nothing showMembers
+                            , tab = tab
+                            }
                     )
                         |> DmRoute
 
@@ -315,6 +360,16 @@ decode url =
 
         _ ->
             HomePageRoute
+
+
+goMatchParam : String
+goMatchParam =
+    "go-match"
+
+
+tabParam : String
+tabParam =
+    "tab"
 
 
 stringToThread : ShowMembersTab -> String -> String -> ThreadRouteWithFriends

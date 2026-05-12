@@ -907,6 +907,7 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
 
                                     ViewThreadWithMaybeMessage threadId _ ->
                                         ViewThreadWithFriends threadId Nothing HideMembersTab
+                            , tab = Nothing
                             }
                             |> Just
                         )

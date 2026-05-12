@@ -58,7 +58,7 @@ import OneToOne
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmChannelHeaderTab(..), DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (AnimationMode(..))
@@ -79,7 +79,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat exposing (DmChannelHeaderTab(..), RoomId(..))
+import VoiceChat exposing (RoomId(..))
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -293,7 +293,12 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                 Just count ->
                                     elLinkButton
                                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                                        (DmRoute { otherUserId = otherUserId, threadRoute = NoThreadWithFriends Nothing HideMembersTab })
+                                        (DmRoute
+                                            { otherUserId = otherUserId
+                                            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+                                            , tab = Nothing
+                                            }
+                                        )
                                         []
                                         (case SeqDict.get otherUserId allUsers of
                                             Just otherUser ->
@@ -1306,7 +1311,12 @@ memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
 memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
-        (DmRoute { otherUserId = userId, threadRoute = NoThreadWithFriends Nothing HideMembersTab })
+        (DmRoute
+            { otherUserId = userId
+            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+            , tab = Nothing
+            }
+        )
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
@@ -3060,7 +3070,7 @@ goGameButton isMobile otherUserId currentTab =
         isMobile
         (Dom.id "guild_openGoMatch")
         otherUserId
-        DmChannelHeaderTab_Go
+        (DmChannelHeaderTab_Go Nothing)
         currentTab
         (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
 
@@ -3882,13 +3892,14 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
                     Nothing
     in
     case maybeTab of
-        Just ( otherUserId, DmChannelHeaderTab_Go ) ->
+        Just ( otherUserId, DmChannelHeaderTab_Go maybeMatchId ) ->
             Go.view
                 model.windowSize
                 local.localUser
                 otherUserId
-                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch)
-                (SeqDict.get otherUserId loggedIn.currentDmGoMatch)
+                maybeMatchId
+                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
+                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
                 |> Ui.map GoMsg
                 |> Just
 
@@ -7181,7 +7192,12 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     in
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
-        (Route.DmRoute { otherUserId = otherUserId, threadRoute = NoThreadWithFriends Nothing HideMembersTab })
+        (Route.DmRoute
+            { otherUserId = otherUserId
+            , threadRoute = NoThreadWithFriends Nothing HideMembersTab
+            , tab = Nothing
+            }
+        )
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4
