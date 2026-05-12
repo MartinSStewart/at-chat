@@ -5223,8 +5223,8 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 maybeThreadStarter
                 isHovered
                 (Ui.row
-                    []
-                    [ callStarted userId allUsers
+                    [ Ui.spacing 8, Ui.contentCenterY ]
+                    [ callStartedCard userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     , messageIdView messageIndex
                     ]
@@ -5267,8 +5267,8 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 maybeThreadStarter
                 isHovered
                 (Ui.row
-                    []
-                    [ goMatchStarted userId allUsers
+                    [ Ui.spacing 8, Ui.contentCenterY ]
+                    [ goMatchStartedCard userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
                     , messageIdView messageIndex
                     ]
@@ -5364,7 +5364,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ callStarted userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ callStartedCard userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
         CallEnded time reactions ->
             threadMessageContainer
@@ -5388,7 +5388,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ goMatchStarted userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ goMatchStartedCard userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
 
 isHoveredToAnimationMode : IsHovered -> AnimationMode
@@ -5697,6 +5697,55 @@ goMatchStarted userId allUsers =
         , Ui.el
             []
             (Ui.text " started a Go match")
+        ]
+
+
+callStartedCard : userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
+callStartedCard userId allUsers =
+    eventCard
+        (Dom.id "guild_callStartedCard")
+        MessageViewMsg_PressedCallStartedCard
+        (Ui.html Icons.phone)
+        (User.toString userId allUsers)
+        "started a call"
+
+
+goMatchStartedCard : userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
+goMatchStartedCard userId allUsers =
+    eventCard
+        (Dom.id "guild_goMatchStartedCard")
+        MessageViewMsg_PressedGoMatchStartedCard
+        (Ui.html Icons.go)
+        (User.toString userId allUsers)
+        "started a Go match"
+
+
+eventCard : HtmlId -> MessageViewMsg -> Element MessageViewMsg -> String -> String -> Element MessageViewMsg
+eventCard htmlId onPress icon userName action =
+    MyUi.rowButton
+        htmlId
+        onPress
+        [ Ui.spacing 8
+        , Ui.paddingXY 10 6
+        , Ui.background MyUi.background2
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.rounded 6
+        , Ui.width Ui.shrink
+        , MyUi.hover False [ Ui.Anim.backgroundColor MyUi.hoverHighlight ]
+        ]
+        [ Ui.el
+            [ Ui.width (Ui.px 20)
+            , Ui.height (Ui.px 20)
+            , Ui.contentCenterY
+            , Ui.Font.color MyUi.font2
+            ]
+            icon
+        , Ui.column
+            [ Ui.spacing 2, Ui.width Ui.shrink ]
+            [ Ui.el [ Ui.Font.bold ] (Ui.text userName)
+            , Ui.el [ Ui.Font.size 13, Ui.Font.color MyUi.font3 ] (Ui.text action)
+            ]
         ]
 
 

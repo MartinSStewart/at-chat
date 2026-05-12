@@ -109,7 +109,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (MediaDevicesStatus(..))
+import VoiceChat exposing (DmChannelHeaderTab(..), MediaDevicesStatus(..))
 
 
 app :
@@ -2455,6 +2455,12 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
                     FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId threadRoute model) model
 
+                MessageView.MessageViewMsg_PressedCallStartedCard ->
+                    openDmChannelHeaderTab guildOrDmId DmChannelHeaderTab_VoiceChat model
+
+                MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
+                    openDmChannelHeaderTab guildOrDmId DmChannelHeaderTab_Go model
+
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
@@ -4001,6 +4007,25 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+
+openDmChannelHeaderTab : AnyGuildOrDmId -> DmChannelHeaderTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+openDmChannelHeaderTab guildOrDmId tab model =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | dmChannelHeaderTabs =
+                            SeqDict.insert otherUserId tab loggedIn.dmChannelHeaderTabs
+                      }
+                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                    )
+                )
+                model
+
+        _ ->
+            ( model, Command.none )
 
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
