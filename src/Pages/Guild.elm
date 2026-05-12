@@ -3884,6 +3884,7 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
     case maybeTab of
         Just ( otherUserId, DmChannelHeaderTab_Go ) ->
             Go.view
+                model.windowSize
                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .currentGoMatch)
                 (SeqDict.get otherUserId loggedIn.currentDmGoMatch |> Maybe.withDefault Go.init)
                 |> Ui.map GoMsg

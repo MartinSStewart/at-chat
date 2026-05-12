@@ -18,6 +18,8 @@ module Go exposing
     )
 
 import Array exposing (Array)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom
@@ -1349,14 +1351,14 @@ cellPx =
     40
 
 
-view : Maybe CurrentGoMatch -> Model -> Element Msg
-view state model =
+view : Coord CssPixels -> Maybe CurrentGoMatch -> Model -> Element Msg
+view windowSize state model =
     case ( model, state ) of
         ( Game game, Just state2 ) ->
-            gameView state2.setup (foldActions state2.actions state2.setup) game
+            gameView windowSize state2.setup (foldActions state2.actions state2.setup) game
 
         ( Setup _, Just state2 ) ->
-            gameView state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
+            gameView windowSize state2.setup (foldActions state2.actions state2.setup) (startGame state2.matchId)
 
         ( Setup setup, Nothing ) ->
             setupView setup
@@ -1591,7 +1593,7 @@ clockView state setup =
 
         Just _ ->
             Ui.row
-                [ Ui.spacing 16, Ui.width Ui.shrink ]
+                [ Ui.spacing 16, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
                 [ clockChip "Black" state.blackTime (state.currentPlayer == Black && isPlayingPhase state)
                 , clockChip "White" state.whiteTime (state.currentPlayer == White && isPlayingPhase state)
                 ]
@@ -1633,26 +1635,17 @@ isPlayingPhase state =
             False
 
 
-gameView : ValidatedSetup -> GameState -> GameModel -> Element Msg
-gameView setup state model =
+gameView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView windowSize setup state model =
     Ui.column
         [ Ui.spacing 16
-        , Ui.padding 24
+        , Ui.paddingXY 0 16
         , MyUi.montserrat
         , Ui.background MyUi.background1
         ]
-        [ Ui.el [ Ui.Font.size 28, Ui.Font.weight 700 ]
-            (Ui.text
-                ("Go ("
-                    ++ String.fromInt (boardSizeToInt setup.width)
-                    ++ " x "
-                    ++ String.fromInt (boardSizeToInt setup.height)
-                    ++ ")"
-                )
-            )
-        , statusView setup state model
+        [ statusView setup state model
         , clockView state setup
-        , boardView setup state model
+        , boardView windowSize setup state model
         , historyView state model
         , controlsView state
         , case model.lastError of
@@ -1693,7 +1686,7 @@ statusView setup state model =
                         ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
-        [ Ui.spacing 4 ]
+        [ Ui.spacing 4, Ui.paddingXY 16 0 ]
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText)
         , Ui.text ("Black has captured: " ++ String.fromInt snapshot.blackCaptures)
         , Ui.text ("White has captured: " ++ String.fromInt snapshot.whiteCaptures)
@@ -1753,7 +1746,7 @@ controlsView state =
                     []
     in
     Ui.row
-        [ Ui.spacing 8, Ui.width Ui.shrink ]
+        [ Ui.spacing 8, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
         (phaseButtons
             ++ [ MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game") ]
         )
@@ -1775,7 +1768,7 @@ historyView state model =
 
     else
         Ui.row
-            [ Ui.spacing 8, Ui.width Ui.shrink ]
+            [ Ui.spacing 8, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
             [ MyUi.simpleButton (Dom.id "go_arrowLeft") PressedArrowLeft (Ui.html (Icons.arrowLeft 20))
             , Html.input
                 [ Html.Attributes.type_ "range"
@@ -1794,9 +1787,12 @@ historyView state model =
             ]
 
 
-boardView : ValidatedSetup -> GameState -> GameModel -> Element Msg
-boardView setup state model =
+boardView : Coord CssPixels -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+boardView windowSize setup state model =
     let
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+
         width =
             boardSizeToInt setup.width
 
@@ -1852,8 +1848,20 @@ boardView setup state model =
                 deadStonePositions setup state
     in
     Svg.svg
-        [ Svg.Attributes.width (String.fromInt widthPx)
-        , Svg.Attributes.height (String.fromInt heightPx)
+        [ Svg.Attributes.width
+            (if isMobile then
+                Coord.xRaw windowSize |> String.fromInt
+
+             else
+                String.fromInt widthPx
+            )
+        , Svg.Attributes.height
+            (if isMobile then
+                Coord.xRaw windowSize |> String.fromInt
+
+             else
+                String.fromInt widthPx
+            )
         , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt widthPx ++ " " ++ String.fromInt heightPx)
         , Svg.Attributes.style "background:#dcb35c;display:block"
         ]
