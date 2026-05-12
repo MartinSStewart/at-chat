@@ -2318,7 +2318,8 @@ clickTargets width height =
                     |> List.map
                         (\y ->
                             Svg.rect
-                                [ Svg.Attributes.x (String.fromInt (x * cellPx))
+                                [ Svg.Attributes.id ("go_cell_" ++ String.fromInt x ++ "_" ++ String.fromInt y)
+                                , Svg.Attributes.x (String.fromInt (x * cellPx))
                                 , Svg.Attributes.y (String.fromInt (y * cellPx))
                                 , Svg.Attributes.width (String.fromInt cellPx)
                                 , Svg.Attributes.height (String.fromInt cellPx)
