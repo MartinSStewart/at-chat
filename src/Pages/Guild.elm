@@ -3062,7 +3062,7 @@ goGameButton isMobile otherUserId currentTab =
         otherUserId
         DmChannelHeaderTab_Go
         currentTab
-        (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text "Go"))
+        (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
 
 
 channelHeaderTab : Bool -> HtmlId -> Id UserId -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Element FrontendMsg -> Element FrontendMsg

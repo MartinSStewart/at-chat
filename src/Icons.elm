@@ -324,7 +324,7 @@ go : Html msg
 go =
     Svg.svg
         [ Svg.Attributes.viewBox "0 0 16 16"
-        , Svg.Attributes.width "20"
+        , Svg.Attributes.width "24"
         , Svg.Attributes.fill "none"
         ]
         [ Svg.g

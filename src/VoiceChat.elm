@@ -364,7 +364,7 @@ videoNodes route tabs windowSize model local =
                 MyUi.channelAndGuildColumnWidth windowSize
 
         voiceChatY =
-            MyUi.channelHeaderHeight
+            MyUi.channelHeaderHeight + 8
 
         maxWidth : Int
         maxWidth =
