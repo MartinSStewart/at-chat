@@ -7,6 +7,7 @@ module Go exposing
     , LocalChange(..)
     , Model
     , Msg
+    , OutMsg(..)
     , ServerChange
     , Stone(..)
     , ValidatedSetup
@@ -420,6 +421,7 @@ type Msg
     | SelectedPlayingAs Stone
     | PressedStartGame
     | Tick Time.Posix
+    | SelectedMatch (Maybe (Id ChannelMessageId))
 
 
 type Action
@@ -442,6 +444,12 @@ type LocalChange
 
 type alias ServerChange =
     { userId : Id UserId, change : LocalChange }
+
+
+type OutMsg
+    = OutNone
+    | OutLocalChange LocalChange
+    | OutSelectMatch (Maybe (Id ChannelMessageId))
 
 
 otherStone : Stone -> Stone
@@ -1006,80 +1014,77 @@ update :
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
     -> Maybe Model
-    -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
+    -> ( Model, Command FrontendOnly toMsg Msg, OutMsg )
 update time currentUserId otherUserId msg maybeMatchId matches model =
-    --let
-    --    model2 : Model
-    --    model2 =
-    --        Maybe.withDefault
-    --            (case state of
-    --                Just _ ->
-    --                    initGame
-    --
-    --                Nothing ->
-    --                    initSetup
-    --            )
-    --            model
-    --in
-    --case ( model2, state ) of
-    --    ( Game game, Just state2 ) ->
-    --        let
-    --            ( game2, cmd, maybeChange ) =
-    --                updateGame currentUserId msg state2.setup (foldActions state2.actions state2.setup) game
-    --        in
-    --        ( game2, cmd, Maybe.map (\change -> Action state2.matchId { time = time, change = change }) maybeChange )
-    --
-    --    ( Setup setup, _ ) ->
-    --        updateSetup time currentUserId otherUserId msg setup
-    --
-    --    ( Game _, Nothing ) ->
-    --        ( model2, Command.none, Nothing )
-    case maybeMatchId of
-        Just matchId ->
-            case SeqDict.get matchId matches of
-                Just ( setup, actions ) ->
-                    let
-                        ( game2, cmd, maybeChange ) =
-                            updateGame
-                                currentUserId
-                                msg
-                                setup
-                                (foldActions actions setup)
-                                (case model of
-                                    Just (Game game) ->
-                                        game
+    case msg of
+        SelectedMatch newMatchId ->
+            ( model |> Maybe.withDefault (Game initGame)
+            , Command.none
+            , OutSelectMatch newMatchId
+            )
 
-                                    Just (Setup _) ->
-                                        initGame
+        _ ->
+            case maybeMatchId of
+                Just matchId ->
+                    case SeqDict.get matchId matches of
+                        Just ( setup, actions ) ->
+                            let
+                                ( game2, cmd, maybeChange ) =
+                                    updateGame
+                                        currentUserId
+                                        msg
+                                        setup
+                                        (foldActions actions setup)
+                                        (case model of
+                                            Just (Game game) ->
+                                                game
 
-                                    Nothing ->
-                                        initGame
-                                )
-                    in
-                    ( game2
-                    , cmd
-                    , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
-                    )
+                                            Just (Setup _) ->
+                                                initGame
+
+                                            Nothing ->
+                                                initGame
+                                        )
+                            in
+                            ( game2
+                            , cmd
+                            , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
+                                |> localChangeToOut
+                            )
+
+                        Nothing ->
+                            ( Game initGame, Command.none, OutNone )
 
                 Nothing ->
-                    ( Game initGame, Command.none, Nothing )
+                    let
+                        ( model2, cmd, maybeChange ) =
+                            updateSetup
+                                time
+                                currentUserId
+                                otherUserId
+                                msg
+                                (case model of
+                                    Just (Game _) ->
+                                        initSetup
+
+                                    Just (Setup setup) ->
+                                        setup
+
+                                    Nothing ->
+                                        initSetup
+                                )
+                    in
+                    ( model2, cmd, localChangeToOut maybeChange )
+
+
+localChangeToOut : Maybe LocalChange -> OutMsg
+localChangeToOut maybeChange =
+    case maybeChange of
+        Just change ->
+            OutLocalChange change
 
         Nothing ->
-            updateSetup
-                time
-                currentUserId
-                otherUserId
-                msg
-                (case model of
-                    Just (Game game) ->
-                        initSetup
-
-                    Just (Setup setup) ->
-                        setup
-
-                    Nothing ->
-                        initSetup
-                )
+            OutNone
 
 
 pressedKey :
@@ -1449,6 +1454,9 @@ updateGame currentUserId msg setup state model =
         PressedArrowRight ->
             ( stepForward (Game model), Command.none, Nothing )
 
+        SelectedMatch _ ->
+            ( Game model, Command.none, Nothing )
+
 
 cellPx : Int
 cellPx =
@@ -1474,6 +1482,11 @@ view :
     -> Maybe Model
     -> Element Msg
 view windowSize localUser otherUserId maybeMatchId matches model =
+    let
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+    in
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.scrollable
@@ -1482,45 +1495,147 @@ view windowSize localUser otherUserId maybeMatchId matches model =
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
         ]
-        (case maybeMatchId of
-            Just matchId ->
-                case SeqDict.get matchId matches of
-                    Just ( setup, actions ) ->
-                        gameView
-                            windowSize
-                            localUser.session.userId
-                            localUser
-                            setup
-                            (foldActions actions setup)
-                            (case model of
-                                Just (Game game) ->
-                                    game
+        (Ui.column
+            []
+            [ matchSwitcherView isMobile maybeMatchId matches
+            , case maybeMatchId of
+                Just matchId ->
+                    case SeqDict.get matchId matches of
+                        Just ( setup, actions ) ->
+                            gameView
+                                windowSize
+                                localUser.session.userId
+                                localUser
+                                setup
+                                (foldActions actions setup)
+                                (case model of
+                                    Just (Game game) ->
+                                        game
 
-                                Just (Setup _) ->
-                                    initGame
+                                    Just (Setup _) ->
+                                        initGame
 
-                                Nothing ->
-                                    initGame
-                            )
-
-                    Nothing ->
-                        Ui.text "Match not found"
-
-            Nothing ->
-                setupView
-                    (localUser.session.userId == otherUserId)
-                    windowSize
-                    (case model of
-                        Just (Game game) ->
-                            initSetup
-
-                        Just (Setup setup) ->
-                            setup
+                                    Nothing ->
+                                        initGame
+                                )
 
                         Nothing ->
-                            initSetup
-                    )
+                            Ui.text "Match not found"
+
+                Nothing ->
+                    setupView
+                        (localUser.session.userId == otherUserId)
+                        windowSize
+                        (case model of
+                            Just (Game _) ->
+                                initSetup
+
+                            Just (Setup setup) ->
+                                setup
+
+                            Nothing ->
+                                initSetup
+                        )
+            ]
         )
+
+
+matchSwitcherView :
+    Bool
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> Element Msg
+matchSwitcherView isMobile maybeMatchId matches =
+    if SeqDict.isEmpty matches then
+        Ui.none
+
+    else
+        let
+            newMatchValue : String
+            newMatchValue =
+                ""
+
+            currentValue : String
+            currentValue =
+                case maybeMatchId of
+                    Just matchId ->
+                        String.fromInt (Id.toInt matchId)
+
+                    Nothing ->
+                        newMatchValue
+
+            onSelect : String -> Msg
+            onSelect text =
+                if text == newMatchValue then
+                    SelectedMatch Nothing
+
+                else
+                    case String.toInt text of
+                        Just n ->
+                            SelectedMatch (Just (Id.fromInt n))
+
+                        Nothing ->
+                            SelectedMatch Nothing
+        in
+        Ui.row
+            [ Ui.spacing 8
+            , Ui.padding
+                (if isMobile then
+                    8
+
+                 else
+                    12
+                )
+            ]
+            [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
+            , Ui.html
+                (Html.select
+                    [ Html.Attributes.id "go_matchSwitcher"
+                    , Html.Attributes.value currentValue
+                    , Html.Events.onInput onSelect
+                    , Html.Attributes.attribute "aria-label" "View match"
+                    , Html.Attributes.style "padding"
+                        (if isMobile then
+                            "4px"
+
+                         else
+                            "7px 8px"
+                        )
+                    , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+                    , Html.Attributes.style "border-radius" "4px"
+                    , Html.Attributes.style "font-size"
+                        (if isMobile then
+                            "14px"
+
+                         else
+                            "16px"
+                        )
+                    , Html.Attributes.style "background-color" "rgb(32,40,70)"
+                    , Html.Attributes.style "color" "rgb(255,255,255)"
+                    , Html.Attributes.style "cursor" "pointer"
+                    ]
+                    (Html.option
+                        [ Html.Attributes.value newMatchValue
+                        , Html.Attributes.selected (maybeMatchId == Nothing)
+                        ]
+                        [ Html.text "Setup new match" ]
+                        :: List.map
+                            (\( matchId, _ ) ->
+                                let
+                                    value : String
+                                    value =
+                                        String.fromInt (Id.toInt matchId)
+                                in
+                                Html.option
+                                    [ Html.Attributes.value value
+                                    , Html.Attributes.selected (Just matchId == maybeMatchId)
+                                    ]
+                                    [ Html.text ("Match #" ++ value) ]
+                            )
+                            (SeqDict.toList matches)
+                    )
+                )
+            ]
 
 
 setupView : Bool -> Coord CssPixels -> SetupModel -> Element Msg

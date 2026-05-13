@@ -1884,7 +1884,7 @@ updateLoaded msg model =
                                     SeqDict.get dmRoute.otherUserId local.dmChannels
                                         |> Maybe.withDefault DmChannel.frontendInit
 
-                                ( goModel2, cmd, maybeChange ) =
+                                ( goModel2, cmd, outMsg ) =
                                     Go.update
                                         model.time
                                         local.localUser.session.userId
@@ -1893,6 +1893,15 @@ updateLoaded msg model =
                                         maybeMatchId
                                         dmChannel.goMatches
                                         (SeqDict.get ( dmRoute.otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+
+                                maybeChange : Maybe Go.LocalChange
+                                maybeChange =
+                                    case outMsg of
+                                        Go.OutLocalChange change ->
+                                            Just change
+
+                                        _ ->
+                                            Nothing
 
                                 ( loggedIn2, cmd2 ) =
                                     FrontendExtra.handleLocalChange
@@ -1908,8 +1917,8 @@ updateLoaded msg model =
                                         (Command.map never GoMsg cmd)
 
                                 ( model2, routeCmd ) =
-                                    case maybeChange of
-                                        Just (Go.StartMatch _ _) ->
+                                    case outMsg of
+                                        Go.OutLocalChange (Go.StartMatch _ _) ->
                                             FrontendExtra.routePush
                                                 { model | loginStatus = LoggedIn loggedIn2 }
                                                 (DmRoute
@@ -1920,6 +1929,15 @@ updateLoaded msg model =
                                                                 |> Just
                                                                 |> DmChannelHeaderTab_Go
                                                                 |> Just
+                                                    }
+                                                )
+
+                                        Go.OutSelectMatch newMatchId ->
+                                            FrontendExtra.routePush
+                                                { model | loginStatus = LoggedIn loggedIn2 }
+                                                (DmRoute
+                                                    { dmRoute
+                                                        | tab = Just (DmChannelHeaderTab_Go newMatchId)
                                                     }
                                                 )
 
