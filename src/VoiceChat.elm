@@ -62,7 +62,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
-import Route exposing (DmChannelHeaderTab(..), Route)
+import Route exposing (DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -287,26 +287,41 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Route -> SeqDict (Id UserId) DmChannelHeaderTab -> Local -> DisplayMode
-displayMode route tabs local =
-    let
-        viewingRoomId : Maybe RoomId
-        viewingRoomId =
-            case Route.toGuildOrDmId route of
-                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
-                    DmRoomId otherUserId |> Just
+displayMode : Route -> Local -> DisplayMode
+displayMode route local =
+    --let
+    --    viewingRoomId : Maybe RoomId
+    --    viewingRoomId =
+    --        case Route.toGuildOrDmId route of
+    --            Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
+    --                DmRoomId otherUserId |> Just
+    --
+    --            _ ->
+    --                Nothing
+    --in
+    case route of
+        HomePageRoute ->
+            NoVideo
 
-                _ ->
-                    Nothing
-    in
-    case viewingRoomId of
-        Just (DmRoomId viewingRoomId2) ->
+        AdminRoute record ->
+            NoVideo
+
+        GuildRoute id channelRoute ->
+            NoVideo
+
+        DiscordGuildRoute discordGuildRouteData ->
+            NoVideo
+
+        DmRoute dmRoute ->
             let
+                roomId =
+                    DmRoomId dmRoute.otherUserId
+
                 isTabExpanded =
-                    SeqDict.get viewingRoomId2 tabs == Just DmChannelHeaderTab_VoiceChat
+                    dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
             in
-            if Just (DmRoomId viewingRoomId2) == local.currentRoom && isTabExpanded then
-                case SeqDict.get (DmRoomId viewingRoomId2) local.voiceChats of
+            if Just roomId == local.currentRoom && isTabExpanded then
+                case SeqDict.get roomId local.voiceChats of
                     Just _ ->
                         ShowLocalVideoAndCall
 
@@ -319,13 +334,20 @@ displayMode route tabs local =
             else
                 NoVideo
 
-        Nothing ->
-            case local.currentRoom of
-                Just _ ->
-                    ShowLocalVideoAndCallThumbnail
+        DiscordDmRoute discordDmRouteData ->
+            NoVideo
 
-                Nothing ->
-                    NoVideo
+        AiChatRoute ->
+            NoVideo
+
+        SlackOAuthRedirect result ->
+            NoVideo
+
+        TextEditorRoute ->
+            NoVideo
+
+        LinkDiscord result ->
+            NoVideo
 
 
 localVideoNodeId : String
@@ -333,8 +355,8 @@ localVideoNodeId =
     "local-video"
 
 
-videoNodes : Route -> SeqDict (Id UserId) DmChannelHeaderTab -> Coord CssPixels -> Model -> Local -> Html Msg
-videoNodes route tabs windowSize model local =
+videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html Msg
+videoNodes route windowSize model local =
     let
         viewingRoomId : Maybe RoomId
         viewingRoomId =
@@ -418,10 +440,39 @@ videoNodes route tabs windowSize model local =
             MyUi.isMobile { windowSize = windowSize }
     in
     (case viewingRoomId of
-        Just ((DmRoomId otherUserId) as viewingRoomId2) ->
+        Just viewingRoomId2 ->
             let
                 isTabExpanded =
-                    SeqDict.get otherUserId tabs == Just DmChannelHeaderTab_VoiceChat
+                    case route of
+                        DmRoute dmRoute ->
+                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+
+                        HomePageRoute ->
+                            False
+
+                        AdminRoute record ->
+                            False
+
+                        GuildRoute id channelRoute ->
+                            False
+
+                        DiscordGuildRoute discordGuildRouteData ->
+                            False
+
+                        DiscordDmRoute discordDmRouteData ->
+                            False
+
+                        AiChatRoute ->
+                            False
+
+                        SlackOAuthRedirect result ->
+                            False
+
+                        TextEditorRoute ->
+                            False
+
+                        LinkDiscord result ->
+                            False
             in
             if Just viewingRoomId2 == local.currentRoom && isTabExpanded then
                 case SeqDict.get viewingRoomId2 local.voiceChats of

@@ -213,7 +213,6 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
-    , dmChannelHeaderTabs : SeqDict (Id UserId) DmChannelHeaderTab
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
     }
@@ -497,7 +496,7 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
-    | PressedChannelHeaderTab (Id UserId) DmChannelHeaderTab
+    | PressedChannelHeaderTab DmChannelHeaderTab
     | FileDragEnter
     | FileDragLeave
     | FileDropped (List File)

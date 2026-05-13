@@ -432,7 +432,6 @@ loadedInitHelper timezone userAgent loginData loading =
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
             , currentDmGoMatch = SeqDict.empty
-            , dmChannelHeaderTabs = SeqDict.empty
             , fileDragOverCount = 0
             }
     in
@@ -1877,30 +1876,39 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case model.route of
                         DmRoute dmRoute ->
-                            let
-                                local =
-                                    Local.model loggedIn.localState
+                            case dmRoute.tab of
+                                Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                                    let
+                                        local =
+                                            Local.model loggedIn.localState
 
-                                ( goModel2, goCmd, maybeChange ) =
-                                    Go.update
+                                        ( goModel2, goCmd, maybeChange ) =
+                                            Go.update
+                                                model.time
+                                                local.localUser.session.userId
+                                                dmRoute.otherUserId
+                                                goMsg
+                                                maybeMatchId
+                                                (SeqDict.get dmRoute.otherUserId local.dmChannels
+                                                    |> Maybe.withDefault DmChannel.frontendInit
+                                                    |> .goMatches
+                                                )
+                                                (SeqDict.get ( dmRoute.otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+                                    in
+                                    FrontendExtra.handleLocalChange
                                         model.time
-                                        local.localUser.session.userId
-                                        dmRoute.otherUserId
-                                        goMsg
-                                        (SeqDict.get dmRoute.otherUserId local.dmChannels
-                                            |> Maybe.withDefault DmChannel.frontendInit
-                                            |> .goMatches
-                                        )
-                                        (SeqDict.get dmRoute.otherUserId loggedIn.currentDmGoMatch)
-                            in
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Maybe.map (Local_Go { otherUserId = dmRoute.otherUserId }) maybeChange)
-                                { loggedIn
-                                    | currentDmGoMatch =
-                                        SeqDict.insert dmRoute.otherUserId goModel2 loggedIn.currentDmGoMatch
-                                }
-                                (Command.map never GoMsg goCmd)
+                                        (Maybe.map (Local_Go { otherUserId = dmRoute.otherUserId }) maybeChange)
+                                        { loggedIn
+                                            | currentDmGoMatch =
+                                                SeqDict.insert
+                                                    ( dmRoute.otherUserId, maybeMatchId )
+                                                    goModel2
+                                                    loggedIn.currentDmGoMatch
+                                        }
+                                        (Command.map never GoMsg goCmd)
+
+                                _ ->
+                                    ( loggedIn, Command.none )
 
                         _ ->
                             ( loggedIn, Command.none )
@@ -2457,24 +2465,75 @@ updateLoaded msg model =
                     FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId threadRoute model) model
 
                 MessageView.MessageViewMsg_PressedCallStartedCard ->
-                    case guildOrDmId of
-                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                            FrontendExtra.updateLoggedIn
-                                (\loggedIn ->
-                                    ( { loggedIn
-                                        | dmChannelHeaderTabs =
-                                            SeqDict.insert otherUserId DmChannelHeaderTab_VoiceChat loggedIn.dmChannelHeaderTabs
-                                      }
-                                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                                    )
-                                )
-                                model
+                    case model.route of
+                        DmRoute dmRoute ->
+                            FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just DmChannelHeaderTab_VoiceChat })
 
-                        _ ->
+                        HomePageRoute ->
+                            ( model, Command.none )
+
+                        AdminRoute record ->
+                            ( model, Command.none )
+
+                        GuildRoute id channelRoute ->
+                            ( model, Command.none )
+
+                        DiscordGuildRoute discordGuildRouteData ->
+                            ( model, Command.none )
+
+                        DiscordDmRoute discordDmRouteData ->
+                            ( model, Command.none )
+
+                        AiChatRoute ->
+                            ( model, Command.none )
+
+                        SlackOAuthRedirect result ->
+                            ( model, Command.none )
+
+                        TextEditorRoute ->
+                            ( model, Command.none )
+
+                        LinkDiscord result ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
-                    openDmChannelHeaderTab guildOrDmId DmChannelHeaderTab_Go model
+                    case threadRoute of
+                        NoThreadWithMessage messageId ->
+                            case model.route of
+                                DmRoute dmRoute ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Go (Just messageId)) })
+
+                                HomePageRoute ->
+                                    ( model, Command.none )
+
+                                AdminRoute record ->
+                                    ( model, Command.none )
+
+                                GuildRoute id channelRoute ->
+                                    ( model, Command.none )
+
+                                DiscordGuildRoute discordGuildRouteData ->
+                                    ( model, Command.none )
+
+                                DiscordDmRoute discordDmRouteData ->
+                                    ( model, Command.none )
+
+                                AiChatRoute ->
+                                    ( model, Command.none )
+
+                                SlackOAuthRedirect result ->
+                                    ( model, Command.none )
+
+                                TextEditorRoute ->
+                                    ( model, Command.none )
+
+                                LinkDiscord result ->
+                                    ( model, Command.none )
+
+                        ViewThreadWithMessage id _ ->
+                            ( model, Command.none )
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -4002,26 +4061,37 @@ updateLoaded msg model =
                 Nothing ->
                     ( modelReset, Command.none )
 
-        PressedChannelHeaderTab otherUserId tab ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | dmChannelHeaderTabs =
-                            SeqDict.update
-                                otherUserId
-                                (\maybe ->
-                                    if maybe == Just tab then
-                                        Nothing
+        PressedChannelHeaderTab tab ->
+            case model.route of
+                DmRoute dmRoute ->
+                    FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just tab })
 
-                                    else
-                                        Just tab
-                                )
-                                loggedIn.dmChannelHeaderTabs
-                      }
-                    , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                    )
-                )
-                model
+                HomePageRoute ->
+                    ( model, Command.none )
+
+                AdminRoute record ->
+                    ( model, Command.none )
+
+                GuildRoute id channelRoute ->
+                    ( model, Command.none )
+
+                DiscordGuildRoute discordGuildRouteData ->
+                    ( model, Command.none )
+
+                DiscordDmRoute discordDmRouteData ->
+                    ( model, Command.none )
+
+                AiChatRoute ->
+                    ( model, Command.none )
+
+                SlackOAuthRedirect result ->
+                    ( model, Command.none )
+
+                TextEditorRoute ->
+                    ( model, Command.none )
+
+                LinkDiscord result ->
+                    ( model, Command.none )
 
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
@@ -4031,12 +4101,10 @@ checkCallDisplayModeChange modelOld modelNew =
             VoiceChat.displayModeChangeCmd
                 (VoiceChat.displayMode
                     modelOld.route
-                    loggedInOld.dmChannelHeaderTabs
                     (Local.model loggedInOld.localState |> .calls)
                 )
                 (VoiceChat.displayMode
                     modelNew.route
-                    loggedInNew.dmChannelHeaderTabs
                     (Local.model loggedInNew.localState |> .calls)
                 )
                 loggedInNew.voiceChat
@@ -5953,7 +6021,6 @@ view model =
                                         Ui.noAttr
                                     , VoiceChat.videoNodes
                                         loaded.route
-                                        loggedIn.dmChannelHeaderTabs
                                         loaded.windowSize
                                         loggedIn.voiceChat
                                         local.calls

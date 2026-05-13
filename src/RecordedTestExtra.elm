@@ -78,6 +78,7 @@ import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
+import Go
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
@@ -1814,6 +1815,18 @@ allAttackerLocalChanges =
             (VoiceChat.OfferSignal { sdp = "" })
         )
     , Local_Go
+        { otherUserId = Broadcast.adminUserId }
+        (Go.StartMatch
+            (Time.millisToPosix 0)
+            { width = Go.boardSize9
+            , height = Go.boardSize9
+            , handicap = 0
+            , komiHalfPoints = Go.KomiHalfPoints 2
+            , timeControl = Nothing
+            , blackPlayer = normalUserId
+            , whitePlayer = Broadcast.adminUserId
+            }
+        )
     ]
 
 

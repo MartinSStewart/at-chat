@@ -3041,7 +3041,7 @@ privateChatWithYourself isMobile currentTab local =
     , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
         [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-        , goGameButton isMobile local.localUser.session.userId currentTab
+        , goGameButton isMobile currentTab
         ]
     ]
 
@@ -3059,31 +3059,30 @@ privateChatWith isMobile currentTab otherUserId local name =
     , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
         [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-        , goGameButton isMobile otherUserId currentTab
+        , goGameButton isMobile currentTab
         ]
     ]
 
 
-goGameButton : Bool -> Id UserId -> Maybe DmChannelHeaderTab -> Element FrontendMsg
-goGameButton isMobile otherUserId currentTab =
+goGameButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
+goGameButton isMobile currentTab =
     channelHeaderTab
         isMobile
         (Dom.id "guild_openGoMatch")
-        otherUserId
         (DmChannelHeaderTab_Go Nothing)
         currentTab
         (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
 
 
-channelHeaderTab : Bool -> HtmlId -> Id UserId -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Element FrontendMsg -> Element FrontendMsg
-channelHeaderTab isMobile htmlId otherUserId tab currentTab content =
+channelHeaderTab : Bool -> HtmlId -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Element FrontendMsg -> Element FrontendMsg
+channelHeaderTab isMobile htmlId tab currentTab content =
     let
         isSelected =
             Just tab == currentTab
     in
     MyUi.elButton
         htmlId
-        (PressedChannelHeaderTab otherUserId tab)
+        (PressedChannelHeaderTab tab)
         [ Ui.width Ui.shrink
         , Ui.height Ui.fill
         , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 4 }
@@ -3172,7 +3171,6 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         , channelHeaderTab
             isMobile
             (Dom.id "guild_voiceChat")
-            otherUserId
             DmChannelHeaderTab_VoiceChat
             currentTab
             (Ui.row
@@ -3451,7 +3449,36 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     let
                         currentTab : Maybe DmChannelHeaderTab
                         currentTab =
-                            SeqDict.get otherUserId loggedIn.dmChannelHeaderTabs
+                            case model.route of
+                                DmRoute dmRoute ->
+                                    dmRoute.tab
+
+                                HomePageRoute ->
+                                    Nothing
+
+                                AdminRoute record ->
+                                    Nothing
+
+                                GuildRoute id channelRoute ->
+                                    Nothing
+
+                                DiscordGuildRoute discordGuildRouteData ->
+                                    Nothing
+
+                                DiscordDmRoute discordDmRouteData ->
+                                    Nothing
+
+                                AiChatRoute ->
+                                    Nothing
+
+                                SlackOAuthRedirect result ->
+                                    Nothing
+
+                                TextEditorRoute ->
+                                    Nothing
+
+                                LinkDiscord result ->
+                                    Nothing
                     in
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
@@ -3882,17 +3909,41 @@ peopleAreTypingView allUsers channel currentUserId model =
 channelHeaderTabView : GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
 channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
     let
-        maybeTab : Maybe ( Id UserId, DmChannelHeaderTab )
+        maybeTab : Maybe ( Id UserId, Maybe DmChannelHeaderTab )
         maybeTab =
-            case guildOrDmIdNoThread of
-                GuildOrDmId_Dm otherUserIdB ->
-                    SeqDict.get otherUserIdB loggedIn.dmChannelHeaderTabs |> Maybe.map (Tuple.pair otherUserIdB)
+            case model.route of
+                DmRoute dmRoute ->
+                    Just ( dmRoute.otherUserId, dmRoute.tab )
 
-                _ ->
+                HomePageRoute ->
+                    Nothing
+
+                AdminRoute record ->
+                    Nothing
+
+                GuildRoute id channelRoute ->
+                    Nothing
+
+                DiscordGuildRoute discordGuildRouteData ->
+                    Nothing
+
+                DiscordDmRoute discordDmRouteData ->
+                    Nothing
+
+                AiChatRoute ->
+                    Nothing
+
+                SlackOAuthRedirect result ->
+                    Nothing
+
+                TextEditorRoute ->
+                    Nothing
+
+                LinkDiscord result ->
                     Nothing
     in
     case maybeTab of
-        Just ( otherUserId, DmChannelHeaderTab_Go maybeMatchId ) ->
+        Just ( otherUserId, Just (DmChannelHeaderTab_Go maybeMatchId) ) ->
             Go.view
                 model.windowSize
                 local.localUser
@@ -3903,10 +3954,13 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
                 |> Ui.map GoMsg
                 |> Just
 
-        Just ( otherUserId, DmChannelHeaderTab_VoiceChat ) ->
+        Just ( otherUserId, Just DmChannelHeaderTab_VoiceChat ) ->
             VoiceChat.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
                 |> Ui.map VoiceChatMsg
                 |> Just
+
+        Just ( _, Nothing ) ->
+            Nothing
 
         Nothing ->
             Nothing
@@ -3971,7 +4025,36 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     let
                         currentTab : Maybe DmChannelHeaderTab
                         currentTab =
-                            SeqDict.get otherUserId loggedIn.dmChannelHeaderTabs
+                            case model.route of
+                                DmRoute dmRoute ->
+                                    dmRoute.tab
+
+                                HomePageRoute ->
+                                    Nothing
+
+                                AdminRoute record ->
+                                    Nothing
+
+                                GuildRoute id channelRoute ->
+                                    Nothing
+
+                                DiscordGuildRoute discordGuildRouteData ->
+                                    Nothing
+
+                                DiscordDmRoute discordDmRouteData ->
+                                    Nothing
+
+                                AiChatRoute ->
+                                    Nothing
+
+                                SlackOAuthRedirect result ->
+                                    Nothing
+
+                                TextEditorRoute ->
+                                    Nothing
+
+                                LinkDiscord result ->
+                                    Nothing
                     in
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]

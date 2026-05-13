@@ -1258,12 +1258,25 @@ routeRequest previousRoute newRoute model =
             let
                 model3 : LoadedFrontend
                 model3 =
-                    clearRevealedSpoilers model2
+                    case previousRoute of
+                        Just (DmRoute previousDmRoute) ->
+                            if dmRoute.otherUserId == previousDmRoute.otherUserId then
+                                model2
+
+                            else
+                                clearRevealedSpoilers model2
+
+                        _ ->
+                            clearRevealedSpoilers model2
             in
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch [ viewCmd, openChannelCmds dmRoute.threadRoute model3 ]
+                    , Command.batch
+                        [ viewCmd
+                        , openChannelCmds dmRoute.threadRoute model3
+                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                        ]
                     )
                 )
                 model3
@@ -1708,7 +1721,7 @@ isPressMsg msg =
         GotVoiceChatRecording _ ->
             False
 
-        PressedChannelHeaderTab _ _ ->
+        PressedChannelHeaderTab _ ->
             True
 
         FileDragEnter ->

@@ -486,12 +486,12 @@ encode route =
                             , []
                             )
 
-                DmRoute { otherUserId, threadRoute } ->
+                DmRoute { otherUserId, threadRoute, tab } ->
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                             ( [ "d", Id.toString otherUserId, "t", Id.toString threadMessageIndex ]
                                 ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers
+                            , encodeShowMembers showMembers ++ encodeTab tab
                             )
 
                         NoThreadWithFriends maybeMessageId showMembers ->
@@ -539,6 +539,26 @@ encodeShowMembers showMembers =
             [ Url.Builder.string showMembersParam "True" ]
 
         HideMembersTab ->
+            []
+
+
+encodeTab : Maybe DmChannelHeaderTab -> List Url.Builder.QueryParameter
+encodeTab showMembers =
+    case showMembers of
+        Just DmChannelHeaderTab_VoiceChat ->
+            [ Url.Builder.string tabParam "call" ]
+
+        Just (DmChannelHeaderTab_Go maybeMatchId) ->
+            Url.Builder.string tabParam "go"
+                :: (case maybeMatchId of
+                        Just matchId ->
+                            [ Url.Builder.int goMatchParam (Id.toInt matchId) ]
+
+                        Nothing ->
+                            []
+                   )
+
+        Nothing ->
             []
 
 
