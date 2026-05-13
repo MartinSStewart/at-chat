@@ -253,7 +253,16 @@ layout model attributes child =
                     maybeMessageId =
                         Route.toGuildOrDmId local.localUser.session.userId model.route
                 in
-                [ Local.networkError
+                [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True )) |> Ui.htmlAttribute
+                , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
+                , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
+                , Html.Events.preventDefaultOn "drop"
+                    (Json.Decode.at [ "dataTransfer", "files" ] (Json.Decode.Extra.collection File.decoder)
+                        |> Json.Decode.map (\list -> ( FileDropped list, True ))
+                    )
+                    |> Ui.htmlAttribute
+                , Ui.inFront (fileDragOverlay (loggedIn.fileDragOverCount > 0) model)
+                , Local.networkError
                     (\change ->
                         case change of
                             LocalChange _ localChange ->
@@ -328,7 +337,6 @@ layout model attributes child =
                     NoMessageHover ->
                         Ui.noAttr
                 ]
-                    ++ fileDragDropAttributes loggedIn.fileDragOverCount model
 
             NotLoggedIn _ ->
                 []
@@ -512,20 +520,6 @@ canDropFileHelper guildOrDmId threadRoute2 files model =
 
         NotLoggedIn _ ->
             ( model, Command.none )
-
-
-fileDragDropAttributes : Int -> LoadedFrontend -> List (Ui.Attribute FrontendMsg)
-fileDragDropAttributes fileDragOverCount model =
-    [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True )) |> Ui.htmlAttribute
-    , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
-    , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
-    , Html.Events.preventDefaultOn "drop"
-        (Json.Decode.at [ "dataTransfer", "files" ] (Json.Decode.Extra.collection File.decoder)
-            |> Json.Decode.map (\list -> ( FileDropped list, True ))
-        )
-        |> Ui.htmlAttribute
-    , Ui.inFront (fileDragOverlay (fileDragOverCount > 0) model)
-    ]
 
 
 fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
