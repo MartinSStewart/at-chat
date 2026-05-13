@@ -1201,7 +1201,11 @@ port got_recorded_data : (Bytes -> msg) -> Sub msg
 
 gotRecordedData : (Bytes -> msg) -> Subscription FrontendOnly msg
 gotRecordedData msg =
-    Subscription.fromJsBytes "got_recorded_data" got_recorded_data msg
+    Subscription.none
+
+
+
+--Subscription.fromJsBytes "got_recorded_data" got_recorded_data msg
 
 
 decodeVoiceChatRecorder : Bytes -> Bytes.Decode.Decoder ( ConnectionId, Recording )
