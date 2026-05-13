@@ -33,6 +33,7 @@ import EmailAddress
 import Emoji exposing (EmojiOrCustomEmoji(..))
 import Env
 import FileStatus exposing (FileData, FileId)
+import Go
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
@@ -67,7 +68,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -1006,6 +1007,9 @@ update msg model =
 
                                                                 CallEnded _ _ ->
                                                                     members
+
+                                                                GoMatchStarted _ _ _ ->
+                                                                    members
                                                         )
                                                         channel.members
                                                         messages2
@@ -1936,6 +1940,9 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         CallEnded _ _ ->
                             "Call ended"
 
+                        GoMatchStarted _ _ _ ->
+                            "Go match started"
+
                 Nothing ->
                     "Thread"
         , autoArchiveDuration = Missing
@@ -2013,16 +2020,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 UserSession.init
                                     sessionId
                                     userId
-                                    (case requestMessagesFor of
-                                        InitialLoadRequested_None ->
-                                            Nothing
-
-                                        InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
-                                            Just ( anyGuildOrDmId, threadRoute )
-
-                                        InitialLoadRequested_Admin _ ->
-                                            Nothing
-                                    )
+                                    (BackendExtra.requestedForToGuildOrDmId userId requestMessagesFor)
                                     userAgent
 
                             newUser : BackendUser
@@ -2067,16 +2065,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             UserSession.init
                                                 sessionId
                                                 pendingLogin.userId
-                                                (case requestMessagesFor of
-                                                    InitialLoadRequested_None ->
-                                                        Nothing
-
-                                                    InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
-                                                        Just ( anyGuildOrDmId, threadRoute )
-
-                                                    InitialLoadRequested_Admin _ ->
-                                                        Nothing
-                                                )
+                                                (BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
                                                 userAgent
                                     in
                                     ( { model
@@ -4546,7 +4535,106 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 Local_VoiceChatChange voiceChatLocalChange ->
-                    handleVoiceChatToBackend time changeId clientId sessionId voiceChatLocalChange model
+                    handleVoiceChatChange time changeId clientId sessionId voiceChatLocalChange model
+
+                Local_Go otherUserId goChange ->
+                    asDmUser
+                        model
+                        sessionId
+                        otherUserId
+                        (\session _ _ dmChannelId dmChannel ->
+                            case goChange of
+                                Go.StartMatch createdAt setup ->
+                                    let
+                                        localMsg2 : Go.LocalChange
+                                        localMsg2 =
+                                            Go.StartMatch time setup
+
+                                        ( messageId, dmChannel2 ) =
+                                            LocalState.createChannelMessageBackend
+                                                (GoMatchStarted createdAt session.userId SeqDict.empty)
+                                                dmChannel
+                                    in
+                                    ( { model
+                                        | dmChannels =
+                                            SeqDict.insert
+                                                dmChannelId
+                                                { dmChannel2
+                                                    | goMatches =
+                                                        SeqDict.insert
+                                                            messageId
+                                                            ( setup, Array.empty )
+                                                            dmChannel2.goMatches
+                                                }
+                                                model.dmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_Go otherUserId localMsg2
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDmChannelExcludingOne
+                                            clientId
+                                            session.userId
+                                            otherUserId.otherUserId
+                                            (\otherUserId2 ->
+                                                Server_Go session.userId { otherUserId = otherUserId2 } localMsg2
+                                            )
+                                            model
+                                        ]
+                                    )
+
+                                Go.Action matchId actionWithTime ->
+                                    case SeqDict.get matchId dmChannel.goMatches of
+                                        Just ( goSetup, actions ) ->
+                                            let
+                                                isCurrentPlayer : Bool
+                                                isCurrentPlayer =
+                                                    case Go.currentPlayersTurn actions of
+                                                        Go.Black ->
+                                                            goSetup.blackPlayer == session.userId
+
+                                                        Go.White ->
+                                                            goSetup.whitePlayer == session.userId
+
+                                                localMsg2 : Go.LocalChange
+                                                localMsg2 =
+                                                    Go.Action matchId { actionWithTime | time = time }
+                                            in
+                                            if isCurrentPlayer then
+                                                ( { model
+                                                    | dmChannels =
+                                                        SeqDict.insert
+                                                            dmChannelId
+                                                            { dmChannel
+                                                                | goMatches =
+                                                                    SeqDict.insert
+                                                                        matchId
+                                                                        ( goSetup, Array.push actionWithTime actions )
+                                                                        dmChannel.goMatches
+                                                            }
+                                                            model.dmChannels
+                                                  }
+                                                , Command.batch
+                                                    [ Local_Go otherUserId localMsg2
+                                                        |> LocalChangeResponse changeId
+                                                        |> Lamdera.sendToFrontend clientId
+                                                    , Broadcast.toDmChannelExcludingOne
+                                                        clientId
+                                                        session.userId
+                                                        otherUserId.otherUserId
+                                                        (\otherUserId2 ->
+                                                            Server_Go session.userId { otherUserId = otherUserId2 } localMsg2
+                                                        )
+                                                        model
+                                                    ]
+                                                )
+
+                                            else
+                                                ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                        Nothing ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                        )
 
         TwoFactorToBackend toBackend2 ->
             asUser
@@ -4692,7 +4780,7 @@ emojiOrCustomEmojiToDiscord customEmojis emoji =
                     Err ()
 
 
-handleVoiceChatToBackend :
+handleVoiceChatChange :
     Time.Posix
     -> ChangeId
     -> ClientId
@@ -4700,7 +4788,7 @@ handleVoiceChatToBackend :
     -> VoiceChat.LocalChange
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleVoiceChatToBackend time changeId clientId sessionId voiceMsg model =
+handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
         VoiceChat.Local_Join _ voiceChatId ->
             case voiceChatId of

@@ -1673,6 +1673,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.goMatchTest normalConfig
     ]
 
 

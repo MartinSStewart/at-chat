@@ -40,6 +40,8 @@ type MessageViewMsg
     | MessageView_PressedViewThreadLink
     | MessageView_NoOp
     | MessageViewMsg_PressedReactionEmoji EmojiOrCustomEmoji
+    | MessageViewMsg_PressedCallStartedCard
+    | MessageViewMsg_PressedGoMatchStartedCard
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -91,6 +93,12 @@ isPressMsg msg =
             False
 
         MessageViewMsg_PressedReactionEmoji _ ->
+            True
+
+        MessageViewMsg_PressedCallStartedCard ->
+            True
+
+        MessageViewMsg_PressedGoMatchStartedCard ->
             True
 
 

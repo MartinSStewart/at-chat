@@ -23,6 +23,7 @@ module RecordedTestExtra exposing
     , enableNotifications
     , firefoxDesktop
     , focusEvent
+    , goMatchTest
     , handleInternalRequests
     , handleLogin
     , handlePortToJs
@@ -77,6 +78,7 @@ import Emoji exposing (Category(..), EmojiOrCustomEmoji(..), SkinTone(..))
 import Env
 import Expect
 import FileStatus
+import Go
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
@@ -190,6 +192,11 @@ handlePortToJs requestAndData =
 desktopWindow : { width : number, height : number }
 desktopWindow =
     { width = 1000, height = 600 }
+
+
+tallDesktopWindow : { width : number, height : number }
+tallDesktopWindow =
+    { width = 1000, height = 1300 }
 
 
 mobileWindow : { width : number, height : number }
@@ -421,18 +428,21 @@ voiceChatTest normalConfig =
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , admin.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
                     , admin.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                    , admin.navigateBack 100
                     , admin.navigateBack 100
                     , admin.click 100 (Dom.id "guild_openDm_1")
                     , user.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , user.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
@@ -440,11 +450,13 @@ voiceChatTest normalConfig =
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
                     , admin.navigateBack 100
+                    , admin.navigateBack 100
                     , admin.click 100 (Dom.id "guild_openDm_0")
                     , admin.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , user.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
@@ -1446,6 +1458,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AddCustomEmojisToUser _ ->
                     False
 
+                Local_Go _ _ ->
+                    True
+
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -1622,6 +1637,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
+                            True
+
+                        Types.Server_Go _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -1806,6 +1824,19 @@ allAttackerLocalChanges =
             }
             (VoiceChat.OfferSignal { sdp = "" })
         )
+    , Local_Go
+        { otherUserId = Broadcast.adminUserId }
+        (Go.StartMatch
+            (Time.millisToPosix 0)
+            { width = Go.boardSize9
+            , height = Go.boardSize9
+            , handicap = 0
+            , komiHalfPoints = Go.KomiHalfPoints 2
+            , timeControl = Nothing
+            , blackPlayer = normalUserId
+            , whitePlayer = Broadcast.adminUserId
+            }
+        )
     ]
 
 
@@ -1945,6 +1976,89 @@ inviteUserAndDmChat config =
                                         ]
                             )
                         , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+goMatchTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+goMatchTest normalConfig =
+    startTest
+        "Two users play a Go match, one leaves and rejoins, then start a new match"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            tallDesktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "go_start")
+                        , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+
+                        -- A couple of opening moves: admin is Black (creator default), user is White
+                        , admin.click 100 (Dom.id "go_cell_4_4")
+                        , user.click 100 (Dom.id "go_cell_5_4")
+                        , admin.click 100 (Dom.id "go_cell_4_5")
+                        , user.click 100 (Dom.id "go_cell_5_5")
+
+                        -- User leaves the game by navigating back out of the DM
+                        , user.navigateBack 100
+
+                        -- ... and then rejoins by clicking back into the DM and the Go tab
+                        , T.connectFrontend
+                            100
+                            sessionId1
+                            "/"
+                            tallDesktopWindow
+                            (\user2 ->
+                                [ user2.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                , user2.click 100 (Dom.id "guild_friendLabel_0")
+                                , user2.click 100 (Dom.id "guild_openGoMatch")
+                                , user2.input 100 (Dom.id "go_matchSwitcher") "0"
+
+                                -- A few more moves to confirm the state persisted
+                                , admin.click 100 (Dom.id "go_cell_3_3")
+                                , user2.click 100 (Dom.id "go_cell_3_4")
+
+                                -- Wrap up the game: pass twice, finish marking, agree on scoring
+                                , admin.click 100 (Dom.id "go_pass")
+                                , user2.click 100 (Dom.id "go_pass")
+                                , admin.click 100 (Dom.id "go_cell_3_6")
+                                , admin.click 100 (Dom.id "go_doneMarking")
+                                , user2.click 100 (Dom.id "go_agree")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
+                                , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "Final score" ])
+
+                                -- Start a fresh match after the game has ended
+                                , admin.click 100 (Dom.id "go_reset")
+                                , admin.click 100 (Dom.id "go_start")
+                                , user2.click 100 (Dom.id "guild_goMatchStartedCard_1")
+                                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                , admin.click 100 (Dom.id "go_cell_3_3")
+                                , user2.click 100 (Dom.id "go_cell_3_4")
+                                , admin.click 100 (Dom.id "go_pass")
+                                , user2.click 100 (Dom.id "go_pass")
+                                , admin.click 100 (Dom.id "go_cell_3_6")
+                                , admin.click 100 (Dom.id "go_doneMarking")
+                                , user2.click 100 (Dom.id "go_disagree")
+                                , admin.click 100 (Dom.id "go_cell_3_5")
+                                ]
+                            )
                         ]
                     )
                 ]

@@ -61,6 +61,7 @@ type ToBackendLog
     | ToBackendLog_Local_SetEmojiSkinTone
     | ToBackendLog_Local_AddCustomEmojisToUser
     | ToBackendLog_Local_VoiceChatChange
+    | ToBackendLog_Local_Go
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -221,3 +222,6 @@ toBackendLogToString log =
 
         ToBackendLog_Local_VoiceChatChange ->
             "Local_VoiceChatChange"
+
+        ToBackendLog_Local_Go ->
+            "Local_Go"

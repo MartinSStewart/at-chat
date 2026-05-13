@@ -712,6 +712,9 @@ messageCustomEmojiIds message =
         CallEnded _ reactions ->
             reactionIds reactions
 
+        GoMatchStarted _ _ reactions ->
+            reactionIds reactions
+
 
 buttonHeight : Bool -> number
 buttonHeight isMobile =

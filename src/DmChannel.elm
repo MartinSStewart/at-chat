@@ -5,7 +5,9 @@ module DmChannel exposing
     , DmChannelId(..)
     , FrontendDmChannel
     , backendInit
+    , channelIdFromString
     , channelIdFromUserIds
+    , channelIdToString
     , frontendInit
     , getArray
     , latestMessageId
@@ -22,6 +24,7 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord
+import Go
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
@@ -36,6 +39,7 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
+    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
     }
 
 
@@ -60,6 +64,7 @@ type alias FrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
+    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
     }
 
 
@@ -74,6 +79,7 @@ backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
+    , goMatches = SeqDict.empty
     }
 
 
@@ -83,6 +89,7 @@ frontendInit =
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
+    , goMatches = SeqDict.empty
     }
 
 
@@ -99,6 +106,7 @@ toFrontend threadRoute dmChannel =
         SeqDict.map
             (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
+    , goMatches = dmChannel.goMatches
     }
 
 
@@ -174,6 +182,26 @@ channelIdFromUserIds (Id userIdA) (Id userIdB) =
 userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )
 userIdsFromChannelId (DmChannelId userIdA userIdB) =
     ( userIdA, userIdB )
+
+
+channelIdToString : DmChannelId -> String
+channelIdToString (DmChannelId userIdA userIdB) =
+    Id.toString userIdA ++ "-" ++ Id.toString userIdB
+
+
+channelIdFromString : String -> Result () DmChannelId
+channelIdFromString text =
+    case String.split "-" text of
+        [ idA, idB ] ->
+            case ( Id.fromString idA, Id.fromString idB ) of
+                ( Just idA2, Just idB2 ) ->
+                    channelIdFromUserIds idA2 idB2 |> Ok
+
+                _ ->
+                    Err ()
+
+        _ ->
+            Err ()
 
 
 otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)

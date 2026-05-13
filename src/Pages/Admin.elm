@@ -60,6 +60,7 @@ import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
@@ -85,6 +86,7 @@ import Ui.Shadow
 import Ui.Table
 import User exposing (AdminUiSection(..), BackendUser, LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
+import VoiceChat exposing (RoomId(..))
 
 
 type Msg
@@ -1400,6 +1402,7 @@ view isMobile2 version local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
+            , voiceChatSection local adminData user
             , filesSection user adminData
             , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
@@ -1461,6 +1464,66 @@ filesSection user adminData =
         user.expandedSections
         FilesSection
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
+
+
+voiceChatSection : LocalState -> AdminData -> BackendUser -> Element Msg
+voiceChatSection local adminData user =
+    let
+        rooms : List ( RoomId, NonemptySet ( Id UserId, ClientId ) )
+        rooms =
+            SeqDict.toList local.calls.voiceChats
+    in
+    section
+        8
+        user.expandedSections
+        VoiceChatSection
+        [ if List.isEmpty rooms then
+            Ui.text "No ongoing voice chats"
+
+          else
+            Ui.column
+                [ Ui.spacing 8 ]
+                (List.map (voiceChatRoomView adminData) rooms)
+        ]
+
+
+voiceChatRoomView : AdminData -> ( RoomId, NonemptySet ( Id UserId, ClientId ) ) -> Element msg
+voiceChatRoomView adminData ( roomId, participants ) =
+    Ui.column
+        [ Ui.spacing 2 ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text (roomIdLabel adminData roomId))
+        , Ui.column
+            [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
+            (List.map
+                (\( userId, clientId ) ->
+                    Ui.row
+                        [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
+                        [ case NonemptyDict.get userId adminData.users of
+                            Just participant ->
+                                Ui.text (PersonName.toString participant.name)
+
+                            Nothing ->
+                                Ui.text ("Unknown user " ++ Id.toString userId)
+                        , Ui.el
+                            [ Ui.alignRight, Ui.width Ui.shrink ]
+                            (Ui.text ("Client: " ++ Lamdera.clientIdToString clientId))
+                        ]
+                )
+                (NonemptySet.toList participants)
+            )
+        ]
+
+
+roomIdLabel : AdminData -> RoomId -> String
+roomIdLabel adminData roomId =
+    case roomId of
+        DmRoomId userId ->
+            case NonemptyDict.get userId adminData.users of
+                Just user ->
+                    "DM with " ++ PersonName.toString user.name
+
+                Nothing ->
+                    "DM with unknown user " ++ Id.toString userId
 
 
 stickersAndEmojisSection : LocalState -> BackendUser -> Element Msg

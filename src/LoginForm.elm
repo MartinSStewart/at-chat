@@ -423,7 +423,8 @@ view textSelection loginForm isMobile pwaStatus =
                         []
                         [ label.element
                         , Ui.Input.text
-                            [ Ui.background MyUi.inputBackground
+                            [ Ui.Events.onKey Ui.Events.enter PressedSubmitUserData
+                            , Ui.background MyUi.inputBackground
                             , Ui.borderColor MyUi.inputBorder
                             , Ui.Font.color MyUi.font1
                             ]
@@ -448,7 +449,7 @@ view textSelection loginForm isMobile pwaStatus =
                         , Ui.border 1
                         , Ui.borderColor MyUi.buttonBorder
                         , Ui.rounded 4
-                        , Ui.Font.color MyUi.buttonFontColor
+                        , Ui.Font.color MyUi.font1
                         , MyUi.focusEffect
                         ]
                         (Ui.text "Submit")

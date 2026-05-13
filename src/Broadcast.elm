@@ -30,6 +30,7 @@ module Broadcast exposing
 import Codec exposing (Codec)
 import Discord
 import DiscordUserData exposing (DiscordUserData(..))
+import DmChannel
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -899,7 +900,7 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
                         otherUser.icon
                         (String.Nonempty.toString text)
                         (DmRoute
-                            { otherUserId = otherUserId
+                            { channelId = DmChannel.channelIdFromUserIds userId otherUserId
                             , threadRoute =
                                 case threadRouteWithReplyTo of
                                     NoThreadWithMaybeMessage _ ->
@@ -907,6 +908,7 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
 
                                     ViewThreadWithMaybeMessage threadId _ ->
                                         ViewThreadWithFriends threadId Nothing HideMembersTab
+                            , tab = Nothing
                             }
                             |> Just
                         )

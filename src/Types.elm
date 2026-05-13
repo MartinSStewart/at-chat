@@ -66,6 +66,7 @@ import EmailAddress exposing (EmailAddress)
 import Embed exposing (EmbedData)
 import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
+import Go
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
@@ -83,7 +84,6 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
-import Pages.Go
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
@@ -91,7 +91,7 @@ import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (DiscordCustomEmojiIdAndName, Domain, RichText)
-import Route exposing (Route)
+import Route exposing (DmChannelHeaderTab, Route)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -153,7 +153,6 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , goModel : Pages.Go.Model
     , scrollbarWidth : Int
     , userAgent : UserAgent
     , pageHasFocus : Bool
@@ -214,6 +213,8 @@ type alias LoggedIn2 =
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
+    , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
+    , fileDragOverCount : Int
     }
 
 
@@ -443,7 +444,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
-    | GoMsg Pages.Go.Msg
+    | GoMsg Go.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
@@ -495,6 +496,10 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | GotVoiceChatRecording Bytes
     | VoiceChatMsg VoiceChat.Msg
+    | PressedChannelHeaderTab DmChannelHeaderTab
+    | FileDragEnter
+    | FileDragLeave
+    | FileDropped (List File)
 
 
 type ScrollPosition
@@ -516,7 +521,9 @@ type alias NewGuildForm =
 
 
 type InitialLoadRequest
-    = InitialLoadRequested_Channel AnyGuildOrDmId ThreadRoute
+    = InitialLoadRequested_Guild (Id GuildId) (Id ChannelId) ThreadRoute
+    | InitialLoadRequested_Dm DmChannelId ThreadRoute
+    | InitialLoadRequested_Discord DiscordGuildOrDmId ThreadRoute
     | InitialLoadRequested_Admin (Maybe (Id PageId))
     | InitialLoadRequested_None
 
@@ -787,6 +794,7 @@ type ServerChange
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
     | Server_VoiceChatChange VoiceChat.ServerChange
+    | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
 
 
 type LocalChange
@@ -827,3 +835,4 @@ type LocalChange
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange VoiceChat.LocalChange
+    | Local_Go { otherUserId : Id UserId } Go.LocalChange

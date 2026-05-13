@@ -395,6 +395,9 @@ messageToString allUsers3 message =
         CallEnded _ _ ->
             "Call ended"
 
+        GoMatchStarted _ _ _ ->
+            "Go match started"
+
 
 messageDeleted : String
 messageDeleted =
@@ -806,6 +809,9 @@ createMessageBackend message channel =
 
                 CallEnded _ _ ->
                     channel.lastTypedAt
+
+                GoMatchStarted _ _ _ ->
+                    channel.lastTypedAt
       }
     )
 
@@ -876,6 +882,9 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 CallEnded _ _ ->
                     Ok ( messageId2, channel2 )
 
+                GoMatchStarted _ _ _ ->
+                    Ok ( messageId2, channel2 )
+
         Err error ->
             Err error
 
@@ -922,6 +931,9 @@ createDiscordMessageBackend messageId message channel =
                         channel.lastTypedAt
 
                     CallEnded _ _ ->
+                        channel.lastTypedAt
+
+                    GoMatchStarted _ _ _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1012,6 +1024,9 @@ createMessageFrontend message channel =
                     channel.lastTypedAt
 
                 CallEnded _ _ ->
+                    channel.lastTypedAt
+
+                GoMatchStarted _ _ _ ->
                     channel.lastTypedAt
     }
 
@@ -2172,6 +2187,9 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
                                 Just (CallEnded _ _) ->
                                     []
 
+                                Just (GoMatchStarted _ startedBy _) ->
+                                    [ startedBy ]
+
                                 Nothing ->
                                     []
                            )
@@ -2230,6 +2248,9 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 CallEnded _ _ ->
                                     []
 
+                                GoMatchStarted _ startedBy _ ->
+                                    [ startedBy ]
+
                         _ ->
                             []
                    )
@@ -2262,6 +2283,9 @@ repliedToUserId maybeRepliedTo channel =
                         CallEnded _ _ ->
                             Nothing
 
+                        GoMatchStarted _ startedBy _ ->
+                            Just startedBy
+
                 Nothing ->
                     Nothing
 
@@ -2290,6 +2314,9 @@ repliedToUserIdFrontend maybeRepliedTo channel =
 
                         CallEnded _ _ ->
                             Nothing
+
+                        GoMatchStarted _ startedBy _ ->
+                            Just startedBy
 
                 _ ->
                     Nothing
@@ -2395,17 +2422,22 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DmRoute { otherUserId, threadRoute } ->
-            if SeqDict.member otherUserId local.dmChannels then
-                case threadRoute of
-                    NoThreadWithFriends _ _ ->
-                        ViewDm otherUserId EmptyPlaceholder
+        DmRoute { channelId, threadRoute } ->
+            case DmChannel.otherUserId local.localUser.session.userId channelId of
+                Just otherUserId ->
+                    if SeqDict.member otherUserId local.dmChannels then
+                        case threadRoute of
+                            NoThreadWithFriends _ _ ->
+                                ViewDm otherUserId EmptyPlaceholder
 
-                    ViewThreadWithFriends threadId _ _ ->
-                        ViewDmThread otherUserId threadId EmptyPlaceholder
+                            ViewThreadWithFriends threadId _ _ ->
+                                ViewDmThread otherUserId threadId EmptyPlaceholder
 
-            else
-                StopViewingChannel
+                    else
+                        StopViewingChannel
+
+                Nothing ->
+                    StopViewingChannel
 
         DiscordDmRoute data ->
             if SeqDict.member data.channelId local.discordDmChannels then
@@ -2415,9 +2447,6 @@ routeToViewing route local =
                 StopViewingChannel
 
         AiChatRoute ->
-            StopViewingChannel
-
-        GoRoute ->
             StopViewingChannel
 
         SlackOAuthRedirect _ ->
@@ -2600,6 +2629,9 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
                                             CallEnded time reactions ->
                                                 CallEnded_NoReply time reactions
+
+                                            GoMatchStarted time _ reactions ->
+                                                GoMatchStarted_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
 
@@ -2635,6 +2667,9 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
                                         CallEnded time reactions ->
                                             CallEnded_NoReply time reactions
+
+                                        GoMatchStarted time _ reactions ->
+                                            GoMatchStarted_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
 
@@ -2693,6 +2728,9 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
 
                                 CallEnded time reactions ->
                                     CallEnded_NoReply time reactions
+
+                                GoMatchStarted time _ reactions ->
+                                    GoMatchStarted_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply
 

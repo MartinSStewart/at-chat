@@ -1,4 +1,23 @@
-module FrontendExtra exposing (changeUpdate, externalLinkWarning, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing
+    ( canDropFiles
+    , changeUpdate
+    , editMessage_gotFiles
+    , externalLinkWarning
+    , gotFiles
+    , handleLocalChange
+    , initAdminData
+    , isPressMsg
+    , layout
+    , logout
+    , pingUserNameSoFar
+    , playNotificationSound
+    , playNotificationSoundForDiscordMessage
+    , routePush
+    , routeReplace
+    , routeRequest
+    , setFocus
+    , updateLoggedIn
+    )
 
 import AiChat
 import Array exposing (Array)
@@ -12,18 +31,22 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File exposing (File)
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji)
-import FileStatus exposing (FileData, FileId)
+import FileName
+import FileStatus exposing (FileData, FileId, FileStatus(..))
+import Go
 import Html exposing (Html)
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
+import Json.Decode.Extra
 import List.Nonempty exposing (Nonempty)
 import Local
 import LocalState exposing (AdminData, AdminStatus(..), DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState)
@@ -199,6 +222,14 @@ pendingChangesText localChange =
                 VoiceChat.Local_Signal _ _ ->
                     "Voice chat state change"
 
+        Local_Go _ change ->
+            case change of
+                Go.StartMatch _ _ ->
+                    "Started Go match"
+
+                Go.Action _ _ ->
+                    "Made a move in Go"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -220,7 +251,7 @@ layout model attributes child =
 
                     maybeMessageId : Maybe ( AnyGuildOrDmId, ThreadRoute )
                     maybeMessageId =
-                        Route.toGuildOrDmId model.route
+                        Route.toGuildOrDmId local.localUser.session.userId model.route
                 in
                 [ Local.networkError
                     (\change ->
@@ -297,6 +328,7 @@ layout model attributes child =
                     NoMessageHover ->
                         Ui.noAttr
                 ]
+                    ++ fileDragDropAttributes loggedIn.fileDragOverCount model
 
             NotLoggedIn _ ->
                 []
@@ -355,6 +387,371 @@ layout model attributes child =
                )
         )
         child
+
+
+canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
+canDropFiles currentUserId route =
+    case route of
+        HomePageRoute ->
+            Nothing
+
+        AdminRoute _ ->
+            Nothing
+
+        GuildRoute guildId channelRoute ->
+            case channelRoute of
+                ChannelRoute channelId threadRoute ->
+                    let
+                        threadRoute2 : ThreadRoute
+                        threadRoute2 =
+                            case threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    NoThread
+
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewThread threadId
+                    in
+                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) threadRoute2 |> Just
+
+                NewChannelRoute ->
+                    Nothing
+
+                EditChannelRoute _ ->
+                    Nothing
+
+                GuildSettingsRoute ->
+                    Nothing
+
+                JoinRoute _ ->
+                    Nothing
+
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    let
+                        threadRoute2 : ThreadRoute
+                        threadRoute2 =
+                            case threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    NoThread
+
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewThread threadId
+                    in
+                    canDropFileHelper
+                        (DiscordGuildOrDmId
+                            (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                        )
+                        threadRoute2
+                        |> Just
+
+                DiscordChannel_NewChannelRoute ->
+                    Nothing
+
+                DiscordChannel_EditChannelRoute _ ->
+                    Nothing
+
+                DiscordChannel_GuildSettingsRoute ->
+                    Nothing
+
+        DmRoute routeData ->
+            case DmChannel.otherUserId currentUserId routeData.channelId of
+                Just otherUserId ->
+                    let
+                        threadRoute2 : ThreadRoute
+                        threadRoute2 =
+                            case routeData.threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    NoThread
+
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewThread threadId
+                    in
+                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm otherUserId)) threadRoute2 |> Just
+
+                Nothing ->
+                    Nothing
+
+        DiscordDmRoute routeData ->
+            canDropFileHelper
+                (DiscordGuildOrDmId
+                    (DiscordGuildOrDmId_Dm
+                        { currentUserId = routeData.currentDiscordUserId, channelId = routeData.channelId }
+                    )
+                )
+                NoThread
+                |> Just
+
+        AiChatRoute ->
+            Nothing
+
+        SlackOAuthRedirect _ ->
+            Nothing
+
+        TextEditorRoute ->
+            Nothing
+
+        LinkDiscord _ ->
+            Nothing
+
+
+canDropFileHelper :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> Nonempty File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+canDropFileHelper guildOrDmId threadRoute2 files model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            if SeqDict.member ( guildOrDmId, threadRoute2 ) loggedIn.editMessage then
+                editMessage_gotFiles ( guildOrDmId, threadRoute2 ) files model
+
+            else
+                gotFiles guildOrDmId threadRoute2 files model
+
+        NotLoggedIn _ ->
+            ( model, Command.none )
+
+
+fileDragDropAttributes : Int -> LoadedFrontend -> List (Ui.Attribute FrontendMsg)
+fileDragDropAttributes fileDragOverCount model =
+    [ Html.Events.preventDefaultOn "dragenter" (Json.Decode.succeed ( FileDragEnter, True )) |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "dragover" (Json.Decode.succeed ( FrontendNoOp, True )) |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "dragleave" (Json.Decode.succeed ( FileDragLeave, True )) |> Ui.htmlAttribute
+    , Html.Events.preventDefaultOn "drop"
+        (Json.Decode.at [ "dataTransfer", "files" ] (Json.Decode.Extra.collection File.decoder)
+            |> Json.Decode.map (\list -> ( FileDropped list, True ))
+        )
+        |> Ui.htmlAttribute
+    , Ui.inFront (fileDragOverlay (fileDragOverCount > 0) model)
+    ]
+
+
+fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
+fileDragOverlay isVisible model =
+    let
+        canDrop : Bool
+        canDrop =
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
+
+                _ ->
+                    False
+
+        accentColor : Ui.Color
+        accentColor =
+            if canDrop then
+                MyUi.font1
+
+            else
+                MyUi.errorColor
+    in
+    Ui.el
+        [ Ui.background (Ui.rgba 0 0 0 0.6)
+        , Ui.height Ui.fill
+        , Ui.width Ui.fill
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.Font.color accentColor
+        , Ui.Font.size 32
+        , Ui.Font.bold
+        , Ui.borderColor accentColor
+        , MyUi.htmlStyle "border" "8px dashed"
+        , MyUi.htmlStyle "box-sizing" "border-box"
+        , MyUi.htmlStyle "pointer-events" "none"
+        , MyUi.htmlStyle "transition" "opacity 0.15s ease-in"
+        , MyUi.htmlStyle "opacity"
+            (if isVisible then
+                "1"
+
+             else
+                "0"
+            )
+        ]
+        (if canDrop then
+            Ui.text "Drop files anywhere to upload"
+
+         else
+            Ui.text "Nowhere to put this file here"
+        )
+
+
+gotFiles :
+    AnyGuildOrDmId
+    -> ThreadRoute
+    -> Nonempty File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+gotFiles guildOrDmId threadRoute files model =
+    updateLoggedIn
+        (\loggedIn ->
+            let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
+                ( fileText, cmds, dict ) =
+                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
+                        Just dict2 ->
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        id =
+                                            Id.nextId (NonemptyDict.toSeqDict dict3)
+                                    in
+                                    ( fileText2
+                                        ++ [ RichText.attachedFilePrefix
+                                                ++ Id.toString id
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.uploadFile
+                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
+                                        local.localUser.session.sessionIdHash
+                                        ( guildOrDmId, threadRoute )
+                                        id
+                                        file2
+                                        :: cmds2
+                                    , NonemptyDict.insert
+                                        id
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            { sent = 0, size = File.size file2 }
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], dict2 )
+                                files
+
+                        Nothing ->
+                            ( List.indexedMap
+                                (\index _ ->
+                                    RichText.attachedFilePrefix
+                                        ++ Id.toString (Id.fromInt (index + 1))
+                                        ++ RichText.attachedFileSuffix
+                                )
+                                (List.Nonempty.toList files)
+                            , List.indexedMap
+                                (\index file2 ->
+                                    let
+                                        id : Id FileId
+                                        id =
+                                            Id.fromInt (index + 1)
+                                    in
+                                    FileStatus.uploadFile
+                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
+                                        local.localUser.session.sessionIdHash
+                                        ( guildOrDmId, threadRoute )
+                                        id
+                                        file2
+                                )
+                                (List.Nonempty.toList files)
+                            , List.Nonempty.indexedMap
+                                (\index file2 ->
+                                    ( Id.fromInt (index + 1)
+                                    , FileUploading
+                                        (File.name file2 |> FileName.fromString)
+                                        { sent = 0, size = File.size file2 }
+                                        (File.mime file2 |> FileStatus.contentType)
+                                    )
+                                )
+                                files
+                                |> NonemptyDict.fromNonemptyList
+                            )
+            in
+            ( { loggedIn
+                | filesToUpload =
+                    SeqDict.insert ( guildOrDmId, threadRoute ) dict loggedIn.filesToUpload
+                , drafts =
+                    case String.join " " fileText |> String.Nonempty.fromString of
+                        Just fileText2 ->
+                            SeqDict.update
+                                ( guildOrDmId, threadRoute )
+                                (\maybe ->
+                                    case maybe of
+                                        Just draft ->
+                                            String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
+                                                |> Just
+
+                                        Nothing ->
+                                            Just fileText2
+                                )
+                                loggedIn.drafts
+
+                        Nothing ->
+                            loggedIn.drafts
+              }
+            , Command.batch cmds
+            )
+        )
+        model
+
+
+editMessage_gotFiles :
+    ( AnyGuildOrDmId, ThreadRoute )
+    -> Nonempty File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+editMessage_gotFiles guildOrDmId files model =
+    updateLoggedIn
+        (\loggedIn ->
+            case SeqDict.get guildOrDmId loggedIn.editMessage of
+                Just edit ->
+                    let
+                        ( fileText, cmds, dict ) =
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        fileId : Id FileId
+                                        fileId =
+                                            Id.nextId dict3
+                                    in
+                                    ( fileText2
+                                        ++ [ " "
+                                                ++ RichText.attachedFilePrefix
+                                                ++ Id.toString fileId
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.uploadFile
+                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
+                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
+                                        guildOrDmId
+                                        fileId
+                                        file2
+                                        :: cmds2
+                                    , SeqDict.insert
+                                        fileId
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            { sent = 0, size = File.size file2 }
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], edit.attachedFiles )
+                                files
+                    in
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.insert
+                                guildOrDmId
+                                { edit
+                                    | text = edit.text ++ String.concat fileText
+                                    , attachedFiles = dict
+                                }
+                                loggedIn.editMessage
+                      }
+                    , Command.batch cmds
+                    )
+
+                Nothing ->
+                    ( loggedIn, Command.none )
+        )
+        model
 
 
 externalLinkWarning : SeqSet Domain -> Bool -> Url -> Element FrontendMsg
@@ -886,19 +1283,29 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
 
-        GoRoute ->
-            ( model2, viewCmd )
-
         DmRoute dmRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
-                    clearRevealedSpoilers model2
+                    case previousRoute of
+                        Just (DmRoute previousDmRoute) ->
+                            if dmRoute.channelId == previousDmRoute.channelId then
+                                model2
+
+                            else
+                                clearRevealedSpoilers model2
+
+                        _ ->
+                            clearRevealedSpoilers model2
             in
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch [ viewCmd, openChannelCmds dmRoute.threadRoute model3 ]
+                    , Command.batch
+                        [ viewCmd
+                        , openChannelCmds dmRoute.threadRoute model3
+                        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+                        ]
                     )
                 )
                 model3
@@ -1341,6 +1748,18 @@ isPressMsg msg =
             VoiceChat.isPressMsg voiceChatMsg
 
         GotVoiceChatRecording _ ->
+            False
+
+        PressedChannelHeaderTab _ ->
+            True
+
+        FileDragEnter ->
+            False
+
+        FileDragLeave ->
+            False
+
+        FileDropped _ ->
             False
 
 
@@ -2253,6 +2672,9 @@ changeUpdate localMsg local =
 
                         VoiceChat.Local_Signal _ _ ->
                             local
+
+                Local_Go { otherUserId } goChange ->
+                    goChangeUpdate local.localUser.session.userId otherUserId goChange local
 
         ServerChange serverChange ->
             case serverChange of
@@ -3338,6 +3760,58 @@ changeUpdate localMsg local =
 
                         VoiceChat.Server_SignalReceived _ _ ->
                             local
+
+                Server_Go changeBy { otherUserId } goChange ->
+                    goChangeUpdate changeBy otherUserId goChange local
+
+
+goChangeUpdate :
+    Id UserId
+    -> Id UserId
+    -> Go.LocalChange
+    -> LocalState
+    -> LocalState
+goChangeUpdate changeBy otherUserId goChange local =
+    { local
+        | dmChannels =
+            SeqDict.update
+                otherUserId
+                (\maybe ->
+                    let
+                        dmChannel : FrontendDmChannel
+                        dmChannel =
+                            Maybe.withDefault DmChannel.frontendInit maybe
+                    in
+                    (case goChange of
+                        Go.StartMatch createdAt setup ->
+                            let
+                                dmChannel2 : FrontendDmChannel
+                                dmChannel2 =
+                                    LocalState.createChannelMessageFrontend
+                                        (GoMatchStarted createdAt changeBy SeqDict.empty)
+                                        dmChannel
+
+                                matchId : Id ChannelMessageId
+                                matchId =
+                                    DmChannel.latestMessageId dmChannel2
+                            in
+                            { dmChannel2
+                                | goMatches = SeqDict.insert matchId ( setup, Array.empty ) dmChannel2.goMatches
+                            }
+
+                        Go.Action matchId actionWithTime ->
+                            { dmChannel
+                                | goMatches =
+                                    SeqDict.updateIfExists
+                                        matchId
+                                        (\( setup, actions ) -> ( setup, Array.push actionWithTime actions ))
+                                        dmChannel.goMatches
+                            }
+                    )
+                        |> Just
+                )
+                local.dmChannels
+    }
 
 
 otherUserLeaveCall : Time.Posix -> VoiceChat.ConnectionId -> LocalState -> LocalState

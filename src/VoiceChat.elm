@@ -1,7 +1,7 @@
 port module VoiceChat exposing
-    ( AudioTrackData
-    , ConnectionId
+    ( ConnectionId
     , DeviceKind(..)
+    , DisplayMode
     , FromJs(..)
     , Ice
     , Local
@@ -20,14 +20,13 @@ port module VoiceChat exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
-    , Track(..)
-    , VideoTrackData
     , decodeVoiceChatRecorder
     , displayMode
     , displayModeChangeCmd
     , fromJs
     , gotRecordedData
     , gotUserMediaDevices
+    , hasJoined
     , init
     , initModel
     , isPressMsg
@@ -38,7 +37,6 @@ port module VoiceChat exposing
     , toJs
     , videoNodes
     , view
-    , voiceChatButton
     )
 
 import Bytes exposing (Bytes)
@@ -46,12 +44,12 @@ import Bytes.Decode
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import DmChannel
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
-import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -65,13 +63,11 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
-import OneOrGreater
-import Route exposing (Route)
+import Route exposing (DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
-import User exposing (LocalUser)
 
 
 type LocalChange
@@ -94,7 +90,6 @@ type Msg
     | PressedJoinCall RoomId
     | PressedLeaveCall
     | PressedDownloadRecording RoomId
-    | PressedChannelHeaderVoiceChatButton RoomId
     | PressedCopyError String
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
@@ -115,7 +110,6 @@ type alias Model =
     , videoInputEnabled : Bool
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
-    , expanded : SeqSet RoomId
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
@@ -154,7 +148,6 @@ initModel =
     , videoInputEnabled = True
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
-    , expanded = SeqSet.empty
     , localIsSpeaking = False
     , startConnectionError = Nothing
     , volume = SeqDict.empty
@@ -295,41 +288,71 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Route -> Model -> Local -> DisplayMode
-displayMode route model local =
+displayMode : Id UserId -> Route -> Local -> DisplayMode
+displayMode currentUserId route local =
     let
-        viewingRoomId : Maybe RoomId
-        viewingRoomId =
-            case Route.toGuildOrDmId route of
-                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
-                    DmRoomId otherUserId |> Just
-
-                _ ->
-                    Nothing
-    in
-    case viewingRoomId of
-        Just viewingRoomId2 ->
-            if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
-                case SeqDict.get viewingRoomId2 local.voiceChats of
-                    Just sessions ->
-                        ShowLocalVideoAndCall
-
-                    Nothing ->
-                        ShowLocalVideo
-
-            else if SeqSet.member viewingRoomId2 model.expanded then
-                ShowLocalVideo
-
-            else
-                NoVideo
-
-        Nothing ->
+        thumbnailOrNoVideo =
             case local.currentRoom of
-                Just currentRoom ->
+                Just _ ->
                     ShowLocalVideoAndCallThumbnail
 
                 Nothing ->
                     NoVideo
+    in
+    case route of
+        HomePageRoute ->
+            thumbnailOrNoVideo
+
+        AdminRoute _ ->
+            thumbnailOrNoVideo
+
+        GuildRoute _ _ ->
+            thumbnailOrNoVideo
+
+        DiscordGuildRoute _ ->
+            thumbnailOrNoVideo
+
+        DmRoute dmRoute ->
+            case DmChannel.otherUserId currentUserId dmRoute.channelId of
+                Just otherUserId ->
+                    let
+                        roomId =
+                            DmRoomId otherUserId
+
+                        isTabExpanded =
+                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+                    in
+                    if Just roomId == local.currentRoom && isTabExpanded then
+                        case SeqDict.get roomId local.voiceChats of
+                            Just _ ->
+                                ShowLocalVideoAndCall
+
+                            Nothing ->
+                                ShowLocalVideo
+
+                    else if isTabExpanded then
+                        ShowLocalVideo
+
+                    else
+                        thumbnailOrNoVideo
+
+                Nothing ->
+                    thumbnailOrNoVideo
+
+        DiscordDmRoute _ ->
+            thumbnailOrNoVideo
+
+        AiChatRoute ->
+            thumbnailOrNoVideo
+
+        SlackOAuthRedirect _ ->
+            thumbnailOrNoVideo
+
+        TextEditorRoute ->
+            thumbnailOrNoVideo
+
+        LinkDiscord _ ->
+            thumbnailOrNoVideo
 
 
 localVideoNodeId : String
@@ -337,12 +360,12 @@ localVideoNodeId =
     "local-video"
 
 
-videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html Msg
-videoNodes route windowSize model local =
+videoNodes : Id UserId -> Route -> Coord CssPixels -> Model -> Local -> Html Msg
+videoNodes currentUserId route windowSize model local =
     let
         viewingRoomId : Maybe RoomId
         viewingRoomId =
-            case Route.toGuildOrDmId route of
+            case Route.toGuildOrDmId currentUserId route of
                 Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
                     DmRoomId otherUserId |> Just
 
@@ -357,7 +380,7 @@ videoNodes route windowSize model local =
                 MyUi.channelAndGuildColumnWidth windowSize
 
         voiceChatY =
-            MyUi.channelHeaderHeight
+            MyUi.channelHeaderHeight + 8
 
         maxWidth : Int
         maxWidth =
@@ -423,7 +446,40 @@ videoNodes route windowSize model local =
     in
     (case viewingRoomId of
         Just viewingRoomId2 ->
-            if Just viewingRoomId2 == local.currentRoom && SeqSet.member viewingRoomId2 model.expanded then
+            let
+                isTabExpanded =
+                    case route of
+                        DmRoute dmRoute ->
+                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+
+                        HomePageRoute ->
+                            False
+
+                        AdminRoute _ ->
+                            False
+
+                        GuildRoute _ _ ->
+                            False
+
+                        DiscordGuildRoute _ ->
+                            False
+
+                        DiscordDmRoute _ ->
+                            False
+
+                        AiChatRoute ->
+                            False
+
+                        SlackOAuthRedirect _ ->
+                            False
+
+                        TextEditorRoute ->
+                            False
+
+                        LinkDiscord _ ->
+                            False
+            in
+            if Just viewingRoomId2 == local.currentRoom && isTabExpanded then
                 case SeqDict.get viewingRoomId2 local.voiceChats of
                     Just sessions ->
                         let
@@ -431,7 +487,7 @@ videoNodes route windowSize model local =
                             total =
                                 NonemptySet.size sessions + 1
                         in
-                        videoNode isMobile IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
+                        videoNode IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -440,7 +496,6 @@ videoNodes route windowSize model local =
                                             { roomId = viewingRoomId2, otherClientId = session }
                                     in
                                     videoNode
-                                        isMobile
                                         (IsConnection connectionId)
                                         False
                                         (videoPosAndSize total (index + 1))
@@ -450,16 +505,16 @@ videoNodes route windowSize model local =
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                        [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
-            else if SeqSet.member viewingRoomId2 model.expanded then
-                [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+            else if isTabExpanded then
+                [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else
-                [ videoNode isMobile IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
         Nothing ->
-            [ videoNode isMobile IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+            [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
     )
         |> Html.Keyed.node "div" []
 
@@ -470,14 +525,13 @@ aspectRatio =
 
 
 videoNode :
-    Bool
-    -> LocalOrConnection
+    LocalOrConnection
     -> Bool
     -> ( Int, Int, Int )
     -> Bool
     -> Model
     -> ( String, Html Msg )
-videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
+videoNode id isHidden ( x, y, width ) isSpeaking model =
     let
         height : Float
         height =
@@ -498,12 +552,20 @@ videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
         , Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt x ++ "px")
         , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Attributes.style
+            "pointer-events"
+            (if isHidden then
+                "none"
+
+             else
+                "auto"
+            )
         , Html.Events.onMouseEnter (MouseEnterVideoNode id)
         , Html.Events.onMouseLeave (MouseExitVideoNode id)
         , Html.Attributes.style
             "opacity"
             (if isHidden then
-                "0.1"
+                "0"
 
              else
                 "1"
@@ -647,8 +709,8 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> RoomId -> LocalUser -> Local -> Model -> Element Msg
-view windowSize roomId localUser calls model =
+view : Coord CssPixels -> RoomId -> Local -> Model -> Element Msg
+view windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
         ongoingCall =
@@ -665,9 +727,8 @@ view windowSize roomId localUser calls model =
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
-        , Ui.background MyUi.background3
+        , Ui.background MyUi.background1
         , MyUi.noShrinking
-        , Ui.inFront (Ui.el [ Ui.paddingXY 16 0 ] (voiceChatButton roomId localUser calls))
         , Ui.inFront
             (Ui.column
                 [ Ui.alignBottom ]
@@ -752,72 +813,6 @@ view windowSize roomId localUser calls model =
         Ui.none
 
 
-voiceChatButton : RoomId -> LocalUser -> Local -> Element Msg
-voiceChatButton voiceChatId localUser calls =
-    let
-        joined : Element msg
-        joined =
-            joinedUsers voiceChatId calls
-                |> SeqDict.toList
-                |> List.map
-                    (\( userId, clientIds ) ->
-                        let
-                            count =
-                                NonemptySet.size clientIds
-                        in
-                        Ui.el
-                            [ case ( count > 1, OneOrGreater.fromInt count ) of
-                                ( True, Just count2 ) ->
-                                    GuildIcon.notificationHelper
-                                        MyUi.background1
-                                        MyUi.white
-                                        MyUi.border1
-                                        2
-                                        -2
-                                        count2
-
-                                _ ->
-                                    Ui.noAttr
-                            ]
-                            (case User.getUser userId localUser of
-                                Just user ->
-                                    User.profileImage user.icon
-
-                                Nothing ->
-                                    User.profileImage Nothing
-                            )
-                    )
-                |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
-    in
-    Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight, Ui.spacing 8 ]
-        [ joined
-        , MyUi.elButton
-            (Dom.id "guild_voiceChat")
-            (PressedChannelHeaderVoiceChatButton voiceChatId)
-            [ Ui.width (Ui.px 44)
-            , Ui.paddingXY 4 0
-            , Ui.height Ui.fill
-            ]
-            (Ui.row
-                [ Ui.spacing 2, Ui.centerY ]
-                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
-                , if hasJoined voiceChatId calls then
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 40 190 80)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                  else
-                    Ui.none
-                ]
-            )
-        ]
-
-
 voiceChatControlButton : String -> Element msg -> Bool -> msg -> Element msg
 voiceChatControlButton htmlId iconHtml isEnabled onPress =
     MyUi.elButton
@@ -859,71 +854,6 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
         iconHtml
 
 
-type Track
-    = VideoTrack VideoTrackData
-    | AudioTrack AudioTrackData
-
-
-trackCodec : Codec Track
-trackCodec =
-    Codec.custom
-        (\aEncoder bEncoder value ->
-            case value of
-                VideoTrack a ->
-                    aEncoder a
-
-                AudioTrack a ->
-                    bEncoder a
-        )
-        |> Codec.variant1 "video" VideoTrack videoTrackCodec
-        |> Codec.variant1 "audio" AudioTrack audioTrackCodec
-        |> Codec.buildCustom
-
-
-type alias VideoTrackData =
-    { deviceId : String
-    , frameRate : Int
-    , groupId : String
-    , width : Int
-    , height : Int
-    , resizeMode : String
-    }
-
-
-type alias AudioTrackData =
-    { deviceId : String
-    , autoGainControl : Bool
-    , groupId : String
-    , channelCount : Int
-    , echoCancellation : Bool
-    , noiseSuppression : Bool
-    }
-
-
-audioTrackCodec : Codec AudioTrackData
-audioTrackCodec =
-    Codec.object AudioTrackData
-        |> Codec.field "deviceId" .deviceId Codec.string
-        |> Codec.field "autoGainControl" .autoGainControl Codec.bool
-        |> Codec.field "groupId" .groupId Codec.string
-        |> Codec.field "channelCount" .channelCount Codec.int
-        |> Codec.field "echoCancellation" .echoCancellation Codec.bool
-        |> Codec.field "noiseSuppression" .noiseSuppression Codec.bool
-        |> Codec.buildObject
-
-
-videoTrackCodec : Codec VideoTrackData
-videoTrackCodec =
-    Codec.object VideoTrackData
-        |> Codec.field "deviceId" .deviceId Codec.string
-        |> Codec.field "frameRate" .frameRate Codec.int
-        |> Codec.field "groupId" .groupId Codec.string
-        |> Codec.field "width" .width Codec.int
-        |> Codec.field "height" .height Codec.int
-        |> Codec.field "resizeMode" .resizeMode Codec.string
-        |> Codec.buildObject
-
-
 hasJoined : RoomId -> Local -> Bool
 hasJoined roomId model =
     model.currentRoom == Just roomId
@@ -948,31 +878,6 @@ leaveVoiceChatCmds model =
 
         Nothing ->
             Command.none
-
-
-joinedUsers : RoomId -> Local -> SeqDict (Id UserId) (NonemptySet ClientId)
-joinedUsers roomId model =
-    case SeqDict.get roomId model.voiceChats of
-        Just voiceChat ->
-            NonemptySet.foldl
-                (\( userId, clientId ) dict ->
-                    SeqDict.update
-                        userId
-                        (\maybe ->
-                            case maybe of
-                                Just nonempty ->
-                                    NonemptySet.insert clientId nonempty |> Just
-
-                                Nothing ->
-                                    NonemptySet.singleton clientId |> Just
-                        )
-                        dict
-                )
-                SeqDict.empty
-                voiceChat
-
-        Nothing ->
-            SeqDict.empty
 
 
 serverChangeCmd : ServerChange -> ClientId -> Local -> Model -> Command FrontendOnly toBackend msg
@@ -1196,11 +1101,12 @@ voiceChatFromJsCodec =
         |> Codec.buildCustom
 
 
-port got_recorded_data : (Bytes -> msg) -> Sub msg
+
+--port got_recorded_data : (Bytes -> msg) -> Sub msg
 
 
 gotRecordedData : (Bytes -> msg) -> Subscription FrontendOnly msg
-gotRecordedData msg =
+gotRecordedData _ =
     Subscription.none
 
 
@@ -1419,19 +1325,16 @@ isPressMsg msg =
         PressedDownloadRecording _ ->
             True
 
-        PressedChannelHeaderVoiceChatButton _ ->
-            True
-
-        PressedCopyError string ->
+        PressedCopyError _ ->
             True
 
         ChangedVolume _ _ ->
             False
 
-        MouseEnterVideoNode connectionId ->
+        MouseEnterVideoNode _ ->
             False
 
-        MouseExitVideoNode connectionId ->
+        MouseExitVideoNode _ ->
             False
 
 

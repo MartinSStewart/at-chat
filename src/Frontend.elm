@@ -17,7 +17,6 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File exposing (File)
 import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
@@ -27,9 +26,9 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
-import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
+import Go
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -50,7 +49,6 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
-import Pages.Go
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -58,7 +56,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqSet
@@ -154,12 +152,6 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
-        , case model of
-            Loaded loaded ->
-                Pages.Go.subscriptions loaded.goModel |> Subscription.map GoMsg
-
-            Loading _ ->
-                Subscription.none
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
@@ -341,7 +333,6 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , goModel = Pages.Go.init
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
@@ -440,6 +431,8 @@ loadedInitHelper timezone userAgent loginData loading =
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
+            , currentDmGoMatch = SeqDict.empty
+            , fileDragOverCount = 0
             }
     in
     ( loggedIn
@@ -756,7 +749,7 @@ updateLoaded msg model =
                 model
 
         SelectedFilesToAttach ( guildOrDmId, threadRoute ) file files ->
-            gotFiles guildOrDmId threadRoute (Nonempty file files) model
+            FrontendExtra.gotFiles guildOrDmId threadRoute (Nonempty file files) model
 
         NewChannelFormChanged guildId newChannelForm ->
             FrontendExtra.updateLoggedIn
@@ -1128,7 +1121,11 @@ updateLoaded msg model =
                                 Nothing ->
                                     case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
-                                            case Route.toGuildOrDmId model.route of
+                                            let
+                                                local =
+                                                    Local.model loggedIn2.localState
+                                            in
+                                            case Route.toGuildOrDmId local.localUser.session.userId model.route of
                                                 Just ( guildOrDmId, threadRoute ) ->
                                                     FrontendExtra.handleLocalChange
                                                         model.time
@@ -1136,7 +1133,7 @@ updateLoaded msg model =
                                                             LocalState.guildOrDmIdToMessagesCount
                                                                 guildOrDmId
                                                                 threadRoute
-                                                                (Local.model loggedIn2.localState)
+                                                                local
                                                          of
                                                             Just messages ->
                                                                 Local_SetLastViewed
@@ -1183,13 +1180,41 @@ updateLoaded msg model =
                         model
 
                 _ ->
-                    case ( model.route, Pages.Go.keyMsg key ) of
-                        ( GoRoute, Just goMsg ) ->
-                            let
-                                ( goModel2, goCmd ) =
-                                    Pages.Go.update goMsg model.goModel
-                            in
-                            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+                    case model.route of
+                        DmRoute dmRoute ->
+                            case dmRoute.tab of
+                                Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                                    FrontendExtra.updateLoggedIn
+                                        (\loggedIn ->
+                                            let
+                                                local =
+                                                    Local.model loggedIn.localState
+                                            in
+                                            case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+                                                Just otherUserId ->
+                                                    let
+                                                        dmChannel : FrontendDmChannel
+                                                        dmChannel =
+                                                            SeqDict.get otherUserId local.dmChannels
+                                                                |> Maybe.withDefault DmChannel.frontendInit
+                                                    in
+                                                    ( { loggedIn
+                                                        | currentDmGoMatch =
+                                                            SeqDict.update
+                                                                ( otherUserId, maybeMatchId )
+                                                                (Go.pressedKey key maybeMatchId dmChannel.goMatches)
+                                                                loggedIn.currentDmGoMatch
+                                                      }
+                                                    , Command.none
+                                                    )
+
+                                                Nothing ->
+                                                    ( loggedIn, Command.none )
+                                        )
+                                        model
+
+                                _ ->
+                                    ( model, Command.none )
 
                         _ ->
                             ( model, Command.none )
@@ -1340,12 +1365,16 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         MessageMenu_PressedReply threadRoute ->
-            case Route.toGuildOrDmId model.route of
-                Just ( guildOrDmId, _ ) ->
-                    pressedReply guildOrDmId threadRoute model
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case Route.toGuildOrDmId (Local.model loggedIn.localState).localUser.session.userId model.route of
+                        Just ( guildOrDmId, _ ) ->
+                            pressedReply guildOrDmId threadRoute loggedIn model
 
-                Nothing ->
-                    ( model, Command.none )
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
@@ -1857,11 +1886,86 @@ updateLoaded msg model =
             )
 
         GoMsg goMsg ->
-            let
-                ( goModel2, goCmd ) =
-                    Pages.Go.update goMsg model.goModel
-            in
-            ( { model | goModel = goModel2 }, Command.map never GoMsg goCmd )
+            case ( model.route, model.loginStatus ) of
+                ( DmRoute dmRoute, LoggedIn loggedIn ) ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case ( dmRoute.tab, DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId ) of
+                        ( Just (DmChannelHeaderTab_Go maybeMatchId), Just otherUserId ) ->
+                            let
+                                dmChannel =
+                                    SeqDict.get otherUserId local.dmChannels
+                                        |> Maybe.withDefault DmChannel.frontendInit
+
+                                ( goModel2, cmd, outMsg ) =
+                                    Go.update
+                                        model.time
+                                        local.localUser.session.userId
+                                        otherUserId
+                                        goMsg
+                                        maybeMatchId
+                                        dmChannel.goMatches
+                                        (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+
+                                maybeChange : Maybe Go.LocalChange
+                                maybeChange =
+                                    case outMsg of
+                                        Go.OutLocalChange change ->
+                                            Just change
+
+                                        _ ->
+                                            Nothing
+
+                                ( loggedIn2, cmd2 ) =
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Maybe.map (Local_Go { otherUserId = otherUserId }) maybeChange)
+                                        { loggedIn
+                                            | currentDmGoMatch =
+                                                SeqDict.update
+                                                    ( otherUserId, maybeMatchId )
+                                                    (\_ -> goModel2)
+                                                    loggedIn.currentDmGoMatch
+                                        }
+                                        (Command.map never GoMsg cmd)
+
+                                ( model2, routeCmd ) =
+                                    case outMsg of
+                                        Go.OutLocalChange (Go.StartMatch _ _) ->
+                                            FrontendExtra.routePush
+                                                { model | loginStatus = LoggedIn loggedIn2 }
+                                                (DmRoute
+                                                    { dmRoute
+                                                        | tab =
+                                                            DmChannel.latestMessageId dmChannel
+                                                                |> Id.increment
+                                                                |> Just
+                                                                |> DmChannelHeaderTab_Go
+                                                                |> Just
+                                                    }
+                                                )
+
+                                        Go.OutSelectMatch newMatchId ->
+                                            FrontendExtra.routePush
+                                                { model | loginStatus = LoggedIn loggedIn2 }
+                                                (DmRoute
+                                                    { dmRoute
+                                                        | tab = Just (DmChannelHeaderTab_Go newMatchId)
+                                                    }
+                                                )
+
+                                        _ ->
+                                            ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                            in
+                            ( model2, Command.batch [ routeCmd, cmd2 ] )
+
+                        _ ->
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
 
         UserNameEditableMsg editableMsg ->
             handleEditable
@@ -1985,7 +2089,7 @@ updateLoaded msg model =
                 model
 
         EditMessage_SelectedFilesToAttach guildOrDmId file files ->
-            editMessage_gotFiles guildOrDmId (Nonempty file files) model
+            FrontendExtra.editMessage_gotFiles guildOrDmId (Nonempty file files) model
 
         EditMessage_GotFileHashName guildOrDmId messageIndex fileId result ->
             FrontendExtra.updateLoggedIn
@@ -2240,9 +2344,13 @@ updateLoaded msg model =
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
-                                                            { otherUserId = otherUserId
+                                                            { channelId =
+                                                                DmChannel.channelIdFromUserIds
+                                                                    (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                                                                    otherUserId
                                                             , threadRoute =
                                                                 ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab
+                                                            , tab = Nothing
                                                             }
                                                         )
 
@@ -2250,9 +2358,13 @@ updateLoaded msg model =
                                                     FrontendExtra.routePush
                                                         model
                                                         (DmRoute
-                                                            { otherUserId = otherUserId
+                                                            { channelId =
+                                                                DmChannel.channelIdFromUserIds
+                                                                    (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                                                                    otherUserId
                                                             , threadRoute =
                                                                 NoThreadWithFriends (Just repliedTo) HideMembersTab
+                                                            , tab = Nothing
                                                             }
                                                         )
 
@@ -2319,7 +2431,9 @@ updateLoaded msg model =
                     pressedEditMessage guildOrDmId threadRoute model
 
                 MessageView.MessageViewMsg_PressedReply ->
-                    pressedReply guildOrDmId threadRoute model
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn -> pressedReply guildOrDmId threadRoute loggedIn model)
+                        model
 
                 MessageView.MessageViewMsg_PressedShowFullMenu isThreadStarter clickedAt ->
                     FrontendExtra.updateLoggedIn
@@ -2364,9 +2478,20 @@ updateLoaded msg model =
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
-                            { otherUserId = otherUserId, threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab }
-                                |> DmRoute
-                                |> FrontendExtra.routePush model
+                            case model.loginStatus of
+                                LoggedIn loggedIn ->
+                                    { channelId =
+                                        DmChannel.channelIdFromUserIds
+                                            (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                                            otherUserId
+                                    , threadRoute = ViewThreadWithFriends messageId Nothing HideMembersTab
+                                    , tab = Nothing
+                                    }
+                                        |> DmRoute
+                                        |> FrontendExtra.routePush model
+
+                                NotLoggedIn _ ->
+                                    ( model, Command.none )
 
                         ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId), NoThreadWithMessage messageId ) ->
                             FrontendExtra.routePush
@@ -2406,6 +2531,77 @@ updateLoaded msg model =
 
                 MessageView.MessageViewMsg_PressedReactionEmoji emoji ->
                     FrontendExtra.updateLoggedIn (toggleReactionEmoji emoji guildOrDmId threadRoute model) model
+
+                MessageView.MessageViewMsg_PressedCallStartedCard ->
+                    case model.route of
+                        DmRoute dmRoute ->
+                            FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just DmChannelHeaderTab_VoiceChat })
+
+                        HomePageRoute ->
+                            ( model, Command.none )
+
+                        AdminRoute _ ->
+                            ( model, Command.none )
+
+                        GuildRoute _ _ ->
+                            ( model, Command.none )
+
+                        DiscordGuildRoute _ ->
+                            ( model, Command.none )
+
+                        DiscordDmRoute _ ->
+                            ( model, Command.none )
+
+                        AiChatRoute ->
+                            ( model, Command.none )
+
+                        SlackOAuthRedirect _ ->
+                            ( model, Command.none )
+
+                        TextEditorRoute ->
+                            ( model, Command.none )
+
+                        LinkDiscord _ ->
+                            ( model, Command.none )
+
+                MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
+                    case threadRoute of
+                        NoThreadWithMessage messageId ->
+                            case model.route of
+                                DmRoute dmRoute ->
+                                    FrontendExtra.routePush
+                                        model
+                                        (DmRoute { dmRoute | tab = Just (DmChannelHeaderTab_Go (Just messageId)) })
+
+                                HomePageRoute ->
+                                    ( model, Command.none )
+
+                                AdminRoute _ ->
+                                    ( model, Command.none )
+
+                                GuildRoute _ _ ->
+                                    ( model, Command.none )
+
+                                DiscordGuildRoute _ ->
+                                    ( model, Command.none )
+
+                                DiscordDmRoute _ ->
+                                    ( model, Command.none )
+
+                                AiChatRoute ->
+                                    ( model, Command.none )
+
+                                SlackOAuthRedirect _ ->
+                                    ( model, Command.none )
+
+                                TextEditorRoute ->
+                                    ( model, Command.none )
+
+                                LinkDiscord _ ->
+                                    ( model, Command.none )
+
+                        ViewThreadWithMessage _ _ ->
+                            ( model, Command.none )
 
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
@@ -2990,7 +3186,7 @@ updateLoaded msg model =
                     ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach ( guildOrDmId, threadRoute )) )
 
                 MessageInput.OnPasteFiles files ->
-                    editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
+                    FrontendExtra.editMessage_gotFiles ( guildOrDmId, threadRoute ) files model
 
                 MessageInput.PressedOpenEmojiSelector ->
                     ( model
@@ -3009,15 +3205,19 @@ updateLoaded msg model =
                 Ok viewport ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
+                            let
+                                local =
+                                    Local.model loggedIn.localState
+                            in
                             case
-                                ( Route.toGuildOrDmId model.route
+                                ( Route.toGuildOrDmId local.localUser.session.userId model.route
                                 , viewport.viewport.y - 0.9 * (toFloat (Coord.yRaw model.windowSize) - MyUi.channelHeaderHeight) < Pages.Guild.scrollCloseToTop
                                 )
                             of
                                 ( Just ( guildOrDmId, threadRoute ), True ) ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (loadOlderMessages guildOrDmId threadRoute (Local.model loggedIn.localState))
+                                        (loadOlderMessages guildOrDmId threadRoute local)
                                         loggedIn
                                         Command.none
 
@@ -3283,6 +3483,9 @@ updateLoaded msg model =
                                                                             CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
+                                                                            GoMatchStarted_NoReply _ _ ->
+                                                                                Nothing
+
                                                                     MessageUnloaded_NoReply ->
                                                                         Nothing
                                                             )
@@ -3375,6 +3578,9 @@ updateLoaded msg model =
                                                                             CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
+                                                                            GoMatchStarted_NoReply _ _ ->
+                                                                                Nothing
+
                                                                     MessageUnloaded_NoReply ->
                                                                         Nothing
                                                             )
@@ -3458,7 +3664,7 @@ updateLoaded msg model =
                     ( model, Effect.File.Select.files [] (SelectedFilesToAttach ( guildOrDmId, threadRoute )) )
 
                 MessageInput.OnPasteFiles files ->
-                    gotFiles guildOrDmId threadRoute files model
+                    FrontendExtra.gotFiles guildOrDmId threadRoute files model
 
                 MessageInput.PressedOpenEmojiSelector ->
                     pressedOpenEmojiSelector Pages.Guild.channelTextInputId EmojiSelectorForMessage model
@@ -3792,30 +3998,6 @@ updateLoaded msg model =
                         )
                         model
 
-                VoiceChat.PressedChannelHeaderVoiceChatButton roomId ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                voiceChat : VoiceChat.Model
-                                voiceChat =
-                                    loggedIn.voiceChat
-                            in
-                            ( { loggedIn
-                                | voiceChat =
-                                    { voiceChat
-                                        | expanded =
-                                            if SeqSet.member roomId voiceChat.expanded then
-                                                SeqSet.remove roomId voiceChat.expanded
-
-                                            else
-                                                SeqSet.insert roomId voiceChat.expanded
-                                    }
-                              }
-                            , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                            )
-                        )
-                        model
-
                 VoiceChat.PressedCopyError text ->
                     ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
                     , Ports.copyToClipboard text
@@ -3913,14 +4095,103 @@ updateLoaded msg model =
                 )
                 model
 
+        FileDragEnter ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | fileDragOverCount = loggedIn.fileDragOverCount + 1 }
+                    , Command.none
+                    )
+                )
+                model
+
+        FileDragLeave ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | fileDragOverCount = max 0 (loggedIn.fileDragOverCount - 1) }
+                    , Command.none
+                    )
+                )
+                model
+
+        FileDropped files ->
+            let
+                modelReset =
+                    FrontendExtra.updateLoggedIn
+                        (\loggedIn -> ( { loggedIn | fileDragOverCount = 0 }, Command.none ))
+                        model
+                        |> Tuple.first
+            in
+            case ( List.Nonempty.fromList files, modelReset.loginStatus ) of
+                ( Just nonemptyFiles, LoggedIn loggedIn ) ->
+                    case
+                        FrontendExtra.canDropFiles
+                            (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                            modelReset.route
+                    of
+                        Just func ->
+                            func nonemptyFiles modelReset
+
+                        Nothing ->
+                            ( modelReset, Command.none )
+
+                _ ->
+                    ( modelReset, Command.none )
+
+        PressedChannelHeaderTab tab ->
+            case model.route of
+                DmRoute dmRoute ->
+                    FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just tab })
+
+                HomePageRoute ->
+                    ( model, Command.none )
+
+                AdminRoute _ ->
+                    ( model, Command.none )
+
+                GuildRoute _ _ ->
+                    ( model, Command.none )
+
+                DiscordGuildRoute _ ->
+                    ( model, Command.none )
+
+                DiscordDmRoute _ ->
+                    ( model, Command.none )
+
+                AiChatRoute ->
+                    ( model, Command.none )
+
+                SlackOAuthRedirect _ ->
+                    ( model, Command.none )
+
+                TextEditorRoute ->
+                    ( model, Command.none )
+
+                LinkDiscord _ ->
+                    ( model, Command.none )
+
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
 checkCallDisplayModeChange modelOld modelNew =
     case ( modelOld.loginStatus, modelNew.loginStatus ) of
         ( LoggedIn loggedInOld, LoggedIn loggedInNew ) ->
+            let
+                localOld =
+                    Local.model loggedInOld.localState
+
+                localNew =
+                    Local.model loggedInNew.localState
+            in
             VoiceChat.displayModeChangeCmd
-                (VoiceChat.displayMode modelOld.route loggedInOld.voiceChat (Local.model loggedInOld.localState |> .calls))
-                (VoiceChat.displayMode modelNew.route loggedInNew.voiceChat (Local.model loggedInNew.localState |> .calls))
+                (VoiceChat.displayMode
+                    localOld.localUser.session.userId
+                    modelOld.route
+                    localOld.calls
+                )
+                (VoiceChat.displayMode
+                    localNew.localUser.session.userId
+                    modelNew.route
+                    localNew.calls
+                )
                 loggedInNew.voiceChat
 
         _ ->
@@ -4316,10 +4587,13 @@ selectionChanged maybeHtmlId maybeRange model =
             case model.loginStatus of
                 LoggedIn loggedIn ->
                     let
+                        local =
+                            Local.model loggedIn.localState
+
                         showDropdown : Bool
                         showDropdown =
                             ((htmlId == Pages.Guild.channelTextInputId) || (htmlId == MessageMenu.editMessageTextInputId))
-                                && (case Route.toGuildOrDmId model.route of
+                                && (case Route.toGuildOrDmId local.localUser.session.userId model.route of
                                         Just ( guildOrDmId, threadRoute ) ->
                                             case FrontendExtra.pingUserNameSoFar htmlId range guildOrDmId threadRoute loggedIn of
                                                 Just (NameSoFar nameSoFar) ->
@@ -4329,7 +4603,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId2
-                                                                (Local.model loggedIn.localState)
+                                                                local
                                                                 |> List.isEmpty
                                                                 |> not
 
@@ -4338,7 +4612,7 @@ selectionChanged maybeHtmlId maybeRange model =
                                                                 (MyUi.isMobile model)
                                                                 nameSoFar
                                                                 guildOrDmId2
-                                                                (Local.model loggedIn.localState)
+                                                                local
                                                                 |> List.isEmpty
                                                                 |> not
 
@@ -4346,9 +4620,6 @@ selectionChanged maybeHtmlId maybeRange model =
                                                     case model.emojiData of
                                                         Just emojiData2 ->
                                                             let
-                                                                local =
-                                                                    Local.model loggedIn.localState
-
                                                                 ( availableCustomEmojis, availableStickers ) =
                                                                     MessageInput.availableCustomEmojisAndStickers
                                                                         guildOrDmId
@@ -4419,7 +4690,7 @@ selectionChanged maybeHtmlId maybeRange model =
 
                           else
                             Command.none
-                        , case Route.toGuildOrDmId model.route of
+                        , case Route.toGuildOrDmId local.localUser.session.userId model.route of
                             Just guildOrDmId ->
                                 if htmlId == Pages.Guild.channelTextInputId then
                                     case SeqDict.get guildOrDmId loggedIn.drafts of
@@ -4666,11 +4937,15 @@ viewImageInfo guildOrDmId fileId model =
 
 setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
 setLastViewedToLatestMessage model loggedIn =
+    let
+        local =
+            Local.model loggedIn.localState
+    in
     FrontendExtra.handleLocalChange
         model.time
-        (case Route.toGuildOrDmId model.route of
+        (case Route.toGuildOrDmId local.localUser.session.userId model.route of
             Just ( guildOrDmId, threadRoute ) ->
-                case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
+                case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute local of
                     Just messages ->
                         Local_SetLastViewed
                             guildOrDmId
@@ -4719,26 +4994,22 @@ handleEditable editableMsg setter acceptEdit model =
         model
 
 
-pressedReply : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-pressedReply guildOrDmId threadRoute model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            ( MessageMenu.close
-                model
-                { loggedIn
-                    | replyTo =
-                        SeqDict.insert
-                            ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
-                            (Id.threadRouteToMessageId threadRoute)
-                            loggedIn.replyTo
-                }
-            , Command.batch
-                [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
-                , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
-                ]
-            )
-        )
+pressedReply : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoggedIn2 -> LoadedFrontend -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply guildOrDmId threadRoute loggedIn model =
+    ( MessageMenu.close
         model
+        { loggedIn
+            | replyTo =
+                SeqDict.insert
+                    ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
+                    (Id.threadRouteToMessageId threadRoute)
+                    loggedIn.replyTo
+        }
+    , Command.batch
+        [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
+        , Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
+        ]
+    )
 
 
 pressedEditMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4903,182 +5174,6 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
 
         Dragging _ ->
             ( model, Command.none )
-
-
-gotFiles :
-    AnyGuildOrDmId
-    -> ThreadRoute
-    -> Nonempty File
-    -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-gotFiles guildOrDmId threadRoute files model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            let
-                local : LocalState
-                local =
-                    Local.model loggedIn.localState
-
-                ( fileText, cmds, dict ) =
-                    case SeqDict.get ( guildOrDmId, threadRoute ) loggedIn.filesToUpload of
-                        Just dict2 ->
-                            List.Nonempty.foldl
-                                (\file2 ( fileText2, cmds2, dict3 ) ->
-                                    let
-                                        id =
-                                            Id.nextId (NonemptyDict.toSeqDict dict3)
-                                    in
-                                    ( fileText2
-                                        ++ [ RichText.attachedFilePrefix
-                                                ++ Id.toString id
-                                                ++ RichText.attachedFileSuffix
-                                           ]
-                                    , FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        local.localUser.session.sessionIdHash
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                        :: cmds2
-                                    , NonemptyDict.insert
-                                        id
-                                        (FileUploading
-                                            (File.name file2 |> FileName.fromString)
-                                            { sent = 0, size = File.size file2 }
-                                            (File.mime file2 |> FileStatus.contentType)
-                                        )
-                                        dict3
-                                    )
-                                )
-                                ( [], [], dict2 )
-                                files
-
-                        Nothing ->
-                            ( List.indexedMap
-                                (\index _ ->
-                                    RichText.attachedFilePrefix
-                                        ++ Id.toString (Id.fromInt (index + 1))
-                                        ++ RichText.attachedFileSuffix
-                                )
-                                (List.Nonempty.toList files)
-                            , List.indexedMap
-                                (\index file2 ->
-                                    let
-                                        id : Id FileId
-                                        id =
-                                            Id.fromInt (index + 1)
-                                    in
-                                    FileStatus.uploadFile
-                                        (GotFileHashName ( guildOrDmId, threadRoute ) id)
-                                        local.localUser.session.sessionIdHash
-                                        ( guildOrDmId, threadRoute )
-                                        id
-                                        file2
-                                )
-                                (List.Nonempty.toList files)
-                            , List.Nonempty.indexedMap
-                                (\index file2 ->
-                                    ( Id.fromInt (index + 1)
-                                    , FileUploading
-                                        (File.name file2 |> FileName.fromString)
-                                        { sent = 0, size = File.size file2 }
-                                        (File.mime file2 |> FileStatus.contentType)
-                                    )
-                                )
-                                files
-                                |> NonemptyDict.fromNonemptyList
-                            )
-            in
-            ( { loggedIn
-                | filesToUpload =
-                    SeqDict.insert ( guildOrDmId, threadRoute ) dict loggedIn.filesToUpload
-                , drafts =
-                    case String.join " " fileText |> String.Nonempty.fromString of
-                        Just fileText2 ->
-                            SeqDict.update
-                                ( guildOrDmId, threadRoute )
-                                (\maybe ->
-                                    case maybe of
-                                        Just draft ->
-                                            String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
-                                                |> Just
-
-                                        Nothing ->
-                                            Just fileText2
-                                )
-                                loggedIn.drafts
-
-                        Nothing ->
-                            loggedIn.drafts
-              }
-            , Command.batch cmds
-            )
-        )
-        model
-
-
-editMessage_gotFiles :
-    ( AnyGuildOrDmId, ThreadRoute )
-    -> Nonempty File
-    -> LoadedFrontend
-    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-editMessage_gotFiles guildOrDmId files model =
-    FrontendExtra.updateLoggedIn
-        (\loggedIn ->
-            case SeqDict.get guildOrDmId loggedIn.editMessage of
-                Just edit ->
-                    let
-                        ( fileText, cmds, dict ) =
-                            List.Nonempty.foldl
-                                (\file2 ( fileText2, cmds2, dict3 ) ->
-                                    let
-                                        fileId : Id FileId
-                                        fileId =
-                                            Id.nextId dict3
-                                    in
-                                    ( fileText2
-                                        ++ [ " "
-                                                ++ RichText.attachedFilePrefix
-                                                ++ Id.toString fileId
-                                                ++ RichText.attachedFileSuffix
-                                           ]
-                                    , FileStatus.uploadFile
-                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
-                                        guildOrDmId
-                                        fileId
-                                        file2
-                                        :: cmds2
-                                    , SeqDict.insert
-                                        fileId
-                                        (FileUploading
-                                            (File.name file2 |> FileName.fromString)
-                                            { sent = 0, size = File.size file2 }
-                                            (File.mime file2 |> FileStatus.contentType)
-                                        )
-                                        dict3
-                                    )
-                                )
-                                ( [], [], edit.attachedFiles )
-                                files
-                    in
-                    ( { loggedIn
-                        | editMessage =
-                            SeqDict.insert
-                                guildOrDmId
-                                { edit
-                                    | text = edit.text ++ String.concat fileText
-                                    , attachedFiles = dict
-                                }
-                                loggedIn.editMessage
-                      }
-                    , Command.batch cmds
-                    )
-
-                Nothing ->
-                    ( loggedIn, Command.none )
-        )
-        model
 
 
 handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
@@ -5487,7 +5582,7 @@ updateLoadedFromBackend msg model =
                         Local_CurrentlyViewing viewing ->
                             case viewing of
                                 ViewChannel guildId channelId _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
@@ -5499,7 +5594,7 @@ updateLoadedFromBackend msg model =
                                             Command.none
 
                                 ViewDm otherUserId _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
                                             if otherUserId == otherUserIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
@@ -5511,7 +5606,7 @@ updateLoadedFromBackend msg model =
                                             Command.none
 
                                 ViewChannelThread guildId channelId threadId _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
@@ -5523,7 +5618,7 @@ updateLoadedFromBackend msg model =
                                             Command.none
 
                                 ViewDmThread otherUserId threadId _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
                                             if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
@@ -5537,10 +5632,10 @@ updateLoadedFromBackend msg model =
                                 StopViewingChannel ->
                                     Command.none
 
-                                ViewDiscordChannel guildId channelId userId2 _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                ViewDiscordChannel guildId channelId discordUserId _ ->
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
-                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
+                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
                                             else
@@ -5549,10 +5644,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordChannelThread guildId channelId userId2 threadId _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
                                             else
@@ -5562,7 +5657,7 @@ updateLoadedFromBackend msg model =
                                             Command.none
 
                                 ViewDiscordDm _ channelId _ ->
-                                    case Route.toGuildOrDmId model.route of
+                                    case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
                                             if channelId == data.channelId then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
@@ -5769,7 +5864,7 @@ updateLoadedFromBackend msg model =
                                             )
                                     in
                                     ( loggedIn2
-                                    , if Route.toGuildOrDmId model.route == Just id then
+                                    , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
                                         Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
 
                                       else
@@ -5785,7 +5880,7 @@ updateLoadedFromBackend msg model =
                                             )
                                     in
                                     ( loggedIn2
-                                    , if Route.toGuildOrDmId model.route == Just id then
+                                    , if Route.toGuildOrDmId local.localUser.session.userId model.route == Just id then
                                         Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
 
                                       else
@@ -5794,7 +5889,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_GotDiscordDmMessageEmbed channelId _ _ ->
                                     ( loggedIn2
-                                    , case Route.toGuildOrDmId model.route of
+                                    , case Route.toGuildOrDmId local.localUser.session.userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
                                             if channelId == data.channelId then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn2.channelScrollPosition
@@ -5808,7 +5903,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_GotDiscordGuildMessageEmbed guildIdA channelIdA threadRouteA _ ->
                                     ( loggedIn2
-                                    , case Route.toGuildOrDmId model.route of
+                                    , case Route.toGuildOrDmId local.localUser.session.userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildIdB channelIdB), threadRouteB ) ->
                                             if
                                                 (guildIdA == guildIdB)
@@ -5839,7 +5934,7 @@ updateLoadedFromBackend msg model =
                                         voiceChatChange
                                         model.clientId
                                         local.calls
-                                        loggedIn.voiceChat
+                                        loggedIn2.voiceChat
                                     )
 
                                 _ ->
@@ -6009,7 +6104,12 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.videoNodes loaded.route loaded.windowSize loggedIn.voiceChat local.calls
+                                    , VoiceChat.videoNodes
+                                        local.localUser.session.userId
+                                        loaded.route
+                                        loaded.windowSize
+                                        loggedIn.voiceChat
+                                        local.calls
                                         |> Html.map VoiceChatMsg
                                         |> Ui.html
                                         |> Ui.inFront
@@ -6105,13 +6205,6 @@ view model =
                                     _ ->
                                         errorPage loaded "Admin access required to view this page"
                             )
-
-                    GoRoute ->
-                        Pages.Go.view loaded.goModel
-                            |> Ui.map GoMsg
-                            |> FrontendExtra.layout loaded
-                                [ Ui.inFront (Pages.Home.header (MyUi.isMobile loaded) loaded.loginStatus)
-                                ]
 
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel
@@ -6237,8 +6330,9 @@ routeToInitialDataRequest : Route -> InitialLoadRequest
 routeToInitialDataRequest route =
     case route of
         GuildRoute guildId (ChannelRoute channelId threadRoute) ->
-            InitialLoadRequested_Channel
-                (GuildOrDmId_Guild guildId channelId |> GuildOrDmId)
+            InitialLoadRequested_Guild
+                guildId
+                channelId
                 (case threadRoute of
                     ViewThreadWithFriends threadMessageId _ _ ->
                         ViewThread threadMessageId
@@ -6247,9 +6341,9 @@ routeToInitialDataRequest route =
                         NoThread
                 )
 
-        DmRoute { otherUserId, threadRoute } ->
-            InitialLoadRequested_Channel
-                (GuildOrDmId_Dm otherUserId |> GuildOrDmId)
+        DmRoute { channelId, threadRoute } ->
+            InitialLoadRequested_Dm
+                channelId
                 (case threadRoute of
                     ViewThreadWithFriends threadMessageId _ _ ->
                         ViewThread threadMessageId
@@ -6261,8 +6355,8 @@ routeToInitialDataRequest route =
         DiscordGuildRoute data ->
             case data.channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute ->
-                    InitialLoadRequested_Channel
-                        (DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId |> DiscordGuildOrDmId)
+                    InitialLoadRequested_Discord
+                        (DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId)
                         (case threadRoute of
                             ViewThreadWithFriends threadMessageId _ _ ->
                                 ViewThread threadMessageId
@@ -6275,10 +6369,8 @@ routeToInitialDataRequest route =
                     InitialLoadRequested_None
 
         DiscordDmRoute data ->
-            InitialLoadRequested_Channel
-                (DiscordGuildOrDmId_Dm { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
-                    |> DiscordGuildOrDmId
-                )
+            InitialLoadRequested_Discord
+                (DiscordGuildOrDmId_Dm { currentUserId = data.currentDiscordUserId, channelId = data.channelId })
                 NoThread
 
         AdminRoute { highlightLog } ->
