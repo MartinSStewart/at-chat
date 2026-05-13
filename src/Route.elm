@@ -496,7 +496,7 @@ encode route =
 
                         NoThreadWithFriends maybeMessageId showMembers ->
                             ( [ "d", Id.toString otherUserId ] ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers
+                            , encodeShowMembers showMembers ++ encodeTab tab
                             )
 
                 DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab } ->
@@ -543,8 +543,8 @@ encodeShowMembers showMembers =
 
 
 encodeTab : Maybe DmChannelHeaderTab -> List Url.Builder.QueryParameter
-encodeTab showMembers =
-    case showMembers of
+encodeTab tab =
+    case tab of
         Just DmChannelHeaderTab_VoiceChat ->
             [ Url.Builder.string tabParam "call" ]
 
