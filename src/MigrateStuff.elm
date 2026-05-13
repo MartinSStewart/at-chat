@@ -1,10 +1,10 @@
-module MigrateStuff exposing (..)
+module MigrateStuff exposing (Msg(..), main)
 
 import Backend
 import Browser
 import Bytes exposing (Bytes)
 import Bytes.Decode exposing (Decoder)
-import Bytes.Encode exposing (Encoder)
+import Bytes.Encode
 import Evergreen.Migrate.V215
 import Evergreen.V214.Discord
 import Evergreen.V214.DmChannel
@@ -17,13 +17,11 @@ import Html
 import Html.Events
 import Http
 import Lamdera.Wire3
-import NonemptyDict
 import Pages.Admin
 import SeqDict
 import Task
 import Time
 import Types
-import WireHelper
 
 
 type Msg
@@ -103,7 +101,7 @@ main =
                                                 in
                                                 Err "Failed to decode"
 
-                                    Http.BadUrl_ string ->
+                                    Http.BadUrl_ _ ->
                                         Err ""
 
                                     Http.Timeout_ ->
@@ -132,7 +130,7 @@ main =
         , view =
             \result ->
                 case result of
-                    Ok ok ->
+                    Ok _ ->
                         Html.button [ Html.Events.onClick PressedDownload ] [ Html.text "Download" ]
 
                     Err error ->

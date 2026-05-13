@@ -395,7 +395,7 @@ messageToString allUsers3 message =
         CallEnded _ _ ->
             "Call ended"
 
-        GoMatchStarted posix userId seqDict ->
+        GoMatchStarted _ _ _ ->
             "Go match started"
 
 
@@ -810,7 +810,7 @@ createMessageBackend message channel =
                 CallEnded _ _ ->
                     channel.lastTypedAt
 
-                GoMatchStarted posix userId seqDict ->
+                GoMatchStarted _ _ _ ->
                     channel.lastTypedAt
       }
     )
@@ -882,7 +882,7 @@ createDiscordDmChannelMessageBackend messageId message channel =
                 CallEnded _ _ ->
                     Ok ( messageId2, channel2 )
 
-                GoMatchStarted posix userId seqDict ->
+                GoMatchStarted _ _ _ ->
                     Ok ( messageId2, channel2 )
 
         Err error ->
@@ -933,7 +933,7 @@ createDiscordMessageBackend messageId message channel =
                     CallEnded _ _ ->
                         channel.lastTypedAt
 
-                    GoMatchStarted posix userId seqDict ->
+                    GoMatchStarted _ _ _ ->
                         channel.lastTypedAt
             , linkedMessageIds =
                 OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
@@ -1026,7 +1026,7 @@ createMessageFrontend message channel =
                 CallEnded _ _ ->
                     channel.lastTypedAt
 
-                GoMatchStarted posix userId seqDict ->
+                GoMatchStarted _ _ _ ->
                     channel.lastTypedAt
     }
 
@@ -2248,7 +2248,7 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                                 CallEnded _ _ ->
                                     []
 
-                                GoMatchStarted posix startedBy seqDict ->
+                                GoMatchStarted _ startedBy _ ->
                                     [ startedBy ]
 
                         _ ->
@@ -2283,7 +2283,7 @@ repliedToUserId maybeRepliedTo channel =
                         CallEnded _ _ ->
                             Nothing
 
-                        GoMatchStarted posix startedBy seqDict ->
+                        GoMatchStarted _ startedBy _ ->
                             Just startedBy
 
                 Nothing ->
@@ -2315,7 +2315,7 @@ repliedToUserIdFrontend maybeRepliedTo channel =
                         CallEnded _ _ ->
                             Nothing
 
-                        GoMatchStarted posix startedBy seqDict ->
+                        GoMatchStarted _ startedBy _ ->
                             Just startedBy
 
                 _ ->
@@ -2625,7 +2625,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                             CallEnded time reactions ->
                                                 CallEnded_NoReply time reactions
 
-                                            GoMatchStarted time userId reactions ->
+                                            GoMatchStarted time _ reactions ->
                                                 GoMatchStarted_NoReply time reactions
                                         )
                                             |> MessageLoaded_NoReply
@@ -2663,7 +2663,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                                         CallEnded time reactions ->
                                             CallEnded_NoReply time reactions
 
-                                        GoMatchStarted time startedBy reactions ->
+                                        GoMatchStarted time _ reactions ->
                                             GoMatchStarted_NoReply time reactions
                                     )
                                         |> MessageLoaded_NoReply
@@ -2724,7 +2724,7 @@ discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
                                 CallEnded time reactions ->
                                     CallEnded_NoReply time reactions
 
-                                GoMatchStarted time startedBy reactions ->
+                                GoMatchStarted time _ reactions ->
                                     GoMatchStarted_NoReply time reactions
                             )
                                 |> MessageLoaded_NoReply

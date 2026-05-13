@@ -17,7 +17,6 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File exposing (File)
 import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
@@ -27,7 +26,6 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
-import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Go
@@ -3354,7 +3352,7 @@ updateLoaded msg model =
                                                                             CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
-                                                                            GoMatchStarted_NoReply posix seqDict ->
+                                                                            GoMatchStarted_NoReply _ _ ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->
@@ -3449,7 +3447,7 @@ updateLoaded msg model =
                                                                             CallEnded_NoReply _ _ ->
                                                                                 Nothing
 
-                                                                            GoMatchStarted_NoReply posix seqDict ->
+                                                                            GoMatchStarted_NoReply _ _ ->
                                                                                 Nothing
 
                                                                     MessageUnloaded_NoReply ->

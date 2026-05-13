@@ -22,7 +22,7 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord
-import Go exposing (CurrentGoMatch)
+import Go
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)

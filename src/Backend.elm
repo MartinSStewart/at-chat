@@ -1008,7 +1008,7 @@ update msg model =
                                                                 CallEnded _ _ ->
                                                                     members
 
-                                                                GoMatchStarted posix userId seqDict ->
+                                                                GoMatchStarted _ _ _ ->
                                                                     members
                                                         )
                                                         channel.members
@@ -1940,7 +1940,7 @@ discordStartThread discordUser channel channelId threadId messageId model =
                         CallEnded _ _ ->
                             "Call ended"
 
-                        GoMatchStarted posix userId seqDict ->
+                        GoMatchStarted _ _ _ ->
                             "Go match started"
 
                 Nothing ->
@@ -4560,7 +4560,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         otherUserId
-                        (\session user otherUser dmChannelId dmChannel ->
+                        (\session _ _ dmChannelId dmChannel ->
                             case goChange of
                                 Go.StartMatch createdAt setup ->
                                     let

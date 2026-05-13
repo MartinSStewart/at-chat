@@ -203,12 +203,12 @@ pendingChangesText localChange =
                 VoiceChat.Local_Signal _ _ ->
                     "Voice chat state change"
 
-        Local_Go record change ->
+        Local_Go _ change ->
             case change of
-                Go.StartMatch posix validatedSetup ->
+                Go.StartMatch _ _ ->
                     "Started Go match"
 
-                Go.Action _ actionWithTime ->
+                Go.Action _ _ ->
                     "Made a move in Go"
 
 
@@ -376,7 +376,7 @@ canDropFiles route =
         HomePageRoute ->
             Nothing
 
-        AdminRoute record ->
+        AdminRoute _ ->
             Nothing
 
         GuildRoute guildId channelRoute ->
@@ -397,13 +397,13 @@ canDropFiles route =
                 NewChannelRoute ->
                     Nothing
 
-                EditChannelRoute id ->
+                EditChannelRoute _ ->
                     Nothing
 
                 GuildSettingsRoute ->
                     Nothing
 
-                JoinRoute secretId ->
+                JoinRoute _ ->
                     Nothing
 
         DiscordGuildRoute routeData ->
@@ -429,7 +429,7 @@ canDropFiles route =
                 DiscordChannel_NewChannelRoute ->
                     Nothing
 
-                DiscordChannel_EditChannelRoute id ->
+                DiscordChannel_EditChannelRoute _ ->
                     Nothing
 
                 DiscordChannel_GuildSettingsRoute ->
@@ -461,13 +461,13 @@ canDropFiles route =
         AiChatRoute ->
             Nothing
 
-        SlackOAuthRedirect result ->
+        SlackOAuthRedirect _ ->
             Nothing
 
         TextEditorRoute ->
             Nothing
 
-        LinkDiscord result ->
+        LinkDiscord _ ->
             Nothing
 
 
@@ -1708,7 +1708,7 @@ isPressMsg msg =
         GotVoiceChatRecording _ ->
             False
 
-        PressedChannelHeaderTab id dmChannelHeaderTab ->
+        PressedChannelHeaderTab _ _ ->
             True
 
         FileDragEnter ->

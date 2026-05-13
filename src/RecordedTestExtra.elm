@@ -1447,7 +1447,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_AddCustomEmojisToUser _ ->
                     False
 
-                Local_Go record _ ->
+                Local_Go _ _ ->
                     True
 
         ChangeBroadcast localMsg ->
@@ -1628,7 +1628,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_LinkedDiscordUserCustomEmojisLoaded _ ->
                             True
 
-                        Types.Server_Go id record localChange ->
+                        Types.Server_Go _ _ _ ->
                             True
 
         TwoFactorAuthenticationToFrontend _ ->
@@ -1813,6 +1813,7 @@ allAttackerLocalChanges =
             }
             (VoiceChat.OfferSignal { sdp = "" })
         )
+    , Local_Go
     ]
 
 

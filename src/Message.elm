@@ -232,7 +232,7 @@ addEmbed ( url, result ) message =
         CallEnded _ _ ->
             message
 
-        GoMatchStarted posix userId seqDict ->
+        GoMatchStarted _ _ _ ->
             message
 
 
@@ -295,7 +295,7 @@ createdAt message =
         CallEnded time _ ->
             time
 
-        GoMatchStarted time userId seqDict ->
+        GoMatchStarted time _ _ ->
             time
 
 
@@ -395,5 +395,5 @@ reactionEmojis message =
         CallEnded _ reactions ->
             reactions
 
-        GoMatchStarted posix userId reactions ->
+        GoMatchStarted _ _ reactions ->
             reactions

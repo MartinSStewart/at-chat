@@ -712,7 +712,7 @@ messageCustomEmojiIds message =
         CallEnded _ reactions ->
             reactionIds reactions
 
-        GoMatchStarted posix userId reactions ->
+        GoMatchStarted _ _ reactions ->
             reactionIds reactions
 
 

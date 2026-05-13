@@ -1317,7 +1317,7 @@ toBackendLog toBackend =
                 Local_VoiceChatChange _ ->
                     ToBackendLog_Local_VoiceChatChange
 
-                Local_Go record _ ->
+                Local_Go _ _ ->
                     ToBackendLog_Local_Go
 
         TwoFactorToBackend _ ->

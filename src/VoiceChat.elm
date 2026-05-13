@@ -1,7 +1,7 @@
 port module VoiceChat exposing
-    ( AudioTrackData
-    , ConnectionId
+    ( ConnectionId
     , DeviceKind(..)
+    , DisplayMode
     , FromJs(..)
     , Ice
     , Local
@@ -20,8 +20,6 @@ port module VoiceChat exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
-    , Track(..)
-    , VideoTrackData
     , decodeVoiceChatRecorder
     , displayMode
     , displayModeChangeCmd
@@ -51,7 +49,6 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
-import GuildIcon
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -65,13 +62,11 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
-import OneOrGreater
 import Route exposing (DmChannelHeaderTab(..), Route)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
-import User exposing (LocalUser)
 
 
 type LocalChange
@@ -312,7 +307,7 @@ displayMode route tabs local =
             in
             if Just (DmRoomId viewingRoomId2) == local.currentRoom && isTabExpanded then
                 case SeqDict.get (DmRoomId viewingRoomId2) local.voiceChats of
-                    Just sessions ->
+                    Just _ ->
                         ShowLocalVideoAndCall
 
                     Nothing ->
@@ -326,7 +321,7 @@ displayMode route tabs local =
 
         Nothing ->
             case local.currentRoom of
-                Just currentRoom ->
+                Just _ ->
                     ShowLocalVideoAndCallThumbnail
 
                 Nothing ->
@@ -805,71 +800,6 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
         iconHtml
 
 
-type Track
-    = VideoTrack VideoTrackData
-    | AudioTrack AudioTrackData
-
-
-trackCodec : Codec Track
-trackCodec =
-    Codec.custom
-        (\aEncoder bEncoder value ->
-            case value of
-                VideoTrack a ->
-                    aEncoder a
-
-                AudioTrack a ->
-                    bEncoder a
-        )
-        |> Codec.variant1 "video" VideoTrack videoTrackCodec
-        |> Codec.variant1 "audio" AudioTrack audioTrackCodec
-        |> Codec.buildCustom
-
-
-type alias VideoTrackData =
-    { deviceId : String
-    , frameRate : Int
-    , groupId : String
-    , width : Int
-    , height : Int
-    , resizeMode : String
-    }
-
-
-type alias AudioTrackData =
-    { deviceId : String
-    , autoGainControl : Bool
-    , groupId : String
-    , channelCount : Int
-    , echoCancellation : Bool
-    , noiseSuppression : Bool
-    }
-
-
-audioTrackCodec : Codec AudioTrackData
-audioTrackCodec =
-    Codec.object AudioTrackData
-        |> Codec.field "deviceId" .deviceId Codec.string
-        |> Codec.field "autoGainControl" .autoGainControl Codec.bool
-        |> Codec.field "groupId" .groupId Codec.string
-        |> Codec.field "channelCount" .channelCount Codec.int
-        |> Codec.field "echoCancellation" .echoCancellation Codec.bool
-        |> Codec.field "noiseSuppression" .noiseSuppression Codec.bool
-        |> Codec.buildObject
-
-
-videoTrackCodec : Codec VideoTrackData
-videoTrackCodec =
-    Codec.object VideoTrackData
-        |> Codec.field "deviceId" .deviceId Codec.string
-        |> Codec.field "frameRate" .frameRate Codec.int
-        |> Codec.field "groupId" .groupId Codec.string
-        |> Codec.field "width" .width Codec.int
-        |> Codec.field "height" .height Codec.int
-        |> Codec.field "resizeMode" .resizeMode Codec.string
-        |> Codec.buildObject
-
-
 hasJoined : RoomId -> Local -> Bool
 hasJoined roomId model =
     model.currentRoom == Just roomId
@@ -1340,16 +1270,16 @@ isPressMsg msg =
         PressedDownloadRecording _ ->
             True
 
-        PressedCopyError string ->
+        PressedCopyError _ ->
             True
 
         ChangedVolume _ _ ->
             False
 
-        MouseEnterVideoNode connectionId ->
+        MouseEnterVideoNode _ ->
             False
 
-        MouseExitVideoNode connectionId ->
+        MouseExitVideoNode _ ->
             False
 
 

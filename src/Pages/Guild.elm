@@ -2057,7 +2057,7 @@ maybeRepliedTo message channel =
         CallEnded _ _ ->
             Nothing
 
-        GoMatchStarted posix userId seqDict ->
+        GoMatchStarted _ _ _ ->
             Nothing
 
 
@@ -3348,7 +3348,7 @@ replyToHeader guildOrDmIdNoThread replyTo allUsers channel =
                         CallEnded _ _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) Nothing allUsers
 
-                        GoMatchStarted posix userId seqDict ->
+                        GoMatchStarted _ userId _ ->
                             replyToHeaderHelper (PressedCloseReplyTo guildOrDmIdNoThread) (Just userId) allUsers
 
                 _ ->
@@ -4764,7 +4764,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         CallEnded _ _ ->
             Ui.none
 
-        GoMatchStarted posix userId seqDict ->
+        GoMatchStarted _ _ _ ->
             Ui.none
 
 
@@ -4892,7 +4892,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         CallEnded _ _ ->
             Ui.none
 
-        GoMatchStarted posix userId seqDict ->
+        GoMatchStarted _ _ _ ->
             Ui.none
 
 
@@ -6090,7 +6090,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                             CallEnded _ _ ->
                                 [ Html.text "Call ended" ]
 
-                            GoMatchStarted posix userId seqDict ->
+                            GoMatchStarted _ userId _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -7184,7 +7184,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
                                 CallEnded _ _ ->
                                     "Call ended"
 
-                                GoMatchStarted posix userId seqDict ->
+                                GoMatchStarted _ _ _ ->
                                     "Go match started"
 
                         MessageUnloaded ->
@@ -7310,7 +7310,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                                 CallEnded _ _ ->
                                     "Call ended"
 
-                                GoMatchStarted posix userId seqDict ->
+                                GoMatchStarted _ _ _ ->
                                     "Go match started"
 
                         MessageUnloaded ->
