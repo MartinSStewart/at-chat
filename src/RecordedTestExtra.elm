@@ -436,11 +436,13 @@ voiceChatTest normalConfig =
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
                     , admin.navigateBack 100
+                    , admin.navigateBack 100
                     , admin.click 100 (Dom.id "guild_openDm_1")
                     , user.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , user.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
@@ -448,11 +450,13 @@ voiceChatTest normalConfig =
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
                     , admin.navigateBack 100
+                    , admin.navigateBack 100
                     , admin.click 100 (Dom.id "guild_openDm_0")
                     , admin.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , user.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
