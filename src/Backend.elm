@@ -2,6 +2,8 @@ module Backend exposing
     ( adminUser
     , app
     , app_
+    , handleExportBackendStep
+    , startExport
     )
 
 import AiChat
@@ -1522,33 +1524,7 @@ update msg model =
                             Duration.from lastScheduledExportTime time |> Quantity.greaterThanOrEqualTo (Duration.hours 4)
             in
             ( if shouldExport then
-                let
-                    baseModel : BackendModel
-                    baseModel =
-                        { model
-                            | guilds = SeqDict.empty
-                            , dmChannels = SeqDict.empty
-                            , discordGuilds = SeqDict.empty
-                            , discordDmChannels = SeqDict.empty
-                            , exportState = Nothing
-                            , scheduledExportState = Nothing
-                        }
-                in
-                { model
-                    | scheduledExportState =
-                        { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
-                        , remainingGuilds = SeqDict.toList model.guilds
-                        , encodedGuilds = []
-                        , remainingDmChannels = SeqDict.toList model.dmChannels
-                        , encodedDmChannels = []
-                        , remainingDiscordGuilds = SeqDict.toList model.discordGuilds
-                        , encodedDiscordGuilds = []
-                        , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels
-                        , encodedDiscordDmChannels = []
-                        }
-                            |> Just
-                    , lastScheduledExportTime = Just time
-                }
+                startExport time model
 
               else
                 { model
@@ -1874,6 +1850,37 @@ disconnectClient time sessionId clientId model =
 
         _ ->
             ( model, Command.none )
+
+
+startExport : Time.Posix -> BackendModel -> BackendModel
+startExport time model =
+    let
+        baseModel : BackendModel
+        baseModel =
+            { model
+                | guilds = SeqDict.empty
+                , dmChannels = SeqDict.empty
+                , discordGuilds = SeqDict.empty
+                , discordDmChannels = SeqDict.empty
+                , exportState = Nothing
+                , scheduledExportState = Nothing
+            }
+    in
+    { model
+        | scheduledExportState =
+            { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
+            , remainingGuilds = SeqDict.toList model.guilds
+            , encodedGuilds = []
+            , remainingDmChannels = SeqDict.toList model.dmChannels
+            , encodedDmChannels = []
+            , remainingDiscordGuilds = SeqDict.toList model.discordGuilds
+            , encodedDiscordGuilds = []
+            , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels
+            , encodedDiscordDmChannels = []
+            }
+                |> Just
+        , lastScheduledExportTime = Just time
+    }
 
 
 updateFromFrontend :
