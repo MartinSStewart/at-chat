@@ -4,14 +4,16 @@ module Go exposing
     , BoardSize
     , DeadContext
     , GameModel
+    , GameMsg(..)
     , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
     , Model
-    , Msg
+    , Msg(..)
     , OutMsg(..)
     , Phase
     , SetupModel
+    , SetupMsg(..)
     , SizeSelection
     , Snapshot
     , Stone(..)
@@ -395,6 +397,8 @@ maxDimension =
     25
 
 
+{-| OpaqueVariants
+-}
 type Msg
     = GameMsg GameMsg
     | SetupMsg SetupMsg
@@ -402,6 +406,8 @@ type Msg
     | PressedReset
 
 
+{-| Opaque
+-}
 type SetupMsg
     = ChangedWidthInput String
     | ChangedHeightInput String
@@ -414,6 +420,8 @@ type SetupMsg
     | PressedStartGame
 
 
+{-| Opaque
+-}
 type GameMsg
     = PressedCell Int Int
     | PressedPass
