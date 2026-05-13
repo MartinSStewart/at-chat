@@ -1034,7 +1034,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
     --
     --    ( Game _, Nothing ) ->
     --        ( model2, Command.none, Nothing )
-    case maybeMatchId |> Debug.log "asdf" of
+    case maybeMatchId of
         Just matchId ->
             case SeqDict.get matchId matches of
                 Just ( setup, actions ) ->
@@ -1214,7 +1214,7 @@ updateSetup time creatorId otherPlayerId msg model =
             ( Setup { model | gameCreatorPlayingAs = stone, error = Nothing }, Command.none, Nothing )
 
         PressedStartGame ->
-            case validateSetup creatorId otherPlayerId model |> Debug.log "validate" of
+            case validateSetup creatorId otherPlayerId model of
                 Ok setup ->
                     ( Game initGame, Command.none, Just (StartMatch time setup) )
 

@@ -1872,29 +1872,29 @@ updateLoaded msg model =
             )
 
         GoMsg goMsg ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    case model.route of
-                        DmRoute dmRoute ->
-                            case dmRoute.tab of
-                                Just (DmChannelHeaderTab_Go maybeMatchId) ->
-                                    let
-                                        local =
-                                            Local.model loggedIn.localState
+            case ( model.route, model.loginStatus ) of
+                ( DmRoute dmRoute, LoggedIn loggedIn ) ->
+                    case dmRoute.tab of
+                        Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                            let
+                                local =
+                                    Local.model loggedIn.localState
 
-                                        ( goModel2, goCmd, maybeChange ) =
-                                            Go.update
-                                                model.time
-                                                local.localUser.session.userId
-                                                dmRoute.otherUserId
-                                                goMsg
-                                                maybeMatchId
-                                                (SeqDict.get dmRoute.otherUserId local.dmChannels
-                                                    |> Maybe.withDefault DmChannel.frontendInit
-                                                    |> .goMatches
-                                                )
-                                                (SeqDict.get ( dmRoute.otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
-                                    in
+                                dmChannel =
+                                    SeqDict.get dmRoute.otherUserId local.dmChannels
+                                        |> Maybe.withDefault DmChannel.frontendInit
+
+                                ( goModel2, cmd, maybeChange ) =
+                                    Go.update
+                                        model.time
+                                        local.localUser.session.userId
+                                        dmRoute.otherUserId
+                                        goMsg
+                                        maybeMatchId
+                                        dmChannel.goMatches
+                                        (SeqDict.get ( dmRoute.otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+
+                                ( loggedIn2, cmd2 ) =
                                     FrontendExtra.handleLocalChange
                                         model.time
                                         (Maybe.map (Local_Go { otherUserId = dmRoute.otherUserId }) maybeChange)
@@ -1905,15 +1905,34 @@ updateLoaded msg model =
                                                     goModel2
                                                     loggedIn.currentDmGoMatch
                                         }
-                                        (Command.map never GoMsg goCmd)
+                                        (Command.map never GoMsg cmd)
 
-                                _ ->
-                                    ( loggedIn, Command.none )
+                                ( model2, routeCmd ) =
+                                    case maybeChange of
+                                        Just (Go.StartMatch _ _) ->
+                                            FrontendExtra.routePush
+                                                { model | loginStatus = LoggedIn loggedIn2 }
+                                                (DmRoute
+                                                    { dmRoute
+                                                        | tab =
+                                                            DmChannel.latestMessageId dmChannel
+                                                                |> Id.increment
+                                                                |> Just
+                                                                |> DmChannelHeaderTab_Go
+                                                                |> Just
+                                                    }
+                                                )
+
+                                        _ ->
+                                            ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+                            in
+                            ( model2, Command.batch [ routeCmd, cmd2 ] )
 
                         _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                            ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
 
         UserNameEditableMsg editableMsg ->
             handleEditable

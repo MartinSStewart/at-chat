@@ -18,6 +18,7 @@ module Id exposing
     , changeType
     , fromInt
     , fromString
+    , increment
     , nextId
     , threadRouteToMessageId
     , threadRouteWithMessage
@@ -166,3 +167,8 @@ toString (Id a) =
 changeType : Id a -> Id b
 changeType (Id a) =
     Id a
+
+
+increment : Id a -> Id a
+increment (Id id) =
+    Id (id + 1)

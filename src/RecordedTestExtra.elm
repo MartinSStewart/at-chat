@@ -1994,8 +1994,8 @@ goMatchTest normalConfig =
                         [ user.click 1000 (Dom.id "guild_openDm_0")
                         , admin.click 100 (Dom.id "guild_openDm_1")
                         , admin.click 100 (Dom.id "guild_openGoMatch")
-                        , user.click 100 (Dom.id "guild_openGoMatch")
                         , admin.click 100 (Dom.id "go_start")
+                        , user.click 100 (Dom.id "guild_goMatchStartedCard")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
 
