@@ -571,9 +571,15 @@ update msg model =
 parseDomainWhitelistInput : String -> SeqSet RichText.Domain
 parseDomainWhitelistInput text =
     String.split "," text
-        |> List.map String.trim
-        |> List.filter (not << String.isEmpty)
-        |> List.map RichText.Domain
+        |> List.filterMap
+            (\text2 ->
+                case Url.fromString ("https://" ++ String.trim text2) of
+                    Just url ->
+                        RichText.urlToDomain url |> Just
+
+                    Nothing ->
+                        Nothing
+            )
         |> SeqSet.fromList
 
 
@@ -2885,17 +2891,6 @@ updateLoaded msg model =
 
                         Nothing ->
                             ( loggedIn, Command.none )
-                )
-                model
-
-        PressedRemoveDomainFromWhitelist domain ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    FrontendExtra.handleLocalChange
-                        model.time
-                        (Just (Local_SetDomainWhitelist False domain))
-                        loggedIn
-                        Command.none
                 )
                 model
 

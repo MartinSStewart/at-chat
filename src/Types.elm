@@ -484,7 +484,6 @@ type FrontendMsg
     | GotVersionNumber (Result Http.Error Int)
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
-    | PressedRemoveDomainFromWhitelist Domain
     | TypedDomainWhitelist String
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
