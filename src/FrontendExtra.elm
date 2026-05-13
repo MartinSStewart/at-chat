@@ -1,4 +1,4 @@
-module FrontendExtra exposing (canDropFiles, changeUpdate, editMessage_gotFiles, externalLinkWarning, gotFiles, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (canDropFiles, changeUpdate, editMessage_gotFiles, externalLinkWarning, gotFiles, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, routeToGuildOrDmId, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -232,7 +232,7 @@ layout model attributes child =
 
                     maybeMessageId : Maybe ( AnyGuildOrDmId, ThreadRoute )
                     maybeMessageId =
-                        Route.toGuildOrDmId model.route
+                        Route.toGuildOrDmId local.localUser.session.userId model.route
                 in
                 [ Local.networkError
                     (\change ->
@@ -370,8 +370,8 @@ layout model attributes child =
         child
 
 
-canDropFiles : Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
-canDropFiles route =
+canDropFiles : Id UserId -> Route -> Maybe (Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg ))
+canDropFiles currentUserId route =
     case route of
         HomePageRoute ->
             Nothing
@@ -436,17 +436,22 @@ canDropFiles route =
                     Nothing
 
         DmRoute routeData ->
-            let
-                threadRoute2 : ThreadRoute
-                threadRoute2 =
-                    case routeData.threadRoute of
-                        NoThreadWithFriends _ _ ->
-                            NoThread
+            case DmChannel.otherUserId currentUserId routeData.channelId of
+                Just otherUserId ->
+                    let
+                        threadRoute2 : ThreadRoute
+                        threadRoute2 =
+                            case routeData.threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    NoThread
 
-                        ViewThreadWithFriends threadId _ _ ->
-                            ViewThread threadId
-            in
-            canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm routeData.otherUserId)) threadRoute2 |> Just
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewThread threadId
+                    in
+                    canDropFileHelper (GuildOrDmId (GuildOrDmId_Dm otherUserId)) threadRoute2 |> Just
+
+                Nothing ->
+                    Nothing
 
         DiscordDmRoute routeData ->
             canDropFileHelper
@@ -509,7 +514,12 @@ fileDragOverlay isVisible model =
     let
         canDrop : Bool
         canDrop =
-            canDropFiles model.route /= Nothing
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    canDropFiles (Local.model loggedIn.localState |> .localUser |> .session |> .userId) model.route /= Nothing
+
+                _ ->
+                    False
 
         accentColor : Ui.Color
         accentColor =
@@ -974,6 +984,18 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
             Command.none
 
 
+routeToGuildOrDmId : LoadedFrontend -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+routeToGuildOrDmId model =
+    case model.loginStatus of
+        LoggedIn loggedIn ->
+            Route.toGuildOrDmId
+                (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
+                model.route
+
+        _ ->
+            Nothing
+
+
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routePush model route =
     if MyUi.isMobile model then
@@ -1260,7 +1282,7 @@ routeRequest previousRoute newRoute model =
                 model3 =
                     case previousRoute of
                         Just (DmRoute previousDmRoute) ->
-                            if dmRoute.otherUserId == previousDmRoute.otherUserId then
+                            if dmRoute.channelId == previousDmRoute.channelId then
                                 model2
 
                             else

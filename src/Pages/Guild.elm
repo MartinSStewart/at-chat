@@ -294,7 +294,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                     elLinkButton
                                         (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                                         (DmRoute
-                                            { otherUserId = otherUserId
+                                            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId otherUserId
                                             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
                                             , tab = Nothing
                                             }
@@ -314,7 +314,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                     in
                     case route of
                         DmRoute dmRoute ->
-                            if otherUserId == dmRoute.otherUserId then
+                            if Just otherUserId == DmChannel.otherUserId localUser.session.userId dmRoute.channelId then
                                 Nothing
 
                             else
@@ -627,49 +627,8 @@ guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-dmChannelView { otherUserId, threadRoute } loggedIn local model =
-    case User.getUser otherUserId local.localUser of
-        Just otherUser ->
-            let
-                dmChannel : FrontendDmChannel
-                dmChannel =
-                    SeqDict.get otherUserId local.dmChannels
-                        |> Maybe.withDefault DmChannel.frontendInit
-            in
-            case threadRoute of
-                ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
-                    SeqDict.get threadMessageIndex dmChannel.threads
-                        |> Maybe.withDefault Thread.frontendInit
-                        |> threadConversationView
-                            (SeqDict.get
-                                ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
-                                local.localUser.user.lastViewedThreads
-                                |> Maybe.withDefault (Id.fromInt -1)
-                                |> Id.changeType
-                            )
-                            (GuildOrDmId_Dm otherUserId)
-                            maybeUrlMessageId
-                            threadMessageIndex
-                            loggedIn
-                            model
-                            local
-                            (PersonName.toString otherUser.name)
-
-                NoThreadWithFriends maybeUrlMessageId _ ->
-                    conversationView
-                        (SeqDict.get
-                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                            local.localUser.user.lastViewed
-                            |> Maybe.withDefault (Id.fromInt -1)
-                        )
-                        (GuildOrDmId_Dm otherUserId)
-                        maybeUrlMessageId
-                        loggedIn
-                        model
-                        local
-                        (PersonName.toString otherUser.name)
-                        dmChannel
-
+dmChannelView { channelId, threadRoute } loggedIn local model =
+    case DmChannel.otherUserId local.localUser.session.userId channelId of
         Nothing ->
             Ui.el
                 [ Ui.centerY
@@ -677,7 +636,59 @@ dmChannelView { otherUserId, threadRoute } loggedIn local model =
                 , Ui.Font.color MyUi.font1
                 , Ui.Font.size 20
                 ]
-                (Ui.text "User not found")
+                (Ui.text "Conversation not found")
+
+        Just otherUserId ->
+            case User.getUser otherUserId local.localUser of
+                Just otherUser ->
+                    let
+                        dmChannel : FrontendDmChannel
+                        dmChannel =
+                            SeqDict.get otherUserId local.dmChannels
+                                |> Maybe.withDefault DmChannel.frontendInit
+                    in
+                    case threadRoute of
+                        ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
+                            SeqDict.get threadMessageIndex dmChannel.threads
+                                |> Maybe.withDefault Thread.frontendInit
+                                |> threadConversationView
+                                    (SeqDict.get
+                                        ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                                        local.localUser.user.lastViewedThreads
+                                        |> Maybe.withDefault (Id.fromInt -1)
+                                        |> Id.changeType
+                                    )
+                                    (GuildOrDmId_Dm otherUserId)
+                                    maybeUrlMessageId
+                                    threadMessageIndex
+                                    loggedIn
+                                    model
+                                    local
+                                    (PersonName.toString otherUser.name)
+
+                        NoThreadWithFriends maybeUrlMessageId _ ->
+                            conversationView
+                                (SeqDict.get
+                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                    local.localUser.user.lastViewed
+                                    |> Maybe.withDefault (Id.fromInt -1)
+                                )
+                                (GuildOrDmId_Dm otherUserId)
+                                maybeUrlMessageId
+                                loggedIn
+                                model
+                                local
+                                (PersonName.toString otherUser.name)
+                                dmChannel
+
+                Nothing ->
+                    Ui.el
+                        [ Ui.centerY
+                        , Ui.Font.center
+                        , Ui.Font.color MyUi.font1
+                        , Ui.Font.size 20
+                        ]
+                        (Ui.text "User not found")
 
 
 discordDmChannelView :
@@ -1312,7 +1323,7 @@ memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute
-            { otherUserId = userId
+            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId userId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }
@@ -3921,7 +3932,8 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
         maybeTab =
             case model.route of
                 DmRoute dmRoute ->
-                    Just ( dmRoute.otherUserId, dmRoute.tab )
+                    DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId
+                        |> Maybe.map (\otherUserId -> ( otherUserId, dmRoute.tab ))
 
                 HomePageRoute ->
                     Nothing
@@ -7115,7 +7127,7 @@ friendsColumn canScroll2 isMobile currentTime openedOtherUserId dmChannels disco
                             currentTime
                             (case openedOtherUserId of
                                 SelectedDmChannel dmRoute ->
-                                    dmRoute.otherUserId == otherUserId
+                                    DmChannel.otherUserId localUser.session.userId dmRoute.channelId == Just otherUserId
 
                                 _ ->
                                     False
@@ -7284,7 +7296,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute
-            { otherUserId = otherUserId
+            { channelId = DmChannel.channelIdFromUserIds localUser.session.userId otherUserId
             , threadRoute = NoThreadWithFriends Nothing HideMembersTab
             , tab = Nothing
             }

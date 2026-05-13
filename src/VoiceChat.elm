@@ -44,6 +44,7 @@ import Bytes.Decode
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import DmChannel
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -287,8 +288,8 @@ showLocalVideo displayMode2 =
             True
 
 
-displayMode : Route -> Local -> DisplayMode
-displayMode route local =
+displayMode : Id UserId -> Route -> Local -> DisplayMode
+displayMode currentUserId route local =
     --let
     --    viewingRoomId : Maybe RoomId
     --    viewingRoomId =
@@ -313,26 +314,31 @@ displayMode route local =
             NoVideo
 
         DmRoute dmRoute ->
-            let
-                roomId =
-                    DmRoomId dmRoute.otherUserId
+            case DmChannel.otherUserId currentUserId dmRoute.channelId of
+                Just otherUserId ->
+                    let
+                        roomId =
+                            DmRoomId otherUserId
 
-                isTabExpanded =
-                    dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
-            in
-            if Just roomId == local.currentRoom && isTabExpanded then
-                case SeqDict.get roomId local.voiceChats of
-                    Just _ ->
-                        ShowLocalVideoAndCall
+                        isTabExpanded =
+                            dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
+                    in
+                    if Just roomId == local.currentRoom && isTabExpanded then
+                        case SeqDict.get roomId local.voiceChats of
+                            Just _ ->
+                                ShowLocalVideoAndCall
 
-                    Nothing ->
+                            Nothing ->
+                                ShowLocalVideo
+
+                    else if isTabExpanded then
                         ShowLocalVideo
 
-            else if isTabExpanded then
-                ShowLocalVideo
+                    else
+                        NoVideo
 
-            else
-                NoVideo
+                Nothing ->
+                    NoVideo
 
         DiscordDmRoute _ ->
             NoVideo
@@ -355,12 +361,12 @@ localVideoNodeId =
     "local-video"
 
 
-videoNodes : Route -> Coord CssPixels -> Model -> Local -> Html Msg
-videoNodes route windowSize model local =
+videoNodes : Id UserId -> Route -> Coord CssPixels -> Model -> Local -> Html Msg
+videoNodes currentUserId route windowSize model local =
     let
         viewingRoomId : Maybe RoomId
         viewingRoomId =
-            case Route.toGuildOrDmId route of
+            case Route.toGuildOrDmId currentUserId route of
                 Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
                     DmRoomId otherUserId |> Just
 

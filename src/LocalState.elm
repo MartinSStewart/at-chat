@@ -2422,17 +2422,22 @@ routeToViewing route local =
             else
                 StopViewingChannel
 
-        DmRoute { otherUserId, threadRoute } ->
-            if SeqDict.member otherUserId local.dmChannels then
-                case threadRoute of
-                    NoThreadWithFriends _ _ ->
-                        ViewDm otherUserId EmptyPlaceholder
+        DmRoute { channelId, threadRoute } ->
+            case DmChannel.otherUserId local.localUser.session.userId channelId of
+                Just otherUserId ->
+                    if SeqDict.member otherUserId local.dmChannels then
+                        case threadRoute of
+                            NoThreadWithFriends _ _ ->
+                                ViewDm otherUserId EmptyPlaceholder
 
-                    ViewThreadWithFriends threadId _ _ ->
-                        ViewDmThread otherUserId threadId EmptyPlaceholder
+                            ViewThreadWithFriends threadId _ _ ->
+                                ViewDmThread otherUserId threadId EmptyPlaceholder
 
-            else
-                StopViewingChannel
+                    else
+                        StopViewingChannel
+
+                Nothing ->
+                    StopViewingChannel
 
         DiscordDmRoute data ->
             if SeqDict.member data.channelId local.discordDmChannels then
