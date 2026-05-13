@@ -408,7 +408,7 @@ canDropFiles currentUserId route =
 
         GuildRoute guildId channelRoute ->
             case channelRoute of
-                ChannelRoute channelId threadRoute ->
+                ChannelRoute channelId threadRoute _ ->
                     let
                         threadRoute2 : ThreadRoute
                         threadRoute2 =
@@ -1198,7 +1198,7 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                ChannelRoute _ threadRoute ->
+                ChannelRoute _ threadRoute _ ->
                     enterChannelRoute threadRoute sameGuild previousRoute viewCmd model3
 
                 NewChannelRoute ->
@@ -1238,6 +1238,7 @@ routeRequest previousRoute newRoute model =
                                                 (ChannelRoute
                                                     (LocalState.announcementChannel guild)
                                                     (NoThreadWithFriends Nothing HideMembersTab)
+                                                    Nothing
                                                 )
                                             )
 

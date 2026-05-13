@@ -452,7 +452,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                                 (PersonName.toString user2.name)
                                 user2.icon
                                 plainText
-                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends) |> Just)
+                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
                                 model
                                 :: cmds
 

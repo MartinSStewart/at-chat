@@ -20,6 +20,7 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import Array.Extra
 import Bitwise
+import ChannelDescription exposing (ChannelDescription(..))
 import ChannelName
 import Coord
 import CustomEmoji exposing (CustomEmojiData)
@@ -342,11 +343,13 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                                 NoThread ->
                                                     NoThreadWithFriends Nothing HideMembersTab
                                             )
+                                            Nothing
 
                                     Nothing ->
                                         ChannelRoute
                                             (LocalState.announcementChannel guild)
                                             (NoThreadWithFriends Nothing HideMembersTab)
+                                            Nothing
                                 )
                             )
                             []
@@ -792,7 +795,7 @@ guildView model guildId channelRoute loggedIn local =
                             showMembers : ShowMembersTab
                             showMembers =
                                 case channelRoute of
-                                    ChannelRoute _ threadRoute ->
+                                    ChannelRoute _ threadRoute _ ->
                                         case threadRoute of
                                             ViewThreadWithFriends _ _ showMembers2 ->
                                                 showMembers2
@@ -1461,7 +1464,7 @@ threadPreviewText allUsers threadMessageIndex channel =
 channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
-        ChannelRoute channelId threadRoute ->
+        ChannelRoute channelId threadRoute _ ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     case threadRoute of
@@ -3511,8 +3514,13 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
-                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
-                        , Ui.text name
+                        [ MyUi.rowButton
+                            (Dom.id "guild_openChannelDescription")
+                            (PressedChannelHeaderTab DmChannelHeaderTab_ChannelDescription)
+                            [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill, Ui.contentCenterY ]
+                            [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                            , Ui.text name
+                            ]
                         , showFilesButton
                         ]
             )
@@ -3927,63 +3935,63 @@ peopleAreTypingView allUsers channel currentUserId model =
 
 channelHeaderTabView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
 channelHeaderTabView local loggedIn model =
-    let
-        maybeTab : Maybe ( Id UserId, Maybe DmChannelHeaderTab )
-        maybeTab =
-            case model.route of
-                DmRoute dmRoute ->
-                    DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId
-                        |> Maybe.map (\otherUserId -> ( otherUserId, dmRoute.tab ))
+    case model.route of
+        GuildRoute guildId (ChannelRoute channelId _ (Just DmChannelHeaderTab_ChannelDescription)) ->
+            case LocalState.getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    Just (channelDescriptionView channel.description)
 
-                HomePageRoute ->
+                Nothing ->
                     Nothing
 
-                AdminRoute _ ->
+        DmRoute dmRoute ->
+            case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+                Just otherUserId ->
+                    case dmRoute.tab of
+                        Just (DmChannelHeaderTab_Go maybeMatchId) ->
+                            Go.view
+                                model.windowSize
+                                local.localUser
+                                otherUserId
+                                maybeMatchId
+                                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
+                                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+                                |> Ui.map GoMsg
+                                |> Just
+
+                        Just DmChannelHeaderTab_VoiceChat ->
+                            VoiceChat.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
+                                |> Ui.map VoiceChatMsg
+                                |> Just
+
+                        Just DmChannelHeaderTab_ChannelDescription ->
+                            Nothing
+
+                        Nothing ->
+                            Nothing
+
+                Nothing ->
                     Nothing
 
-                GuildRoute _ _ ->
-                    Nothing
-
-                DiscordGuildRoute _ ->
-                    Nothing
-
-                DiscordDmRoute _ ->
-                    Nothing
-
-                AiChatRoute ->
-                    Nothing
-
-                SlackOAuthRedirect _ ->
-                    Nothing
-
-                TextEditorRoute ->
-                    Nothing
-
-                LinkDiscord _ ->
-                    Nothing
-    in
-    case maybeTab of
-        Just ( otherUserId, Just (DmChannelHeaderTab_Go maybeMatchId) ) ->
-            Go.view
-                model.windowSize
-                local.localUser
-                otherUserId
-                maybeMatchId
-                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
-                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
-                |> Ui.map GoMsg
-                |> Just
-
-        Just ( otherUserId, Just DmChannelHeaderTab_VoiceChat ) ->
-            VoiceChat.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
-                |> Ui.map VoiceChatMsg
-                |> Just
-
-        Just ( _, Nothing ) ->
+        _ ->
             Nothing
 
-        Nothing ->
-            Nothing
+
+channelDescriptionView : ChannelDescription -> Element FrontendMsg
+channelDescriptionView (ChannelDescription description) =
+    Ui.el
+        [ Ui.paddingXY 16 12
+        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+        , Ui.borderColor MyUi.border2
+        , Ui.background MyUi.background2
+        , Ui.Font.color MyUi.font2
+        ]
+        (if String.isEmpty description then
+            Ui.el [ Ui.Font.italic ] (Ui.text "No channel description")
+
+         else
+            Ui.text description
+        )
 
 
 threadConversationView :
@@ -6408,7 +6416,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             channelId
                             channel
                             (case channelRoute of
-                                ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) ->
+                                ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) _ ->
                                     if channelIdB == channelId then
                                         SeqDict.insert threadMessageIndex Thread.frontendInit channel.threads
 
@@ -6587,7 +6595,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                         isSelected : Bool
                         isSelected =
                             case channelRoute of
-                                ChannelRoute a (ViewThreadWithFriends b _ _) ->
+                                ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
                                     a == channelId && b == threadMessageIndex
 
                                 _ ->
@@ -6612,7 +6620,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                         ]
                         [ elLinkButton
                             (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)))
+                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
                             [ Ui.height Ui.fill
                             , Ui.contentCenterY
                             , Ui.paddingWith
@@ -6800,7 +6808,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
         isSelected : Bool
         isSelected =
             case channelRoute of
-                ChannelRoute a (NoThreadWithFriends _ _) ->
+                ChannelRoute a (NoThreadWithFriends _ _) _ ->
                     a == channelId
 
                 EditChannelRoute a ->
@@ -6829,7 +6837,7 @@ channelColumnRow isMobile hasNotification channelNameHover channelRoute guildId 
         ]
         [ elLinkButton
             (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
-            (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab)))
+            (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing))
             [ Ui.height Ui.fill
             , Ui.contentCenterY
             , Ui.paddingWith

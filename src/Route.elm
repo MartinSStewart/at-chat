@@ -66,6 +66,7 @@ type alias DmRouteData =
 type DmChannelHeaderTab
     = DmChannelHeaderTab_VoiceChat
     | DmChannelHeaderTab_Go (Maybe (Id ChannelMessageId))
+    | DmChannelHeaderTab_ChannelDescription
 
 
 type alias DiscordGuildRouteData =
@@ -76,7 +77,7 @@ type alias DiscordGuildRouteData =
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends
+    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends (Maybe DmChannelHeaderTab)
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | GuildSettingsRoute
@@ -136,6 +137,16 @@ decode url =
             AiChatRoute
 
         "g" :: guildId :: rest ->
+            let
+                guildTab : Maybe DmChannelHeaderTab
+                guildTab =
+                    case Dict.get tabParam url2.queryParameters of
+                        Just [ "description" ] ->
+                            Just DmChannelHeaderTab_ChannelDescription
+
+                        _ ->
+                            Nothing
+            in
             case Id.fromString guildId of
                 Just guildId2 ->
                     case rest of
@@ -147,6 +158,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (stringToThread showMembers threadMessageIndex messageIndex)
+                                            Nothing
                                         )
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
@@ -155,6 +167,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (stringToThread showMembers threadMessageIndex "")
+                                            Nothing
                                         )
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
@@ -163,6 +176,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                                            guildTab
                                         )
 
                                 ( Just channelId2, [] ) ->
@@ -171,6 +185,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (NoThreadWithFriends Nothing showMembers)
+                                            guildTab
                                         )
 
                                 ( Just channelId2, [ "edit" ] ) ->
@@ -406,7 +421,7 @@ encode route =
 
                 GuildRoute guildId maybeChannelId ->
                     case maybeChannelId of
-                        ChannelRoute channelId thread ->
+                        ChannelRoute channelId thread tab ->
                             case thread of
                                 ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                                     ( [ "g"
@@ -423,7 +438,7 @@ encode route =
                                 NoThreadWithFriends maybeMessageId showMembers ->
                                     ( [ "g", Id.toString guildId, "c", Id.toString channelId ]
                                         ++ maybeMessageIdToString maybeMessageId
-                                    , encodeShowMembers showMembers
+                                    , encodeShowMembers showMembers ++ encodeTab tab
                                     )
 
                         EditChannelRoute channelId ->
@@ -559,6 +574,9 @@ encodeTab tab =
                             []
                    )
 
+        Just DmChannelHeaderTab_ChannelDescription ->
+            [ Url.Builder.string tabParam "description" ]
+
         Nothing ->
             []
 
@@ -610,7 +628,7 @@ requiresLogin route =
 toGuildOrDmId : Id UserId -> Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
 toGuildOrDmId userId route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
             ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->

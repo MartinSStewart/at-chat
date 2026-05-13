@@ -168,7 +168,7 @@ subscriptions model =
             Loaded loaded ->
                 Subscription.batch
                     [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _ _) ->
+                        GuildRoute _ (ChannelRoute _ _ _) ->
                             Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
                         _ ->
@@ -812,7 +812,7 @@ updateLoaded msg model =
                                         { model | loginStatus = LoggedIn loggedIn2 }
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab))
+                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
                                         )
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
@@ -910,7 +910,7 @@ updateLoaded msg model =
                         }
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab))
+                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
                         )
 
                 NotLoggedIn _ ->
@@ -961,6 +961,7 @@ updateLoaded msg model =
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
                                                 (NoThreadWithFriends Nothing HideMembersTab)
+                                                Nothing
                                             )
                                         )
 
@@ -1393,12 +1394,12 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _)), LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _), LoggedIn loggedIn ) ->
                     FrontendExtra.routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
+                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab) Nothing)
                         )
 
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
@@ -1626,7 +1627,7 @@ updateLoaded msg model =
 
                                 showMember =
                                     case model.route of
-                                        GuildRoute _ (ChannelRoute _ threadRoute) ->
+                                        GuildRoute _ (ChannelRoute _ threadRoute _) ->
                                             case threadRoute of
                                                 ViewThreadWithFriends _ _ showMembers2 ->
                                                     showMembers2
@@ -2347,6 +2348,7 @@ updateLoaded msg model =
                                                             (ChannelRoute
                                                                 channelId
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                Nothing
                                                             )
                                                         )
 
@@ -2357,6 +2359,7 @@ updateLoaded msg model =
                                                             (ChannelRoute
                                                                 channelId
                                                                 (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                Nothing
                                                             )
                                                         )
 
@@ -2494,7 +2497,7 @@ updateLoaded msg model =
                                 model
                                 (GuildRoute
                                     guildId
-                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab))
+                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab) Nothing)
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
@@ -4206,6 +4209,23 @@ updateLoaded msg model =
                 AdminRoute _ ->
                     ( model, Command.none )
 
+                GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) currentTab) ->
+                    let
+                        newTab : Maybe Route.DmChannelHeaderTab
+                        newTab =
+                            if currentTab == Just tab then
+                                Nothing
+
+                            else
+                                Just tab
+                    in
+                    FrontendExtra.routePush
+                        model
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) newTab)
+                        )
+
                 GuildRoute _ _ ->
                     ( model, Command.none )
 
@@ -4925,19 +4945,19 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 setShowMembers showMembers model =
     case model.route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) ->
             case threadRoute of
                 NoThreadWithFriends a _ ->
                     FrontendExtra.routePush
                         model
-                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers)))
+                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers) tab))
 
                 ViewThreadWithFriends threadId a _ ->
                     FrontendExtra.routePush
                         model
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers))
+                            (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers) tab)
                         )
 
         DmRoute dmRoute ->
@@ -5631,6 +5651,7 @@ updateLoadedFromBackend msg model =
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
                                                 (NoThreadWithFriends Nothing HideMembersTab)
+                                                Nothing
                                             )
                                         )
 
@@ -5809,6 +5830,7 @@ updateLoadedFromBackend msg model =
                                                         (ChannelRoute
                                                             (LocalState.announcementChannel guild)
                                                             (NoThreadWithFriends Nothing HideMembersTab)
+                                                            Nothing
                                                         )
                                                     )
 
@@ -6387,7 +6409,7 @@ errorPage model text =
 routeToInitialDataRequest : Route -> InitialLoadRequest
 routeToInitialDataRequest route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
             InitialLoadRequested_Guild
                 guildId
                 channelId
