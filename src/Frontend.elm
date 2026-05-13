@@ -1909,9 +1909,9 @@ updateLoaded msg model =
                                         (Maybe.map (Local_Go { otherUserId = dmRoute.otherUserId }) maybeChange)
                                         { loggedIn
                                             | currentDmGoMatch =
-                                                SeqDict.insert
+                                                SeqDict.update
                                                     ( dmRoute.otherUserId, maybeMatchId )
-                                                    goModel2
+                                                    (\_ -> goModel2)
                                                     loggedIn.currentDmGoMatch
                                         }
                                         (Command.map never GoMsg cmd)

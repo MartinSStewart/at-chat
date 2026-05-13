@@ -364,7 +364,7 @@ decode url =
 
 goMatchParam : String
 goMatchParam =
-    "go-match"
+    "match"
 
 
 tabParam : String

@@ -43,7 +43,7 @@ import Ports
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
-import Svg
+import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
 import Ui exposing (Element)
@@ -402,16 +402,14 @@ maxDimension =
 
 
 type Msg
-    = PressedCell Int Int
-    | PressedPass
+    = GameMsg GameMsg
+    | SetupMsg SetupMsg
+    | SelectedMatch (Maybe (Id ChannelMessageId))
     | PressedReset
-    | PressedDoneMarking
-    | PressedAgree
-    | PressedDisagree
-    | PressedArrowLeft
-    | PressedArrowRight
-    | ChangedViewingMove Int
-    | ChangedWidthInput String
+
+
+type SetupMsg
+    = ChangedWidthInput String
     | ChangedHeightInput String
     | ChangedHandicapInput String
     | ChangedKomiInput String
@@ -420,8 +418,18 @@ type Msg
     | SelectedSize SizeSelection
     | SelectedPlayingAs Stone
     | PressedStartGame
+
+
+type GameMsg
+    = PressedCell Int Int
+    | PressedPass
+    | PressedDoneMarking
+    | PressedAgree
+    | PressedDisagree
+    | PressedArrowLeft
+    | PressedArrowRight
+    | ChangedViewingMove Int
     | Tick Time.Posix
-    | SelectedMatch (Maybe (Id ChannelMessageId))
 
 
 type Action
@@ -447,7 +455,7 @@ type alias ServerChange =
 
 
 type OutMsg
-    = OutNone
+    = NoOutMsg
     | OutLocalChange LocalChange
     | OutSelectMatch (Maybe (Id ChannelMessageId))
 
@@ -1014,16 +1022,16 @@ update :
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
     -> Maybe Model
-    -> ( Model, Command FrontendOnly toMsg Msg, OutMsg )
+    -> ( Maybe Model, Command FrontendOnly toMsg Msg, OutMsg )
 update time currentUserId otherUserId msg maybeMatchId matches model =
     case msg of
-        SelectedMatch newMatchId ->
-            ( model |> Maybe.withDefault (Game initGame)
-            , Command.none
-            , OutSelectMatch newMatchId
-            )
+        PressedReset ->
+            ( model, Command.none, OutSelectMatch Nothing )
 
-        _ ->
+        SelectedMatch newMatchId ->
+            ( model, Command.none, OutSelectMatch newMatchId )
+
+        GameMsg gameMsg ->
             case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
@@ -1032,7 +1040,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                                 ( game2, cmd, maybeChange ) =
                                     updateGame
                                         currentUserId
-                                        msg
+                                        gameMsg
                                         setup
                                         (foldActions actions setup)
                                         (case model of
@@ -1046,14 +1054,22 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                                                 initGame
                                         )
                             in
-                            ( game2
+                            ( Just game2
                             , cmd
                             , Maybe.map (\change -> Action matchId { time = time, change = change }) maybeChange
                                 |> localChangeToOut
                             )
 
                         Nothing ->
-                            ( Game initGame, Command.none, OutNone )
+                            ( model, Command.none, NoOutMsg )
+
+                Nothing ->
+                    ( model, Command.none, NoOutMsg )
+
+        SetupMsg setupMsg ->
+            case maybeMatchId of
+                Just matchId ->
+                    ( model, Command.none, NoOutMsg )
 
                 Nothing ->
                     let
@@ -1062,7 +1078,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                                 time
                                 currentUserId
                                 otherUserId
-                                msg
+                                setupMsg
                                 (case model of
                                     Just (Game _) ->
                                         initSetup
@@ -1074,7 +1090,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                                         initSetup
                                 )
                     in
-                    ( model2, cmd, localChangeToOut maybeChange )
+                    ( Just model2, cmd, localChangeToOut maybeChange )
 
 
 localChangeToOut : Maybe LocalChange -> OutMsg
@@ -1084,7 +1100,7 @@ localChangeToOut maybeChange =
             OutLocalChange change
 
         Nothing ->
-            OutNone
+            NoOutMsg
 
 
 pressedKey :
@@ -1189,7 +1205,7 @@ updateSetup :
     Time.Posix
     -> Id UserId
     -> Id UserId
-    -> Msg
+    -> SetupMsg
     -> SetupModel
     -> ( Model, Command FrontendOnly toMsg Msg, Maybe LocalChange )
 updateSetup time creatorId otherPlayerId msg model =
@@ -1225,9 +1241,6 @@ updateSetup time creatorId otherPlayerId msg model =
 
                 Err error ->
                     ( Setup { model | error = Just error }, Command.none, Nothing )
-
-        _ ->
-            ( Setup model, Command.none, Nothing )
 
 
 selectedDimensions : SetupModel -> Result String ( BoardSize, BoardSize )
@@ -1311,7 +1324,7 @@ updateAction setup { change, time } model =
                     model
 
 
-updateGame : Id UserId -> Msg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
+updateGame : Id UserId -> GameMsg -> ValidatedSetup -> GameState -> GameModel -> ( Model, Command FrontendOnly toMsg Msg, Maybe Action )
 updateGame currentUserId msg setup state model =
     case msg of
         PressedCell x y ->
@@ -1402,9 +1415,6 @@ updateGame currentUserId msg setup state model =
                 _ ->
                     ( Game model, Command.none, Nothing )
 
-        PressedReset ->
-            ( Setup initSetup, Command.none, Nothing )
-
         ChangedViewingMove moveNumber ->
             let
                 total : Int
@@ -1417,33 +1427,6 @@ updateGame currentUserId msg setup state model =
             in
             ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none, Nothing )
 
-        ChangedWidthInput _ ->
-            ( Game model, Command.none, Nothing )
-
-        ChangedHeightInput _ ->
-            ( Game model, Command.none, Nothing )
-
-        ChangedHandicapInput _ ->
-            ( Game model, Command.none, Nothing )
-
-        ChangedKomiInput _ ->
-            ( Game model, Command.none, Nothing )
-
-        ChangedMainTimeInput _ ->
-            ( Game model, Command.none, Nothing )
-
-        ChangedIncrementInput _ ->
-            ( Game model, Command.none, Nothing )
-
-        SelectedSize _ ->
-            ( Game model, Command.none, Nothing )
-
-        SelectedPlayingAs stone ->
-            ( Game model, Command.none, Nothing )
-
-        PressedStartGame ->
-            ( Game model, Command.none, Nothing )
-
         Tick now ->
             ( Game model, Command.none, Nothing )
 
@@ -1453,9 +1436,6 @@ updateGame currentUserId msg setup state model =
 
         PressedArrowRight ->
             ( stepForward (Game model), Command.none, Nothing )
-
-        SelectedMatch _ ->
-            ( Game model, Command.none, Nothing )
 
 
 cellPx : Int
@@ -1497,7 +1477,11 @@ view windowSize localUser otherUserId maybeMatchId matches model =
         ]
         (Ui.column
             []
-            [ matchSwitcherView isMobile maybeMatchId matches
+            [ Ui.row
+                [ Ui.spacing 16 ]
+                [ matchSwitcherView isMobile maybeMatchId matches
+                , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
+                ]
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
@@ -1518,6 +1502,7 @@ view windowSize localUser otherUserId maybeMatchId matches model =
                                     Nothing ->
                                         initGame
                                 )
+                                |> Ui.map GameMsg
 
                         Nothing ->
                             Ui.text "Match not found"
@@ -1536,6 +1521,7 @@ view windowSize localUser otherUserId maybeMatchId matches model =
                             Nothing ->
                                 initSetup
                         )
+                        |> Ui.map SetupMsg
             ]
         )
 
@@ -1553,7 +1539,7 @@ matchSwitcherView isMobile maybeMatchId matches =
         let
             newMatchValue : String
             newMatchValue =
-                ""
+                " "
 
             currentValue : String
             currentValue =
@@ -1586,6 +1572,8 @@ matchSwitcherView isMobile maybeMatchId matches =
                  else
                     12
                 )
+            , Ui.width Ui.shrink
+            , Ui.height Ui.fill
             ]
             [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
             , Ui.html
@@ -1624,7 +1612,7 @@ matchSwitcherView isMobile maybeMatchId matches =
                                 let
                                     value : String
                                     value =
-                                        String.fromInt (Id.toInt matchId)
+                                        Id.toString matchId
                                 in
                                 Html.option
                                     [ Html.Attributes.value value
@@ -1638,7 +1626,7 @@ matchSwitcherView isMobile maybeMatchId matches =
             ]
 
 
-setupView : Bool -> Coord CssPixels -> SetupModel -> Element Msg
+setupView : Bool -> Coord CssPixels -> SetupModel -> Element SetupMsg
 setupView playingAgainstSelf windowSize model =
     let
         isMobile : Bool
@@ -1733,7 +1721,7 @@ setupView playingAgainstSelf windowSize model =
         ]
 
 
-sizeOptionView : Element Msg -> Ui.Input.OptionState -> Element Msg
+sizeOptionView : Element SetupMsg -> Ui.Input.OptionState -> Element SetupMsg
 sizeOptionView label status =
     Ui.row
         [ Ui.spacing 10, Ui.alignLeft, Ui.width Ui.shrink, Ui.contentCenterY ]
@@ -1764,7 +1752,7 @@ sizeOptionView label status =
         ]
 
 
-setupSection : String -> Element msg -> Element msg
+setupSection : String -> Element SetupMsg -> Element SetupMsg
 setupSection title content =
     Ui.column
         [ Ui.spacing 8 ]
@@ -1773,7 +1761,7 @@ setupSection title content =
         ]
 
 
-dimensionInput : String -> String -> (String -> Msg) -> Element Msg
+dimensionInput : String -> String -> (String -> SetupMsg) -> Element SetupMsg
 dimensionInput htmlId value onChange =
     numberInput
         { htmlId = htmlId
@@ -1784,7 +1772,7 @@ dimensionInput htmlId value onChange =
         }
 
 
-komiInput : String -> Element Msg
+komiInput : String -> Element SetupMsg
 komiInput value =
     Html.input
         [ Html.Attributes.id "go_komiInput"
@@ -1807,9 +1795,9 @@ numberInput :
     , minValue : Int
     , maxValue : Int
     , value : String
-    , onChange : String -> Msg
+    , onChange : String -> SetupMsg
     }
-    -> Element Msg
+    -> Element SetupMsg
 numberInput args =
     Html.input
         [ Html.Attributes.id args.htmlId
@@ -1828,7 +1816,7 @@ numberInput args =
         |> Ui.html
 
 
-timeInput : String -> String -> String -> (String -> Msg) -> Element Msg
+timeInput : String -> String -> String -> (String -> SetupMsg) -> Element SetupMsg
 timeInput htmlId label value onChange =
     Ui.column [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ] (Ui.text label)
@@ -1876,7 +1864,7 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Bool -> LocalUser -> GameState -> ValidatedSetup -> Element Msg
+clockView : Bool -> LocalUser -> GameState -> ValidatedSetup -> Element msg
 clockView isMobile localUser state setup =
     case setup.timeControl of
         Nothing ->
@@ -1990,7 +1978,7 @@ isLocalUsersTurn currentUserId setup state =
             setup.whitePlayer == currentUserId
 
 
-gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
 gameView windowSize currentUserId localUser setup state model =
     let
         isMobile : Bool
@@ -2092,14 +2080,15 @@ winnerSuffix b w =
         " (tie)"
 
 
-controlsView : GameState -> Element Msg
+controlsView : GameState -> Element GameMsg
 controlsView state =
     let
-        phaseButtons : List (Element Msg)
+        phaseButtons : List (Element GameMsg)
         phaseButtons =
             case state.phase of
                 Playing { previousPlayerPassed } ->
-                    [ MyUi.simpleButton (Dom.id "go_pass")
+                    [ MyUi.simpleButton
+                        (Dom.id "go_pass")
                         PressedPass
                         (Ui.text
                             (if previousPlayerPassed then
@@ -2124,12 +2113,10 @@ controlsView state =
     in
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink, Ui.paddingXY 16 0 ]
-        (phaseButtons
-            ++ [ MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game") ]
-        )
+        phaseButtons
 
 
-historyView : GameState -> GameModel -> Element Msg
+historyView : GameState -> GameModel -> Element GameMsg
 historyView state model =
     let
         total : Int
@@ -2164,7 +2151,7 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element Msg
+boardView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
 boardView windowSize currentUserId setup state model =
     let
         isMobile : Bool
@@ -2284,7 +2271,7 @@ boardView windowSize currentUserId setup state model =
             ]
 
 
-gridLines : Int -> Int -> List (Svg.Svg Msg)
+gridLines : Int -> Int -> List (Svg.Svg msg)
 gridLines width height =
     let
         offset : Int
@@ -2299,7 +2286,7 @@ gridLines width height =
         endY =
             (height - 1) * cellPx + offset
 
-        horizontal : List (Svg.Svg Msg)
+        horizontal : List (Svg.Svg msg)
         horizontal =
             List.range 0 (height - 1)
                 |> List.map
@@ -2320,7 +2307,7 @@ gridLines width height =
                             []
                     )
 
-        vertical : List (Svg.Svg Msg)
+        vertical : List (Svg.Svg msg)
         vertical =
             List.range 0 (width - 1)
                 |> List.map
@@ -2369,7 +2356,7 @@ starPoints width height =
             []
 
 
-lastMoveMarker : Bool -> GameState -> List (Svg.Svg Msg)
+lastMoveMarker : Bool -> GameState -> List (Svg.Svg msg)
 lastMoveMarker viewingPast state =
     case ( viewingPast, state.lastMove ) of
         ( False, Just ( x, y ) ) ->
@@ -2386,7 +2373,7 @@ lastMoveMarker viewingPast state =
             []
 
 
-starPointShapes : Int -> Int -> List (Svg.Svg Msg)
+starPointShapes : Int -> Int -> List (Svg.Svg msg)
 starPointShapes width height =
     starPoints width height
         |> List.map
@@ -2401,7 +2388,7 @@ starPointShapes width height =
             )
 
 
-stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
+stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg.Svg msg)
 stoneShapes dead board =
     Dict.toList board
         |> List.map
@@ -2447,7 +2434,7 @@ stoneShapes dead board =
             )
 
 
-territoryShapes : Dict ( Int, Int ) Stone -> List (Svg.Svg Msg)
+territoryShapes : Dict ( Int, Int ) Stone -> List (Svg.Svg msg)
 territoryShapes marks =
     Dict.toList marks
         |> List.map
@@ -2487,7 +2474,7 @@ territoryShapes marks =
             )
 
 
-clickTargets : Int -> Int -> List (Svg.Svg Msg)
+clickTargets : Int -> Int -> List (Svg GameMsg)
 clickTargets width height =
     List.range 0 (width - 1)
         |> List.concatMap

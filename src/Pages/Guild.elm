@@ -3070,16 +3070,18 @@ goGameButton isMobile currentTab =
         isMobile
         (Dom.id "guild_openGoMatch")
         (DmChannelHeaderTab_Go Nothing)
-        currentTab
+        (case currentTab of
+            Just (DmChannelHeaderTab_Go _) ->
+                True
+
+            _ ->
+                False
+        )
         (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
 
 
-channelHeaderTab : Bool -> HtmlId -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Element FrontendMsg -> Element FrontendMsg
-channelHeaderTab isMobile htmlId tab currentTab content =
-    let
-        isSelected =
-            Just tab == currentTab
-    in
+channelHeaderTab : Bool -> HtmlId -> DmChannelHeaderTab -> Bool -> Element FrontendMsg -> Element FrontendMsg
+channelHeaderTab isMobile htmlId tab isSelected content =
     MyUi.elButton
         htmlId
         (PressedChannelHeaderTab tab)
@@ -3093,7 +3095,7 @@ channelHeaderTab isMobile htmlId tab currentTab content =
         , Ui.attrIf isSelected (Ui.background MyUi.background1)
         , Ui.contentCenterY
         , Ui.Font.color
-            (if Just tab == currentTab then
+            (if isSelected then
                 MyUi.font1
 
              else
@@ -3172,7 +3174,13 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
             isMobile
             (Dom.id "guild_voiceChat")
             DmChannelHeaderTab_VoiceChat
-            currentTab
+            (case currentTab of
+                Just DmChannelHeaderTab_VoiceChat ->
+                    True
+
+                _ ->
+                    False
+            )
             (Ui.row
                 [ Ui.spacing 2, Ui.width Ui.shrink, Ui.contentCenterY ]
                 [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
@@ -5224,7 +5232,7 @@ messageView :
     -> Id ChannelMessageId
     -> Message ChannelMessageId userId
     -> Element MessageViewMsg
-messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageIndex message =
+messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     case message of
         UserTextMessage data ->
             messageContainer
@@ -5243,7 +5251,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     _ ->
                         highlight
                 )
-                messageIndex
+                messageId
                 (currentUserId == data.createdBy)
                 currentUserId
                 localUser.user
@@ -5260,7 +5268,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     revealedSpoilers
                     allUsers
                     isHovered
-                    messageIndex
+                    messageId
                     data
                 )
 
@@ -5271,7 +5279,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 localUser.customEmojis
                 allUsers
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5282,7 +5290,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp joinedAt localUser.timezone |> Ui.html
-                    , messageIdView messageIndex
+                    , messageIdView messageId
                     ]
                 )
 
@@ -5293,7 +5301,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 localUser.customEmojis
                 allUsers
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5309,7 +5317,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 localUser.customEmojis
                 allUsers
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5320,7 +5328,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     [ Ui.contentTop ]
                     [ callStartedCard userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
-                    , messageIdView messageIndex
+                    , messageIdView messageId
                     ]
                 )
 
@@ -5331,7 +5339,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 localUser.customEmojis
                 allUsers
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5342,7 +5350,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     []
                     [ callEnded
                     , messageTimestamp time localUser.timezone |> Ui.html
-                    , messageIdView messageIndex
+                    , messageIdView messageId
                     ]
                 )
 
@@ -5353,7 +5361,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 localUser.customEmojis
                 allUsers
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5362,9 +5370,9 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 isHovered
                 (Ui.row
                     [ Ui.contentTop ]
-                    [ goMatchStartedCard userId allUsers
+                    [ goMatchStartedCard messageId userId allUsers
                     , messageTimestamp time localUser.timezone |> Ui.html
-                    , messageIdView messageIndex
+                    , messageIdView messageId
                     ]
                 )
 
@@ -5383,7 +5391,7 @@ threadMessageView :
     -> Id ThreadMessageId
     -> Message ThreadMessageId userId
     -> Element MessageViewMsg
-threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageIndex message =
+threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
@@ -5398,7 +5406,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     _ ->
                         highlight
                 )
-                messageIndex
+                messageId
                 (currentUserId == message2.createdBy)
                 currentUserId
                 localUser.user
@@ -5415,14 +5423,14 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                     revealedSpoilers
                     allUsers
                     isHovered
-                    messageIndex
+                    messageId
                     message2
                 )
 
         UserJoinedMessage joinedAt userId reactions ->
             threadMessageContainer
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5439,7 +5447,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
         DeletedMessage createdAt ->
             threadMessageContainer
                 highlight
-                messageIndex
+                messageId
                 False
                 localUser.session.userId
                 localUser.user
@@ -5451,7 +5459,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
         CallStarted time userId reactions ->
             threadMessageContainer
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5463,7 +5471,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
         CallEnded time reactions ->
             threadMessageContainer
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
@@ -5475,14 +5483,14 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
         GoMatchStarted time userId reactions ->
             threadMessageContainer
                 highlight
-                messageIndex
+                messageId
                 False
                 currentUserId
                 localUser.user
                 reactions
                 localUser.customEmojis
                 isHovered
-                (Ui.row [] [ goMatchStartedCard userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+                (Ui.row [] [ goMatchStartedCard messageId userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
 
 isHoveredToAnimationMode : IsHovered -> AnimationMode
@@ -5804,10 +5812,10 @@ callStartedCard userId allUsers =
         "started a call"
 
 
-goMatchStartedCard : userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
-goMatchStartedCard userId allUsers =
+goMatchStartedCard : Id messageId -> userId -> SeqDict userId { a | name : PersonName } -> Element MessageViewMsg
+goMatchStartedCard messageId userId allUsers =
     eventCard
-        (Dom.id "guild_goMatchStartedCard")
+        (Dom.id ("guild_goMatchStartedCard_" ++ Id.toString messageId))
         MessageViewMsg_PressedGoMatchStartedCard
         (Ui.html Icons.go)
         (User.toString userId allUsers)

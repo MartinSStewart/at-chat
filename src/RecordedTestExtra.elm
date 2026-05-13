@@ -1995,7 +1995,7 @@ goMatchTest normalConfig =
                         , admin.click 100 (Dom.id "guild_openDm_1")
                         , admin.click 100 (Dom.id "guild_openGoMatch")
                         , admin.click 100 (Dom.id "go_start")
-                        , user.click 100 (Dom.id "guild_goMatchStartedCard")
+                        , user.click 100 (Dom.id "guild_goMatchStartedCard_0")
                         , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                         , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
 
@@ -2018,6 +2018,7 @@ goMatchTest normalConfig =
                                 [ user2.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
                                 , user2.click 100 (Dom.id "guild_openGoMatch")
+                                , user2.input 100 (Dom.id "go_matchSwitcher") "0"
 
                                 -- A few more moves to confirm the state persisted
                                 , admin.click 100 (Dom.id "go_cell_3_3")
@@ -2035,6 +2036,7 @@ goMatchTest normalConfig =
                                 -- Start a fresh match after the game has ended
                                 , admin.click 100 (Dom.id "go_reset")
                                 , admin.click 100 (Dom.id "go_start")
+                                , user2.click 100 (Dom.id "guild_goMatchStartedCard_1")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 ]
