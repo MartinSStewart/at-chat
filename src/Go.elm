@@ -58,9 +58,9 @@ type Stone
 
 type Phase
     = Playing { previousPlayerPassed : Bool }
-    | Marking { markingPlayer : Stone }
-    | Confirming { markingPlayer : Stone }
-    | Scored { markingPlayer : Stone, blackScore : Float, whiteScore : Float }
+    | Marking
+    | Confirming
+    | Scored { blackScore : Float, whiteScore : Float }
 
 
 type alias Snapshot =
@@ -423,6 +423,7 @@ type GameMsg
     | PressedArrowLeft
     | PressedArrowRight
     | ChangedViewingMove Int
+    | Tick Time.Posix
 
 
 type Action
@@ -603,12 +604,7 @@ performPass setup model =
     case model.phase of
         Playing { previousPlayerPassed } ->
             if previousPlayerPassed then
-                applyIncrement
-                    setup
-                    model.currentPlayer
-                    { model
-                        | phase = Marking { markingPlayer = model.currentPlayer }
-                    }
+                applyIncrement setup model.currentPlayer { model | phase = Marking }
 
             else
                 applyIncrement
@@ -1275,15 +1271,15 @@ updateAction setup { change, time } model =
 
         FinishedMarking ->
             case model.phase of
-                Marking r ->
-                    { model | phase = Confirming r }
+                Marking ->
+                    { model | phase = Confirming }
 
                 _ ->
                     model
 
         AcceptTerritory ->
             case model.phase of
-                Confirming r ->
+                Confirming ->
                     let
                         ( b, w ) =
                             computeScore setup model
@@ -1291,8 +1287,7 @@ updateAction setup { change, time } model =
                     { model
                         | phase =
                             Scored
-                                { markingPlayer = r.markingPlayer
-                                , blackScore = b
+                                { blackScore = b
                                 , whiteScore = w
                                 }
                     }
@@ -1302,10 +1297,10 @@ updateAction setup { change, time } model =
 
         RejectTerritory ->
             case model.phase of
-                Confirming r ->
+                Confirming ->
                     { model
                         | phase = Playing { previousPlayerPassed = False }
-                        , currentPlayer = otherStone r.markingPlayer
+                        , currentPlayer = otherStone model.currentPlayer
                         , territoryMarks = Dict.empty
                     }
 
@@ -1346,10 +1341,10 @@ updateGame currentUserId msg setup state model =
                         else
                             ( Game model, Command.none, Nothing )
 
-                    Marking _ ->
+                    Marking ->
                         ( Game model, Command.none, MarkTerritory x y |> Just )
 
-                    Confirming _ ->
+                    Confirming ->
                         ( Game model, Command.none, Nothing )
 
                     Scored _ ->
@@ -1376,7 +1371,7 @@ updateGame currentUserId msg setup state model =
 
         PressedDoneMarking ->
             case state.phase of
-                Marking _ ->
+                Marking ->
                     ( Game model, Command.none, Just FinishedMarking )
 
                 _ ->
@@ -1384,7 +1379,7 @@ updateGame currentUserId msg setup state model =
 
         PressedAgree ->
             case state.phase of
-                Confirming _ ->
+                Confirming ->
                     ( Game model
                     , Command.none
                     , Just AcceptTerritory
@@ -1395,7 +1390,7 @@ updateGame currentUserId msg setup state model =
 
         PressedDisagree ->
             case state.phase of
-                Confirming _ ->
+                Confirming ->
                     ( Game model
                     , Command.none
                     , Just RejectTerritory
@@ -2024,12 +2019,12 @@ statusView setup state model =
                 Playing _ ->
                     stoneName state.currentPlayer ++ " to move"
 
-                Marking r ->
-                    stoneName r.markingPlayer
+                Marking ->
+                    stoneName state.currentPlayer
                         ++ " marks territory: tap an empty region to cycle owner (none → Black → White)."
 
-                Confirming r ->
-                    stoneName (otherStone r.markingPlayer)
+                Confirming ->
+                    stoneName (otherStone state.currentPlayer)
                         ++ ": agree with the marking, or disagree to resume play."
 
                 Scored s ->
@@ -2089,10 +2084,10 @@ controlsView state =
                         )
                     ]
 
-                Marking _ ->
+                Marking ->
                     [ MyUi.simpleButton (Dom.id "go_doneMarking") PressedDoneMarking (Ui.text "Done marking") ]
 
-                Confirming _ ->
+                Confirming ->
                     [ MyUi.simpleButton (Dom.id "go_agree") PressedAgree (Ui.text "Agree")
                     , MyUi.simpleButton (Dom.id "go_disagree") PressedDisagree (Ui.text "Disagree")
                     ]
@@ -2208,7 +2203,7 @@ boardView windowSize currentUserId setup state model =
                     Playing _ ->
                         isLocalUsersTurn currentUserId setup state
 
-                    Marking _ ->
+                    Marking ->
                         True
 
                     _ ->

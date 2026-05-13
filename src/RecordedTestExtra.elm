@@ -191,6 +191,11 @@ handlePortToJs requestAndData =
 
 desktopWindow : { width : number, height : number }
 desktopWindow =
+    { width = 1000, height = 600 }
+
+
+tallDesktopWindow : { width : number, height : number }
+tallDesktopWindow =
     { width = 1000, height = 1300 }
 
 
@@ -423,6 +428,7 @@ voiceChatTest normalConfig =
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , admin.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
@@ -1985,7 +1991,7 @@ goMatchTest normalConfig =
             100
             sessionId0
             "/"
-            desktopWindow
+            tallDesktopWindow
             (\admin ->
                 [ handleLogin firefoxDesktop adminEmail admin
                 , inviteUser
@@ -2013,7 +2019,7 @@ goMatchTest normalConfig =
                             100
                             sessionId1
                             "/"
-                            desktopWindow
+                            tallDesktopWindow
                             (\user2 ->
                                 [ user2.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                                 , user2.click 100 (Dom.id "guild_friendLabel_0")
@@ -2039,6 +2045,14 @@ goMatchTest normalConfig =
                                 , user2.click 100 (Dom.id "guild_goMatchStartedCard_1")
                                 , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
                                 , user2.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                , admin.click 100 (Dom.id "go_cell_3_3")
+                                , user2.click 100 (Dom.id "go_cell_3_4")
+                                , admin.click 100 (Dom.id "go_pass")
+                                , user2.click 100 (Dom.id "go_pass")
+                                , admin.click 100 (Dom.id "go_cell_3_6")
+                                , admin.click 100 (Dom.id "go_doneMarking")
+                                , user2.click 100 (Dom.id "go_disagree")
+                                , admin.click 100 (Dom.id "go_cell_3_5")
                                 ]
                             )
                         ]
