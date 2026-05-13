@@ -464,13 +464,13 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                 InitialLoadRequested_None ->
                     IsAdminButNoData
 
-                InitialLoadRequested_Guild id _ threadRoute ->
+                InitialLoadRequested_Guild _ _ _ ->
                     IsAdminButNoData
 
-                InitialLoadRequested_Dm dmChannelId threadRoute ->
+                InitialLoadRequested_Dm _ _ ->
                     IsAdminButNoData
 
-                InitialLoadRequested_Discord discordGuildOrDmId threadRoute ->
+                InitialLoadRequested_Discord _ _ ->
                     IsAdminButNoData
 
         else

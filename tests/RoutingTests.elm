@@ -62,6 +62,7 @@ routeFuzzer =
         ]
 
 
+tabFuzzer : Fuzzer DmChannelHeaderTab
 tabFuzzer =
     Fuzz.oneOfValues
         [ DmChannelHeaderTab_VoiceChat

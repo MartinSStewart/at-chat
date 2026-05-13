@@ -5632,10 +5632,10 @@ updateLoadedFromBackend msg model =
                                 StopViewingChannel ->
                                     Command.none
 
-                                ViewDiscordChannel guildId channelId userId2 _ ->
+                                ViewDiscordChannel guildId channelId discordUserId _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
-                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
+                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
                                             else
@@ -5644,10 +5644,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordChannelThread guildId channelId userId2 threadId _ ->
+                                ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
                                     case Route.toGuildOrDmId userId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                            if discordUserId == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
                                                 Scroll.toBottomOfChannelIfAtBottom loggedIn.channelScrollPosition
 
                                             else
@@ -5934,7 +5934,7 @@ updateLoadedFromBackend msg model =
                                         voiceChatChange
                                         model.clientId
                                         local.calls
-                                        loggedIn.voiceChat
+                                        loggedIn2.voiceChat
                                     )
 
                                 _ ->

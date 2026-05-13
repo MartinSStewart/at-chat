@@ -423,7 +423,6 @@ type GameMsg
     | PressedArrowLeft
     | PressedArrowRight
     | ChangedViewingMove Int
-    | Tick Time.Posix
 
 
 type Action
@@ -618,18 +617,6 @@ performPass setup model =
 
         _ ->
             model
-
-
-timeoutPass : ValidatedSetup -> GameState -> GameState
-timeoutPass setup model =
-    let
-        passed : GameState
-        passed =
-            performPass setup model
-    in
-    { passed
-        | lastTick = Nothing
-    }
 
 
 
@@ -1107,7 +1094,7 @@ pressedKey key maybeMatchId matches model =
                             stepForward model2 |> Just
 
                         _ ->
-                            model
+                            Just model2
 
                 _ ->
                     model
@@ -1258,8 +1245,8 @@ foldActions actions setup =
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
-updateAction setup { change, time } model =
-    case change of
+updateAction setup action model =
+    case action.change of
         PlaceStone x y ->
             tryPlace setup x y model |> Result.withDefault model
 
@@ -1410,9 +1397,6 @@ updateGame currentUserId msg setup state model =
                     clamp 0 total moveNumber
             in
             ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none, Nothing )
-
-        Tick now ->
-            ( Game model, Command.none, Nothing )
 
         --( Game (tickClock now model), Command.none, Nothing )
         PressedArrowLeft ->

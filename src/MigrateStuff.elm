@@ -144,6 +144,7 @@ decodeBackendModel =
     Evergreen.V214.Types.w3_decode_BackendModel
 
 
+decodeGuild : Decoder ( a, b )
 decodeGuild =
     Bytes.Decode.map2 Tuple.pair
         (Evergreen.V214.Id.w3_decode_Id Lamdera.Wire3.failDecode)
@@ -157,6 +158,7 @@ decodeDmChannel =
         Evergreen.V214.DmChannel.w3_decode_DmChannel
 
 
+decodeDiscordGuild : Decoder ( a, b )
 decodeDiscordGuild =
     Bytes.Decode.map2 Tuple.pair
         (Evergreen.V214.Discord.w3_decode_Id Lamdera.Wire3.failDecode)

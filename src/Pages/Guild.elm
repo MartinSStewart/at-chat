@@ -627,8 +627,8 @@ guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds
 
 
 dmChannelView : DmRouteData -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-dmChannelView { channelId, threadRoute } loggedIn local model =
-    case DmChannel.otherUserId local.localUser.session.userId channelId of
+dmChannelView dmRoute loggedIn local model =
+    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
         Nothing ->
             Ui.el
                 [ Ui.centerY
@@ -647,7 +647,7 @@ dmChannelView { channelId, threadRoute } loggedIn local model =
                             SeqDict.get otherUserId local.dmChannels
                                 |> Maybe.withDefault DmChannel.frontendInit
                     in
-                    case threadRoute of
+                    case dmRoute.threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                             SeqDict.get threadMessageIndex dmChannel.threads
                                 |> Maybe.withDefault Thread.frontendInit
@@ -3516,7 +3516,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         , showFilesButton
                         ]
             )
-            (channelHeaderTabView guildOrDmIdNoThread local loggedIn model)
+            (channelHeaderTabView local loggedIn model)
         , Ui.el
             [ emojiSelector
                 isMobile
@@ -3925,8 +3925,8 @@ peopleAreTypingView allUsers channel currentUserId model =
             ]
 
 
-channelHeaderTabView : GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
-channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
+channelHeaderTabView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
+channelHeaderTabView local loggedIn model =
     let
         maybeTab : Maybe ( Id UserId, Maybe DmChannelHeaderTab )
         maybeTab =
@@ -4093,7 +4093,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         , showFilesButton
                         ]
             )
-            (channelHeaderTabView guildOrDmIdNoThread local loggedIn model)
+            (channelHeaderTabView local loggedIn model)
         , Ui.el
             [ emojiSelector
                 isMobile

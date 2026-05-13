@@ -290,28 +290,27 @@ showLocalVideo displayMode2 =
 
 displayMode : Id UserId -> Route -> Local -> DisplayMode
 displayMode currentUserId route local =
-    --let
-    --    viewingRoomId : Maybe RoomId
-    --    viewingRoomId =
-    --        case Route.toGuildOrDmId route of
-    --            Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
-    --                DmRoomId otherUserId |> Just
-    --
-    --            _ ->
-    --                Nothing
-    --in
+    let
+        thumbnailOrNoVideo =
+            case local.currentRoom of
+                Just _ ->
+                    ShowLocalVideoAndCallThumbnail
+
+                Nothing ->
+                    NoVideo
+    in
     case route of
         HomePageRoute ->
-            NoVideo
+            thumbnailOrNoVideo
 
         AdminRoute _ ->
-            NoVideo
+            thumbnailOrNoVideo
 
         GuildRoute _ _ ->
-            NoVideo
+            thumbnailOrNoVideo
 
         DiscordGuildRoute _ ->
-            NoVideo
+            thumbnailOrNoVideo
 
         DmRoute dmRoute ->
             case DmChannel.otherUserId currentUserId dmRoute.channelId of
@@ -335,25 +334,25 @@ displayMode currentUserId route local =
                         ShowLocalVideo
 
                     else
-                        NoVideo
+                        thumbnailOrNoVideo
 
                 Nothing ->
-                    NoVideo
+                    thumbnailOrNoVideo
 
         DiscordDmRoute _ ->
-            NoVideo
+            thumbnailOrNoVideo
 
         AiChatRoute ->
-            NoVideo
+            thumbnailOrNoVideo
 
         SlackOAuthRedirect _ ->
-            NoVideo
+            thumbnailOrNoVideo
 
         TextEditorRoute ->
-            NoVideo
+            thumbnailOrNoVideo
 
         LinkDiscord _ ->
-            NoVideo
+            thumbnailOrNoVideo
 
 
 localVideoNodeId : String
@@ -488,7 +487,7 @@ videoNodes currentUserId route windowSize model local =
                             total =
                                 NonemptySet.size sessions + 1
                         in
-                        videoNode isMobile IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
+                        videoNode IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -497,7 +496,6 @@ videoNodes currentUserId route windowSize model local =
                                             { roomId = viewingRoomId2, otherClientId = session }
                                     in
                                     videoNode
-                                        isMobile
                                         (IsConnection connectionId)
                                         False
                                         (videoPosAndSize total (index + 1))
@@ -507,16 +505,16 @@ videoNodes currentUserId route windowSize model local =
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                        [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else if isTabExpanded then
-                [ videoNode isMobile IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else
-                [ videoNode isMobile IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
 
         Nothing ->
-            [ videoNode isMobile IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+            [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
     )
         |> Html.Keyed.node "div" []
 
@@ -527,14 +525,13 @@ aspectRatio =
 
 
 videoNode :
-    Bool
-    -> LocalOrConnection
+    LocalOrConnection
     -> Bool
     -> ( Int, Int, Int )
     -> Bool
     -> Model
     -> ( String, Html Msg )
-videoNode isMobile id isHidden ( x, y, width ) isSpeaking model =
+videoNode id isHidden ( x, y, width ) isSpeaking model =
     let
         height : Float
         height =
@@ -1104,11 +1101,12 @@ voiceChatFromJsCodec =
         |> Codec.buildCustom
 
 
-port got_recorded_data : (Bytes -> msg) -> Sub msg
+
+--port got_recorded_data : (Bytes -> msg) -> Sub msg
 
 
 gotRecordedData : (Bytes -> msg) -> Subscription FrontendOnly msg
-gotRecordedData msg =
+gotRecordedData _ =
     Subscription.none
 
 
