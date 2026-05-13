@@ -59,7 +59,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -566,6 +566,15 @@ update msg model =
                             updateLoaded msg loaded
                     in
                     ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ] )
+
+
+parseDomainWhitelistInput : String -> SeqSet RichText.Domain
+parseDomainWhitelistInput text =
+    String.split "," text
+        |> List.map String.trim
+        |> List.filter (not << String.isEmpty)
+        |> List.map RichText.Domain
+        |> SeqSet.fromList
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -1856,7 +1865,12 @@ updateLoaded msg model =
         PressedShowUserOption ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | userOptions = Just UserOptions.init }, Command.none )
+                    ( { loggedIn
+                        | userOptions =
+                            Just (UserOptions.init (Local.model loggedIn.localState).localUser.user.domainWhitelist)
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -2882,6 +2896,55 @@ updateLoaded msg model =
                         (Just (Local_SetDomainWhitelist False domain))
                         loggedIn
                         Command.none
+                )
+                model
+
+        TypedDomainWhitelist newText ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            let
+                                oldDomains : SeqSet RichText.Domain
+                                oldDomains =
+                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+
+                                newDomains : SeqSet RichText.Domain
+                                newDomains =
+                                    parseDomainWhitelistInput newText
+
+                                loggedIn2 : LoggedIn2
+                                loggedIn2 =
+                                    { loggedIn
+                                        | userOptions =
+                                            Just { userOptions | domainWhitelistInput = newText }
+                                    }
+                            in
+                            List.foldl
+                                (\domain ( l, cmds ) ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Just (Local_SetDomainWhitelist True domain))
+                                        l
+                                        cmds
+                                )
+                                ( loggedIn2, Command.none )
+                                (SeqSet.toList (SeqSet.diff newDomains oldDomains))
+                                |> (\acc ->
+                                        List.foldl
+                                            (\domain ( l, cmds ) ->
+                                                FrontendExtra.handleLocalChange
+                                                    model.time
+                                                    (Just (Local_SetDomainWhitelist False domain))
+                                                    l
+                                                    cmds
+                                            )
+                                            acc
+                                            (SeqSet.toList (SeqSet.diff oldDomains newDomains))
+                                   )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model
 

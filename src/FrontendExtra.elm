@@ -1705,6 +1705,9 @@ isPressMsg msg =
         PressedRemoveDomainFromWhitelist _ ->
             True
 
+        TypedDomainWhitelist _ ->
+            False
+
         PressedContinueToSite ->
             True
 
