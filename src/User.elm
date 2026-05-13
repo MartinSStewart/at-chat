@@ -464,6 +464,7 @@ type AdminUiSection
     | FilesSection
     | ToBackendLogsSection
     | StickersAndEmojisSection
+    | VoiceChatSection
 
 
 sectionToString : AdminUiSection -> String
@@ -504,6 +505,9 @@ sectionToString section2 =
 
         StickersAndEmojisSection ->
             "Stickers and emojis"
+
+        VoiceChatSection ->
+            "Voice chat"
 
 
 {-| User containing only publicly visible data
