@@ -1,38 +1,37 @@
 module Go exposing
     ( Action(..)
     , ActionWithTime
-    , CurrentGoMatch
+    , BoardSize
+    , DeadContext
+    , GameModel
     , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
     , Model
     , Msg
     , OutMsg(..)
-    , ServerChange
+    , Phase
+    , SetupModel
+    , SizeSelection
+    , Snapshot
     , Stone(..)
+    , TimeControl
     , ValidatedSetup
     , boardSize9
     , currentPlayersTurn
     , deadStones
-    , foldActions
-    , initGame
-    , initSetup
     , pressedKey
     , update
     , view
-    , viewHeight
     )
 
 import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
-import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
-import FileStatus exposing (FileHash)
 import Html
 import Html.Attributes
 import Html.Events
@@ -41,7 +40,6 @@ import Id exposing (ChannelMessageId, Id, UserId)
 import MyUi
 import Ports
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -63,10 +61,6 @@ type Phase
     | Marking { markingPlayer : Stone }
     | Confirming { markingPlayer : Stone }
     | Scored { markingPlayer : Stone, blackScore : Float, whiteScore : Float }
-
-
-type alias CurrentGoMatch =
-    { matchId : Id ChannelMessageId, setup : ValidatedSetup, actions : Array ActionWithTime }
 
 
 type alias Snapshot =
@@ -429,7 +423,6 @@ type GameMsg
     | PressedArrowLeft
     | PressedArrowRight
     | ChangedViewingMove Int
-    | Tick Time.Posix
 
 
 type Action
@@ -448,10 +441,6 @@ type alias ActionWithTime =
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
     | Action (Id ChannelMessageId) ActionWithTime
-
-
-type alias ServerChange =
-    { userId : Id UserId, change : LocalChange }
 
 
 type OutMsg
@@ -1068,7 +1057,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
 
         SetupMsg setupMsg ->
             case maybeMatchId of
-                Just matchId ->
+                Just _ ->
                     ( model, Command.none, NoOutMsg )
 
                 Nothing ->
@@ -1134,7 +1123,7 @@ pressedKey key maybeMatchId matches model =
 stepBack : GameState -> Model -> Model
 stepBack state model =
     case model of
-        Setup setupModel ->
+        Setup _ ->
             model
 
         Game game ->
@@ -1148,7 +1137,7 @@ stepBack state model =
 stepForward : Model -> Model
 stepForward model =
     case model of
-        Setup setupModel ->
+        Setup _ ->
             model
 
         Game game ->
@@ -1387,7 +1376,7 @@ updateGame currentUserId msg setup state model =
 
         PressedDoneMarking ->
             case state.phase of
-                Marking r ->
+                Marking _ ->
                     ( Game model, Command.none, Just FinishedMarking )
 
                 _ ->
@@ -1395,7 +1384,7 @@ updateGame currentUserId msg setup state model =
 
         PressedAgree ->
             case state.phase of
-                Confirming r ->
+                Confirming _ ->
                     ( Game model
                     , Command.none
                     , Just AcceptTerritory
@@ -1406,7 +1395,7 @@ updateGame currentUserId msg setup state model =
 
         PressedDisagree ->
             case state.phase of
-                Confirming r ->
+                Confirming _ ->
                     ( Game model
                     , Command.none
                     , Just RejectTerritory
@@ -1897,7 +1886,7 @@ clockView isMobile localUser state setup =
 currentPlayersTurn : Array ActionWithTime -> Stone
 currentPlayersTurn actions =
     Array.foldl
-        (\{ time, change } stone ->
+        (\{ change } stone ->
             case change of
                 PlaceStone _ _ ->
                     otherStone stone
@@ -2271,7 +2260,7 @@ boardView windowSize currentUserId setup state model =
             ]
 
 
-gridLines : Int -> Int -> List (Svg.Svg msg)
+gridLines : Int -> Int -> List (Svg msg)
 gridLines width height =
     let
         offset : Int
@@ -2286,7 +2275,7 @@ gridLines width height =
         endY =
             (height - 1) * cellPx + offset
 
-        horizontal : List (Svg.Svg msg)
+        horizontal : List (Svg msg)
         horizontal =
             List.range 0 (height - 1)
                 |> List.map
@@ -2307,7 +2296,7 @@ gridLines width height =
                             []
                     )
 
-        vertical : List (Svg.Svg msg)
+        vertical : List (Svg msg)
         vertical =
             List.range 0 (width - 1)
                 |> List.map
@@ -2356,7 +2345,7 @@ starPoints width height =
             []
 
 
-lastMoveMarker : Bool -> GameState -> List (Svg.Svg msg)
+lastMoveMarker : Bool -> GameState -> List (Svg msg)
 lastMoveMarker viewingPast state =
     case ( viewingPast, state.lastMove ) of
         ( False, Just ( x, y ) ) ->
@@ -2373,7 +2362,7 @@ lastMoveMarker viewingPast state =
             []
 
 
-starPointShapes : Int -> Int -> List (Svg.Svg msg)
+starPointShapes : Int -> Int -> List (Svg msg)
 starPointShapes width height =
     starPoints width height
         |> List.map
@@ -2388,7 +2377,7 @@ starPointShapes width height =
             )
 
 
-stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg.Svg msg)
+stoneShapes : Set ( Int, Int ) -> Dict ( Int, Int ) Stone -> List (Svg msg)
 stoneShapes dead board =
     Dict.toList board
         |> List.map
@@ -2434,7 +2423,7 @@ stoneShapes dead board =
             )
 
 
-territoryShapes : Dict ( Int, Int ) Stone -> List (Svg.Svg msg)
+territoryShapes : Dict ( Int, Int ) Stone -> List (Svg msg)
 territoryShapes marks =
     Dict.toList marks
         |> List.map

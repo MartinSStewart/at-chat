@@ -3464,28 +3464,28 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 HomePageRoute ->
                                     Nothing
 
-                                AdminRoute record ->
+                                AdminRoute _ ->
                                     Nothing
 
-                                GuildRoute id channelRoute ->
+                                GuildRoute _ _ ->
                                     Nothing
 
-                                DiscordGuildRoute discordGuildRouteData ->
+                                DiscordGuildRoute _ ->
                                     Nothing
 
-                                DiscordDmRoute discordDmRouteData ->
+                                DiscordDmRoute _ ->
                                     Nothing
 
                                 AiChatRoute ->
                                     Nothing
 
-                                SlackOAuthRedirect result ->
+                                SlackOAuthRedirect _ ->
                                     Nothing
 
                                 TextEditorRoute ->
                                     Nothing
 
-                                LinkDiscord result ->
+                                LinkDiscord _ ->
                                     Nothing
                     in
                     Ui.row
@@ -3926,28 +3926,28 @@ channelHeaderTabView guildOrDmIdNoThread local loggedIn model =
                 HomePageRoute ->
                     Nothing
 
-                AdminRoute record ->
+                AdminRoute _ ->
                     Nothing
 
-                GuildRoute id channelRoute ->
+                GuildRoute _ _ ->
                     Nothing
 
-                DiscordGuildRoute discordGuildRouteData ->
+                DiscordGuildRoute _ ->
                     Nothing
 
-                DiscordDmRoute discordDmRouteData ->
+                DiscordDmRoute _ ->
                     Nothing
 
                 AiChatRoute ->
                     Nothing
 
-                SlackOAuthRedirect result ->
+                SlackOAuthRedirect _ ->
                     Nothing
 
                 TextEditorRoute ->
                     Nothing
 
-                LinkDiscord result ->
+                LinkDiscord _ ->
                     Nothing
     in
     case maybeTab of
@@ -4040,28 +4040,28 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                 HomePageRoute ->
                                     Nothing
 
-                                AdminRoute record ->
+                                AdminRoute _ ->
                                     Nothing
 
-                                GuildRoute id channelRoute ->
+                                GuildRoute _ _ ->
                                     Nothing
 
-                                DiscordGuildRoute discordGuildRouteData ->
+                                DiscordGuildRoute _ ->
                                     Nothing
 
-                                DiscordDmRoute discordDmRouteData ->
+                                DiscordDmRoute _ ->
                                     Nothing
 
                                 AiChatRoute ->
                                     Nothing
 
-                                SlackOAuthRedirect result ->
+                                SlackOAuthRedirect _ ->
                                     Nothing
 
                                 TextEditorRoute ->
                                     Nothing
 
-                                LinkDiscord result ->
+                                LinkDiscord _ ->
                                     Nothing
                     in
                     Ui.row

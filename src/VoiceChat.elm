@@ -303,13 +303,13 @@ displayMode route local =
         HomePageRoute ->
             NoVideo
 
-        AdminRoute record ->
+        AdminRoute _ ->
             NoVideo
 
-        GuildRoute id channelRoute ->
+        GuildRoute _ _ ->
             NoVideo
 
-        DiscordGuildRoute discordGuildRouteData ->
+        DiscordGuildRoute _ ->
             NoVideo
 
         DmRoute dmRoute ->
@@ -334,19 +334,19 @@ displayMode route local =
             else
                 NoVideo
 
-        DiscordDmRoute discordDmRouteData ->
+        DiscordDmRoute _ ->
             NoVideo
 
         AiChatRoute ->
             NoVideo
 
-        SlackOAuthRedirect result ->
+        SlackOAuthRedirect _ ->
             NoVideo
 
         TextEditorRoute ->
             NoVideo
 
-        LinkDiscord result ->
+        LinkDiscord _ ->
             NoVideo
 
 
@@ -450,28 +450,28 @@ videoNodes route windowSize model local =
                         HomePageRoute ->
                             False
 
-                        AdminRoute record ->
+                        AdminRoute _ ->
                             False
 
-                        GuildRoute id channelRoute ->
+                        GuildRoute _ _ ->
                             False
 
-                        DiscordGuildRoute discordGuildRouteData ->
+                        DiscordGuildRoute _ ->
                             False
 
-                        DiscordDmRoute discordDmRouteData ->
+                        DiscordDmRoute _ ->
                             False
 
                         AiChatRoute ->
                             False
 
-                        SlackOAuthRedirect result ->
+                        SlackOAuthRedirect _ ->
                             False
 
                         TextEditorRoute ->
                             False
 
-                        LinkDiscord result ->
+                        LinkDiscord _ ->
                             False
             in
             if Just viewingRoomId2 == local.currentRoom && isTabExpanded then

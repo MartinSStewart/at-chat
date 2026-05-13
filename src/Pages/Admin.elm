@@ -1469,7 +1469,7 @@ filesSection user adminData =
 voiceChatSection : LocalState -> AdminData -> BackendUser -> Element Msg
 voiceChatSection local adminData user =
     let
-        rooms : List ( RoomId, NonemptySet ( Id UserId, Lamdera.ClientId ) )
+        rooms : List ( RoomId, NonemptySet ( Id UserId, ClientId ) )
         rooms =
             SeqDict.toList local.calls.voiceChats
     in
@@ -1487,7 +1487,7 @@ voiceChatSection local adminData user =
         ]
 
 
-voiceChatRoomView : AdminData -> ( RoomId, NonemptySet ( Id UserId, Lamdera.ClientId ) ) -> Element msg
+voiceChatRoomView : AdminData -> ( RoomId, NonemptySet ( Id UserId, ClientId ) ) -> Element msg
 voiceChatRoomView adminData ( roomId, participants ) =
     Ui.column
         [ Ui.spacing 2 ]

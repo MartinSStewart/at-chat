@@ -2509,28 +2509,28 @@ updateLoaded msg model =
                         HomePageRoute ->
                             ( model, Command.none )
 
-                        AdminRoute record ->
+                        AdminRoute _ ->
                             ( model, Command.none )
 
-                        GuildRoute id channelRoute ->
+                        GuildRoute _ _ ->
                             ( model, Command.none )
 
-                        DiscordGuildRoute discordGuildRouteData ->
+                        DiscordGuildRoute _ ->
                             ( model, Command.none )
 
-                        DiscordDmRoute discordDmRouteData ->
+                        DiscordDmRoute _ ->
                             ( model, Command.none )
 
                         AiChatRoute ->
                             ( model, Command.none )
 
-                        SlackOAuthRedirect result ->
+                        SlackOAuthRedirect _ ->
                             ( model, Command.none )
 
                         TextEditorRoute ->
                             ( model, Command.none )
 
-                        LinkDiscord result ->
+                        LinkDiscord _ ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
@@ -2545,31 +2545,31 @@ updateLoaded msg model =
                                 HomePageRoute ->
                                     ( model, Command.none )
 
-                                AdminRoute record ->
+                                AdminRoute _ ->
                                     ( model, Command.none )
 
-                                GuildRoute id channelRoute ->
+                                GuildRoute _ _ ->
                                     ( model, Command.none )
 
-                                DiscordGuildRoute discordGuildRouteData ->
+                                DiscordGuildRoute _ ->
                                     ( model, Command.none )
 
-                                DiscordDmRoute discordDmRouteData ->
+                                DiscordDmRoute _ ->
                                     ( model, Command.none )
 
                                 AiChatRoute ->
                                     ( model, Command.none )
 
-                                SlackOAuthRedirect result ->
+                                SlackOAuthRedirect _ ->
                                     ( model, Command.none )
 
                                 TextEditorRoute ->
                                     ( model, Command.none )
 
-                                LinkDiscord result ->
+                                LinkDiscord _ ->
                                     ( model, Command.none )
 
-                        ViewThreadWithMessage id _ ->
+                        ViewThreadWithMessage _ _ ->
                             ( model, Command.none )
 
         GotRegisterPushSubscription result ->
@@ -4106,28 +4106,28 @@ updateLoaded msg model =
                 HomePageRoute ->
                     ( model, Command.none )
 
-                AdminRoute record ->
+                AdminRoute _ ->
                     ( model, Command.none )
 
-                GuildRoute id channelRoute ->
+                GuildRoute _ _ ->
                     ( model, Command.none )
 
-                DiscordGuildRoute discordGuildRouteData ->
+                DiscordGuildRoute _ ->
                     ( model, Command.none )
 
-                DiscordDmRoute discordDmRouteData ->
+                DiscordDmRoute _ ->
                     ( model, Command.none )
 
                 AiChatRoute ->
                     ( model, Command.none )
 
-                SlackOAuthRedirect result ->
+                SlackOAuthRedirect _ ->
                     ( model, Command.none )
 
                 TextEditorRoute ->
                     ( model, Command.none )
 
-                LinkDiscord result ->
+                LinkDiscord _ ->
                     ( model, Command.none )
 
 
