@@ -521,7 +521,9 @@ type alias NewGuildForm =
 
 
 type InitialLoadRequest
-    = InitialLoadRequested_Channel AnyGuildOrDmId ThreadRoute
+    = InitialLoadRequested_Guild (Id GuildId) (Id ChannelId) ThreadRoute
+    | InitialLoadRequested_Dm DmChannelId ThreadRoute
+    | InitialLoadRequested_Discord DiscordGuildOrDmId ThreadRoute
     | InitialLoadRequested_Admin (Maybe (Id PageId))
     | InitialLoadRequested_None
 

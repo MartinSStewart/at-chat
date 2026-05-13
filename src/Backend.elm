@@ -2020,16 +2020,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 UserSession.init
                                     sessionId
                                     userId
-                                    (case requestMessagesFor of
-                                        InitialLoadRequested_None ->
-                                            Nothing
-
-                                        InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
-                                            Just ( anyGuildOrDmId, threadRoute )
-
-                                        InitialLoadRequested_Admin _ ->
-                                            Nothing
-                                    )
+                                    (BackendExtra.requestedForToGuildOrDmId userId requestMessagesFor)
                                     userAgent
 
                             newUser : BackendUser
@@ -2074,16 +2065,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             UserSession.init
                                                 sessionId
                                                 pendingLogin.userId
-                                                (case requestMessagesFor of
-                                                    InitialLoadRequested_None ->
-                                                        Nothing
-
-                                                    InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
-                                                        Just ( anyGuildOrDmId, threadRoute )
-
-                                                    InitialLoadRequested_Admin _ ->
-                                                        Nothing
-                                                )
+                                                (BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
                                                 userAgent
                                     in
                                     ( { model

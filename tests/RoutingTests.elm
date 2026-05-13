@@ -1,5 +1,6 @@
 module RoutingTests exposing (roundtrip)
 
+import DmChannel
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
@@ -46,8 +47,15 @@ routeFuzzer =
         , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe idFuzzer))
         , Fuzz.constant AiChatRoute
         , Fuzz.map2 GuildRoute idFuzzer channelRouteFuzzer
-        , Fuzz.map3
-            (\otherUserId threadRoute tab -> DmRoute { otherUserId = otherUserId, threadRoute = threadRoute, tab = tab })
+        , Fuzz.map4
+            (\userId otherUserId threadRoute tab ->
+                DmRoute
+                    { channelId = DmChannel.channelIdFromUserIds userId otherUserId
+                    , threadRoute = threadRoute
+                    , tab = tab
+                    }
+            )
+            idFuzzer
             idFuzzer
             threadRouteFuzzer
             (Fuzz.maybe tabFuzzer)

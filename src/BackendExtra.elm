@@ -12,6 +12,7 @@ module BackendExtra exposing
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
+    , requestedForToGuildOrDmId
     , sendDm
     , sendGuildMessage
     , sendLoginEmail
@@ -244,6 +245,30 @@ isLoginTooOld pendingLogin time =
         && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
 
 
+requestedForToGuildOrDmId : Id UserId -> InitialLoadRequest -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+requestedForToGuildOrDmId userId requestMessagesFor =
+    case requestMessagesFor of
+        InitialLoadRequested_None ->
+            Nothing
+
+        InitialLoadRequested_Discord guildOrDmId threadRoute ->
+            Just ( DiscordGuildOrDmId guildOrDmId, threadRoute )
+
+        InitialLoadRequested_Admin _ ->
+            Nothing
+
+        InitialLoadRequested_Guild guildId channelId threadRoute ->
+            Just ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadRoute )
+
+        InitialLoadRequested_Dm dmChannelId threadRoute ->
+            case DmChannel.otherUserId userId dmChannelId of
+                Just otherUserId ->
+                    Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadRoute )
+
+                Nothing ->
+                    Nothing
+
+
 loginWithToken :
     Time.Posix
     -> SessionId
@@ -288,16 +313,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                     UserSession.init
                                         sessionId
                                         pendingLogin.userId
-                                        (case requestMessagesFor of
-                                            InitialLoadRequested_None ->
-                                                Nothing
-
-                                            InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
-                                                Just ( anyGuildOrDmId, threadRoute )
-
-                                            InitialLoadRequested_Admin _ ->
-                                                Nothing
-                                        )
+                                        (requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
                                         userAgent
                             in
                             ( { model
@@ -445,10 +461,16 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                 InitialLoadRequested_Admin logPage ->
                     IsAdminLoginData (adminData model (Maybe.withDefault user.lastLogPageViewed logPage))
 
-                InitialLoadRequested_Channel _ _ ->
+                InitialLoadRequested_None ->
                     IsAdminButNoData
 
-                InitialLoadRequested_None ->
+                InitialLoadRequested_Guild id _ threadRoute ->
+                    IsAdminButNoData
+
+                InitialLoadRequested_Dm dmChannelId threadRoute ->
+                    IsAdminButNoData
+
+                InitialLoadRequested_Discord discordGuildOrDmId threadRoute ->
                     IsAdminButNoData
 
         else
@@ -460,7 +482,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
             (\guildId guild ->
                 LocalState.guildToFrontendForUser
                     (case requestMessagesFor of
-                        InitialLoadRequested_Channel (GuildOrDmId (GuildOrDmId_Guild guildIdB channelId)) threadRoute ->
+                        InitialLoadRequested_Guild guildIdB channelId threadRoute ->
                             if guildId == guildIdB then
                                 Just ( channelId, threadRoute )
 
@@ -479,7 +501,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
             (\guildId guild ->
                 discordGuildToFrontendForUser
                     (case requestMessagesFor of
-                        InitialLoadRequested_Channel (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId)) threadRoute ->
+                        InitialLoadRequested_Discord (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId) threadRoute ->
                             if requestedGuildId == guildId then
                                 Just ( requestChannelId, threadRoute )
 
@@ -498,7 +520,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
             (\dmChannelId dmChannel ->
                 discordDmChannelToFrontend
                     (case requestMessagesFor of
-                        InitialLoadRequested_Channel (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data)) _ ->
+                        InitialLoadRequested_Discord (DiscordGuildOrDmId_Dm data) _ ->
                             dmChannelId == data.channelId
 
                         _ ->
@@ -516,8 +538,8 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
                                 (case requestMessagesFor of
-                                    InitialLoadRequested_Channel (GuildOrDmId (GuildOrDmId_Dm otherUserIdB)) threadRoute ->
-                                        if otherUserId == otherUserIdB then
+                                    InitialLoadRequested_Dm dmChannelIdB threadRoute ->
+                                        if dmChannelId == dmChannelIdB then
                                             Just threadRoute
 
                                         else

@@ -1,4 +1,23 @@
-module FrontendExtra exposing (canDropFiles, changeUpdate, editMessage_gotFiles, externalLinkWarning, gotFiles, handleLocalChange, initAdminData, isPressMsg, layout, logout, pingUserNameSoFar, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, routeToGuildOrDmId, setFocus, updateLoggedIn)
+module FrontendExtra exposing
+    ( canDropFiles
+    , changeUpdate
+    , editMessage_gotFiles
+    , externalLinkWarning
+    , gotFiles
+    , handleLocalChange
+    , initAdminData
+    , isPressMsg
+    , layout
+    , logout
+    , pingUserNameSoFar
+    , playNotificationSound
+    , playNotificationSoundForDiscordMessage
+    , routePush
+    , routeReplace
+    , routeRequest
+    , setFocus
+    , updateLoggedIn
+    )
 
 import AiChat
 import Array exposing (Array)
@@ -982,18 +1001,6 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
 
         PushNotifications ->
             Command.none
-
-
-routeToGuildOrDmId : LoadedFrontend -> Maybe ( AnyGuildOrDmId, ThreadRoute )
-routeToGuildOrDmId model =
-    case model.loginStatus of
-        LoggedIn loggedIn ->
-            Route.toGuildOrDmId
-                (Local.model loggedIn.localState |> .localUser |> .session |> .userId)
-                model.route
-
-        _ ->
-            Nothing
 
 
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
