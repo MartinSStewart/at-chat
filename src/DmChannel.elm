@@ -5,7 +5,9 @@ module DmChannel exposing
     , DmChannelId(..)
     , FrontendDmChannel
     , backendInit
+    , channelIdFromString
     , channelIdFromUserIds
+    , channelIdToString
     , frontendInit
     , getArray
     , latestMessageId
@@ -180,6 +182,26 @@ channelIdFromUserIds (Id userIdA) (Id userIdB) =
 userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )
 userIdsFromChannelId (DmChannelId userIdA userIdB) =
     ( userIdA, userIdB )
+
+
+channelIdToString : DmChannelId -> String
+channelIdToString (DmChannelId userIdA userIdB) =
+    Id.toString userIdA ++ "-" ++ Id.toString userIdB
+
+
+channelIdFromString : String -> Result () DmChannelId
+channelIdFromString text =
+    case String.split "-" text of
+        [ idA, idB ] ->
+            case ( Id.fromString idA, Id.fromString idB ) of
+                ( Just idA2, Just idB2 ) ->
+                    channelIdFromUserIds idA2 idB2 |> Ok
+
+                _ ->
+                    Err ()
+
+        _ ->
+            Err ()
 
 
 otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)
