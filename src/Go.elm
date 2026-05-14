@@ -1845,32 +1845,29 @@ formatClock seconds =
 
 clockView : Bool -> LocalUser -> GameState -> ValidatedSetup -> Element msg
 clockView isMobile localUser state setup =
-    case setup.timeControl of
-        Nothing ->
-            Ui.none
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 16 0
+        , if isMobile then
+            Ui.centerX
 
-        Just _ ->
-            Ui.row
-                [ Ui.spacing 8
-                , Ui.width Ui.shrink
-                , Ui.paddingXY 16 0
-                , if isMobile then
-                    Ui.centerX
-
-                  else
-                    Ui.noAttr
-                ]
-                [ clockChip
-                    (User.getUser setup.blackPlayer localUser)
-                    "Black"
-                    state.blackTime
-                    (state.currentPlayer == Black && isPlayingPhase state)
-                , clockChip
-                    (User.getUser setup.whitePlayer localUser)
-                    "White"
-                    state.whiteTime
-                    (state.currentPlayer == White && isPlayingPhase state)
-                ]
+          else
+            Ui.noAttr
+        ]
+        [ clockChip
+            (User.getUser setup.blackPlayer localUser)
+            "Black"
+            state.blackTime
+            (state.currentPlayer == Black && isPlayingPhase state)
+            setup.timeControl
+        , clockChip
+            (User.getUser setup.whitePlayer localUser)
+            "White"
+            state.whiteTime
+            (state.currentPlayer == White && isPlayingPhase state)
+            setup.timeControl
+        ]
 
 
 currentPlayersTurn : Array ActionWithTime -> Stone
@@ -1900,8 +1897,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Maybe FrontendUser -> String -> Float -> Bool -> Element msg
-clockChip maybeUser label seconds isActive =
+clockChip : Maybe FrontendUser -> String -> Float -> Bool -> Maybe TimeControl -> Element msg
+clockChip maybeUser label seconds isActive timeControl =
     Ui.row
         [ User.profileImageRounding
         , Ui.width (Ui.px 170)
@@ -1933,7 +1930,12 @@ clockChip maybeUser label seconds isActive =
             Nothing ->
                 User.profileImage Nothing
         , Ui.text label
-        , Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink, Ui.alignRight ] (Ui.text (formatClock seconds))
+        , case timeControl of
+            Just _ ->
+                Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink, Ui.alignRight ] (Ui.text (formatClock seconds))
+
+            Nothing ->
+                Ui.none
         ]
 
 
