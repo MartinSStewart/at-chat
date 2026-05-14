@@ -400,13 +400,13 @@ toChannelHeaderTab route =
                 NewChannelRoute ->
                     Nothing
 
-                EditChannelRoute id ->
+                EditChannelRoute _ ->
                     Nothing
 
                 GuildSettingsRoute ->
                     Nothing
 
-                JoinRoute secretId ->
+                JoinRoute _ ->
                     Nothing
 
         DiscordGuildRoute _ ->
@@ -439,7 +439,7 @@ sameChannelHeaderTab tabA tabB =
                 _ ->
                     False
 
-        DmChannelHeaderTab_Go maybeId ->
+        DmChannelHeaderTab_Go _ ->
             case tabB of
                 DmChannelHeaderTab_Go _ ->
                     True
