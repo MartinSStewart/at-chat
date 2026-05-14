@@ -1673,6 +1673,87 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.startTest
+        "Owner creates an empty channel and deletes it"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+
+                    newChannelId : Id ChannelId
+                    newChannelId =
+                        Id.fromInt 1
+                in
+                [ admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "to-delete"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
+                , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
+                , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
+                , admin.click 100 (Dom.id "guild_deleteChannel")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Owner must confirm deletion of a non-empty channel by typing its name"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+
+                    newChannelId : Id ChannelId
+                    newChannelId =
+                        Id.fromInt 1
+                in
+                [ admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "with-message"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , RecordedTestExtra.writeMessage admin 100 "I have content"
+                , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
+                , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
+
+                -- First click reveals the confirmation input but does not delete
+                , admin.click 100 (Dom.id "guild_deleteChannel")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "Type \"with-message\" to confirm deletion" ]
+                    )
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "with-message" ])
+
+                -- Wrong text does not delete
+                , admin.input 100 (Dom.id "deleteChannelConfirmation") "wrong-name"
+                , admin.click 100 (Dom.id "guild_deleteChannel")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "with-message" ])
+
+                -- Correct text deletes the channel
+                , admin.input 100 (Dom.id "deleteChannelConfirmation") "with-message"
+                , admin.click 100 (Dom.id "guild_deleteChannel")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "with-message" ])
+                ]
+            )
+        ]
     , RecordedTestExtra.goMatchTest normalConfig
     ]
 
