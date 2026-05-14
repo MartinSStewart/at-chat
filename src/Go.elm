@@ -1453,11 +1453,7 @@ view windowSize localUser otherUserId maybeMatchId matches model =
         ]
         (Ui.column
             []
-            [ Ui.row
-                [ Ui.spacing 16 ]
-                [ matchSwitcherView isMobile maybeMatchId matches
-                , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
-                ]
+            [ matchSwitcherView isMobile maybeMatchId matches
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
@@ -1599,6 +1595,7 @@ matchSwitcherView isMobile maybeMatchId matches =
                             (SeqDict.toList matches)
                     )
                 )
+            , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
             ]
 
 

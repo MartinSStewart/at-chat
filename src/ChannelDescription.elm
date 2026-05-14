@@ -1,4 +1,4 @@
-module ChannelDescription exposing (ChannelDescription(..), empty, fromStringLossy)
+module ChannelDescription exposing (ChannelDescription(..), empty, fromStringLossy, toString)
 
 {-| -}
 
@@ -22,3 +22,8 @@ fromStringLossy text =
 empty : ChannelDescription
 empty =
     ChannelDescription ""
+
+
+toString : ChannelDescription -> String
+toString (ChannelDescription a) =
+    a

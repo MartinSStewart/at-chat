@@ -221,6 +221,7 @@ type alias LoggedIn2 =
 type alias UserOptionsModel =
     { name : Editable.Model
     , showLinkDiscordSetup : Bool
+    , domainWhitelistInput : String
     }
 
 
@@ -483,7 +484,9 @@ type FrontendMsg
     | GotVersionNumber (Result Http.Error Int)
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
-    | PressedRemoveDomainFromWhitelist Domain
+    | TypedDomainWhitelist String
+    | PressedSaveDomainWhitelist
+    | PressedResetDomainWhitelist
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg

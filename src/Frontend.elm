@@ -59,7 +59,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Sticker
 import String.Extra
 import String.Nonempty
@@ -168,7 +168,7 @@ subscriptions model =
             Loaded loaded ->
                 Subscription.batch
                     [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _ _) ->
+                        GuildRoute _ (ChannelRoute _ _ _) ->
                             Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
                         _ ->
@@ -568,6 +568,21 @@ update msg model =
                     ( Loaded loadedNew, Command.batch [ cmd, checkCallDisplayModeChange loaded loadedNew ] )
 
 
+parseDomainWhitelistInput : String -> SeqSet RichText.Domain
+parseDomainWhitelistInput text =
+    String.split "," text
+        |> List.filterMap
+            (\text2 ->
+                case Url.fromString ("https://" ++ String.trim text2) of
+                    Just url ->
+                        RichText.urlToDomain url |> Just
+
+                    Nothing ->
+                        Nothing
+            )
+        |> SeqSet.fromList
+
+
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
     case msg of
@@ -797,7 +812,7 @@ updateLoaded msg model =
                                         { model | loginStatus = LoggedIn loggedIn2 }
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab))
+                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
                                         )
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
@@ -895,7 +910,7 @@ updateLoaded msg model =
                         }
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab))
+                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
                         )
 
                 NotLoggedIn _ ->
@@ -946,6 +961,7 @@ updateLoaded msg model =
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
                                                 (NoThreadWithFriends Nothing HideMembersTab)
+                                                Nothing
                                             )
                                         )
 
@@ -1378,12 +1394,12 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _)), LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _) _), LoggedIn loggedIn ) ->
                     FrontendExtra.routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
+                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab) Nothing)
                         )
 
                 ( DmRoute dmRoute, LoggedIn loggedIn ) ->
@@ -1611,7 +1627,7 @@ updateLoaded msg model =
 
                                 showMember =
                                     case model.route of
-                                        GuildRoute _ (ChannelRoute _ threadRoute) ->
+                                        GuildRoute _ (ChannelRoute _ threadRoute _) ->
                                             case threadRoute of
                                                 ViewThreadWithFriends _ _ showMembers2 ->
                                                     showMembers2
@@ -1856,7 +1872,12 @@ updateLoaded msg model =
         PressedShowUserOption ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | userOptions = Just UserOptions.init }, Command.none )
+                    ( { loggedIn
+                        | userOptions =
+                            Just (UserOptions.init (Local.model loggedIn.localState).localUser.user.domainWhitelist)
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -2327,6 +2348,7 @@ updateLoaded msg model =
                                                             (ChannelRoute
                                                                 channelId
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                Nothing
                                                             )
                                                         )
 
@@ -2337,6 +2359,7 @@ updateLoaded msg model =
                                                             (ChannelRoute
                                                                 channelId
                                                                 (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                Nothing
                                                             )
                                                         )
 
@@ -2474,7 +2497,7 @@ updateLoaded msg model =
                                 model
                                 (GuildRoute
                                     guildId
-                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab))
+                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab) Nothing)
                                 )
 
                         ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
@@ -2874,14 +2897,99 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedRemoveDomainFromWhitelist domain ->
+        TypedDomainWhitelist newText ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    FrontendExtra.handleLocalChange
-                        model.time
-                        (Just (Local_SetDomainWhitelist False domain))
-                        loggedIn
-                        Command.none
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just { userOptions | domainWhitelistInput = newText }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedSaveDomainWhitelist ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            let
+                                oldDomains : SeqSet RichText.Domain
+                                oldDomains =
+                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+
+                                newDomains : SeqSet RichText.Domain
+                                newDomains =
+                                    parseDomainWhitelistInput userOptions.domainWhitelistInput
+                            in
+                            List.foldl
+                                (\domain ( l, cmds ) ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Just (Local_SetDomainWhitelist True domain))
+                                        l
+                                        cmds
+                                )
+                                ( loggedIn, Command.none )
+                                (SeqSet.toList (SeqSet.diff newDomains oldDomains))
+                                |> (\acc ->
+                                        List.foldl
+                                            (\domain ( l, cmds ) ->
+                                                FrontendExtra.handleLocalChange
+                                                    model.time
+                                                    (Just (Local_SetDomainWhitelist False domain))
+                                                    l
+                                                    cmds
+                                            )
+                                            acc
+                                            (SeqSet.toList (SeqSet.diff oldDomains newDomains))
+                                   )
+                                |> Tuple.mapFirst
+                                    (\l ->
+                                        { l
+                                            | userOptions =
+                                                Maybe.map
+                                                    (\uo ->
+                                                        { uo
+                                                            | domainWhitelistInput =
+                                                                UserOptions.domainWhitelistToString
+                                                                    (Local.model l.localState).localUser.user.domainWhitelist
+                                                        }
+                                                    )
+                                                    l.userOptions
+                                        }
+                                    )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedResetDomainWhitelist ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just
+                                        { userOptions
+                                            | domainWhitelistInput =
+                                                UserOptions.domainWhitelistToString
+                                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+                                        }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -4138,15 +4246,37 @@ updateLoaded msg model =
                     ( modelReset, Command.none )
 
         PressedChannelHeaderTab tab ->
+            let
+                sameTab : DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Maybe DmChannelHeaderTab
+                sameTab tabA tabB =
+                    case tabB of
+                        Just tabB2 ->
+                            if Route.sameChannelHeaderTab tabA tabB2 then
+                                Nothing
+
+                            else
+                                Just tabA
+
+                        Nothing ->
+                            Just tabA
+            in
             case model.route of
                 DmRoute dmRoute ->
-                    FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just tab })
+                    FrontendExtra.routePush model (DmRoute { dmRoute | tab = sameTab tab dmRoute.tab })
 
                 HomePageRoute ->
                     ( model, Command.none )
 
                 AdminRoute _ ->
                     ( model, Command.none )
+
+                GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) currentTab) ->
+                    FrontendExtra.routePush
+                        model
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) (sameTab tab currentTab))
+                        )
 
                 GuildRoute _ _ ->
                     ( model, Command.none )
@@ -4867,19 +4997,19 @@ textInputFocusChanged maybeHtmlId maybeSelection model =
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 setShowMembers showMembers model =
     case model.route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute tab) ->
             case threadRoute of
                 NoThreadWithFriends a _ ->
                     FrontendExtra.routePush
                         model
-                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers)))
+                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers) tab))
 
                 ViewThreadWithFriends threadId a _ ->
                     FrontendExtra.routePush
                         model
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers))
+                            (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers) tab)
                         )
 
         DmRoute dmRoute ->
@@ -5573,6 +5703,7 @@ updateLoadedFromBackend msg model =
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
                                                 (NoThreadWithFriends Nothing HideMembersTab)
+                                                Nothing
                                             )
                                         )
 
@@ -5751,6 +5882,7 @@ updateLoadedFromBackend msg model =
                                                         (ChannelRoute
                                                             (LocalState.announcementChannel guild)
                                                             (NoThreadWithFriends Nothing HideMembersTab)
+                                                            Nothing
                                                         )
                                                     )
 
@@ -6329,7 +6461,7 @@ errorPage model text =
 routeToInitialDataRequest : Route -> InitialLoadRequest
 routeToInitialDataRequest route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
             InitialLoadRequested_Guild
                 guildId
                 channelId

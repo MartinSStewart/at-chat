@@ -2376,7 +2376,7 @@ routeToViewing route local =
         GuildRoute guildId channelRoute ->
             if SeqDict.member guildId local.guilds then
                 case channelRoute of
-                    ChannelRoute channelId threadRoute ->
+                    ChannelRoute channelId threadRoute _ ->
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewChannel guildId channelId EmptyPlaceholder

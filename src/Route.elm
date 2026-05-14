@@ -14,10 +14,12 @@ module Route exposing
     , linkDiscordPath
     , linkDiscordQueryParam
     , requiresLogin
+    , sameChannelHeaderTab
+    , toChannelHeaderTab
     , toGuildOrDmId
     )
 
-import AppUrl
+import AppUrl exposing (AppUrl)
 import Codec
 import Dict
 import Discord
@@ -66,6 +68,7 @@ type alias DmRouteData =
 type DmChannelHeaderTab
     = DmChannelHeaderTab_VoiceChat
     | DmChannelHeaderTab_Go (Maybe (Id ChannelMessageId))
+    | DmChannelHeaderTab_ChannelDescription
 
 
 type alias DiscordGuildRouteData =
@@ -76,7 +79,7 @@ type alias DiscordGuildRouteData =
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends
+    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends (Maybe DmChannelHeaderTab)
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | GuildSettingsRoute
@@ -147,6 +150,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (stringToThread showMembers threadMessageIndex messageIndex)
+                                            (decodeChannelHeaderTab url2)
                                         )
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
@@ -155,6 +159,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (stringToThread showMembers threadMessageIndex "")
+                                            (decodeChannelHeaderTab url2)
                                         )
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
@@ -163,6 +168,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                                            (decodeChannelHeaderTab url2)
                                         )
 
                                 ( Just channelId2, [] ) ->
@@ -171,6 +177,7 @@ decode url =
                                         (ChannelRoute
                                             channelId2
                                             (NoThreadWithFriends Nothing showMembers)
+                                            (decodeChannelHeaderTab url2)
                                         )
 
                                 ( Just channelId2, [ "edit" ] ) ->
@@ -262,56 +269,29 @@ decode url =
         "d" :: channelId :: rest ->
             case DmChannel.channelIdFromString channelId of
                 Ok channelId2 ->
-                    let
-                        goMatchId : Maybe (Id ChannelMessageId)
-                        goMatchId =
-                            case Dict.get goMatchParam url2.queryParameters of
-                                Just [ goMatchId2 ] ->
-                                    Id.fromString goMatchId2
-
-                                _ ->
-                                    Nothing
-
-                        tab : Maybe DmChannelHeaderTab
-                        tab =
-                            case Dict.get tabParam url2.queryParameters of
-                                Just [ tab2 ] ->
-                                    case tab2 of
-                                        "go" ->
-                                            DmChannelHeaderTab_Go goMatchId |> Just
-
-                                        "call" ->
-                                            DmChannelHeaderTab_VoiceChat |> Just
-
-                                        _ ->
-                                            Nothing
-
-                                _ ->
-                                    Nothing
-                    in
                     (case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
                             { channelId = channelId2
                             , threadRoute = stringToThread showMembers threadMessageIndex messageIndex
-                            , tab = tab
+                            , tab = decodeChannelHeaderTab url2
                             }
 
                         [ "t", threadMessageIndex ] ->
                             { channelId = channelId2
                             , threadRoute = stringToThread showMembers threadMessageIndex ""
-                            , tab = tab
+                            , tab = decodeChannelHeaderTab url2
                             }
 
                         [ "m", messageIndex ] ->
                             { channelId = channelId2
                             , threadRoute = NoThreadWithFriends (Id.fromString messageIndex) showMembers
-                            , tab = tab
+                            , tab = decodeChannelHeaderTab url2
                             }
 
                         _ ->
                             { channelId = channelId2
                             , threadRoute = NoThreadWithFriends Nothing showMembers
-                            , tab = tab
+                            , tab = decodeChannelHeaderTab url2
                             }
                     )
                         |> DmRoute
@@ -363,6 +343,113 @@ decode url =
             HomePageRoute
 
 
+decodeChannelHeaderTab : AppUrl -> Maybe DmChannelHeaderTab
+decodeChannelHeaderTab url2 =
+    let
+        goMatchId : Maybe (Id ChannelMessageId)
+        goMatchId =
+            case Dict.get goMatchParam url2.queryParameters of
+                Just [ goMatchId2 ] ->
+                    Id.fromString goMatchId2
+
+                _ ->
+                    Nothing
+    in
+    case Dict.get tabParam url2.queryParameters of
+        Just [ tab2 ] ->
+            case tab2 of
+                "description" ->
+                    DmChannelHeaderTab_ChannelDescription |> Just
+
+                "go" ->
+                    DmChannelHeaderTab_Go goMatchId |> Just
+
+                "call" ->
+                    DmChannelHeaderTab_VoiceChat |> Just
+
+                _ ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+toChannelHeaderTab : Route -> Maybe DmChannelHeaderTab
+toChannelHeaderTab route =
+    case route of
+        DmRoute dmRoute ->
+            dmRoute.tab
+
+        HomePageRoute ->
+            Nothing
+
+        AdminRoute _ ->
+            Nothing
+
+        GuildRoute _ channelRoute ->
+            case channelRoute of
+                ChannelRoute _ _ maybeTab ->
+                    maybeTab
+
+                NewChannelRoute ->
+                    Nothing
+
+                EditChannelRoute _ ->
+                    Nothing
+
+                GuildSettingsRoute ->
+                    Nothing
+
+                JoinRoute _ ->
+                    Nothing
+
+        DiscordGuildRoute _ ->
+            Nothing
+
+        DiscordDmRoute _ ->
+            Nothing
+
+        AiChatRoute ->
+            Nothing
+
+        SlackOAuthRedirect _ ->
+            Nothing
+
+        TextEditorRoute ->
+            Nothing
+
+        LinkDiscord _ ->
+            Nothing
+
+
+sameChannelHeaderTab : DmChannelHeaderTab -> DmChannelHeaderTab -> Bool
+sameChannelHeaderTab tabA tabB =
+    case tabA of
+        DmChannelHeaderTab_VoiceChat ->
+            case tabB of
+                DmChannelHeaderTab_VoiceChat ->
+                    True
+
+                _ ->
+                    False
+
+        DmChannelHeaderTab_Go _ ->
+            case tabB of
+                DmChannelHeaderTab_Go _ ->
+                    True
+
+                _ ->
+                    False
+
+        DmChannelHeaderTab_ChannelDescription ->
+            case tabB of
+                DmChannelHeaderTab_ChannelDescription ->
+                    True
+
+                _ ->
+                    False
+
+
 goMatchParam : String
 goMatchParam =
     "match"
@@ -406,7 +493,7 @@ encode route =
 
                 GuildRoute guildId maybeChannelId ->
                     case maybeChannelId of
-                        ChannelRoute channelId thread ->
+                        ChannelRoute channelId thread tab ->
                             case thread of
                                 ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                                     ( [ "g"
@@ -417,13 +504,13 @@ encode route =
                                       , Id.toString threadMessageIndex
                                       ]
                                         ++ maybeMessageIdToString maybeMessageId
-                                    , encodeShowMembers showMembers
+                                    , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
                                     ( [ "g", Id.toString guildId, "c", Id.toString channelId ]
                                         ++ maybeMessageIdToString maybeMessageId
-                                    , encodeShowMembers showMembers
+                                    , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                                     )
 
                         EditChannelRoute channelId ->
@@ -492,12 +579,12 @@ encode route =
                         ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                             ( [ "d", DmChannel.channelIdToString channelId, "t", Id.toString threadMessageIndex ]
                                 ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers ++ encodeTab tab
+                            , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
                         NoThreadWithFriends maybeMessageId showMembers ->
                             ( [ "d", DmChannel.channelIdToString channelId ] ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers ++ encodeTab tab
+                            , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                             )
 
                 DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab } ->
@@ -543,8 +630,8 @@ encodeShowMembers showMembers =
             []
 
 
-encodeTab : Maybe DmChannelHeaderTab -> List Url.Builder.QueryParameter
-encodeTab tab =
+encodeChannelHeaderTab : Maybe DmChannelHeaderTab -> List Url.Builder.QueryParameter
+encodeChannelHeaderTab tab =
     case tab of
         Just DmChannelHeaderTab_VoiceChat ->
             [ Url.Builder.string tabParam "call" ]
@@ -558,6 +645,9 @@ encodeTab tab =
                         Nothing ->
                             []
                    )
+
+        Just DmChannelHeaderTab_ChannelDescription ->
+            [ Url.Builder.string tabParam "description" ]
 
         Nothing ->
             []
@@ -610,7 +700,7 @@ requiresLogin route =
 toGuildOrDmId : Id UserId -> Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
 toGuildOrDmId userId route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
             ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->

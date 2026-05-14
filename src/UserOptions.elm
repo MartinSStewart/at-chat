@@ -1,4 +1,4 @@
-module UserOptions exposing (discordBookmarkletId, init, view)
+module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
 
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
@@ -18,7 +18,7 @@ import Range exposing (Range)
 import RichText
 import Route
 import SeqDict
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -31,11 +31,20 @@ import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
 
-init : UserOptionsModel
-init =
+init : SeqSet RichText.Domain -> UserOptionsModel
+init domainWhitelist =
     { name = Editable.init
     , showLinkDiscordSetup = False
+    , domainWhitelistInput = domainWhitelistToString domainWhitelist
     }
+
+
+domainWhitelistToString : SeqSet RichText.Domain -> String
+domainWhitelistToString domains =
+    SeqSet.toList domains
+        |> List.map RichText.domainToString
+        |> List.sort
+        |> String.join ", "
 
 
 viewConnectedDevice :
@@ -313,34 +322,49 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     Ui.none
 
                   else
+                    let
+                        hasChanges : Bool
+                        hasChanges =
+                            model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
+                    in
                     MyUi.container
                         MyUi.background1
                         isMobile
                         ("Whitelisted domains (" ++ String.fromInt (SeqSet.size local.localUser.user.domainWhitelist) ++ ")")
-                        (SeqSet.toList local.localUser.user.domainWhitelist
-                            |> List.sortBy RichText.domainToString
-                            |> List.map
-                                (\domain ->
-                                    Ui.row
-                                        [ Ui.spacing 8, Ui.width Ui.fill ]
-                                        [ Ui.text (RichText.domainToString domain)
-                                        , MyUi.elButton
-                                            (Dom.id ("userOptions_removeWhitelistDomain_" ++ RichText.domainToString domain))
-                                            (PressedRemoveDomainFromWhitelist domain)
-                                            [ Ui.background MyUi.deleteButtonBackground
-                                            , Ui.Font.color MyUi.deleteButtonFont
-                                            , Ui.width Ui.shrink
-                                            , Ui.paddingXY 12 0
-                                            , Ui.rounded 4
-                                            , Ui.Font.size 14
-                                            , Ui.contentCenterY
-                                            , Ui.height (Ui.px 30)
-                                            , Ui.alignRight
-                                            ]
-                                            (Ui.text "Remove")
-                                        ]
-                                )
-                        )
+                        [ Ui.Input.multiline
+                            [ MyUi.id (Dom.id "userOptions_whitelistDomains")
+                            , Ui.paddingXY 8 6
+                            , Ui.background MyUi.inputBackground
+                            , Ui.border 1
+                            , Ui.borderColor MyUi.inputBorder
+                            , Ui.rounded 4
+                            ]
+                            { onChange = TypedDomainWhitelist
+                            , text = model.domainWhitelistInput
+                            , placeholder = Nothing
+                            , label = Ui.Input.labelHidden "Whitelisted domains"
+                            , spellcheck = False
+                            }
+                        , Ui.row
+                            [ Ui.spacing 8, Ui.width Ui.shrink ]
+                            [ if hasChanges then
+                                MyUi.simpleButton
+                                    (Dom.id "userOptions_saveWhitelistDomains")
+                                    PressedSaveDomainWhitelist
+                                    (Ui.text "Save")
+
+                              else
+                                Ui.none
+                            , if hasChanges then
+                                MyUi.simpleButton
+                                    (Dom.id "userOptions_resetWhitelistDomains")
+                                    PressedResetDomainWhitelist
+                                    (Ui.text "Reset")
+
+                              else
+                                Ui.none
+                            ]
+                        ]
                 , MyUi.container
                     MyUi.background1
                     isMobile
