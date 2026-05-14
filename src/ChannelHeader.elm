@@ -25,6 +25,8 @@ import OneOrGreater
 import PersonName
 import Route exposing (ChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
+import Svg
+import Svg.Attributes
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
 import Ui.Anim
@@ -277,6 +279,8 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
     , Ui.paddingWith { left = paddingLeft, right = paddingRight, top = 4, bottom = 4 }
     , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
     , Ui.attrIf isSelected (Ui.background MyUi.background1)
+    , Ui.attrIf isSelected (outwardBottomCorner 8 True)
+    , Ui.attrIf isSelected (outwardBottomCorner 8 False)
     , Ui.contentCenterY
     , Ui.Font.color
         (if isSelected then
@@ -287,6 +291,60 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
         )
     , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
     ]
+
+
+outwardBottomCorner : Int -> Bool -> Ui.Attribute msg
+outwardBottomCorner radius isLeft =
+    let
+        r : String
+        r =
+            String.fromInt radius
+
+        path : String
+        path =
+            if isLeft then
+                "M " ++ r ++ ",0 A " ++ r ++ " " ++ r ++ " 0 0 1 0," ++ r ++ " L " ++ r ++ "," ++ r ++ " Z"
+
+            else
+                "M 0,0 A " ++ r ++ " " ++ r ++ " 0 0 0 " ++ r ++ "," ++ r ++ " L 0," ++ r ++ " Z"
+
+        translate : String
+        translate =
+            if isLeft then
+                "translate(-" ++ r ++ "px, 0)"
+
+            else
+                "translate(" ++ r ++ "px, 0)"
+    in
+    Ui.inFront
+        (Ui.el
+            [ Ui.alignBottom
+            , if isLeft then
+                Ui.alignLeft
+
+              else
+                Ui.alignRight
+            , Ui.width (Ui.px radius)
+            , Ui.height (Ui.px radius)
+            , Ui.Font.color MyUi.background1
+            , MyUi.htmlStyle "transform" translate
+            , MyUi.htmlStyle "pointer-events" "none"
+            ]
+            (Svg.svg
+                [ Svg.Attributes.width r
+                , Svg.Attributes.height r
+                , Svg.Attributes.viewBox ("0 0 " ++ r ++ " " ++ r)
+                , Svg.Attributes.style "display:block"
+                ]
+                [ Svg.path
+                    [ Svg.Attributes.d path
+                    , Svg.Attributes.fill "currentColor"
+                    ]
+                    []
+                ]
+                |> Ui.html
+            )
+        )
 
 
 channelHeaderTab :
