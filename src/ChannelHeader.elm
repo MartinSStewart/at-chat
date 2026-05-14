@@ -360,12 +360,6 @@ channelHeaderTab isMobile htmlId tab currentTab content =
 
 privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> Element FrontendMsg
 privateChatWithYourself isMobile currentTab local =
-    let
-        goMatches =
-            SeqDict.get local.localUser.session.userId local.dmChannels
-                |> Maybe.map .goMatches
-                |> Maybe.withDefault SeqDict.empty
-    in
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -377,19 +371,13 @@ privateChatWithYourself isMobile currentTab local =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , goGameButton isMobile currentTab local.localUser.session.userId goMatches
+            , goGameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
             ]
         ]
 
 
 privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
 privateChatWith isMobile currentTab otherUserId local name =
-    let
-        goMatches =
-            SeqDict.get otherUserId local.dmChannels
-                |> Maybe.map .goMatches
-                |> Maybe.withDefault SeqDict.empty
-    in
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -401,7 +389,10 @@ privateChatWith isMobile currentTab otherUserId local name =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-            , goGameButton isMobile currentTab local.localUser.session.userId goMatches
+            , SeqDict.get otherUserId local.dmChannels
+                |> Maybe.map .goMatches
+                |> Maybe.withDefault SeqDict.empty
+                |> goGameButton isMobile currentTab local.localUser.session.userId
             ]
         ]
 
