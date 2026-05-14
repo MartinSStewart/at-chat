@@ -2002,16 +2002,6 @@ clockChip maybeUser seconds isActive stone setup captures =
         ]
 
 
-isPlayingPhase : GameState -> Bool
-isPlayingPhase state =
-    case state.phase of
-        Playing _ ->
-            True
-
-        _ ->
-            False
-
-
 isLocalUsersTurn : Id UserId -> ValidatedSetup -> GameState -> Bool
 isLocalUsersTurn currentUserId setup state =
     case state.currentPlayer of

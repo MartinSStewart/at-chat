@@ -6094,6 +6094,33 @@ updateLoadedFromBackend msg model =
                                         loggedIn2.voiceChat
                                     )
 
+                                Server_Go _ _ goChange ->
+                                    case goChange of
+                                        Go.StartMatch _ _ ->
+                                            ( loggedIn2, Command.none )
+
+                                        Go.Action _ actionWithTime ->
+                                            ( loggedIn2
+                                            , case actionWithTime.change of
+                                                Go.PlaceStone _ _ ->
+                                                    Ports.playSound "pop"
+
+                                                Go.PassTurn ->
+                                                    Ports.playSound "pop"
+
+                                                Go.MarkTerritory _ _ ->
+                                                    Command.none
+
+                                                Go.FinishedMarking ->
+                                                    Ports.playSound "pop"
+
+                                                Go.AcceptTerritory ->
+                                                    Ports.playSound "pop"
+
+                                                Go.RejectTerritory ->
+                                                    Ports.playSound "pop"
+                                            )
+
                                 _ ->
                                     ( loggedIn2, Command.none )
 
