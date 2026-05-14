@@ -204,7 +204,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
             ]
             (if isMobile2 then
                 [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
-                , content
+                , Ui.el [] content
                 , if includeShowMembers then
                     MyUi.elButton
                         (Dom.id "guild_showMembers")
@@ -373,7 +373,7 @@ privateChatWithYourself isMobile currentTab local =
         (Dom.id "guild_openDescription")
         DmChannelHeaderTab_ChannelDescription
         currentTab
-        (Ui.text "Private chat with yourself")
+        (Ui.text "Chat with yourself")
     , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
         [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
@@ -389,7 +389,7 @@ privateChatWith isMobile currentTab otherUserId local name =
         (Dom.id "guild_openDescription")
         DmChannelHeaderTab_ChannelDescription
         currentTab
-        (Ui.text "Private chat with ")
+        (Ui.text "Chat with ")
     , Ui.text name
     , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
