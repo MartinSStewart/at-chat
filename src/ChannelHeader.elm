@@ -1,4 +1,12 @@
-module ChannelHeader exposing (channelHeader, chattingWithYourself, conversationChannelHeader, discordChannelHeader, discordThreadChannelHeader, headerBackButton, threadChannelHeader)
+module ChannelHeader exposing
+    ( channelHeader
+    , chattingWithYourself
+    , conversationChannelHeader
+    , discordChannelHeader
+    , discordThreadChannelHeader
+    , headerBackButton
+    , threadChannelHeader
+    )
 
 import ChannelDescription exposing (ChannelDescription(..))
 import ChannelName exposing (ChannelName)
@@ -493,14 +501,15 @@ channelHeaderTabView local loggedIn model =
                                 |> Just
 
                         Just DmChannelHeaderTab_ChannelDescription ->
-                            (if otherUserId == local.localUser.session.userId then
-                                Ui.text "This is a channel all to yourself where you can write things down you want to remember."
+                            channelDescriptionView
+                                Nothing
+                                (if otherUserId == local.localUser.session.userId then
+                                    "This is a channel all to yourself where you can write things down you want to remember."
 
-                             else
-                                "This is a private channel for just you and "
-                                    ++ User.toString otherUserId local.localUser.otherUsers
-                                    |> Ui.text
-                            )
+                                 else
+                                    "This is a private channel for just you and "
+                                        ++ User.toString otherUserId local.localUser.otherUsers
+                                )
                                 |> Just
 
                         Nothing ->
@@ -542,10 +551,13 @@ channelDescriptionView channelName description =
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background1
         , Ui.Font.color MyUi.font2
+        , Ui.spacing 8
         ]
         [ case channelName of
             Just channelName2 ->
-                Ui.el [ Ui.Font.bold ] (Ui.text (ChannelName.toString channelName2))
+                Ui.el
+                    [ Ui.Font.bold, MyUi.htmlStyle "overflow-wrap" "break-word" ]
+                    (Ui.text (ChannelName.toString channelName2))
 
             Nothing ->
                 Ui.none

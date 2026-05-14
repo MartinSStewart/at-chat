@@ -36,8 +36,7 @@ roundtrip =
                             _ =
                                 Debug.log "Failed to roundtrip, URL was " encoded
                         in
-                        actual
-                            |> Expect.equal route
+                        Expect.equal route actual
 
 
 routeFuzzer : Fuzzer Route
@@ -78,7 +77,14 @@ idFuzzer =
 
 secretIdFuzzer : Fuzzer (SecretId a)
 secretIdFuzzer =
-    Fuzz.map SecretId.fromString (Fuzz.map String.fromList (Fuzz.listOfLength 16 (Fuzz.oneOf (List.map Fuzz.constant (String.toList "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")))))
+    Fuzz.map
+        (\a -> String.fromList a |> SecretId.fromString)
+        (Fuzz.listOfLength
+            16
+            (Fuzz.oneOf
+                (List.map Fuzz.constant (String.toList "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"))
+            )
+        )
 
 
 threadRouteFuzzer : Fuzzer ThreadRouteWithFriends
@@ -92,7 +98,7 @@ threadRouteFuzzer =
 channelRouteFuzzer : Fuzzer ChannelRoute
 channelRouteFuzzer =
     Fuzz.oneOf
-        [ Fuzz.map2 ChannelRoute idFuzzer threadRouteFuzzer
+        [ Fuzz.map3 ChannelRoute idFuzzer threadRouteFuzzer (Fuzz.maybe tabFuzzer)
         , Fuzz.constant NewChannelRoute
         , Fuzz.map EditChannelRoute idFuzzer
         , Fuzz.constant GuildSettingsRoute
