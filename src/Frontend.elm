@@ -912,8 +912,8 @@ updateLoaded msg model =
         PressedSubmitEditChannelChanges guildId channelId form ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case Result.map2 Tuple.pair (ChannelName.fromString form.name) (ChannelDescription.fromString form.description) of
-                        Ok ( channelName, channelDescription ) ->
+                    case ( ChannelName.fromString form.name, ChannelDescription.fromString form.description ) of
+                        ( Ok channelName, Ok channelDescription ) ->
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Local_EditChannel guildId channelId channelName channelDescription |> Just)
@@ -923,7 +923,7 @@ updateLoaded msg model =
                                 }
                                 Command.none
 
-                        Err _ ->
+                        _ ->
                             ( { loggedIn
                                 | editChannelForm =
                                     SeqDict.insert
