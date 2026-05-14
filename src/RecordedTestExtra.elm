@@ -1337,7 +1337,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Discord_SendMessage _ _ _ _ _ ->
                     True
 
-                Local_NewChannel _ _ _ ->
+                Local_NewChannel _ _ _ _ ->
                     True
 
                 Local_EditChannel _ _ _ _ ->
@@ -1476,7 +1476,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Discord_SendMessage _ _ _ _ _ _ ->
                             True
 
-                        Types.Server_NewChannel _ _ _ ->
+                        Types.Server_NewChannel _ _ _ _ ->
                             True
 
                         Types.Server_EditChannel _ _ _ _ ->
@@ -1786,7 +1786,7 @@ allAttackerLocalChanges =
     , Local_LoadThreadMessages (GuildOrDmId_Guild legitGuildId channelId) (Id.fromInt 0) (Id.fromInt 0) EmptyPlaceholder
     , Local_MemberEditTyping messageTime guildOrDmId_guild threadRouteWithMessage
     , Local_MemberTyping messageTime ( guildOrDmId_guild, NoThread )
-    , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked")
+    , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
     , Local_NewInviteLink messageTime legitGuildId EmptyPlaceholder
     , Local_RegisterPushSubscription { endpoint = domain, auth = "auth", p256dh = "p256dh" }

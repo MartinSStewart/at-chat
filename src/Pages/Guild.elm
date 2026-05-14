@@ -7185,6 +7185,7 @@ newChannelFormView isMobile2 guildId form =
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
+            , channelDescriptionInput form |> Ui.map (NewChannelFormChanged guildId)
             , submitButton (Dom.id "guild_createChannel") (PressedSubmitNewChannel guildId form) "Create channel"
             ]
         ]

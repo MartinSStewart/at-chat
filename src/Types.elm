@@ -740,7 +740,7 @@ type LocalMsg
 type ServerChange
     = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
-    | Server_NewChannel Time.Posix (Id GuildId) ChannelName
+    | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
@@ -817,7 +817,7 @@ type LocalChange
     | Local_Admin AdminChange
     | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_NewChannel Time.Posix (Id GuildId) ChannelName
+    | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))

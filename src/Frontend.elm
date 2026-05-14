@@ -782,8 +782,8 @@ updateLoaded msg model =
         PressedSubmitNewChannel guildId newChannelForm ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
-                    case ChannelName.fromString newChannelForm.name of
-                        Ok channelName ->
+                    case Result.map2 Tuple.pair (ChannelName.fromString newChannelForm.name) (ChannelDescription.fromString newChannelForm.description) of
+                        Ok ( channelName, channelDescription ) ->
                             let
                                 oldLoggedIn : LoggedIn2
                                 oldLoggedIn =
@@ -792,7 +792,7 @@ updateLoaded msg model =
                                 ( loggedIn2, cmd ) =
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (Local_NewChannel model.time guildId channelName |> Just)
+                                        (Local_NewChannel model.time guildId channelName channelDescription |> Just)
                                         { loggedIn
                                             | newChannelForm =
                                                 SeqDict.remove guildId loggedIn.newChannelForm

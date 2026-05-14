@@ -1061,8 +1061,8 @@ defaultChannelName =
     Unsafe.channelName "general"
 
 
-createChannel : Time.Posix -> Id UserId -> ChannelName -> BackendGuild -> BackendGuild
-createChannel time userId channelName guild =
+createChannel : Time.Posix -> Id UserId -> ChannelName -> ChannelDescription -> BackendGuild -> BackendGuild
+createChannel time userId channelName channelDescription guild =
     let
         channelId : Id ChannelId
         channelId =
@@ -1075,7 +1075,7 @@ createChannel time userId channelName guild =
                 { createdAt = time
                 , createdBy = userId
                 , name = channelName
-                , description = ChannelDescription.empty
+                , description = channelDescription
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
@@ -1098,8 +1098,8 @@ discordTopicToDescription topic existingDescription =
             existingDescription
 
 
-createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> FrontendGuild -> FrontendGuild
-createChannelFrontend time userId channelName guild =
+createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> ChannelDescription -> FrontendGuild -> FrontendGuild
+createChannelFrontend time userId channelName channelDescription guild =
     { guild
         | channels =
             SeqDict.insert
@@ -1107,7 +1107,7 @@ createChannelFrontend time userId channelName guild =
                 { createdAt = time
                 , createdBy = userId
                 , name = channelName
-                , description = ChannelDescription.empty
+                , description = channelDescription
                 , messages = Array.empty
                 , visibleMessages = VisibleMessages.empty
                 , isArchived = Nothing

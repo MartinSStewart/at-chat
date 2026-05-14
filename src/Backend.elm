@@ -2479,7 +2479,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
                                 )
 
-                Local_NewChannel _ guildId channelName ->
+                Local_NewChannel _ guildId channelName channelDescription ->
                     asGuildOwner
                         model
                         sessionId
@@ -2489,17 +2489,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | guilds =
                                     SeqDict.insert
                                         guildId
-                                        (LocalState.createChannel time userId channelName guild)
+                                        (LocalState.createChannel time userId channelName channelDescription guild)
                                         model.guilds
                               }
                             , Command.batch
-                                [ Local_NewChannel time guildId channelName
+                                [ Local_NewChannel time guildId channelName channelDescription
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
                                 , Broadcast.toGuildExcludingOne
                                     clientId
                                     guildId
-                                    (Server_NewChannel time guildId channelName |> ServerChange)
+                                    (Server_NewChannel time guildId channelName channelDescription |> ServerChange)
                                     model
                                 ]
                             )

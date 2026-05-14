@@ -105,7 +105,7 @@ pendingChangesText localChange =
         Local_Discord_SendMessage _ _ _ _ _ ->
             "Sent a message"
 
-        Local_NewChannel _ _ _ ->
+        Local_NewChannel _ _ _ _ ->
             "Created new channel"
 
         Local_EditChannel _ _ _ _ ->
@@ -2058,12 +2058,12 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                Local_NewChannel time guildId channelName ->
+                Local_NewChannel time guildId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName channelDescription)
                                 local.guilds
                     }
 
@@ -2958,12 +2958,12 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                Server_NewChannel time guildId channelName ->
+                Server_NewChannel time guildId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName channelDescription)
                                 local.guilds
                     }
 
