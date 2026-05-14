@@ -5286,8 +5286,7 @@ replyToHeaderAboveMessageHelper isMobile messageId content =
     MyUi.rowButton
         (Dom.id ("guild_replyLink_" ++ Id.toString messageId))
         MessageView_PressedReplyLink
-        [ Ui.Font.color MyUi.font1
-        , Ui.Font.size 14
+        [ Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
         , Ui.Font.color MyUi.font3
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
@@ -5880,8 +5879,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
         , elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId GuildSettingsRoute)
-            [ Ui.width Ui.shrink
-            , Ui.Font.color MyUi.font2
+            [ Ui.Font.color MyUi.font2
             , Ui.width (Ui.px 40)
             , Ui.alignRight
             , Ui.paddingXY 8 0
@@ -6006,8 +6004,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                 , channelRoute = DiscordChannel_GuildSettingsRoute
                 }
             )
-            [ Ui.width Ui.shrink
-            , Ui.Font.color MyUi.font2
+            [ Ui.Font.color MyUi.font2
             , Ui.width (Ui.px 40)
             , Ui.alignRight
             , Ui.paddingXY 8 0
@@ -7284,7 +7281,6 @@ newGuildFormView form =
         , Ui.alignTop
         , Ui.spacing 16
         , Ui.height Ui.fill
-        , Ui.width Ui.fill
         , Ui.background MyUi.background1
         , MyUi.htmlStyle "padding-top" MyUi.insetTop
         ]

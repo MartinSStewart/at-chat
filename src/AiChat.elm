@@ -1103,7 +1103,6 @@ responseView windowWidth responseCount responseId response =
                 , Ui.borderWith { left = 1, right = 1, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.inputBorder
                 , Ui.roundedWith { topLeft = 0, topRight = 0, bottomRight = 4, bottomLeft = 4 }
-                , Ui.width Ui.fill
                 ]
                 (Ui.text (aiModelNameToString modelId))
             ]
@@ -1173,8 +1172,7 @@ optionsView model =
         , Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 16 }
         ]
         [ Ui.row
-            [ Ui.width Ui.fill
-            , Ui.contentCenterY
+            [ Ui.contentCenterY
             ]
             [ Ui.el
                 [ Ui.Font.bold
@@ -1194,7 +1192,6 @@ optionsView model =
             ]
         , Ui.column
             [ Ui.spacing 8
-            , Ui.width Ui.fill
             , Ui.paddingXY 16 0
             ]
             [ Ui.column

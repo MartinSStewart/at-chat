@@ -845,8 +845,7 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
           else
             Ui.inFront
                 (Ui.el
-                    [ Ui.width Ui.fill
-                    , Ui.height Ui.fill
+                    [ Ui.height Ui.fill
                     ]
                     (Ui.html Icons.diagonalSlash)
                 )

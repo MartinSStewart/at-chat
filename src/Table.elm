@@ -191,7 +191,6 @@ tableConfig id showAll onMsg getModel userColumns =
                                                 , MyUi.focusEffect
                                                 , Ui.Font.color (Ui.rgb 0 0 0)
                                                 , Ui.rounded 4
-                                                , Ui.width Ui.fill
                                                 , Ui.Font.center
                                                 ]
                                                 (Ui.text "Show all")

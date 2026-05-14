@@ -392,7 +392,6 @@ view textSelection loginForm isMobile pwaStatus =
                 , Ui.borderColor (Ui.rgba 255 242 204 1) -- Light yellow/orange border (0.8 alpha = 204)
                 , Ui.rounded 8
                 , Ui.padding 16
-                , Ui.width Ui.fill
                 ]
                 mobileWarning
 

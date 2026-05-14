@@ -561,7 +561,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         [ Ui.paddingXY 0 4, Ui.width (Ui.px 1), Ui.height Ui.fill ]
                         (Ui.el [ Ui.height Ui.fill, Ui.background MyUi.buttonBorder ] Ui.none)
                         :: commonEmojis
-                        |> Ui.row [ Ui.height (Ui.px (buttonHeight True)), MyUi.noShrinking, Ui.width Ui.fill ]
+                        |> Ui.row [ Ui.height (Ui.px (buttonHeight True)), MyUi.noShrinking ]
 
                   else
                     Ui.none

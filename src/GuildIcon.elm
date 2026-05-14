@@ -251,7 +251,6 @@ addGuildButton htmlId isSelected onPress =
             Ui.rounded (round (toFloat size * 8 / 50))
         , MyUi.montserrat
         , Ui.Font.weight 600
-        , Ui.height Ui.fill
         , Ui.background (Ui.rgb 240 240 240)
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
@@ -283,7 +282,6 @@ showFriendsButton isSelected onPress =
             Ui.rounded (round (toFloat size * 8 / 50))
         , MyUi.montserrat
         , Ui.Font.weight 600
-        , Ui.height Ui.fill
         , Ui.background (Ui.rgb 240 240 240)
         , Ui.border 1
         , Ui.borderColor MyUi.secondaryGrayBorder
