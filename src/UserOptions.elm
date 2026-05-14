@@ -102,7 +102,6 @@ viewConnectedDevice isCurrentSession session =
     in
     Ui.row
         [ Ui.spacing 8
-        , Ui.width Ui.fill
         ]
         [ Ui.el
             [ Ui.width (Ui.px 36)
@@ -119,7 +118,7 @@ viewConnectedDevice isCurrentSession session =
                     Ui.html Icons.tablet
             )
         , Ui.column
-            [ Ui.spacing 2, Ui.width Ui.fill ]
+            [ Ui.spacing 2 ]
             [ Ui.text
                 (deviceText
                     ++ " • "
@@ -576,7 +575,7 @@ discordUserCard loaded discordUserId data =
         , Ui.widthMax 400
         ]
         [ Ui.row
-            [ Ui.spacing 8, Ui.width Ui.fill ]
+            [ Ui.spacing 8 ]
             [ User.profileImage data.icon
             , Ui.column
                 [ Ui.spacing 2 ]

@@ -545,7 +545,6 @@ fileDragOverlay isVisible model =
     Ui.el
         [ Ui.background (Ui.rgba 0 0 0 0.6)
         , Ui.height Ui.fill
-        , Ui.width Ui.fill
         , Ui.contentCenterX
         , Ui.contentCenterY
         , Ui.Font.color accentColor
