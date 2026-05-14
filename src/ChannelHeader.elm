@@ -45,14 +45,11 @@ channel isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
-                    (if otherUserId == local.localUser.session.userId then
-                        privateChatWithYourself isMobile currentChannelHeaderTab local
+                if otherUserId == local.localUser.session.userId then
+                    privateChatWithYourself isMobile currentChannelHeaderTab local
 
-                     else
-                        privateChatWith isMobile currentChannelHeaderTab otherUserId local name
-                    )
+                else
+                    privateChatWith isMobile currentChannelHeaderTab otherUserId local name
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
@@ -78,14 +75,11 @@ thread isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             GuildOrDmId_Dm otherUserId ->
-                Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
-                    (if otherUserId == local.localUser.session.userId then
-                        privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
+                if otherUserId == local.localUser.session.userId then
+                    privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
 
-                     else
-                        privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
-                    )
+                else
+                    privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
 
             GuildOrDmId_Guild _ _ ->
                 Ui.row
@@ -109,14 +103,11 @@ discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
-                Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
-                    (if chattingWithYourself data local then
-                        privateChatWithYourself isMobile Nothing local
+                if chattingWithYourself data local then
+                    privateChatWithYourself isMobile Nothing local
 
-                     else
-                        discordPrivateChatWith name
-                    )
+                else
+                    discordPrivateChatWith name
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
@@ -142,14 +133,11 @@ discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
         True
         (case guildOrDmIdNoThread of
             DiscordGuildOrDmId_Dm data ->
-                Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
-                    (if chattingWithYourself data local then
-                        privateChatWithYourself isMobile Nothing local
+                if chattingWithYourself data local then
+                    privateChatWithYourself isMobile Nothing local
 
-                     else
-                        discordPrivateChatWith name
-                    )
+                else
+                    discordPrivateChatWith name
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
@@ -333,6 +321,7 @@ outwardBottomCorner radius isLeft =
 
               else
                 Ui.alignRight
+            , Ui.move { x = 0, y = 1, z = 0 }
             , Ui.width (Ui.px (radius + overlap))
             , Ui.height (Ui.px radius)
             , Ui.Font.color MyUi.tabBackground
@@ -367,37 +356,40 @@ channelHeaderTab isMobile htmlId tab currentTab content =
     MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 16 isMobile tab currentTab) content
 
 
-privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> List (Element FrontendMsg)
+privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> Element FrontendMsg
 privateChatWithYourself isMobile currentTab local =
-    [ channelHeaderTab
-        isMobile
-        (Dom.id "guild_openDescription")
-        DmChannelHeaderTab_ChannelDescription
-        currentTab
-        (Ui.text "Chat with yourself")
-    , Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-        , goGameButton isMobile currentTab
+    Ui.row
+        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
+        [ channelHeaderTab
+            isMobile
+            (Dom.id "guild_openDescription")
+            DmChannelHeaderTab_ChannelDescription
+            currentTab
+            (Ui.text "Chat with yourself")
+        , Ui.row
+            [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+            [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
+            , goGameButton isMobile currentTab
+            ]
         ]
-    ]
 
 
-privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> List (Element FrontendMsg)
+privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
 privateChatWith isMobile currentTab otherUserId local name =
-    [ channelHeaderTab
-        isMobile
-        (Dom.id "guild_openDescription")
-        DmChannelHeaderTab_ChannelDescription
-        currentTab
-        (Ui.text "Chat with ")
-    , Ui.text name
-    , Ui.row
-        [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-        [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-        , goGameButton isMobile currentTab
+    Ui.row
+        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
+        [ channelHeaderTab
+            isMobile
+            (Dom.id "guild_openDescription")
+            DmChannelHeaderTab_ChannelDescription
+            currentTab
+            (Ui.row [] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
+        , Ui.row
+            [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
+            [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
+            , goGameButton isMobile currentTab
+            ]
         ]
-    ]
 
 
 goGameButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
@@ -498,17 +490,19 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
         ]
 
 
-discordPrivateChatWith : String -> List (Element FrontendMsg)
+discordPrivateChatWith : String -> Element FrontendMsg
 discordPrivateChatWith name =
-    [ Ui.el
-        [ Ui.Font.color MyUi.font3
-        , Ui.width Ui.shrink
-        , MyUi.prewrap
-        , Ui.clipWithEllipsis
+    Ui.row
+        [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
+        [ Ui.el
+            [ Ui.Font.color MyUi.font3
+            , Ui.width Ui.shrink
+            , MyUi.prewrap
+            , Ui.clipWithEllipsis
+            ]
+            (Ui.text "Chat with ")
+        , Ui.text name
         ]
-        (Ui.text "Private chat with ")
-    , Ui.text name
-    ]
 
 
 tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
@@ -571,10 +565,10 @@ tabBodyView local loggedIn model =
                             channelDescriptionView
                                 Nothing
                                 (if otherUserId == local.localUser.session.userId then
-                                    "This is a channel all to yourself where you can write things down you want to remember."
+                                    "A channel where you can write things down you want to remember."
 
                                  else
-                                    "This is a private channel for just you and "
+                                    "A private channel for just you and "
                                         ++ User.toString otherUserId local.localUser.otherUsers
                                 )
                                 |> Just
