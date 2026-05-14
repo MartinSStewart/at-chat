@@ -4202,30 +4202,16 @@ updateLoaded msg model =
             let
                 sameTab : DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Maybe DmChannelHeaderTab
                 sameTab tabA tabB =
-                    case tabA of
-                        DmChannelHeaderTab_VoiceChat ->
-                            case tabB of
-                                Just DmChannelHeaderTab_VoiceChat ->
-                                    Nothing
+                    case tabB of
+                        Just tabB2 ->
+                            if Route.sameChannelHeaderTab tabA tabB2 then
+                                Nothing
 
-                                _ ->
-                                    Just tabA
+                            else
+                                Just tabA
 
-                        DmChannelHeaderTab_Go maybeId ->
-                            case tabB of
-                                Just (DmChannelHeaderTab_Go _) ->
-                                    Nothing
-
-                                _ ->
-                                    Just tabA
-
-                        DmChannelHeaderTab_ChannelDescription ->
-                            case tabB of
-                                Just DmChannelHeaderTab_ChannelDescription ->
-                                    Nothing
-
-                                _ ->
-                                    Just tabA
+                        Nothing ->
+                            Just tabA
             in
             case model.route of
                 DmRoute dmRoute ->

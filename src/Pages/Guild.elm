@@ -3084,40 +3084,62 @@ goGameButton isMobile currentTab =
         isMobile
         (Dom.id "guild_openGoMatch")
         (DmChannelHeaderTab_Go Nothing)
-        (case currentTab of
-            Just (DmChannelHeaderTab_Go _) ->
-                True
-
-            _ ->
-                False
-        )
+        currentTab
         (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
 
 
-channelHeaderTab : Bool -> HtmlId -> DmChannelHeaderTab -> Bool -> Element FrontendMsg -> Element FrontendMsg
-channelHeaderTab isMobile htmlId tab isSelected content =
-    MyUi.elButton
+channelHeaderTab :
+    Bool
+    -> HtmlId
+    -> DmChannelHeaderTab
+    -> Maybe DmChannelHeaderTab
+    -> Element FrontendMsg
+    -> Element FrontendMsg
+channelHeaderTab isMobile htmlId tab currentTab content =
+    MyUi.elButton htmlId (PressedChannelHeaderTab tab) (channelHeaderTabAttributes 16 isMobile tab currentTab) content
+
+
+channelHeaderTabRow :
+    Bool
+    -> HtmlId
+    -> DmChannelHeaderTab
+    -> Maybe DmChannelHeaderTab
+    -> List (Element FrontendMsg)
+    -> Element FrontendMsg
+channelHeaderTabRow isMobile htmlId tab currentTab content =
+    MyUi.rowButton
         htmlId
         (PressedChannelHeaderTab tab)
-        [ Ui.width Ui.shrink
-        , Ui.height Ui.fill
-        , Ui.paddingWith { left = 16, right = 16, top = 4, bottom = 4 }
-
-        --, Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
-        --, Ui.borderColor MyUi.border1
-        , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-        , Ui.attrIf isSelected (Ui.background MyUi.background1)
-        , Ui.contentCenterY
-        , Ui.Font.color
-            (if isSelected then
-                MyUi.font1
-
-             else
-                MyUi.font3
-            )
-        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-        ]
+        (Ui.spacing 2 :: channelHeaderTabAttributes 4 isMobile tab currentTab)
         content
+
+
+channelHeaderTabAttributes : Int -> Bool -> DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> List (Ui.Attribute msg)
+channelHeaderTabAttributes paddingX isMobile tab currentTab =
+    let
+        isSelected =
+            case currentTab of
+                Just currentTab2 ->
+                    Route.sameChannelHeaderTab tab currentTab2
+
+                Nothing ->
+                    False
+    in
+    [ Ui.width Ui.shrink
+    , Ui.height Ui.fill
+    , Ui.paddingWith { left = paddingX, right = paddingX, top = 4, bottom = 4 }
+    , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+    , Ui.attrIf isSelected (Ui.background MyUi.background1)
+    , Ui.contentCenterY
+    , Ui.Font.color
+        (if isSelected then
+            MyUi.font1
+
+         else
+            MyUi.font3
+        )
+    , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+    ]
 
 
 voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg
@@ -3188,13 +3210,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
             isMobile
             (Dom.id "guild_voiceChat")
             DmChannelHeaderTab_VoiceChat
-            (case currentTab of
-                Just DmChannelHeaderTab_VoiceChat ->
-                    True
-
-                _ ->
-                    False
-            )
+            currentTab
             (Ui.row
                 [ Ui.spacing 2, Ui.width Ui.shrink, Ui.contentCenterY ]
                 [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
@@ -3458,6 +3474,9 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                 Nothing ->
                     Nothing
+
+        currentChannelHeaderTab =
+            Route.toChannelHeaderTab model.route
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -3468,59 +3487,35 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             True
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
-                    let
-                        currentTab : Maybe DmChannelHeaderTab
-                        currentTab =
-                            case model.route of
-                                DmRoute dmRoute ->
-                                    dmRoute.tab
-
-                                HomePageRoute ->
-                                    Nothing
-
-                                AdminRoute _ ->
-                                    Nothing
-
-                                GuildRoute _ _ ->
-                                    Nothing
-
-                                DiscordGuildRoute _ ->
-                                    Nothing
-
-                                DiscordDmRoute _ ->
-                                    Nothing
-
-                                AiChatRoute ->
-                                    Nothing
-
-                                SlackOAuthRedirect _ ->
-                                    Nothing
-
-                                TextEditorRoute ->
-                                    Nothing
-
-                                LinkDiscord _ ->
-                                    Nothing
-                    in
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself isMobile currentTab local
+                            privateChatWithYourself isMobile currentChannelHeaderTab local
 
                          else
-                            privateChatWith isMobile currentTab otherUserId local name
+                            privateChatWith isMobile currentChannelHeaderTab otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
-                        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
-                        [ MyUi.rowButton
+                        [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
+                        [ channelHeaderTabRow
+                            isMobile
                             (Dom.id "guild_openChannelDescription")
-                            (PressedChannelHeaderTab DmChannelHeaderTab_ChannelDescription)
-                            [ Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill, Ui.contentCenterY ]
+                            DmChannelHeaderTab_ChannelDescription
+                            currentChannelHeaderTab
+                            --(Ui.row
+                            --    [ Ui.spacing 2
+                            --    , Ui.clipWithEllipsis
+                            --    , Ui.height Ui.fill
+                            --    , Ui.contentCenterY
+                            --    , Ui.width Ui.shrink
+                            --    ]
                             [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                             , Ui.text name
                             ]
+
+                        --)
                         , showFilesButton
                         ]
             )
@@ -4050,47 +4045,13 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             True
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
-                    let
-                        currentTab : Maybe DmChannelHeaderTab
-                        currentTab =
-                            case model.route of
-                                DmRoute dmRoute ->
-                                    dmRoute.tab
-
-                                HomePageRoute ->
-                                    Nothing
-
-                                AdminRoute _ ->
-                                    Nothing
-
-                                GuildRoute _ _ ->
-                                    Nothing
-
-                                DiscordGuildRoute _ ->
-                                    Nothing
-
-                                DiscordDmRoute _ ->
-                                    Nothing
-
-                                AiChatRoute ->
-                                    Nothing
-
-                                SlackOAuthRedirect _ ->
-                                    Nothing
-
-                                TextEditorRoute ->
-                                    Nothing
-
-                                LinkDiscord _ ->
-                                    Nothing
-                    in
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
                         (if otherUserId == local.localUser.session.userId then
-                            privateChatWithYourself isMobile currentTab local
+                            privateChatWithYourself isMobile (Route.toChannelHeaderTab model.route) local
 
                          else
-                            privateChatWith isMobile currentTab otherUserId local name
+                            privateChatWith isMobile (Route.toChannelHeaderTab model.route) otherUserId local name
                         )
 
                 GuildOrDmId_Guild _ _ ->

@@ -14,6 +14,8 @@ module Route exposing
     , linkDiscordPath
     , linkDiscordQueryParam
     , requiresLogin
+    , sameChannelHeaderTab
+    , toChannelHeaderTab
     , toGuildOrDmId
     )
 
@@ -376,6 +378,82 @@ decode url =
 
         _ ->
             HomePageRoute
+
+
+toChannelHeaderTab : Route -> Maybe DmChannelHeaderTab
+toChannelHeaderTab route =
+    case route of
+        DmRoute dmRoute ->
+            dmRoute.tab
+
+        HomePageRoute ->
+            Nothing
+
+        AdminRoute _ ->
+            Nothing
+
+        GuildRoute _ channelRoute ->
+            case channelRoute of
+                ChannelRoute _ _ maybeTab ->
+                    maybeTab
+
+                NewChannelRoute ->
+                    Nothing
+
+                EditChannelRoute id ->
+                    Nothing
+
+                GuildSettingsRoute ->
+                    Nothing
+
+                JoinRoute secretId ->
+                    Nothing
+
+        DiscordGuildRoute _ ->
+            Nothing
+
+        DiscordDmRoute _ ->
+            Nothing
+
+        AiChatRoute ->
+            Nothing
+
+        SlackOAuthRedirect _ ->
+            Nothing
+
+        TextEditorRoute ->
+            Nothing
+
+        LinkDiscord _ ->
+            Nothing
+
+
+sameChannelHeaderTab : DmChannelHeaderTab -> DmChannelHeaderTab -> Bool
+sameChannelHeaderTab tabA tabB =
+    case tabA of
+        DmChannelHeaderTab_VoiceChat ->
+            case tabB of
+                DmChannelHeaderTab_VoiceChat ->
+                    True
+
+                _ ->
+                    False
+
+        DmChannelHeaderTab_Go maybeId ->
+            case tabB of
+                DmChannelHeaderTab_Go _ ->
+                    True
+
+                _ ->
+                    False
+
+        DmChannelHeaderTab_ChannelDescription ->
+            case tabB of
+                DmChannelHeaderTab_ChannelDescription ->
+                    True
+
+                _ ->
+                    False
 
 
 goMatchParam : String
