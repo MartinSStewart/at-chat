@@ -27,6 +27,7 @@ import NoMissingTypeConstructor
 import NoMissingTypeExpose
 import NoModuleOnExposedNames
 import NoOpaqueInToBackend
+import NoRedundantUiAttributes
 import NoSimpleLetBody
 import NoStaleReferences
 import NoUnused.CustomTypeConstructors
@@ -62,6 +63,8 @@ config =
             , "src/DiscordRecordedTest.elm"
             ]
     , RunUnsafeAtStartup.rule
+    , NoRedundantUiAttributes.rule
+        |> defaultIgnore
     , NoStaleReferences.rule
         |> defaultIgnore
 
