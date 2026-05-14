@@ -296,17 +296,25 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
 outwardBottomCorner : Int -> Bool -> Ui.Attribute msg
 outwardBottomCorner radius isLeft =
     let
+        overlap : Int
+        overlap =
+            1
+
         r : String
         r =
             String.fromInt radius
 
+        w : String
+        w =
+            String.fromInt (radius + overlap)
+
         path : String
         path =
             if isLeft then
-                "M " ++ r ++ ",0 A " ++ r ++ " " ++ r ++ " 0 0 1 0," ++ r ++ " L " ++ r ++ "," ++ r ++ " Z"
+                "M " ++ w ++ ",0 L " ++ r ++ ",0 A " ++ r ++ " " ++ r ++ " 0 0 1 0," ++ r ++ " L " ++ w ++ "," ++ r ++ " Z"
 
             else
-                "M 0,0 A " ++ r ++ " " ++ r ++ " 0 0 0 " ++ r ++ "," ++ r ++ " L 0," ++ r ++ " Z"
+                "M 0,0 L " ++ String.fromInt overlap ++ ",0 A " ++ r ++ " " ++ r ++ " 0 0 0 " ++ w ++ "," ++ r ++ " L 0," ++ r ++ " Z"
 
         translate : String
         translate =
@@ -324,16 +332,16 @@ outwardBottomCorner radius isLeft =
 
               else
                 Ui.alignRight
-            , Ui.width (Ui.px radius)
+            , Ui.width (Ui.px (radius + overlap))
             , Ui.height (Ui.px radius)
             , Ui.Font.color MyUi.background1
             , MyUi.htmlStyle "transform" translate
             , MyUi.htmlStyle "pointer-events" "none"
             ]
             (Svg.svg
-                [ Svg.Attributes.width r
+                [ Svg.Attributes.width w
                 , Svg.Attributes.height r
-                , Svg.Attributes.viewBox ("0 0 " ++ r ++ " " ++ r)
+                , Svg.Attributes.viewBox ("0 0 " ++ w ++ " " ++ r)
                 , Svg.Attributes.style "display:block"
                 ]
                 [ Svg.path
