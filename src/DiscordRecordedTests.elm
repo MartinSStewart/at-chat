@@ -322,6 +322,7 @@ discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
                         Route.DiscordChannel_ChannelRoute
                             RecordedTestExtra.botTestGuild_ChannelA
                             (Route.NoThreadWithFriends Nothing Route.ShowMembersTab)
+                            Nothing
                     }
                 )
             )
