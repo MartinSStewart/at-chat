@@ -1679,7 +1679,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         normalConfig
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
             RecordedTestExtra.desktopWindow
-            (\admin _ ->
+            (\admin user ->
                 let
                     guildId : Id GuildId
                     guildId =
@@ -1692,15 +1692,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ admin.click 100 (Dom.id "guild_newChannel")
                 , admin.input 100 (Dom.id "newChannelName") "to-delete"
                 , admin.click 100 (Dom.id "guild_createChannel")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "to-delete" ])
                 , admin.update 100 (Types.MouseEnteredChannelName guildId newChannelId Id.NoThread)
                 , admin.click 100 (Dom.id ("guild_editChannel_" ++ Id.toString newChannelId))
                 , admin.click 100 (Dom.id "guild_deleteChannel")
-                , admin.checkView
-                    100
-                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
                 ]
             )
         ]
@@ -1710,7 +1708,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         normalConfig
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
             RecordedTestExtra.desktopWindow
-            (\admin _ ->
+            (\admin user ->
                 let
                     guildId : Id GuildId
                     guildId =
@@ -1737,6 +1735,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.checkView
                     100
                     (Test.Html.Query.has [ Test.Html.Selector.exactText "with-message" ])
+                , user.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "with-message" ])
 
                 -- Wrong text does not delete
                 , admin.input 100 (Dom.id "deleteChannelConfirmation") "wrong-name"
@@ -1749,6 +1750,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.input 100 (Dom.id "deleteChannelConfirmation") "with-message"
                 , admin.click 100 (Dom.id "guild_deleteChannel")
                 , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "with-message" ])
+                , user.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "with-message" ])
                 ]
