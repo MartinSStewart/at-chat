@@ -383,7 +383,7 @@ privateChatWith isMobile currentTab otherUserId local name =
             (Dom.id "guild_openDescription")
             DmChannelHeaderTab_ChannelDescription
             currentTab
-            (Ui.row [] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
+            (Ui.row [ MyUi.prewrap ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
