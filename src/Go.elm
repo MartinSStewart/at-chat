@@ -186,6 +186,11 @@ komiHalfPointsFromString input =
                 Err "Enter a number"
 
 
+addPointsToHalfPoints : Int -> KomiHalfPoints -> KomiHalfPoints
+addPointsToHalfPoints points (KomiHalfPoints a) =
+    points * 2 + a |> KomiHalfPoints
+
+
 komiHalfPointsToString : KomiHalfPoints -> String
 komiHalfPointsToString (KomiHalfPoints a) =
     String.fromInt (a // 2)
@@ -1559,6 +1564,7 @@ matchSwitcherView isMobile maybeMatchId matches =
                     [ Html.Attributes.id "go_matchSwitcher"
                     , Html.Attributes.value currentValue
                     , Html.Events.onInput onSelect
+                    , Html.Attributes.style "height" "100%"
                     , Html.Attributes.attribute "aria-label" "View match"
                     , Html.Attributes.style "padding"
                         (if isMobile then
@@ -1627,7 +1633,6 @@ setupView playingAgainstSelf windowSize model =
              else
                 24
             )
-        , MyUi.montserrat
         , Ui.background MyUi.tabBackground
         ]
         [ setupSection
@@ -1843,30 +1848,27 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : Bool -> LocalUser -> GameState -> ValidatedSetup -> Element msg
-clockView isMobile localUser state setup =
+clockView : LocalUser -> GameState -> ValidatedSetup -> Element msg
+clockView localUser state setup =
     Ui.row
         [ Ui.spacing 8
-        , Ui.width Ui.shrink
-        , Ui.paddingXY 16 0
-        , if isMobile then
-            Ui.centerX
-
-          else
-            Ui.noAttr
+        , Ui.paddingXY 16 16
+        , Ui.contentCenterX
         ]
         [ clockChip
             (User.getUser setup.blackPlayer localUser)
-            "Black"
             state.blackTime
             (state.currentPlayer == Black && isPlayingPhase state)
-            setup.timeControl
+            Black
+            setup
+            state.blackCaptures
         , clockChip
             (User.getUser setup.whitePlayer localUser)
-            "White"
             state.whiteTime
             (state.currentPlayer == White && isPlayingPhase state)
-            setup.timeControl
+            White
+            setup
+            state.whiteCaptures
         ]
 
 
@@ -1897,45 +1899,103 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Maybe FrontendUser -> String -> Float -> Bool -> Maybe TimeControl -> Element msg
-clockChip maybeUser label seconds isActive timeControl =
+clockChip : Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Element msg
+clockChip maybeUser seconds isActive stone setup captures =
+    let
+        ( colorA, colorB ) =
+            case stone of
+                White ->
+                    ( Ui.rgb 230 230 230, Ui.rgb 20 20 20 )
+
+                Black ->
+                    ( Ui.rgb 20 20 20, MyUi.white )
+    in
     Ui.row
         [ User.profileImageRounding
         , Ui.width (Ui.px 170)
-        , Ui.border 1
+        , Ui.border 2
         , Ui.spacing 8
         , Ui.paddingRight 8
+        , Ui.contentCenterY
+        , Ui.clip
         , Ui.borderColor
-            (if isActive then
-                Ui.rgb 59 153 252
+            (case ( isActive, stone ) of
+                ( True, Black ) ->
+                    Ui.rgb 59 153 252
 
-             else
-                Ui.rgb 200 200 200
+                ( False, Black ) ->
+                    colorA
+
+                ( True, White ) ->
+                    Ui.rgb 59 153 252
+
+                ( False, White ) ->
+                    colorA
             )
-        , if isActive then
-            Ui.background MyUi.background2
 
-          else
-            Ui.noAttr
+        --, if isActive then
+        --    Ui.background MyUi.background2
+        --
+        --  else
+        --    Ui.noAttr
+        , Ui.background colorA
         , if isActive then
-            Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 6, color = Ui.rgba 59 153 252 0.5 } ]
+            Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 6, color = Ui.rgba 59 153 252 1 } ]
 
           else
             Ui.noAttr
         ]
-        [ case maybeUser of
+        [ (case maybeUser of
             Just user ->
-                User.profileImage user.icon
+                User.profileImageNoRounding user.icon
 
             Nothing ->
-                User.profileImage Nothing
-        , Ui.text label
-        , case timeControl of
-            Just _ ->
-                Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink, Ui.alignRight ] (Ui.text (formatClock seconds))
+                User.profileImageNoRounding Nothing
+          )
+            |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 } ]
+        , Ui.row
+            [ Ui.spacing 16, Ui.alignRight ]
+            [ case setup.timeControl of
+                Just _ ->
+                    Ui.el
+                        [ Ui.Font.weight 600
+                        , Ui.width Ui.shrink
+                        , Ui.Font.size 20
+                        , Ui.Font.color colorB
+                        ]
+                        (Ui.text (formatClock seconds))
 
-            Nothing ->
-                Ui.none
+                Nothing ->
+                    Ui.none
+            , Ui.row
+                [ Ui.Font.color
+                    (case stone of
+                        White ->
+                            Ui.rgb 20 20 20
+
+                        Black ->
+                            Ui.rgb 230 230 230
+                    )
+                , Ui.spacing 4
+                , Ui.contentCenterY
+                , Ui.Font.letterSpacing -1
+                , Ui.Font.bold
+                ]
+                [ Ui.el
+                    [ Ui.width (Ui.px 16)
+                    , Ui.height (Ui.px 16)
+                    , Ui.background colorB
+                    , Ui.rounded 99
+                    ]
+                    Ui.none
+                , case stone of
+                    White ->
+                        addPointsToHalfPoints captures setup.komiHalfPoints |> komiHalfPointsToString |> Ui.text
+
+                    Black ->
+                        String.fromInt captures |> Ui.text
+                ]
+            ]
         ]
 
 
@@ -1982,18 +2042,27 @@ gameView windowSize currentUserId localUser setup state model =
              else
                 16
             )
-        , MyUi.montserrat
         , Ui.background MyUi.background1
         ]
-        [ statusView setup state model
-        , clockView isMobile localUser state setup
-        , boardView windowSize currentUserId setup state model
+        [ statusView state
+        , Ui.column
+            [ Ui.width Ui.shrink
+            , Ui.background boardColor
+            , Ui.rounded 4
+            ]
+            [ clockView localUser state setup
+            , boardView windowSize currentUserId setup state model
+            ]
         , if isMobile then
             Ui.none
 
           else
             historyView state model
-        , controlsView state
+        , if isLocalUsersTurn currentUserId setup state then
+            controlsView state
+
+          else
+            Ui.none
         , case model.lastError of
             Just err ->
                 Ui.el [ Ui.Font.color (Ui.rgb 200 50 50) ] (Ui.text err)
@@ -2003,13 +2072,9 @@ gameView windowSize currentUserId localUser setup state model =
         ]
 
 
-statusView : ValidatedSetup -> GameState -> GameModel -> Element msg
-statusView setup state model =
+statusView : GameState -> Element msg
+statusView state =
     let
-        snapshot : Snapshot
-        snapshot =
-            viewingSnapshot state model
-
         turnText : String
         turnText =
             case state.phase of
@@ -2033,11 +2098,7 @@ statusView setup state model =
     in
     Ui.column
         [ Ui.spacing 4, Ui.paddingXY 16 0 ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText)
-        , Ui.text ("Black has captured: " ++ String.fromInt snapshot.blackCaptures)
-        , Ui.text ("White has captured: " ++ String.fromInt snapshot.whiteCaptures)
-        , Ui.text ("Komi: " ++ komiHalfPointsToString setup.komiHalfPoints)
-        ]
+        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText) ]
 
 
 formatScore : Float -> String
@@ -2227,7 +2288,7 @@ boardView windowSize currentUserId setup state model =
         , Svg.Attributes.height (String.fromInt displayHeight)
         , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt widthPx ++ " " ++ String.fromInt heightPx)
         , Svg.Attributes.preserveAspectRatio "xMidYMid meet"
-        , Svg.Attributes.style "background:#dcb35c;display:block"
+        , Svg.Attributes.style "display:block"
         ]
         (gridLines width height
             ++ starPointShapes width height
@@ -2250,6 +2311,11 @@ boardView windowSize currentUserId setup state model =
               else
                 Ui.noAttr
             ]
+
+
+boardColor : Ui.Color
+boardColor =
+    Ui.rgb 220 179 92
 
 
 gridLines : Int -> Int -> List (Svg msg)

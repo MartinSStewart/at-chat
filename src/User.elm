@@ -25,6 +25,7 @@ module User exposing
     , linkDiscordDataCodec
     , multipleProfileImages
     , profileImage
+    , profileImageNoRounding
     , profileImageRounding
     , profileImageSize
     , sectionToString
@@ -683,6 +684,28 @@ profileImage maybeFileHash =
             Ui.el
                 [ Ui.background (Ui.rgb 100 100 100)
                 , profileImageRounding
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
+                ]
+                Ui.none
+
+
+profileImageNoRounding : Maybe FileHash -> Element msg
+profileImageNoRounding maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Ui.image
+                [ Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
+                ]
+                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+
+        Nothing ->
+            Ui.el
+                [ Ui.background (Ui.rgb 100 100 100)
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
                 ]
