@@ -897,25 +897,17 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedCancelEditChannelChanges guildId channelId ->
-            case model.loginStatus of
-                LoggedIn loggedIn ->
-                    FrontendExtra.routePush
-                        { model
-                            | loginStatus =
-                                LoggedIn
-                                    { loggedIn
-                                        | editChannelForm =
-                                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
-                                    }
-                        }
-                        (GuildRoute
-                            guildId
-                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
-                        )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+        PressedResetEditChannelChanges guildId channelId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editChannelForm =
+                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
         PressedSubmitEditChannelChanges guildId channelId form ->
             FrontendExtra.updateLoggedIn
@@ -941,6 +933,28 @@ updateLoaded msg model =
                               }
                             , Command.none
                             )
+                )
+                model
+
+        PressedShowDeleteChannelConfirmation guildId channelId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editChannelForm =
+                            SeqDict.update
+                                ( guildId, channelId )
+                                (\maybeForm ->
+                                    case maybeForm of
+                                        Just form ->
+                                            Just { form | showDeleteConfirmation = True }
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                loggedIn.editChannelForm
+                      }
+                    , Command.none
+                    )
                 )
                 model
 

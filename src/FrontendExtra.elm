@@ -1445,10 +1445,13 @@ isPressMsg msg =
         EditChannelFormChanged _ _ _ ->
             False
 
-        PressedCancelEditChannelChanges _ _ ->
+        PressedResetEditChannelChanges _ _ ->
             True
 
         PressedSubmitEditChannelChanges _ _ _ ->
+            True
+
+        PressedShowDeleteChannelConfirmation _ _ ->
             True
 
         PressedDeleteChannel _ _ ->

@@ -399,9 +399,10 @@ type FrontendMsg
     | MouseEnteredDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | MouseExitedDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
-    | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
+    | PressedResetEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
+    | PressedShowDeleteChannelConfirmation (Id GuildId) (Id ChannelId)
     | PressedCreateInviteLink (Id GuildId)
     | FrontendNoOp
     | PressedCopyText String
@@ -516,6 +517,7 @@ type alias NewChannelForm =
     { name : String
     , description : String
     , deleteConfirmation : String
+    , showDeleteConfirmation : Bool
     , pressedSubmit : Bool
     }
 
