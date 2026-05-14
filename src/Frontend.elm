@@ -30,6 +30,7 @@ import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Go
+import Gremlin
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -236,6 +237,14 @@ subscriptions model =
                                             MessageMenuFixed _ ->
                                                 Subscription.none
                                 , ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
+                                , if loggedIn.enableGremlins then
+                                    Subscription.batch
+                                        [ Time.every (Duration.milliseconds 250) (\_ -> GremlinTick)
+                                        , Ports.wordBoundingBoxesSub GotGremlinWordBoxes
+                                        ]
+
+                                  else
+                                    Subscription.none
                                 ]
 
                         NotLoggedIn _ ->
@@ -435,6 +444,9 @@ loadedInitHelper timezone userAgent loginData loading =
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = 0
             , enableGremlins = False
+            , gremlinTick = 0
+            , gremlinReqId = 0
+            , gremlinSpot = Nothing
             }
     in
     ( loggedIn
@@ -2801,9 +2813,119 @@ updateLoaded msg model =
         PressedToggleGremlins enabled ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | enableGremlins = enabled }
-                    , Ports.setGremlinsEnabled enabled
+                    ( { loggedIn
+                        | enableGremlins = enabled
+                        , gremlinSpot =
+                            if enabled then
+                                loggedIn.gremlinSpot
+
+                            else
+                                Nothing
+                      }
+                    , Command.none
                     )
+                )
+                model
+
+        GremlinTick ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        nextTick : Int
+                        nextTick =
+                            loggedIn.gremlinTick + 1
+
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+
+                        shouldRespawn : Bool
+                        shouldRespawn =
+                            -- pick a new spot every ~3 seconds (12 ticks @ 250ms),
+                            -- and right away when we don't have one yet
+                            loggedIn.gremlinSpot == Nothing || modBy 12 nextTick == 0
+
+                        nextReqId : Int
+                        nextReqId =
+                            if shouldRespawn then
+                                loggedIn.gremlinReqId + 1
+
+                            else
+                                loggedIn.gremlinReqId
+
+                        respawnCmd : Command FrontendOnly ToBackend FrontendMsg
+                        respawnCmd =
+                            if shouldRespawn then
+                                case Gremlin.pickGremlinTargetMessage nextTick local of
+                                    Just htmlId ->
+                                        Ports.getWordBoundingBoxes nextReqId htmlId
+
+                                    Nothing ->
+                                        Command.none
+
+                            else
+                                Command.none
+                    in
+                    ( { loggedIn
+                        | gremlinTick = nextTick
+                        , gremlinReqId = nextReqId
+                      }
+                    , respawnCmd
+                    )
+                )
+                model
+
+        GotGremlinWordBoxes result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case result of
+                        Ok response ->
+                            if response.requestId /= loggedIn.gremlinReqId then
+                                ( loggedIn, Command.none )
+
+                            else
+                                case Gremlin.pickGremlinWord response.boxes of
+                                    Just word ->
+                                        let
+                                            local : LocalState
+                                            local =
+                                                Local.model loggedIn.localState
+                                        in
+                                        ( loggedIn
+                                        , case Gremlin.pickGremlinTargetMessage loggedIn.gremlinTick local of
+                                            Just htmlId ->
+                                                Dom.getElement htmlId
+                                                    |> Task.attempt (GotGremlinElement word)
+
+                                            Nothing ->
+                                                Command.none
+                                        )
+
+                                    Nothing ->
+                                        ( loggedIn, Command.none )
+
+                        Err _ ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        GotGremlinElement word result ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case result of
+                        Ok element ->
+                            ( { loggedIn
+                                | gremlinSpot =
+                                    Just
+                                        { x = element.element.x + word.x + word.width - Gremlin.gremlinWidth
+                                        , y = element.element.y + word.y - Gremlin.gremlinHeight + 2
+                                        }
+                              }
+                            , Command.none
+                            )
+
+                        Err _ ->
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -6259,7 +6381,8 @@ view model =
                                 in
                                 FrontendExtra.layout
                                     loaded
-                                    [ case loggedIn.userOptions of
+                                    [ Gremlin.view loggedIn |> Ui.inFront
+                                    , case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
                                                 (MyUi.isMobile loaded)

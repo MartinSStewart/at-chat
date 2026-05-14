@@ -218,7 +218,14 @@ type alias LoggedIn2 =
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
     , enableGremlins : Bool
+    , gremlinTick : Int
+    , gremlinReqId : Int
+    , gremlinSpot : Maybe GremlinSpot
     }
+
+
+type alias GremlinSpot =
+    { x : Float, y : Float }
 
 
 type alias UserOptionsModel =
@@ -477,6 +484,9 @@ type FrontendMsg
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
     | PressedToggleGremlins Bool
+    | GremlinTick
+    | GotGremlinWordBoxes (Result String Ports.WordBoundingBoxesResponse)
+    | GotGremlinElement Ports.WordBoundingBox (Result Dom.Error Dom.Element)
     | PressedLinkDiscordUser
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)

@@ -34,7 +34,6 @@ port module Ports exposing
     , serviceWorkerMessage
     , setCursorPosition
     , setFavicon
-    , setGremlinsEnabled
     , shiftScrollByElementDelta
     , showNotification
     , smoothScrollBy
@@ -601,17 +600,6 @@ port word_bounding_boxes_to_js : Json.Encode.Value -> Cmd msg
 
 
 port word_bounding_boxes_from_js : (Json.Decode.Value -> msg) -> Sub msg
-
-
-port gremlins_to_js : Json.Encode.Value -> Cmd msg
-
-
-setGremlinsEnabled : Bool -> Command FrontendOnly toMsg msg
-setGremlinsEnabled enabled =
-    Command.sendToJs
-        "gremlins_to_js"
-        gremlins_to_js
-        (Json.Encode.object [ ( "enabled", Json.Encode.bool enabled ) ])
 
 
 type alias WordBoundingBox =

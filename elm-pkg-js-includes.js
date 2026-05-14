@@ -7,7 +7,6 @@ const setFavicon = require('./elm-pkg-js/set-favicon.js');
 const cropImage = require('./elm-pkg-js/crop-image.js');
 const voiceChat = require('./elm-pkg-js/voice-chat.js');
 const wordBoundingBoxes = require('./elm-pkg-js/word-bounding-boxes.js');
-const gremlins = require('./elm-pkg-js/gremlins.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -18,5 +17,4 @@ exports.init = async function init(app) {
   cropImage.init(app);
   voiceChat.init(app);
   wordBoundingBoxes.init(app);
-  gremlins.init(app);
 }

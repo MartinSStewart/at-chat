@@ -1666,6 +1666,15 @@ isPressMsg msg =
         PressedToggleGremlins _ ->
             True
 
+        GremlinTick ->
+            False
+
+        GotGremlinWordBoxes _ ->
+            False
+
+        GotGremlinElement _ _ ->
+            False
+
         PressedLinkDiscordUser ->
             True
 
