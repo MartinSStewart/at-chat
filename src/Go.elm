@@ -1,20 +1,20 @@
 module Go exposing
     ( Action(..)
     , ActionWithTime
-    , BoardSize
+    , BoardSize(..)
     , DeadContext
     , GameModel
     , GameMsg(..)
     , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , Model
+    , Model(..)
     , Msg(..)
     , OutMsg(..)
     , Phase
     , SetupModel
     , SetupMsg(..)
-    , SizeSelection
+    , SizeSelection(..)
     , Snapshot
     , Stone(..)
     , TimeControl
@@ -100,6 +100,8 @@ type alias GameModel =
     }
 
 
+{-| OpaqueVariants
+-}
 type BoardSize
     = BoardSize Int
 
@@ -213,6 +215,8 @@ type alias SetupModel =
     }
 
 
+{-| OpaqueVariants
+-}
 type SizeSelection
     = Standard9
     | Standard13
@@ -220,6 +224,8 @@ type SizeSelection
     | CustomSize
 
 
+{-| OpaqueVariants
+-}
 type Model
     = Setup SetupModel
     | Game GameModel
