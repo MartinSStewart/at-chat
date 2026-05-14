@@ -8,7 +8,7 @@ module ChannelHeader exposing
     , threadChannelHeader
     )
 
-import ChannelDescription exposing (ChannelDescription(..))
+import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -22,7 +22,6 @@ import MyUi
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater
-import PersonName
 import Route exposing (ChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import Svg
@@ -528,22 +527,22 @@ channelHeaderTabView local loggedIn model =
                         DmChannelHeaderTab_VoiceChat ->
                             Nothing
 
-                        DmChannelHeaderTab_Go maybeId ->
+                        DmChannelHeaderTab_Go _ ->
                             Nothing
 
-                ChannelRoute channelId _ _ ->
+                ChannelRoute _ _ _ ->
                     Nothing
 
                 NewChannelRoute ->
                     Nothing
 
-                EditChannelRoute id ->
+                EditChannelRoute _ ->
                     Nothing
 
                 GuildSettingsRoute ->
                     Nothing
 
-                JoinRoute secretId ->
+                JoinRoute _ ->
                     Nothing
 
         DmRoute dmRoute ->
@@ -587,25 +586,25 @@ channelHeaderTabView local loggedIn model =
         HomePageRoute ->
             Nothing
 
-        AdminRoute record ->
+        AdminRoute _ ->
             Nothing
 
-        DiscordGuildRoute discordGuildRouteData ->
+        DiscordGuildRoute _ ->
             Nothing
 
-        DiscordDmRoute dmRoute ->
+        DiscordDmRoute _ ->
             Nothing
 
         AiChatRoute ->
             Nothing
 
-        SlackOAuthRedirect result ->
+        SlackOAuthRedirect _ ->
             Nothing
 
         TextEditorRoute ->
             Nothing
 
-        LinkDiscord result ->
+        LinkDiscord _ ->
             Nothing
 
 
