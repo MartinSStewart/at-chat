@@ -4199,9 +4199,37 @@ updateLoaded msg model =
                     ( modelReset, Command.none )
 
         PressedChannelHeaderTab tab ->
+            let
+                sameTab : DmChannelHeaderTab -> Maybe DmChannelHeaderTab -> Maybe DmChannelHeaderTab
+                sameTab tabA tabB =
+                    case tabA of
+                        DmChannelHeaderTab_VoiceChat ->
+                            case tabB of
+                                Just DmChannelHeaderTab_VoiceChat ->
+                                    Nothing
+
+                                _ ->
+                                    Just tabA
+
+                        DmChannelHeaderTab_Go maybeId ->
+                            case tabB of
+                                Just (DmChannelHeaderTab_Go _) ->
+                                    Nothing
+
+                                _ ->
+                                    Just tabA
+
+                        DmChannelHeaderTab_ChannelDescription ->
+                            case tabB of
+                                Just DmChannelHeaderTab_ChannelDescription ->
+                                    Nothing
+
+                                _ ->
+                                    Just tabA
+            in
             case model.route of
                 DmRoute dmRoute ->
-                    FrontendExtra.routePush model (DmRoute { dmRoute | tab = Just tab })
+                    FrontendExtra.routePush model (DmRoute { dmRoute | tab = sameTab tab dmRoute.tab })
 
                 HomePageRoute ->
                     ( model, Command.none )
@@ -4210,20 +4238,11 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) currentTab) ->
-                    let
-                        newTab : Maybe Route.DmChannelHeaderTab
-                        newTab =
-                            if currentTab == Just tab then
-                                Nothing
-
-                            else
-                                Just tab
-                    in
                     FrontendExtra.routePush
                         model
                         (GuildRoute
                             guildId
-                            (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) newTab)
+                            (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) (sameTab tab currentTab))
                         )
 
                 GuildRoute _ _ ->
