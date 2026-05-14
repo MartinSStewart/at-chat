@@ -2902,6 +2902,23 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case loggedIn.userOptions of
                         Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just { userOptions | domainWhitelistInput = newText }
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedSaveDomainWhitelist ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
                             let
                                 oldDomains : SeqSet RichText.Domain
                                 oldDomains =
@@ -2909,14 +2926,7 @@ updateLoaded msg model =
 
                                 newDomains : SeqSet RichText.Domain
                                 newDomains =
-                                    parseDomainWhitelistInput newText
-
-                                loggedIn2 : LoggedIn2
-                                loggedIn2 =
-                                    { loggedIn
-                                        | userOptions =
-                                            Just { userOptions | domainWhitelistInput = newText }
-                                    }
+                                    parseDomainWhitelistInput userOptions.domainWhitelistInput
                             in
                             List.foldl
                                 (\domain ( l, cmds ) ->
@@ -2926,7 +2936,7 @@ updateLoaded msg model =
                                         l
                                         cmds
                                 )
-                                ( loggedIn2, Command.none )
+                                ( loggedIn, Command.none )
                                 (SeqSet.toList (SeqSet.diff newDomains oldDomains))
                                 |> (\acc ->
                                         List.foldl
@@ -2940,6 +2950,43 @@ updateLoaded msg model =
                                             acc
                                             (SeqSet.toList (SeqSet.diff oldDomains newDomains))
                                    )
+                                |> Tuple.mapFirst
+                                    (\l ->
+                                        { l
+                                            | userOptions =
+                                                Maybe.map
+                                                    (\uo ->
+                                                        { uo
+                                                            | domainWhitelistInput =
+                                                                UserOptions.domainWhitelistToString
+                                                                    (Local.model l.localState).localUser.user.domainWhitelist
+                                                        }
+                                                    )
+                                                    l.userOptions
+                                        }
+                                    )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PressedResetDomainWhitelist ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Just
+                                        { userOptions
+                                            | domainWhitelistInput =
+                                                UserOptions.domainWhitelistToString
+                                                    (Local.model loggedIn.localState).localUser.user.domainWhitelist
+                                        }
+                              }
+                            , Command.none
+                            )
 
                         Nothing ->
                             ( loggedIn, Command.none )

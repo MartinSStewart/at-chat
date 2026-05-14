@@ -1,4 +1,4 @@
-module UserOptions exposing (discordBookmarkletId, init, view)
+module UserOptions exposing (discordBookmarkletId, domainWhitelistToString, init, view)
 
 import Discord
 import DiscordUserData exposing (DiscordUserLoadingData(..))
@@ -322,6 +322,11 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     Ui.none
 
                   else
+                    let
+                        hasChanges : Bool
+                        hasChanges =
+                            model.domainWhitelistInput /= domainWhitelistToString local.localUser.user.domainWhitelist
+                    in
                     MyUi.container
                         MyUi.background1
                         isMobile
@@ -340,6 +345,25 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             , label = Ui.Input.labelHidden "Whitelisted domains"
                             , spellcheck = False
                             }
+                        , Ui.row
+                            [ Ui.spacing 8, Ui.width Ui.shrink ]
+                            [ if hasChanges then
+                                MyUi.simpleButton
+                                    (Dom.id "userOptions_saveWhitelistDomains")
+                                    PressedSaveDomainWhitelist
+                                    (Ui.text "Save")
+
+                              else
+                                Ui.none
+                            , if hasChanges then
+                                MyUi.simpleButton
+                                    (Dom.id "userOptions_resetWhitelistDomains")
+                                    PressedResetDomainWhitelist
+                                    (Ui.text "Reset")
+
+                              else
+                                Ui.none
+                            ]
                         ]
                 , MyUi.container
                     MyUi.background1

@@ -485,6 +485,8 @@ type FrontendMsg
     | PressedCloseExternalLinkWarning
     | PressedAddDomainToWhitelist Bool
     | TypedDomainWhitelist String
+    | PressedSaveDomainWhitelist
+    | PressedResetDomainWhitelist
     | PressedContinueToSite
     | EditMessage_MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
     | MessageInputMsg AnyGuildOrDmId ThreadRoute MessageInput.Msg
