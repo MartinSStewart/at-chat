@@ -22,6 +22,7 @@ module Go exposing
     , boardSize9
     , currentPlayersTurn
     , deadStones
+    , hasPendingTurn
     , pressedKey
     , update
     , view
@@ -2010,6 +2011,25 @@ isLocalUsersTurn currentUserId setup state =
 
         White ->
             setup.whitePlayer == currentUserId
+
+
+hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime ) -> Bool
+hasPendingTurn userId matches =
+    SeqDict.values matches
+        |> List.any
+            (\( setup, actions ) ->
+                let
+                    state : GameState
+                    state =
+                        foldActions actions setup
+                in
+                case state.phase of
+                    Scored _ ->
+                        False
+
+                    _ ->
+                        isLocalUsersTurn userId setup state
+            )
 
 
 gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg

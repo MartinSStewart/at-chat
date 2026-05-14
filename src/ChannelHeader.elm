@@ -8,6 +8,7 @@ module ChannelHeader exposing
     , thread
     )
 
+import Array exposing (Array)
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
@@ -16,7 +17,7 @@ import Effect.Lamdera exposing (ClientId)
 import Go
 import GuildIcon
 import Icons
-import Id exposing (DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
+import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
@@ -358,6 +359,12 @@ channelHeaderTab isMobile htmlId tab currentTab content =
 
 privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> Element FrontendMsg
 privateChatWithYourself isMobile currentTab local =
+    let
+        goMatches =
+            SeqDict.get local.localUser.session.userId local.dmChannels
+                |> Maybe.map .goMatches
+                |> Maybe.withDefault SeqDict.empty
+    in
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -369,13 +376,19 @@ privateChatWithYourself isMobile currentTab local =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , goGameButton isMobile currentTab
+            , goGameButton isMobile currentTab local.localUser.session.userId goMatches
             ]
         ]
 
 
 privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> Element FrontendMsg
 privateChatWith isMobile currentTab otherUserId local name =
+    let
+        goMatches =
+            SeqDict.get otherUserId local.dmChannels
+                |> Maybe.map .goMatches
+                |> Maybe.withDefault SeqDict.empty
+    in
     Ui.row
         [ Ui.Font.color MyUi.font1, Ui.spacing 6, Ui.height Ui.fill ]
         [ channelHeaderTab
@@ -387,19 +400,61 @@ privateChatWith isMobile currentTab otherUserId local name =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-            , goGameButton isMobile currentTab
+            , goGameButton isMobile currentTab local.localUser.session.userId goMatches
             ]
         ]
 
 
-goGameButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
-goGameButton isMobile currentTab =
+goGameButton :
+    Bool
+    -> Maybe DmChannelHeaderTab
+    -> Id UserId
+    -> SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    -> Element FrontendMsg
+goGameButton isMobile currentTab userId goMatches =
+    let
+        viewingGo : Bool
+        viewingGo =
+            case currentTab of
+                Just (DmChannelHeaderTab_Go _) ->
+                    True
+
+                _ ->
+                    False
+
+        showDot : Bool
+        showDot =
+            not viewingGo && Go.hasPendingTurn userId goMatches
+    in
     channelHeaderTab
         isMobile
         (Dom.id "guild_openGoMatch")
         (DmChannelHeaderTab_Go Nothing)
         currentTab
-        (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
+        (Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.Font.bold
+            , if showDot then
+                Ui.el
+                    [ Ui.width (Ui.px 10)
+                    , Ui.height (Ui.px 10)
+                    , Ui.background MyUi.alertColor
+                    , Ui.rounded 5
+                    , Ui.border 2
+                    , Ui.borderColor MyUi.background1
+                    , Ui.move { x = 4, y = -4, z = 0 }
+                    , Ui.alignRight
+                    , MyUi.htmlStyle "aria-label" "Your turn"
+                    , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "guild_goMatchTurnDot"))
+                    ]
+                    Ui.none
+                    |> Ui.inFront
+
+              else
+                Ui.noAttr
+            ]
+            (Ui.html Icons.go)
+        )
 
 
 voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg
