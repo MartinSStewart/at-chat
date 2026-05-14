@@ -1195,30 +1195,35 @@ updateLoaded msg model =
                                 Just (DmChannelHeaderTab_Go maybeMatchId) ->
                                     FrontendExtra.updateLoggedIn
                                         (\loggedIn ->
-                                            let
-                                                local =
-                                                    Local.model loggedIn.localState
-                                            in
-                                            case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
-                                                Just otherUserId ->
-                                                    let
-                                                        dmChannel : FrontendDmChannel
-                                                        dmChannel =
-                                                            SeqDict.get otherUserId local.dmChannels
-                                                                |> Maybe.withDefault DmChannel.frontendInit
-                                                    in
-                                                    ( { loggedIn
-                                                        | currentDmGoMatch =
-                                                            SeqDict.update
-                                                                ( otherUserId, maybeMatchId )
-                                                                (Go.pressedKey key maybeMatchId dmChannel.goMatches)
-                                                                loggedIn.currentDmGoMatch
-                                                      }
-                                                    , Command.none
-                                                    )
+                                            case loggedIn.textInputFocus of
+                                                Just _ ->
+                                                    ( loggedIn, Command.none )
 
                                                 Nothing ->
-                                                    ( loggedIn, Command.none )
+                                                    let
+                                                        local =
+                                                            Local.model loggedIn.localState
+                                                    in
+                                                    case DmChannel.otherUserId local.localUser.session.userId dmRoute.channelId of
+                                                        Just otherUserId ->
+                                                            let
+                                                                dmChannel : FrontendDmChannel
+                                                                dmChannel =
+                                                                    SeqDict.get otherUserId local.dmChannels
+                                                                        |> Maybe.withDefault DmChannel.frontendInit
+                                                            in
+                                                            ( { loggedIn
+                                                                | currentDmGoMatch =
+                                                                    SeqDict.update
+                                                                        ( otherUserId, maybeMatchId )
+                                                                        (Go.pressedKey key maybeMatchId dmChannel.goMatches)
+                                                                        loggedIn.currentDmGoMatch
+                                                              }
+                                                            , Command.none
+                                                            )
+
+                                                        Nothing ->
+                                                            ( loggedIn, Command.none )
                                         )
                                         model
 
