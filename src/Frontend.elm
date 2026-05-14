@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Bytes.Decode
+import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -923,7 +924,7 @@ updateLoaded msg model =
                         Ok channelName ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_EditChannel guildId channelId channelName |> Just)
+                                (Local_EditChannel guildId channelId channelName (ChannelDescription.fromStringLossy form.description) |> Just)
                                 { loggedIn
                                     | editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm

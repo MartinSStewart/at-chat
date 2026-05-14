@@ -2505,7 +2505,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_EditChannel guildId channelId channelName ->
+                Local_EditChannel guildId channelId channelName channelDescription ->
                     asGuildOwner
                         model
                         sessionId
@@ -2515,7 +2515,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | guilds =
                                     SeqDict.insert
                                         guildId
-                                        (LocalState.editChannel channelName channelId guild)
+                                        (LocalState.editChannel channelName channelDescription channelId guild)
                                         model.guilds
                               }
                             , Command.batch
@@ -2524,7 +2524,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 , Broadcast.toGuildExcludingOne
                                     clientId
                                     guildId
-                                    (Server_EditChannel guildId channelId channelName |> ServerChange)
+                                    (Server_EditChannel guildId channelId channelName channelDescription |> ServerChange)
                                     model
                                 ]
                             )

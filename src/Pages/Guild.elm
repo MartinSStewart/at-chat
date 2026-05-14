@@ -20,6 +20,7 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import Array.Extra
 import Bitwise
+import ChannelDescription
 import ChannelHeader
 import ChannelName
 import Coord
@@ -7038,7 +7039,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
 newChannelFormInit : NewChannelForm
 newChannelFormInit =
-    { name = "", pressedSubmit = False }
+    { name = "", description = "", pressedSubmit = False }
 
 
 newGuildFormInit : NewGuildForm
@@ -7048,7 +7049,10 @@ newGuildFormInit =
 
 editChannelFormInit : FrontendChannel -> NewChannelForm
 editChannelFormInit channel =
-    { name = ChannelName.toString channel.name, pressedSubmit = False }
+    { name = ChannelName.toString channel.name
+    , description = ChannelDescription.toString channel.description
+    , pressedSubmit = False
+    }
 
 
 editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> NewChannelForm -> Element FrontendMsg
@@ -7057,6 +7061,7 @@ editChannelFormView guildId channelId channel form =
         [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
         , channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+        , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
         , Ui.row
             [ Ui.spacing 16 ]
             [ MyUi.elButton
@@ -7153,6 +7158,33 @@ channelNameInput form =
 
             _ ->
                 Ui.none
+        ]
+
+
+channelDescriptionInput : NewChannelForm -> Element NewChannelForm
+channelDescriptionInput form =
+    let
+        descriptionLabel =
+            Ui.Input.label
+                "channelDescription"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text "Channel description")
+    in
+    Ui.column
+        []
+        [ descriptionLabel.element
+        , Ui.Input.multiline
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> { form | description = text }
+            , text = form.description
+            , placeholder = Nothing
+            , label = descriptionLabel.id
+            , spellcheck = True
+            }
         ]
 
 

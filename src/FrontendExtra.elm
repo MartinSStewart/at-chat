@@ -108,7 +108,7 @@ pendingChangesText localChange =
         Local_NewChannel _ _ _ ->
             "Created new channel"
 
-        Local_EditChannel _ _ _ ->
+        Local_EditChannel _ _ _ _ ->
             "Edited channel"
 
         Local_DeleteChannel _ _ ->
@@ -2067,12 +2067,12 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
-                Local_EditChannel guildId channelId channelName ->
+                Local_EditChannel guildId channelId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.editChannel channelName channelId)
+                                (LocalState.editChannel channelName channelDescription channelId)
                                 local.guilds
                     }
 
@@ -2967,12 +2967,12 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
-                Server_EditChannel guildId channelId channelName ->
+                Server_EditChannel guildId channelId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.editChannel channelName channelId)
+                                (LocalState.editChannel channelName channelDescription channelId)
                                 local.guilds
                     }
 

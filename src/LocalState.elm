@@ -1120,11 +1120,12 @@ createChannelFrontend time userId channelName guild =
 
 editChannel :
     ChannelName
+    -> ChannelDescription
     -> Id ChannelId
-    -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName } }
-    -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName } }
-editChannel channelName channelId guild =
-    updateChannel (\channel -> { channel | name = channelName }) channelId guild
+    -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName, description : ChannelDescription } }
+    -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName, description : ChannelDescription } }
+editChannel channelName channelDescription channelId guild =
+    updateChannel (\channel -> { channel | name = channelName, description = channelDescription }) channelId guild
 
 
 deleteChannel : Time.Posix -> Id UserId -> Id ChannelId -> BackendGuild -> BackendGuild

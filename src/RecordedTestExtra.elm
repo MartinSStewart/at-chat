@@ -66,6 +66,7 @@ import AiChat exposing (AiModelName(..))
 import Array
 import Backend
 import Broadcast
+import ChannelDescription
 import Codec
 import Dict
 import Discord
@@ -1339,7 +1340,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_NewChannel _ _ _ ->
                     True
 
-                Local_EditChannel _ _ _ ->
+                Local_EditChannel _ _ _ _ ->
                     True
 
                 Local_DeleteChannel _ _ ->
@@ -1478,7 +1479,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_NewChannel _ _ _ ->
                             True
 
-                        Types.Server_EditChannel _ _ _ ->
+                        Types.Server_EditChannel _ _ _ _ ->
                             True
 
                         Types.Server_DeleteChannel _ _ ->
@@ -1774,7 +1775,7 @@ allAttackerLocalChanges =
     , Local_Discord_SendEditGuildMessage messageTime discordUserId discordGuildId discordChannelId threadRouteWithMessage normalText
     , Local_Discord_SendMessage messageTime discordGuildOrDmId_guild normalText threadRouteWithMaybeMessage SeqDict.empty
     , Local_Discord_SendMessage messageTime discordGuildOrDmId_dm normalText threadRouteWithMaybeMessage SeqDict.empty
-    , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked")
+    , Local_EditChannel legitGuildId channelId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_Invalid
     , Local_LinkDiscordAcknowledgementIsChecked True
     , Local_LoadChannelMessages (GuildOrDmId_Dm normalUserId) (Id.fromInt 0) EmptyPlaceholder
