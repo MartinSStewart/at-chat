@@ -58,6 +58,7 @@ type alias DiscordDmRouteData =
     , channelId : Discord.Id Discord.PrivateChannelId
     , viewingMessage : Maybe (Id ChannelMessageId)
     , showMembersTab : ShowMembersTab
+    , tab : Maybe DmChannelHeaderTab
     }
 
 
@@ -87,7 +88,7 @@ type ChannelRoute
 
 
 type DiscordChannelRoute
-    = DiscordChannel_ChannelRoute (Discord.Id Discord.ChannelId) ThreadRouteWithFriends
+    = DiscordChannel_ChannelRoute (Discord.Id Discord.ChannelId) ThreadRouteWithFriends (Maybe DmChannelHeaderTab)
     | DiscordChannel_NewChannelRoute
     | DiscordChannel_EditChannelRoute (Discord.Id Discord.ChannelId)
     | DiscordChannel_GuildSettingsRoute
@@ -214,6 +215,7 @@ decode url =
                                         (DiscordChannel_ChannelRoute
                                             channelId2
                                             (stringToThread showMembers threadMessageIndex messageIndex)
+                                            (decodeChannelHeaderTab url2)
                                         )
                                         |> DiscordGuildRoute
 
@@ -224,6 +226,7 @@ decode url =
                                         (DiscordChannel_ChannelRoute
                                             channelId2
                                             (stringToThread showMembers threadMessageIndex "")
+                                            (decodeChannelHeaderTab url2)
                                         )
                                         |> DiscordGuildRoute
 
@@ -234,6 +237,7 @@ decode url =
                                         (DiscordChannel_ChannelRoute
                                             channelId2
                                             (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                                            (decodeChannelHeaderTab url2)
                                         )
                                         |> DiscordGuildRoute
 
@@ -244,6 +248,7 @@ decode url =
                                         (DiscordChannel_ChannelRoute
                                             channelId2
                                             (NoThreadWithFriends Nothing showMembers)
+                                            (decodeChannelHeaderTab url2)
                                         )
                                         |> DiscordGuildRoute
 
@@ -313,6 +318,7 @@ decode url =
                                 _ ->
                                     Nothing
                         , showMembersTab = showMembers
+                        , tab = decodeChannelHeaderTab url2
                         }
 
                 _ ->
@@ -403,11 +409,22 @@ toChannelHeaderTab route =
                 JoinRoute _ ->
                     Nothing
 
-        DiscordGuildRoute _ ->
-            Nothing
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute _ _ maybeTab ->
+                    maybeTab
 
-        DiscordDmRoute _ ->
-            Nothing
+                DiscordChannel_NewChannelRoute ->
+                    Nothing
+
+                DiscordChannel_EditChannelRoute _ ->
+                    Nothing
+
+                DiscordChannel_GuildSettingsRoute ->
+                    Nothing
+
+        DiscordDmRoute routeData ->
+            routeData.tab
 
         AiChatRoute ->
             Nothing
@@ -426,12 +443,7 @@ sameChannelHeaderTab : DmChannelHeaderTab -> DmChannelHeaderTab -> Bool
 sameChannelHeaderTab tabA tabB =
     case tabA of
         DmChannelHeaderTab_VoiceChat ->
-            case tabB of
-                DmChannelHeaderTab_VoiceChat ->
-                    True
-
-                _ ->
-                    False
+            tabB == DmChannelHeaderTab_VoiceChat
 
         DmChannelHeaderTab_Go _ ->
             case tabB of
@@ -442,12 +454,7 @@ sameChannelHeaderTab tabA tabB =
                     False
 
         DmChannelHeaderTab_ChannelDescription ->
-            case tabB of
-                DmChannelHeaderTab_ChannelDescription ->
-                    True
-
-                _ ->
-                    False
+            tabB == DmChannelHeaderTab_ChannelDescription
 
 
 goMatchParam : String
@@ -527,7 +534,7 @@ encode route =
 
                 DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
                     case channelRoute of
-                        DiscordChannel_ChannelRoute channelId thread ->
+                        DiscordChannel_ChannelRoute channelId thread tab ->
                             case thread of
                                 ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
                                     ( [ "dg"
@@ -539,7 +546,7 @@ encode route =
                                       , Id.toString threadMessageIndex
                                       ]
                                         ++ maybeMessageIdToString maybeMessageId
-                                    , encodeShowMembers showMembers
+                                    , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
@@ -550,7 +557,7 @@ encode route =
                                       , Discord.idToString channelId
                                       ]
                                         ++ maybeMessageIdToString maybeMessageId
-                                    , encodeShowMembers showMembers
+                                    , encodeShowMembers showMembers ++ encodeChannelHeaderTab tab
                                     )
 
                         DiscordChannel_EditChannelRoute channelId ->
@@ -729,7 +736,7 @@ toGuildOrDmId userId route =
 
         DiscordGuildRoute data ->
             case data.channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute ->
+                DiscordChannel_ChannelRoute channelId threadRoute _ ->
                     ( DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId |> DiscordGuildOrDmId
                     , case threadRoute of
                         ViewThreadWithFriends threadMessageId _ _ ->

@@ -2402,7 +2402,7 @@ routeToViewing route local =
         DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
             if SeqDict.member guildId local.discordGuilds then
                 case channelRoute of
-                    DiscordChannel_ChannelRoute channelId threadRoute ->
+                    DiscordChannel_ChannelRoute channelId threadRoute _ ->
                         case threadRoute of
                             NoThreadWithFriends _ _ ->
                                 ViewDiscordChannel guildId channelId currentDiscordUserId EmptyPlaceholder

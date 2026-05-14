@@ -1452,7 +1452,7 @@ view windowSize localUser otherUserId maybeMatchId matches model =
     Ui.el
         [ Ui.height (Ui.px (viewHeight windowSize))
         , Ui.scrollable
-        , Ui.background MyUi.background1
+        , Ui.background MyUi.tabBackground
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , MyUi.noShrinking
@@ -1628,7 +1628,7 @@ setupView playingAgainstSelf windowSize model =
                 24
             )
         , MyUi.montserrat
-        , Ui.background MyUi.background1
+        , Ui.background MyUi.tabBackground
         ]
         [ setupSection
             "Board size"

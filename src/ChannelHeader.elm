@@ -1,11 +1,11 @@
 module ChannelHeader exposing
-    ( channelHeader
+    ( channel
+    , channelHeader
     , chattingWithYourself
-    , conversationChannelHeader
-    , discordChannelHeader
-    , discordThreadChannelHeader
+    , discordChannel
+    , discordThread
     , headerBackButton
-    , threadChannelHeader
+    , thread
     )
 
 import ChannelDescription
@@ -22,7 +22,7 @@ import MyUi
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater
-import Route exposing (ChannelRoute(..), DmChannelHeaderTab(..), Route(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import Svg
 import Svg.Attributes
@@ -34,15 +34,8 @@ import User exposing (LocalUser)
 import VoiceChat exposing (RoomId(..))
 
 
-conversationChannelHeader :
-    Bool
-    -> String
-    -> GuildOrDmId
-    -> LocalState
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> Element FrontendMsg
-conversationChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model =
+channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+channel isMobile name guildOrDmIdNoThread local loggedIn model =
     let
         currentChannelHeaderTab =
             Route.toChannelHeaderTab model.route
@@ -75,18 +68,11 @@ conversationChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model
                     , showFilesButton
                     ]
         )
-        (channelHeaderTabView local loggedIn model)
+        (tabBodyView local loggedIn model)
 
 
-threadChannelHeader :
-    Bool
-    -> String
-    -> GuildOrDmId
-    -> LocalState
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> Element FrontendMsg
-threadChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model =
+thread : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+thread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
         True
@@ -109,11 +95,15 @@ threadChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model =
                     , showFilesButton
                     ]
         )
-        (channelHeaderTabView local loggedIn model)
+        (tabBodyView local loggedIn model)
 
 
-discordChannelHeader : Bool -> String -> DiscordGuildOrDmId -> LocalState -> Element FrontendMsg
-discordChannelHeader isMobile name guildOrDmIdNoThread local =
+discordChannel : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+discordChannel isMobile name guildOrDmIdNoThread local loggedIn model =
+    let
+        currentChannelHeaderTab =
+            Route.toChannelHeaderTab model.route
+    in
     channelHeader
         isMobile
         True
@@ -130,17 +120,23 @@ discordChannelHeader isMobile name guildOrDmIdNoThread local =
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                    [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
-                    , Ui.text name
+                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.height Ui.fill ]
+                    [ channelHeaderTabRow
+                        isMobile
+                        (Dom.id "guild_openChannelDescription")
+                        DmChannelHeaderTab_ChannelDescription
+                        currentChannelHeaderTab
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                        , Ui.text name
+                        ]
                     , showFilesButton
                     ]
         )
-        Nothing
+        (tabBodyView local loggedIn model)
 
 
-discordThreadChannelHeader : Bool -> String -> DiscordGuildOrDmId -> LocalState -> Element FrontendMsg
-discordThreadChannelHeader isMobile name guildOrDmIdNoThread local =
+discordThread : Bool -> String -> DiscordGuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
+discordThread isMobile name guildOrDmIdNoThread local loggedIn model =
     channelHeader
         isMobile
         True
@@ -157,20 +153,20 @@ discordThreadChannelHeader isMobile name guildOrDmIdNoThread local =
 
             DiscordGuildOrDmId_Guild _ _ _ ->
                 Ui.row
-                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                    [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis, Ui.contentCenterY, Ui.height Ui.fill ]
                     [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
                     , Ui.text name
                     , showFilesButton
                     ]
         )
-        Nothing
+        (tabBodyView local loggedIn model)
 
 
 chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
 chattingWithYourself data local =
     case SeqDict.get data.channelId local.discordDmChannels of
-        Just channel ->
-            NonemptyDict.all (\userId _ -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
+        Just channel2 ->
+            NonemptyDict.all (\userId _ -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel2.members
 
         Nothing ->
             False
@@ -277,7 +273,7 @@ channelHeaderTabAttributes paddingLeft paddingRight isMobile tab currentTab =
     , Ui.height Ui.fill
     , Ui.paddingWith { left = paddingLeft, right = paddingRight, top = 4, bottom = 4 }
     , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-    , Ui.attrIf isSelected (Ui.background MyUi.background1)
+    , Ui.attrIf isSelected (Ui.background MyUi.tabBackground)
     , Ui.attrIf isSelected (outwardBottomCorner 8 True)
     , Ui.attrIf isSelected (outwardBottomCorner 8 False)
     , Ui.contentCenterY
@@ -333,7 +329,7 @@ outwardBottomCorner radius isLeft =
                 Ui.alignRight
             , Ui.width (Ui.px (radius + overlap))
             , Ui.height (Ui.px radius)
-            , Ui.Font.color MyUi.background1
+            , Ui.Font.color MyUi.tabBackground
             , MyUi.htmlStyle "transform" translate
             , MyUi.htmlStyle "pointer-events" "none"
             ]
@@ -509,8 +505,8 @@ discordPrivateChatWith name =
     ]
 
 
-channelHeaderTabView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
-channelHeaderTabView local loggedIn model =
+tabBodyView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
+tabBodyView local loggedIn model =
     case model.route of
         GuildRoute guildId channelRoute ->
             case channelRoute of
@@ -518,8 +514,8 @@ channelHeaderTabView local loggedIn model =
                     case tab of
                         DmChannelHeaderTab_ChannelDescription ->
                             case LocalState.getGuildAndChannel guildId channelId local of
-                                Just ( _, channel ) ->
-                                    Just (channelDescriptionView (Just channel.name) (ChannelDescription.toString channel.description))
+                                Just ( _, channel2 ) ->
+                                    Just (channelDescriptionView (Just channel2.name) (ChannelDescription.toString channel2.description))
 
                                 Nothing ->
                                     Nothing
@@ -589,8 +585,35 @@ channelHeaderTabView local loggedIn model =
         AdminRoute _ ->
             Nothing
 
-        DiscordGuildRoute _ ->
-            Nothing
+        DiscordGuildRoute routeData ->
+            case routeData.channelRoute of
+                DiscordChannel_ChannelRoute channelId _ (Just tab) ->
+                    case tab of
+                        DmChannelHeaderTab_ChannelDescription ->
+                            case LocalState.getDiscordGuildAndChannel routeData.guildId channelId local of
+                                Just ( _, channel2 ) ->
+                                    Just (channelDescriptionView (Just channel2.name) (ChannelDescription.toString channel2.description))
+
+                                Nothing ->
+                                    Nothing
+
+                        DmChannelHeaderTab_VoiceChat ->
+                            Nothing
+
+                        DmChannelHeaderTab_Go _ ->
+                            Nothing
+
+                DiscordChannel_ChannelRoute _ _ _ ->
+                    Nothing
+
+                DiscordChannel_NewChannelRoute ->
+                    Nothing
+
+                DiscordChannel_EditChannelRoute _ ->
+                    Nothing
+
+                DiscordChannel_GuildSettingsRoute ->
+                    Nothing
 
         DiscordDmRoute _ ->
             Nothing
@@ -614,7 +637,7 @@ channelDescriptionView channelName description =
         [ Ui.paddingXY 16 12
         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
         , Ui.borderColor MyUi.border2
-        , Ui.background MyUi.background1
+        , Ui.background MyUi.tabBackground
         , Ui.Font.color MyUi.font2
         , Ui.spacing 8
         ]

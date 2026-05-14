@@ -61,6 +61,7 @@ module MyUi exposing
     , secondaryGrayBorder
     , selectedTextBackground
     , simpleButton
+    , tabBackground
     , textLinkColor
     , textLinkColorOnDarkBackground
     , timeElapsedShort
@@ -954,6 +955,11 @@ colorWithAlpha alpha color =
             Color.toRgba color
     in
     Color.fromRgba { color2 | alpha = alpha }
+
+
+tabBackground : Ui.Color
+tabBackground =
+    background1
 
 
 background1 : Ui.Color

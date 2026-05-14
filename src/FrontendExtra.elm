@@ -435,7 +435,7 @@ canDropFiles currentUserId route =
 
         DiscordGuildRoute routeData ->
             case routeData.channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute ->
+                DiscordChannel_ChannelRoute channelId threadRoute _ ->
                     let
                         threadRoute2 : ThreadRoute
                         threadRoute2 =
@@ -1263,7 +1263,7 @@ routeRequest previousRoute newRoute model =
                             False
             in
             case channelRoute of
-                DiscordChannel_ChannelRoute _ threadRoute ->
+                DiscordChannel_ChannelRoute _ threadRoute _ ->
                     enterChannelRoute threadRoute sameGuild previousRoute viewCmd model3
 
                 DiscordChannel_NewChannelRoute ->

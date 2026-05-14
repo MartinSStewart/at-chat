@@ -398,11 +398,13 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                                         NoThread ->
                                                             NoThreadWithFriends Nothing HideMembersTab
                                                     )
+                                                    Nothing
 
                                             Nothing ->
                                                 DiscordChannel_ChannelRoute
                                                     (LocalState.discordAnnouncementChannel guild)
                                                     (NoThreadWithFriends Nothing HideMembersTab)
+                                                    Nothing
                                      }
                                         |> DiscordGuildRoute
                                     )
@@ -975,7 +977,7 @@ discordGuildView model routeData loggedIn local =
                             showMembers : ShowMembersTab
                             showMembers =
                                 case routeData.channelRoute of
-                                    DiscordChannel_ChannelRoute _ threadRoute ->
+                                    DiscordChannel_ChannelRoute _ threadRoute _ ->
                                         case threadRoute of
                                             ViewThreadWithFriends _ _ showMembers2 ->
                                                 showMembers2
@@ -1536,7 +1538,7 @@ channelView channelRoute guildId guild loggedIn local model =
 discordChannelView : DiscordGuildRouteData -> DiscordFrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 discordChannelView routeData guild loggedIn local model =
     case routeData.channelRoute of
-        DiscordChannel_ChannelRoute channelId threadRoute ->
+        DiscordChannel_ChannelRoute channelId threadRoute _ ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     let
@@ -3205,7 +3207,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.conversationChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model
+        [ ChannelHeader.channel isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
             [ emojiSelector
                 isMobile
@@ -3381,7 +3383,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.discordChannelHeader isMobile name guildOrDmIdNoThread local
+        [ ChannelHeader.discordChannel isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
             [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
@@ -3633,7 +3635,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.threadChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model
+        [ ChannelHeader.thread isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
             [ emojiSelector
                 isMobile
@@ -3818,7 +3820,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
-        [ ChannelHeader.discordThreadChannelHeader isMobile name guildOrDmIdNoThread local
+        [ ChannelHeader.discordThread isMobile name guildOrDmIdNoThread local loggedIn model
         , Ui.el
             [ emojiSelector isMobile availableCustomEmojis availableStickers local loggedIn model
             , Ui.heightMin 0
@@ -6050,7 +6052,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                             channelId
                             channel
                             (case routeData.channelRoute of
-                                DiscordChannel_ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) ->
+                                DiscordChannel_ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) _ ->
                                     if channelIdB == channelId then
                                         SeqDict.insert threadMessageIndex Thread.discordFrontendInit channel.threads
 
@@ -6213,7 +6215,7 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                         isSelected : Bool
                         isSelected =
                             case routeData.channelRoute of
-                                DiscordChannel_ChannelRoute a (ViewThreadWithFriends b _ _) ->
+                                DiscordChannel_ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
                                     a == channelId && b == threadMessageIndex
 
                                 _ ->
@@ -6241,7 +6243,11 @@ discordChannelColumnThreads isMobile routeData directMentions localUser channelI
                             (DiscordGuildRoute
                                 { currentDiscordUserId = routeData.currentDiscordUserId
                                 , guildId = routeData.guildId
-                                , channelRoute = DiscordChannel_ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)
+                                , channelRoute =
+                                    DiscordChannel_ChannelRoute
+                                        channelId
+                                        (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)
+                                        Nothing
                                 }
                             )
                             [ Ui.height Ui.fill
@@ -6415,7 +6421,7 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
         isSelected : Bool
         isSelected =
             case routeData.channelRoute of
-                DiscordChannel_ChannelRoute a (NoThreadWithFriends _ _) ->
+                DiscordChannel_ChannelRoute a (NoThreadWithFriends _ _) _ ->
                     a == channelId
 
                 DiscordChannel_EditChannelRoute a ->
@@ -6447,7 +6453,11 @@ discordChannelColumnRow isMobile hasNotifications channelNameHover routeData cha
             (DiscordGuildRoute
                 { currentDiscordUserId = routeData.currentDiscordUserId
                 , guildId = routeData.guildId
-                , channelRoute = DiscordChannel_ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab)
+                , channelRoute =
+                    DiscordChannel_ChannelRoute
+                        channelId
+                        (NoThreadWithFriends Nothing HideMembersTab)
+                        Nothing
                 }
             )
             [ Ui.height Ui.fill
@@ -6964,6 +6974,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                         , channelId = dmChannelId
                         , viewingMessage = Nothing
                         , showMembersTab = HideMembersTab
+                        , tab = Nothing
                         }
                     )
                 )

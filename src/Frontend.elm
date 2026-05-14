@@ -1414,7 +1414,7 @@ updateLoaded msg model =
 
                 ( DiscordGuildRoute guildRoute, LoggedIn loggedIn ) ->
                     case guildRoute.channelRoute of
-                        DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) ->
+                        DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) _ ->
                             FrontendExtra.routePush
                                 { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                                 (DiscordGuildRoute
@@ -1423,6 +1423,7 @@ updateLoaded msg model =
                                             DiscordChannel_ChannelRoute
                                                 channelId
                                                 (ViewThreadWithFriends messageIndex Nothing HideMembersTab)
+                                                Nothing
                                     }
                                 )
 
@@ -2410,6 +2411,7 @@ updateLoaded msg model =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
+                                                                Nothing
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2423,6 +2425,7 @@ updateLoaded msg model =
                                                             DiscordChannel_ChannelRoute
                                                                 channelId
                                                                 (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                                Nothing
                                                          }
                                                             |> DiscordGuildRoute
                                                         )
@@ -2435,6 +2438,7 @@ updateLoaded msg model =
                                                             , channelId = channelId
                                                             , viewingMessage = Just repliedTo
                                                             , showMembersTab = HideMembersTab
+                                                            , tab = Nothing
                                                             }
                                                         )
 
@@ -2521,7 +2525,11 @@ updateLoaded msg model =
                                 model
                                 ({ currentDiscordUserId = currentDiscordUserId
                                  , guildId = guildId
-                                 , channelRoute = DiscordChannel_ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab)
+                                 , channelRoute =
+                                    DiscordChannel_ChannelRoute
+                                        channelId
+                                        (ViewThreadWithFriends messageId Nothing HideMembersTab)
+                                        Nothing
                                  }
                                     |> DiscordGuildRoute
                                 )
@@ -2534,6 +2542,7 @@ updateLoaded msg model =
                                     , channelId = channelId
                                     , viewingMessage = Nothing
                                     , showMembersTab = HideMembersTab
+                                    , tab = Nothing
                                     }
                                 )
 
@@ -2851,6 +2860,7 @@ updateLoaded msg model =
                                     , channelId = channelId
                                     , viewingMessage = Nothing
                                     , showMembersTab = HideMembersTab
+                                    , tab = Nothing
                                     }
                                 )
 
@@ -4270,19 +4280,36 @@ updateLoaded msg model =
                 AdminRoute _ ->
                     ( model, Command.none )
 
-                GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) currentTab) ->
-                    FrontendExtra.routePush
-                        model
-                        (GuildRoute
-                            guildId
-                            (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) (sameTab tab currentTab))
-                        )
+                GuildRoute guildId channelRoute ->
+                    case channelRoute of
+                        ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) currentTab ->
+                            FrontendExtra.routePush
+                                model
+                                (GuildRoute
+                                    guildId
+                                    (ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) (sameTab tab currentTab))
+                                )
 
-                GuildRoute _ _ ->
-                    ( model, Command.none )
+                        _ ->
+                            ( model, Command.none )
 
-                DiscordGuildRoute _ ->
-                    ( model, Command.none )
+                DiscordGuildRoute routeData ->
+                    case routeData.channelRoute of
+                        DiscordChannel_ChannelRoute channelId (NoThreadWithFriends maybeMessageId showMembers) currentTab ->
+                            FrontendExtra.routePush
+                                model
+                                (DiscordGuildRoute
+                                    { routeData
+                                        | channelRoute =
+                                            DiscordChannel_ChannelRoute
+                                                channelId
+                                                (NoThreadWithFriends maybeMessageId showMembers)
+                                                (sameTab tab currentTab)
+                                    }
+                                )
+
+                        _ ->
+                            ( model, Command.none )
 
                 DiscordDmRoute _ ->
                     ( model, Command.none )
@@ -6486,7 +6513,7 @@ routeToInitialDataRequest route =
 
         DiscordGuildRoute data ->
             case data.channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute ->
+                DiscordChannel_ChannelRoute channelId threadRoute _ ->
                     InitialLoadRequested_Discord
                         (DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId)
                         (case threadRoute of

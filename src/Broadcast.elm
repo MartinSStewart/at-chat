@@ -539,7 +539,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
                                             , guildId = guildId
-                                            , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends
+                                            , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends Nothing
                                             }
                                             |> Just
                                         )
@@ -672,6 +672,7 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
                     , channelId = channelId
                     , viewingMessage = Nothing
                     , showMembersTab = HideMembersTab
+                    , tab = Nothing
                     }
                     |> Just
                 )
