@@ -882,14 +882,14 @@ updateLoaded msg model =
                 )
                 model
 
-        EditChannelFormChanged guildId channelId newChannelForm ->
+        EditChannelFormChanged guildId channelId form ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | editChannelForm =
                             SeqDict.insert
                                 ( guildId, channelId )
-                                newChannelForm
+                                form
                                 loggedIn.editChannelForm
                       }
                     , Command.none
@@ -933,28 +933,6 @@ updateLoaded msg model =
                               }
                             , Command.none
                             )
-                )
-                model
-
-        PressedShowDeleteChannelConfirmation guildId channelId ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | editChannelForm =
-                            SeqDict.update
-                                ( guildId, channelId )
-                                (\maybeForm ->
-                                    case maybeForm of
-                                        Just form ->
-                                            Just { form | showDeleteConfirmation = True }
-
-                                        Nothing ->
-                                            Nothing
-                                )
-                                loggedIn.editChannelForm
-                      }
-                    , Command.none
-                    )
                 )
                 model
 

@@ -6,6 +6,7 @@ module Types exposing
     , ChannelSidebarMode(..)
     , DiscordAttachmentData
     , Drag(..)
+    , EditChannelForm
     , EditMessage
     , EmojiSelector(..)
     , ExportState
@@ -190,7 +191,7 @@ type alias LoggedIn2 =
     , admin : Pages.Admin.Model
     , drafts : SeqDict ( AnyGuildOrDmId, ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
-    , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
+    , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     , newGuildForm : Maybe NewGuildForm
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
@@ -398,11 +399,10 @@ type FrontendMsg
     | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
     | MouseEnteredDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | MouseExitedDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
-    | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
+    | EditChannelFormChanged (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedResetEditChannelChanges (Id GuildId) (Id ChannelId)
-    | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
+    | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
-    | PressedShowDeleteChannelConfirmation (Id GuildId) (Id ChannelId)
     | PressedCreateInviteLink (Id GuildId)
     | FrontendNoOp
     | PressedCopyText String
@@ -514,6 +514,13 @@ type ScrollPosition
 
 
 type alias NewChannelForm =
+    { name : String
+    , description : String
+    , pressedSubmit : Bool
+    }
+
+
+type alias EditChannelForm =
     { name : String
     , description : String
     , deleteConfirmation : String

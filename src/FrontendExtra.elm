@@ -1451,9 +1451,6 @@ isPressMsg msg =
         PressedSubmitEditChannelChanges _ _ _ ->
             True
 
-        PressedShowDeleteChannelConfirmation _ _ ->
-            True
-
         PressedDeleteChannel _ _ ->
             True
 
