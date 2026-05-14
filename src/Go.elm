@@ -43,6 +43,7 @@ import Id exposing (ChannelMessageId, Id, UserId)
 import MyUi
 import Ports
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -2013,23 +2014,31 @@ isLocalUsersTurn currentUserId setup state =
             setup.whitePlayer == currentUserId
 
 
-hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime ) -> Bool
+hasPendingTurn :
+    Id UserId
+    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqSet (Id ChannelMessageId)
 hasPendingTurn userId matches =
-    SeqDict.values matches
-        |> List.any
-            (\( setup, actions ) ->
-                let
-                    state : GameState
-                    state =
-                        foldActions actions setup
-                in
-                case state.phase of
-                    Scored _ ->
-                        False
+    SeqDict.foldl
+        (\matchId ( setup, actions ) set ->
+            let
+                state : GameState
+                state =
+                    foldActions actions setup
+            in
+            case state.phase of
+                Scored _ ->
+                    set
 
-                    _ ->
-                        isLocalUsersTurn userId setup state
-            )
+                _ ->
+                    if isLocalUsersTurn userId setup state then
+                        SeqSet.insert matchId set
+
+                    else
+                        set
+        )
+        SeqSet.empty
+        matches
 
 
 gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg

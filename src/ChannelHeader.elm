@@ -25,6 +25,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import Svg
 import Svg.Attributes
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
@@ -422,36 +423,36 @@ goGameButton isMobile currentTab userId goMatches =
                 _ ->
                     False
 
-        showDot : Bool
-        showDot =
-            not viewingGo && Go.hasPendingTurn userId goMatches
+        hasPendingTurn =
+            Go.hasPendingTurn userId goMatches
     in
     channelHeaderTab
         isMobile
         (Dom.id "guild_openGoMatch")
-        (DmChannelHeaderTab_Go Nothing)
+        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Go)
         currentTab
         (Ui.el
             [ Ui.width Ui.shrink
             , Ui.Font.bold
-            , if showDot then
-                Ui.el
-                    [ Ui.width (Ui.px 10)
-                    , Ui.height (Ui.px 10)
-                    , Ui.background MyUi.alertColor
-                    , Ui.rounded 5
-                    , Ui.border 2
-                    , Ui.borderColor MyUi.background1
-                    , Ui.move { x = 4, y = -4, z = 0 }
-                    , Ui.alignRight
-                    , MyUi.htmlStyle "aria-label" "Your turn"
-                    , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "guild_goMatchTurnDot"))
-                    ]
-                    Ui.none
-                    |> Ui.inFront
+            , case ( viewingGo, SeqSet.isEmpty hasPendingTurn ) of
+                ( False, False ) ->
+                    Ui.el
+                        [ Ui.width (Ui.px 10)
+                        , Ui.height (Ui.px 10)
+                        , Ui.background MyUi.alertColor
+                        , Ui.rounded 5
+                        , Ui.border 2
+                        , Ui.borderColor MyUi.background1
+                        , Ui.move { x = -3, y = 3, z = 0 }
+                        , Ui.alignRight
+                        , MyUi.htmlStyle "aria-label" "Your turn"
+                        , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "guild_goMatchTurnDot"))
+                        ]
+                        Ui.none
+                        |> Ui.inFront
 
-              else
-                Ui.noAttr
+                _ ->
+                    Ui.noAttr
             ]
             (Ui.html Icons.go)
         )
