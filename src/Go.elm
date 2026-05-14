@@ -622,7 +622,10 @@ performPass setup model =
     case model.phase of
         Playing { previousPlayerPassed } ->
             if previousPlayerPassed then
-                applyIncrement setup model.currentPlayer { model | phase = Marking }
+                applyIncrement
+                    setup
+                    model.currentPlayer
+                    { model | phase = Marking, currentPlayer = otherStone model.currentPlayer }
 
             else
                 applyIncrement
@@ -1278,7 +1281,7 @@ updateAction setup action model =
         FinishedMarking ->
             case model.phase of
                 Marking ->
-                    { model | phase = Confirming }
+                    { model | phase = Confirming, currentPlayer = otherStone model.currentPlayer }
 
                 _ ->
                     model
@@ -1858,14 +1861,14 @@ clockView localUser state setup =
         [ clockChip
             (User.getUser setup.blackPlayer localUser)
             state.blackTime
-            (state.currentPlayer == Black && isPlayingPhase state)
+            (state.currentPlayer == Black)
             Black
             setup
             state.blackCaptures
         , clockChip
             (User.getUser setup.whitePlayer localUser)
             state.whiteTime
-            (state.currentPlayer == White && isPlayingPhase state)
+            (state.currentPlayer == White)
             White
             setup
             state.whiteCaptures
