@@ -1,6 +1,7 @@
 module ChannelHeader exposing (channelHeader, chattingWithYourself, conversationChannelHeader, discordChannelHeader, discordThreadChannelHeader, headerBackButton, threadChannelHeader)
 
 import ChannelDescription exposing (ChannelDescription(..))
+import ChannelName exposing (ChannelName)
 import DmChannel
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera exposing (ClientId)
@@ -13,6 +14,7 @@ import MyUi
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater
+import PersonName
 import Route exposing (ChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
@@ -101,6 +103,7 @@ threadChannelHeader isMobile name guildOrDmIdNoThread local loggedIn model =
         (channelHeaderTabView local loggedIn model)
 
 
+discordChannelHeader : Bool -> String -> DiscordGuildOrDmId -> LocalState -> Element FrontendMsg
 discordChannelHeader isMobile name guildOrDmIdNoThread local =
     channelHeader
         isMobile
@@ -127,6 +130,7 @@ discordChannelHeader isMobile name guildOrDmIdNoThread local =
         Nothing
 
 
+discordThreadChannelHeader : Bool -> String -> DiscordGuildOrDmId -> LocalState -> Element FrontendMsg
 discordThreadChannelHeader isMobile name guildOrDmIdNoThread local =
     channelHeader
         isMobile
@@ -245,7 +249,7 @@ channelHeaderTabRow isMobile htmlId tab currentTab content =
     MyUi.rowButton
         htmlId
         (PressedChannelHeaderTab tab)
-        (Ui.spacing 2 :: channelHeaderTabAttributes 4 8 isMobile tab currentTab)
+        (Ui.spacing 2 :: MyUi.prewrap :: channelHeaderTabAttributes 4 8 isMobile tab currentTab)
         content
 
 
@@ -290,12 +294,11 @@ channelHeaderTab isMobile htmlId tab currentTab content =
 
 privateChatWithYourself : Bool -> Maybe DmChannelHeaderTab -> LocalState -> List (Element FrontendMsg)
 privateChatWithYourself isMobile currentTab local =
-    [ Ui.el
-        [ Ui.Font.color MyUi.font3
-        , Ui.width Ui.shrink
-        , MyUi.prewrap
-        , Ui.clipWithEllipsis
-        ]
+    [ channelHeaderTab
+        isMobile
+        (Dom.id "guild_openDescription")
+        DmChannelHeaderTab_ChannelDescription
+        currentTab
         (Ui.text "Private chat with yourself")
     , Ui.row
         [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
@@ -307,12 +310,11 @@ privateChatWithYourself isMobile currentTab local =
 
 privateChatWith : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalState -> String -> List (Element FrontendMsg)
 privateChatWith isMobile currentTab otherUserId local name =
-    [ Ui.el
-        [ Ui.Font.color MyUi.font3
-        , Ui.width Ui.shrink
-        , MyUi.prewrap
-        , Ui.clipWithEllipsis
-        ]
+    [ channelHeaderTab
+        isMobile
+        (Dom.id "guild_openDescription")
+        DmChannelHeaderTab_ChannelDescription
+        currentTab
         (Ui.text "Private chat with ")
     , Ui.text name
     , Ui.row
@@ -437,12 +439,37 @@ discordPrivateChatWith name =
 channelHeaderTabView : LocalState -> LoggedIn2 -> LoadedFrontend -> Maybe (Element FrontendMsg)
 channelHeaderTabView local loggedIn model =
     case model.route of
-        GuildRoute guildId (ChannelRoute channelId _ (Just DmChannelHeaderTab_ChannelDescription)) ->
-            case LocalState.getGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    Just (channelDescriptionView channel.description)
+        GuildRoute guildId channelRoute ->
+            case channelRoute of
+                ChannelRoute channelId _ (Just tab) ->
+                    case tab of
+                        DmChannelHeaderTab_ChannelDescription ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( _, channel ) ->
+                                    Just (channelDescriptionView (Just channel.name) (ChannelDescription.toString channel.description))
 
-                Nothing ->
+                                Nothing ->
+                                    Nothing
+
+                        DmChannelHeaderTab_VoiceChat ->
+                            Nothing
+
+                        DmChannelHeaderTab_Go maybeId ->
+                            Nothing
+
+                ChannelRoute channelId _ _ ->
+                    Nothing
+
+                NewChannelRoute ->
+                    Nothing
+
+                EditChannelRoute id ->
+                    Nothing
+
+                GuildSettingsRoute ->
+                    Nothing
+
+                JoinRoute secretId ->
                     Nothing
 
         DmRoute dmRoute ->
@@ -466,7 +493,15 @@ channelHeaderTabView local loggedIn model =
                                 |> Just
 
                         Just DmChannelHeaderTab_ChannelDescription ->
-                            Nothing
+                            (if otherUserId == local.localUser.session.userId then
+                                Ui.text "This is a channel all to yourself where you can write things down you want to remember."
+
+                             else
+                                "This is a private channel for just you and "
+                                    ++ User.toString otherUserId local.localUser.otherUsers
+                                    |> Ui.text
+                            )
+                                |> Just
 
                         Nothing ->
                             Nothing
@@ -474,22 +509,49 @@ channelHeaderTabView local loggedIn model =
                 Nothing ->
                     Nothing
 
-        _ ->
+        HomePageRoute ->
+            Nothing
+
+        AdminRoute record ->
+            Nothing
+
+        DiscordGuildRoute discordGuildRouteData ->
+            Nothing
+
+        DiscordDmRoute dmRoute ->
+            Nothing
+
+        AiChatRoute ->
+            Nothing
+
+        SlackOAuthRedirect result ->
+            Nothing
+
+        TextEditorRoute ->
+            Nothing
+
+        LinkDiscord result ->
             Nothing
 
 
-channelDescriptionView : ChannelDescription -> Element FrontendMsg
-channelDescriptionView (ChannelDescription description) =
-    Ui.el
+channelDescriptionView : Maybe ChannelName -> String -> Element FrontendMsg
+channelDescriptionView channelName description =
+    Ui.column
         [ Ui.paddingXY 16 12
         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background1
         , Ui.Font.color MyUi.font2
         ]
-        (if String.isEmpty description then
+        [ case channelName of
+            Just channelName2 ->
+                Ui.el [ Ui.Font.bold ] (Ui.text (ChannelName.toString channelName2))
+
+            Nothing ->
+                Ui.none
+        , if String.isEmpty description then
             Ui.el [ Ui.Font.italic ] (Ui.text "No channel description")
 
-         else
+          else
             Ui.text description
-        )
+        ]
