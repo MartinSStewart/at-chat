@@ -48,8 +48,22 @@ initContext =
 expressionVisitor : Node Expression -> Context -> ( List (Rule.Error {}), Context )
 expressionVisitor expression context =
     case Node.value (unwrapParens expression) of
-        ListExpr elements ->
-            ( checkAttributeList context.lookupTable elements, context )
+        Application ((Node _ (FunctionOrValue [ "Ui" ] _)) :: (Node _ (ListExpr elements)) :: _) ->
+            ( checkAttributeList True context.lookupTable elements, context )
+
+        Application (_ :: rest) ->
+            ( List.concatMap
+                (\expression2 ->
+                    case Node.value (unwrapParens expression2) of
+                        ListExpr elements ->
+                            checkAttributeList False context.lookupTable elements
+
+                        _ ->
+                            []
+                )
+                rest
+            , context
+            )
 
         _ ->
             ( [], context )
@@ -124,8 +138,8 @@ type Removal
     | OverriddenBy ClassifiedAttr ClassifiedAttr
 
 
-checkAttributeList : ModuleNameLookupTable -> List (Node Expression) -> List (Rule.Error {})
-checkAttributeList lookupTable elements =
+checkAttributeList : Bool -> ModuleNameLookupTable -> List (Node Expression) -> List (Rule.Error {})
+checkAttributeList canRemoveWidthFill lookupTable elements =
     let
         rangeArray : Array Range
         rangeArray =
@@ -135,11 +149,7 @@ checkAttributeList lookupTable elements =
         classified =
             elements
                 |> List.indexedMap Tuple.pair
-                |> List.filterMap
-                    (\( i, el ) ->
-                        classify lookupTable el
-                            |> Maybe.map (\c -> ( i, c ))
-                    )
+                |> List.filterMap (\( i, el ) -> classify canRemoveWidthFill lookupTable el |> Maybe.map (Tuple.pair i))
 
         removals : List ( Int, Removal )
         removals =
@@ -291,8 +301,8 @@ conflicts a b =
             a == b
 
 
-classify : ModuleNameLookupTable -> Node Expression -> Maybe ClassifiedAttr
-classify lookupTable rawNode =
+classify : Bool -> ModuleNameLookupTable -> Node Expression -> Maybe ClassifiedAttr
+classify canRemoveWidthFill lookupTable rawNode =
     let
         node : Node Expression
         node =
@@ -327,7 +337,7 @@ classify lookupTable rawNode =
                                             , class = class
                                             , displayName = displayNameOf moduleName name
                                             , isWidthFillDefault =
-                                                moduleName == [ "Ui" ] && name == "width" && isUiFill lookupTable args
+                                                canRemoveWidthFill && moduleName == [ "Ui" ] && name == "width" && isUiFill lookupTable args
                                             }
                                         )
                             )
