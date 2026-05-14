@@ -1240,10 +1240,10 @@ toBackendLog toBackend =
                 Local_Discord_SendMessage _ _ _ _ _ ->
                     ToBackendLog_Local_Discord_SendMessage
 
-                Local_NewChannel _ _ _ ->
+                Local_NewChannel _ _ _ _ ->
                     ToBackendLog_Local_NewChannel
 
-                Local_EditChannel _ _ _ ->
+                Local_EditChannel _ _ _ _ ->
                     ToBackendLog_Local_EditChannel
 
                 Local_DeleteChannel _ _ ->

@@ -20,6 +20,7 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import Array.Extra
 import Bitwise
+import ChannelDescription
 import ChannelHeader
 import ChannelName
 import Coord
@@ -65,7 +66,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditChannelForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1518,6 +1519,7 @@ channelView channelRoute guildId guild loggedIn local model =
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     editChannelFormView
+                        (MyUi.isMobile model)
                         guildId
                         channelId
                         channel
@@ -7038,7 +7040,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
 newChannelFormInit : NewChannelForm
 newChannelFormInit =
-    { name = "", pressedSubmit = False }
+    { name = "", description = "", pressedSubmit = False }
 
 
 newGuildFormInit : NewGuildForm
@@ -7046,52 +7048,136 @@ newGuildFormInit =
     { name = "", pressedSubmit = False }
 
 
-editChannelFormInit : FrontendChannel -> NewChannelForm
+editChannelFormInit : FrontendChannel -> EditChannelForm
 editChannelFormInit channel =
-    { name = ChannelName.toString channel.name, pressedSubmit = False }
+    { name = ChannelName.toString channel.name
+    , description = ChannelDescription.toString channel.description
+    , deleteConfirmation = ""
+    , showDeleteConfirmation = False
+    , pressedSubmit = False
+    }
 
 
-editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> NewChannelForm -> Element FrontendMsg
-editChannelFormView guildId channelId channel form =
+editChannelFormView : Bool -> Id GuildId -> Id ChannelId -> FrontendChannel -> EditChannelForm -> Element FrontendMsg
+editChannelFormView isMobile2 guildId channelId channel form =
+    let
+        isEmpty : Bool
+        isEmpty =
+            Array.isEmpty channel.messages
+
+        channelNameString : String
+        channelNameString =
+            ChannelName.toString channel.name
+
+        channelDescriptionString : String
+        channelDescriptionString =
+            ChannelDescription.toString channel.description
+
+        hasChanges : Bool
+        hasChanges =
+            form.name /= channelNameString || form.description /= channelDescriptionString
+
+        confirmationMatches : Bool
+        confirmationMatches =
+            form.deleteConfirmation == channelNameString
+
+        ( deleteOnPress, deleteEnabled ) =
+            if isEmpty then
+                ( PressedDeleteChannel guildId channelId, True )
+
+            else if not form.showDeleteConfirmation then
+                ( EditChannelFormChanged guildId channelId { form | showDeleteConfirmation = True }, True )
+
+            else if confirmationMatches then
+                ( PressedDeleteChannel guildId channelId, True )
+
+            else
+                ( FrontendNoOp, False )
+    in
     Ui.column
-        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
-        , channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
-        , Ui.row
-            [ Ui.spacing 16 ]
-            [ MyUi.elButton
-                (Dom.id "guild_cancelEditChannel")
-                (PressedCancelEditChannelChanges guildId channelId)
+        [ Ui.Font.color MyUi.font1, Ui.alignTop ]
+        [ ChannelHeader.channelHeader isMobile2 False (Ui.text ("Edit #" ++ channelNameString)) Nothing
+        , Ui.column
+            [ Ui.padding 16, Ui.spacing 16 ]
+            [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+            , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+            , if hasChanges then
+                Ui.row
+                    [ Ui.spacing 16 ]
+                    [ MyUi.elButton
+                        (Dom.id "guild_resetEditChannel")
+                        (PressedResetEditChannelChanges guildId channelId)
+                        [ Ui.paddingXY 16 8
+                        , Ui.background MyUi.cancelButtonBackground
+                        , Ui.width Ui.shrink
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.buttonFontColor
+                        , Ui.Font.bold
+                        , Ui.borderColor MyUi.buttonBorder
+                        , Ui.border 1
+                        ]
+                        (Ui.text "Reset")
+                    , submitButton
+                        (Dom.id "guild_submitEditChannel")
+                        (PressedSubmitEditChannelChanges guildId channelId form)
+                        "Save changes"
+                    ]
+
+              else
+                Ui.none
+            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
+            , if not isEmpty && form.showDeleteConfirmation then
+                deleteConfirmationInput channelNameString form
+                    |> Ui.map (EditChannelFormChanged guildId channelId)
+
+              else
+                Ui.none
+            , MyUi.elButton
+                (Dom.id "guild_deleteChannel")
+                deleteOnPress
                 [ Ui.paddingXY 16 8
-                , Ui.background MyUi.cancelButtonBackground
+                , Ui.background
+                    (if deleteEnabled then
+                        MyUi.deleteButtonBackground
+
+                     else
+                        MyUi.disabledButtonBackground
+                    )
                 , Ui.width Ui.shrink
                 , Ui.rounded 8
-                , Ui.Font.color MyUi.buttonFontColor
+                , Ui.Font.color MyUi.deleteButtonFont
                 , Ui.Font.bold
                 , Ui.borderColor MyUi.buttonBorder
                 , Ui.border 1
                 ]
-                (Ui.text "Cancel")
-            , submitButton
-                (Dom.id "guild_submitEditChannel")
-                (PressedSubmitEditChannelChanges guildId channelId form)
-                "Save changes"
+                (Ui.text "Delete channel")
             ]
+        ]
 
-        --, Ui.el [ Ui.height (Ui.px 1), Ui.background splitterColor ] Ui.none
-        , MyUi.elButton
-            (Dom.id "guild_deleteChannel")
-            (PressedDeleteChannel guildId channelId)
-            [ Ui.paddingXY 16 8
-            , Ui.background MyUi.deleteButtonBackground
-            , Ui.width Ui.shrink
-            , Ui.rounded 8
-            , Ui.Font.color MyUi.deleteButtonFont
-            , Ui.Font.bold
-            , Ui.borderColor MyUi.buttonBorder
-            , Ui.border 1
+
+deleteConfirmationInput : String -> EditChannelForm -> Element EditChannelForm
+deleteConfirmationInput channelNameString form =
+    let
+        confirmLabel =
+            Ui.Input.label
+                "deleteChannelConfirmation"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text ("Type \"" ++ channelNameString ++ "\" to confirm deletion"))
+    in
+    Ui.column
+        []
+        [ confirmLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
             ]
-            (Ui.text "Delete channel")
+            { onChange = \text -> { form | deleteConfirmation = text }
+            , text = form.deleteConfirmation
+            , placeholder = Nothing
+            , label = confirmLabel.id
+            }
         ]
 
 
@@ -7103,6 +7189,7 @@ newChannelFormView isMobile2 guildId form =
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
+            , channelDescriptionInput form |> Ui.map (NewChannelFormChanged guildId)
             , submitButton (Dom.id "guild_createChannel") (PressedSubmitNewChannel guildId form) "Create channel"
             ]
         ]
@@ -7124,7 +7211,7 @@ submitButton htmlId onPress text =
         (Ui.text text)
 
 
-channelNameInput : NewChannelForm -> Element NewChannelForm
+channelNameInput : { a | name : String, pressedSubmit : Bool } -> Element { a | name : String, pressedSubmit : Bool }
 channelNameInput form =
     let
         nameLabel =
@@ -7148,6 +7235,39 @@ channelNameInput form =
             , label = nameLabel.id
             }
         , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
+            ( True, Err error ) ->
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            _ ->
+                Ui.none
+        ]
+
+
+channelDescriptionInput : { a | description : String, pressedSubmit : Bool } -> Element { a | description : String, pressedSubmit : Bool }
+channelDescriptionInput form =
+    let
+        descriptionLabel =
+            Ui.Input.label
+                "channelDescription"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text "Channel description")
+    in
+    Ui.column
+        []
+        [ descriptionLabel.element
+        , Ui.Input.multiline
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> { form | description = text }
+            , text = form.description
+            , placeholder = Nothing
+            , label = descriptionLabel.id
+            , spellcheck = True
+            }
+        , case ( form.pressedSubmit, ChannelDescription.fromString form.description ) of
             ( True, Err error ) ->
                 Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
 

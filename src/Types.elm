@@ -6,6 +6,7 @@ module Types exposing
     , ChannelSidebarMode(..)
     , DiscordAttachmentData
     , Drag(..)
+    , EditChannelForm
     , EditMessage
     , EmojiSelector(..)
     , ExportState
@@ -44,6 +45,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
+import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -189,7 +191,7 @@ type alias LoggedIn2 =
     , admin : Pages.Admin.Model
     , drafts : SeqDict ( AnyGuildOrDmId, ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
-    , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
+    , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
     , newGuildForm : Maybe NewGuildForm
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
@@ -397,9 +399,9 @@ type FrontendMsg
     | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
     | MouseEnteredDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
     | MouseExitedDiscordChannelName (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRoute
-    | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
-    | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
-    | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
+    | EditChannelFormChanged (Id GuildId) (Id ChannelId) EditChannelForm
+    | PressedResetEditChannelChanges (Id GuildId) (Id ChannelId)
+    | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
     | PressedCreateInviteLink (Id GuildId)
     | FrontendNoOp
@@ -513,6 +515,16 @@ type ScrollPosition
 
 type alias NewChannelForm =
     { name : String
+    , description : String
+    , pressedSubmit : Bool
+    }
+
+
+type alias EditChannelForm =
+    { name : String
+    , description : String
+    , deleteConfirmation : String
+    , showDeleteConfirmation : Bool
     , pressedSubmit : Bool
     }
 
@@ -728,8 +740,8 @@ type LocalMsg
 type ServerChange
     = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
     | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id Discord.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData) (SeqDict (Id StickerId) StickerData)
-    | Server_NewChannel Time.Posix (Id GuildId) ChannelName
-    | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
+    | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
+    | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
@@ -805,8 +817,8 @@ type LocalChange
     | Local_Admin AdminChange
     | Local_SendMessage Time.Posix GuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_Discord_SendMessage Time.Posix DiscordGuildOrDmId NonemptyString ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Local_NewChannel Time.Posix (Id GuildId) ChannelName
-    | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
+    | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
+    | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))

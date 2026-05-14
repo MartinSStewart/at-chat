@@ -105,10 +105,10 @@ pendingChangesText localChange =
         Local_Discord_SendMessage _ _ _ _ _ ->
             "Sent a message"
 
-        Local_NewChannel _ _ _ ->
+        Local_NewChannel _ _ _ _ ->
             "Created new channel"
 
-        Local_EditChannel _ _ _ ->
+        Local_EditChannel _ _ _ _ ->
             "Edited channel"
 
         Local_DeleteChannel _ _ ->
@@ -1445,7 +1445,7 @@ isPressMsg msg =
         EditChannelFormChanged _ _ _ ->
             False
 
-        PressedCancelEditChannelChanges _ _ ->
+        PressedResetEditChannelChanges _ _ ->
             True
 
         PressedSubmitEditChannelChanges _ _ _ ->
@@ -2058,21 +2058,21 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                Local_NewChannel time guildId channelName ->
+                Local_NewChannel time guildId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName channelDescription)
                                 local.guilds
                     }
 
-                Local_EditChannel guildId channelId channelName ->
+                Local_EditChannel guildId channelId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.editChannel channelName channelId)
+                                (LocalState.editChannel channelName channelDescription channelId)
                                 local.guilds
                     }
 
@@ -2958,21 +2958,21 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                Server_NewChannel time guildId channelName ->
+                Server_NewChannel time guildId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName channelDescription)
                                 local.guilds
                     }
 
-                Server_EditChannel guildId channelId channelName ->
+                Server_EditChannel guildId channelId channelName channelDescription ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.editChannel channelName channelId)
+                                (LocalState.editChannel channelName channelDescription channelId)
                                 local.guilds
                     }
 

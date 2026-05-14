@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Bytes.Decode
+import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -781,8 +782,8 @@ updateLoaded msg model =
         PressedSubmitNewChannel guildId newChannelForm ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
-                    case ChannelName.fromString newChannelForm.name of
-                        Ok channelName ->
+                    case Result.map2 Tuple.pair (ChannelName.fromString newChannelForm.name) (ChannelDescription.fromString newChannelForm.description) of
+                        Ok ( channelName, channelDescription ) ->
                             let
                                 oldLoggedIn : LoggedIn2
                                 oldLoggedIn =
@@ -791,7 +792,7 @@ updateLoaded msg model =
                                 ( loggedIn2, cmd ) =
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (Local_NewChannel model.time guildId channelName |> Just)
+                                        (Local_NewChannel model.time guildId channelName channelDescription |> Just)
                                         { loggedIn
                                             | newChannelForm =
                                                 SeqDict.remove guildId loggedIn.newChannelForm
@@ -881,14 +882,14 @@ updateLoaded msg model =
                 )
                 model
 
-        EditChannelFormChanged guildId channelId newChannelForm ->
+        EditChannelFormChanged guildId channelId form ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | editChannelForm =
                             SeqDict.insert
                                 ( guildId, channelId )
-                                newChannelForm
+                                form
                                 loggedIn.editChannelForm
                       }
                     , Command.none
@@ -896,41 +897,33 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedCancelEditChannelChanges guildId channelId ->
-            case model.loginStatus of
-                LoggedIn loggedIn ->
-                    FrontendExtra.routePush
-                        { model
-                            | loginStatus =
-                                LoggedIn
-                                    { loggedIn
-                                        | editChannelForm =
-                                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
-                                    }
-                        }
-                        (GuildRoute
-                            guildId
-                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab) Nothing)
-                        )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+        PressedResetEditChannelChanges guildId channelId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editChannelForm =
+                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
         PressedSubmitEditChannelChanges guildId channelId form ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case ChannelName.fromString form.name of
-                        Ok channelName ->
+                    case ( ChannelName.fromString form.name, ChannelDescription.fromString form.description ) of
+                        ( Ok channelName, Ok channelDescription ) ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_EditChannel guildId channelId channelName |> Just)
+                                (Local_EditChannel guildId channelId channelName channelDescription |> Just)
                                 { loggedIn
                                     | editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                                 }
                                 Command.none
 
-                        Err _ ->
+                        _ ->
                             ( { loggedIn
                                 | editChannelForm =
                                     SeqDict.insert
