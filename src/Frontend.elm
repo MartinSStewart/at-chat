@@ -920,11 +920,11 @@ updateLoaded msg model =
         PressedSubmitEditChannelChanges guildId channelId form ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case ChannelName.fromString form.name of
-                        Ok channelName ->
+                    case Result.map2 Tuple.pair (ChannelName.fromString form.name) (ChannelDescription.fromString form.description) of
+                        Ok ( channelName, channelDescription ) ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_EditChannel guildId channelId channelName (ChannelDescription.fromStringLossy form.description) |> Just)
+                                (Local_EditChannel guildId channelId channelName channelDescription |> Just)
                                 { loggedIn
                                     | editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm

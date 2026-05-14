@@ -7039,7 +7039,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
 newChannelFormInit : NewChannelForm
 newChannelFormInit =
-    { name = "", description = "", pressedSubmit = False }
+    { name = "", description = "", deleteConfirmation = "", pressedSubmit = False }
 
 
 newGuildFormInit : NewGuildForm
@@ -7051,15 +7051,33 @@ editChannelFormInit : FrontendChannel -> NewChannelForm
 editChannelFormInit channel =
     { name = ChannelName.toString channel.name
     , description = ChannelDescription.toString channel.description
+    , deleteConfirmation = ""
     , pressedSubmit = False
     }
 
 
 editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> NewChannelForm -> Element FrontendMsg
 editChannelFormView guildId channelId channel form =
+    let
+        isEmpty : Bool
+        isEmpty =
+            Array.isEmpty channel.messages
+
+        channelNameString : String
+        channelNameString =
+            ChannelName.toString channel.name
+
+        confirmationMatches : Bool
+        confirmationMatches =
+            form.deleteConfirmation == channelNameString
+
+        canDelete : Bool
+        canDelete =
+            isEmpty || confirmationMatches
+    in
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ channelNameString))
         , channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
         , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
         , Ui.row
@@ -7084,11 +7102,28 @@ editChannelFormView guildId channelId channel form =
             ]
 
         --, Ui.el [ Ui.height (Ui.px 1), Ui.background splitterColor ] Ui.none
+        , if isEmpty then
+            Ui.none
+
+          else
+            deleteConfirmationInput channelNameString form
+                |> Ui.map (EditChannelFormChanged guildId channelId)
         , MyUi.elButton
             (Dom.id "guild_deleteChannel")
-            (PressedDeleteChannel guildId channelId)
+            (if canDelete then
+                PressedDeleteChannel guildId channelId
+
+             else
+                FrontendNoOp
+            )
             [ Ui.paddingXY 16 8
-            , Ui.background MyUi.deleteButtonBackground
+            , Ui.background
+                (if canDelete then
+                    MyUi.deleteButtonBackground
+
+                 else
+                    MyUi.disabledButtonBackground
+                )
             , Ui.width Ui.shrink
             , Ui.rounded 8
             , Ui.Font.color MyUi.deleteButtonFont
@@ -7097,6 +7132,32 @@ editChannelFormView guildId channelId channel form =
             , Ui.border 1
             ]
             (Ui.text "Delete channel")
+        ]
+
+
+deleteConfirmationInput : String -> NewChannelForm -> Element NewChannelForm
+deleteConfirmationInput channelNameString form =
+    let
+        confirmLabel =
+            Ui.Input.label
+                "deleteChannelConfirmation"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text ("Type \"" ++ channelNameString ++ "\" to confirm deletion"))
+    in
+    Ui.column
+        []
+        [ confirmLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> { form | deleteConfirmation = text }
+            , text = form.deleteConfirmation
+            , placeholder = Nothing
+            , label = confirmLabel.id
+            }
         ]
 
 
@@ -7185,6 +7246,12 @@ channelDescriptionInput form =
             , label = descriptionLabel.id
             , spellcheck = True
             }
+        , case ChannelDescription.fromString form.description of
+            Err error ->
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            Ok _ ->
+                Ui.none
         ]
 
 

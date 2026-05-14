@@ -515,6 +515,7 @@ type ScrollPosition
 type alias NewChannelForm =
     { name : String
     , description : String
+    , deleteConfirmation : String
     , pressedSubmit : Bool
     }
 

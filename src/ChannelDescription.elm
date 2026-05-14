@@ -1,4 +1,4 @@
-module ChannelDescription exposing (ChannelDescription(..), empty, fromStringLossy, toString)
+module ChannelDescription exposing (ChannelDescription(..), empty, fromString, fromStringLossy, maxLength, toString)
 
 {-| -}
 
@@ -12,6 +12,15 @@ type ChannelDescription
 maxLength : number
 maxLength =
     500
+
+
+fromString : String -> Result String ChannelDescription
+fromString text =
+    if String.length text > maxLength then
+        Err ("Description can't be longer than " ++ String.fromInt maxLength ++ " characters")
+
+    else
+        Ok (ChannelDescription text)
 
 
 fromStringLossy : String -> ChannelDescription
