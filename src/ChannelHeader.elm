@@ -8,6 +8,7 @@ module ChannelHeader exposing
     , thread
     )
 
+import Array exposing (Array)
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
@@ -16,7 +17,7 @@ import Effect.Lamdera exposing (ClientId)
 import Go
 import GuildIcon
 import Icons
-import Id exposing (DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
+import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
@@ -24,6 +25,7 @@ import NonemptySet exposing (NonemptySet)
 import OneOrGreater
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import Svg
 import Svg.Attributes
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
@@ -369,7 +371,7 @@ privateChatWithYourself isMobile currentTab local =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , goGameButton isMobile currentTab
+            , goGameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
             ]
         ]
 
@@ -387,19 +389,64 @@ privateChatWith isMobile currentTab otherUserId local name =
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
             [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
-            , goGameButton isMobile currentTab
+            , SeqDict.get otherUserId local.dmChannels
+                |> Maybe.map .goMatches
+                |> Maybe.withDefault SeqDict.empty
+                |> goGameButton isMobile currentTab local.localUser.session.userId
             ]
         ]
 
 
-goGameButton : Bool -> Maybe DmChannelHeaderTab -> Element FrontendMsg
-goGameButton isMobile currentTab =
+goGameButton :
+    Bool
+    -> Maybe DmChannelHeaderTab
+    -> Id UserId
+    -> SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    -> Element FrontendMsg
+goGameButton isMobile currentTab userId goMatches =
+    let
+        viewingGo : Bool
+        viewingGo =
+            case currentTab of
+                Just (DmChannelHeaderTab_Go _) ->
+                    True
+
+                _ ->
+                    False
+
+        hasPendingTurn =
+            Go.hasPendingTurn userId goMatches
+    in
     channelHeaderTab
         isMobile
         (Dom.id "guild_openGoMatch")
-        (DmChannelHeaderTab_Go Nothing)
+        (SeqSet.toList hasPendingTurn |> List.reverse |> List.head |> DmChannelHeaderTab_Go)
         currentTab
-        (Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.html Icons.go))
+        (Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.Font.bold
+            , case ( viewingGo, SeqSet.isEmpty hasPendingTurn ) of
+                ( False, False ) ->
+                    Ui.el
+                        [ Ui.width (Ui.px 10)
+                        , Ui.height (Ui.px 10)
+                        , Ui.background MyUi.alertColor
+                        , Ui.rounded 5
+                        , Ui.border 2
+                        , Ui.borderColor MyUi.background1
+                        , Ui.move { x = -3, y = 3, z = 0 }
+                        , Ui.alignRight
+                        , MyUi.htmlStyle "aria-label" "Your turn"
+                        , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "guild_goMatchTurnDot"))
+                        ]
+                        Ui.none
+                        |> Ui.inFront
+
+                _ ->
+                    Ui.noAttr
+            ]
+            (Ui.html Icons.go)
+        )
 
 
 voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg

@@ -22,6 +22,7 @@ module Go exposing
     , boardSize9
     , currentPlayersTurn
     , deadStones
+    , hasPendingTurn
     , pressedKey
     , update
     , view
@@ -42,6 +43,7 @@ import Id exposing (ChannelMessageId, Id, UserId)
 import MyUi
 import Ports
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Set exposing (Set)
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -2010,6 +2012,33 @@ isLocalUsersTurn currentUserId setup state =
 
         White ->
             setup.whitePlayer == currentUserId
+
+
+hasPendingTurn :
+    Id UserId
+    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqSet (Id ChannelMessageId)
+hasPendingTurn userId matches =
+    SeqDict.foldl
+        (\matchId ( setup, actions ) set ->
+            let
+                state : GameState
+                state =
+                    foldActions actions setup
+            in
+            case state.phase of
+                Scored _ ->
+                    set
+
+                _ ->
+                    if isLocalUsersTurn userId setup state then
+                        SeqSet.insert matchId set
+
+                    else
+                        set
+        )
+        SeqSet.empty
+        matches
 
 
 gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
