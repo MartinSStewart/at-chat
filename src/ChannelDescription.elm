@@ -1,4 +1,4 @@
-module ChannelDescription exposing (ChannelDescription(..), empty, fromString, fromStringLossy, maxLength, toString)
+module ChannelDescription exposing (ChannelDescription(..), empty, fromString, fromStringLossy, toString)
 
 {-| -}
 

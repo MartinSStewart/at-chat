@@ -8,7 +8,6 @@ module Pages.Guild exposing
     , decodeMessageView
     , discordGuildView
     , dropdownButtonId
-    , editChannelFormInit
     , encodeMessageView
     , guildView
     , homePageLoggedInView
