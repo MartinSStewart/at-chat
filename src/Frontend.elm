@@ -434,6 +434,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , voiceChat = VoiceChat.initModel
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = 0
+            , enableGremlins = False
             }
     in
     ( loggedIn
@@ -2794,6 +2795,15 @@ updateLoaded msg model =
                         (Just (Local_LinkDiscordAcknowledgementIsChecked checked))
                         loggedIn
                         Command.none
+                )
+                model
+
+        PressedToggleGremlins enabled ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | enableGremlins = enabled }
+                    , Ports.setGremlinsEnabled enabled
+                    )
                 )
                 model
 

@@ -217,6 +217,7 @@ type alias LoggedIn2 =
     , voiceChat : VoiceChat.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
+    , enableGremlins : Bool
     }
 
 
@@ -475,6 +476,7 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedDiscordAcknowledgment Bool
+    | PressedToggleGremlins Bool
     | PressedLinkDiscordUser
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)

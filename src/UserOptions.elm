@@ -283,6 +283,24 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                     PressedCopyText
                                     (Log.httpErrorToString error)
                         ]
+                    , let
+                        gremlinsLabel =
+                            Ui.Input.label
+                                "userOptions_enableGremlins"
+                                [ Ui.pointer, Ui.width Ui.shrink ]
+                                (Ui.text "Enable gremlins")
+                      in
+                      Ui.row
+                        [ Ui.spacing 8 ]
+                        [ Ui.Input.checkbox
+                            []
+                            { onChange = PressedToggleGremlins
+                            , icon = Nothing
+                            , checked = loggedIn.enableGremlins
+                            , label = gremlinsLabel.id
+                            }
+                        , gremlinsLabel.element
+                        ]
 
                     --, Ui.el
                     --    [ Ui.linkNewTab

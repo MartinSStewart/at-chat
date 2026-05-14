@@ -1663,6 +1663,9 @@ isPressMsg msg =
         PressedDiscordAcknowledgment _ ->
             True
 
+        PressedToggleGremlins _ ->
+            True
+
         PressedLinkDiscordUser ->
             True
 
