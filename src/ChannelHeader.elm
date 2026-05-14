@@ -199,7 +199,7 @@ channelHeader isMobile2 includeShowMembers content tabContent =
             ]
             (if isMobile2 then
                 [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
-                , Ui.el [] content
+                , Ui.el [ Ui.height Ui.fill, Ui.contentCenterY ] content
                 , if includeShowMembers then
                     MyUi.elButton
                         (Dom.id "guild_showMembers")
@@ -217,7 +217,13 @@ channelHeader isMobile2 includeShowMembers content tabContent =
                 ]
 
              else
-                [ Ui.el [ Ui.paddingWith { left = 16, right = 8, top = 0, bottom = 0 }, Ui.height Ui.fill ] content ]
+                [ Ui.el
+                    [ Ui.paddingWith { left = 16, right = 8, top = 0, bottom = 0 }
+                    , Ui.contentCenterY
+                    , Ui.height Ui.fill
+                    ]
+                    content
+                ]
             )
         , case tabContent of
             Just tabContent2 ->
@@ -635,8 +641,6 @@ channelDescriptionView : Maybe ChannelName -> String -> Element FrontendMsg
 channelDescriptionView channelName description =
     Ui.column
         [ Ui.paddingXY 16 12
-        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-        , Ui.borderColor MyUi.border2
         , Ui.background MyUi.tabBackground
         , Ui.Font.color MyUi.font2
         , Ui.spacing 8
