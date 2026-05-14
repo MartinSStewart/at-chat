@@ -1,12 +1,14 @@
 module NoRedundantUiAttributes exposing (rule)
 
 {-| Reports redundant or conflicting elm-ui attributes used together in the
-same attribute list.
+same attribute list, and provides automatic fixes that remove the redundant
+attribute(s) while keeping the last one (which is the one that takes effect
+at runtime).
 
 Examples of what gets flagged:
 
-  - `Ui.paddingLeft` and `Ui.paddingWith` in the same list (the shorthand
-    overrides the per-side value).
+  - `Ui.paddingLeft` followed by `Ui.paddingWith` (the shorthand overrides the
+    per-side value).
   - `Ui.alignTop` and `Ui.alignBottom` in the same list (an element can only
     align in one direction at a time).
   - `Ui.width Ui.fill` (this is already the default behavior).
@@ -15,12 +17,15 @@ Examples of what gets flagged:
 
 -}
 
+import Array exposing (Array)
 import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
+import Review.Fix as Fix
 import Review.ModuleNameLookupTable as ModuleNameLookupTable exposing (ModuleNameLookupTable)
 import Review.Rule as Rule exposing (Rule)
+import Set exposing (Set)
 
 
 rule : Rule
@@ -114,82 +119,145 @@ type alias ClassifiedAttr =
     }
 
 
+type Removal
+    = WidthFillDefault ClassifiedAttr
+    | OverriddenBy ClassifiedAttr ClassifiedAttr
+
+
 checkAttributeList : ModuleNameLookupTable -> List (Node Expression) -> List (Rule.Error {})
 checkAttributeList lookupTable elements =
     let
-        classified : List ClassifiedAttr
+        rangeArray : Array Range
+        rangeArray =
+            Array.fromList (List.map Node.range elements)
+
+        classified : List ( Int, ClassifiedAttr )
         classified =
-            List.filterMap (classify lookupTable) elements
+            elements
+                |> List.indexedMap Tuple.pair
+                |> List.filterMap
+                    (\( i, el ) ->
+                        classify lookupTable el
+                            |> Maybe.map (\c -> ( i, c ))
+                    )
 
-        defaultErrors : List (Rule.Error {})
-        defaultErrors =
-            classified
-                |> List.filter .isWidthFillDefault
-                |> List.map widthFillDefaultError
+        removals : List ( Int, Removal )
+        removals =
+            buildRemovals classified
 
-        conflictErrors : List (Rule.Error {})
-        conflictErrors =
-            findConflicts classified
+        removalSet : Set Int
+        removalSet =
+            Set.fromList (List.map Tuple.first removals)
     in
-    defaultErrors ++ conflictErrors
+    List.map (buildErrorForRemoval rangeArray removalSet) removals
 
 
-widthFillDefaultError : ClassifiedAttr -> Rule.Error {}
-widthFillDefaultError attr =
-    Rule.error
-        { message = "Ui.width Ui.fill is the default and can be removed"
-        , details =
-            [ "Elements in elm-ui already have `Ui.width Ui.fill` applied by default, so adding this attribute explicitly has no effect."
-            , "Remove this attribute to reduce noise in the attribute list."
-            ]
-        }
-        attr.range
-
-
-findConflicts : List ClassifiedAttr -> List (Rule.Error {})
-findConflicts attrs =
-    findConflictsHelp [] attrs []
-
-
-findConflictsHelp : List ClassifiedAttr -> List ClassifiedAttr -> List (Rule.Error {}) -> List (Rule.Error {})
-findConflictsHelp seen remaining acc =
-    case remaining of
-        [] ->
-            List.reverse acc
-
-        current :: rest ->
-            case firstConflict current seen of
-                Just earlier ->
-                    findConflictsHelp (current :: seen) rest (conflictError earlier current :: acc)
-
-                Nothing ->
-                    findConflictsHelp (current :: seen) rest acc
-
-
-firstConflict : ClassifiedAttr -> List ClassifiedAttr -> Maybe ClassifiedAttr
-firstConflict current seen =
-    case seen of
-        [] ->
-            Nothing
-
-        prior :: rest ->
-            if conflicts current.class prior.class then
-                Just prior
+buildRemovals : List ( Int, ClassifiedAttr ) -> List ( Int, Removal )
+buildRemovals classified =
+    List.filterMap
+        (\( i, attr ) ->
+            if attr.isWidthFillDefault then
+                Just ( i, WidthFillDefault attr )
 
             else
-                firstConflict current rest
+                case findLaterOverride i attr.class classified of
+                    Just later ->
+                        Just ( i, OverriddenBy attr later )
+
+                    Nothing ->
+                        Nothing
+        )
+        classified
 
 
-conflictError : ClassifiedAttr -> ClassifiedAttr -> Rule.Error {}
-conflictError earlier current =
-    Rule.error
-        { message = current.displayName ++ " is redundant with " ++ earlier.displayName
-        , details =
-            [ "Both " ++ earlier.displayName ++ " and " ++ current.displayName ++ " appear in the same attribute list and either set the same property or conflict with each other."
-            , "An element can only have one value for this property, so only the last one will take effect. Remove one of these attributes to make the intent clear."
-            ]
-        }
-        current.range
+findLaterOverride : Int -> AttrClass -> List ( Int, ClassifiedAttr ) -> Maybe ClassifiedAttr
+findLaterOverride i class classified =
+    classified
+        |> List.filter (\( j, other ) -> j > i && conflicts class other.class)
+        |> List.head
+        |> Maybe.map Tuple.second
+
+
+buildErrorForRemoval : Array Range -> Set Int -> ( Int, Removal ) -> Rule.Error {}
+buildErrorForRemoval rangeArray removalSet ( index, removal ) =
+    let
+        isLastInBlock : Bool
+        isLastInBlock =
+            not (Set.member (index + 1) removalSet)
+
+        fixes : List Fix.Fix
+        fixes =
+            if isLastInBlock then
+                case computeBlockRange index removalSet rangeArray of
+                    Just range ->
+                        [ Fix.removeRange range ]
+
+                    Nothing ->
+                        []
+
+            else
+                []
+    in
+    case removal of
+        WidthFillDefault attr ->
+            Rule.errorWithFix
+                { message = "Ui.width Ui.fill is the default and can be removed"
+                , details =
+                    [ "Elements in elm-ui already have `Ui.width Ui.fill` applied by default, so adding this attribute explicitly has no effect."
+                    , "Remove this attribute to reduce noise in the attribute list."
+                    ]
+                }
+                attr.range
+                fixes
+
+        OverriddenBy earlier later ->
+            Rule.errorWithFix
+                { message = earlier.displayName ++ " is overridden by a later " ++ later.displayName
+                , details =
+                    [ "Both " ++ earlier.displayName ++ " and " ++ later.displayName ++ " appear in the same attribute list and either set the same property or conflict with each other."
+                    , "Only the last one will take effect, so this earlier attribute is redundant and can be removed."
+                    ]
+                }
+                earlier.range
+                fixes
+
+
+computeBlockRange : Int -> Set Int -> Array Range -> Maybe Range
+computeBlockRange endIndex removalSet rangeArray =
+    let
+        startIndex : Int
+        startIndex =
+            findBlockStart endIndex removalSet
+    in
+    case ( Array.get startIndex rangeArray, Array.get endIndex rangeArray ) of
+        ( Just startRange, Just endRange ) ->
+            if startIndex == 0 then
+                case Array.get (endIndex + 1) rangeArray of
+                    Just next ->
+                        Just { start = startRange.start, end = next.start }
+
+                    Nothing ->
+                        Just { start = startRange.start, end = endRange.end }
+
+            else
+                case Array.get (startIndex - 1) rangeArray of
+                    Just prev ->
+                        Just { start = prev.end, end = endRange.end }
+
+                    Nothing ->
+                        Just { start = startRange.start, end = endRange.end }
+
+        _ ->
+            Nothing
+
+
+findBlockStart : Int -> Set Int -> Int
+findBlockStart i removalSet =
+    if Set.member (i - 1) removalSet then
+        findBlockStart (i - 1) removalSet
+
+    else
+        i
 
 
 conflicts : AttrClass -> AttrClass -> Bool
