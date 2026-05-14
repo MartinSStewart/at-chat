@@ -1519,6 +1519,7 @@ channelView channelRoute guildId guild loggedIn local model =
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     editChannelFormView
+                        (MyUi.isMobile model)
                         guildId
                         channelId
                         channel
@@ -7057,8 +7058,8 @@ editChannelFormInit channel =
     }
 
 
-editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> EditChannelForm -> Element FrontendMsg
-editChannelFormView guildId channelId channel form =
+editChannelFormView : Bool -> Id GuildId -> Id ChannelId -> FrontendChannel -> EditChannelForm -> Element FrontendMsg
+editChannelFormView isMobile2 guildId channelId channel form =
     let
         isEmpty : Bool
         isEmpty =
@@ -7094,60 +7095,63 @@ editChannelFormView guildId channelId channel form =
                 ( FrontendNoOp, False )
     in
     Ui.column
-        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ channelNameString))
-        , channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
-        , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
-        , if hasChanges then
-            Ui.row
-                [ Ui.spacing 16 ]
-                [ MyUi.elButton
-                    (Dom.id "guild_resetEditChannel")
-                    (PressedResetEditChannelChanges guildId channelId)
-                    [ Ui.paddingXY 16 8
-                    , Ui.background MyUi.cancelButtonBackground
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 8
-                    , Ui.Font.color MyUi.buttonFontColor
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
+        [ Ui.Font.color MyUi.font1, Ui.alignTop ]
+        [ ChannelHeader.channelHeader isMobile2 False (Ui.text ("Edit #" ++ channelNameString)) Nothing
+        , Ui.column
+            [ Ui.padding 16, Ui.spacing 16 ]
+            [ channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+            , channelDescriptionInput form |> Ui.map (EditChannelFormChanged guildId channelId)
+            , if hasChanges then
+                Ui.row
+                    [ Ui.spacing 16 ]
+                    [ MyUi.elButton
+                        (Dom.id "guild_resetEditChannel")
+                        (PressedResetEditChannelChanges guildId channelId)
+                        [ Ui.paddingXY 16 8
+                        , Ui.background MyUi.cancelButtonBackground
+                        , Ui.width Ui.shrink
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.buttonFontColor
+                        , Ui.Font.bold
+                        , Ui.borderColor MyUi.buttonBorder
+                        , Ui.border 1
+                        ]
+                        (Ui.text "Reset")
+                    , submitButton
+                        (Dom.id "guild_submitEditChannel")
+                        (PressedSubmitEditChannelChanges guildId channelId form)
+                        "Save changes"
                     ]
-                    (Ui.text "Reset")
-                , submitButton
-                    (Dom.id "guild_submitEditChannel")
-                    (PressedSubmitEditChannelChanges guildId channelId form)
-                    "Save changes"
+
+              else
+                Ui.none
+            , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
+            , if not isEmpty && form.showDeleteConfirmation then
+                deleteConfirmationInput channelNameString form
+                    |> Ui.map (EditChannelFormChanged guildId channelId)
+
+              else
+                Ui.none
+            , MyUi.elButton
+                (Dom.id "guild_deleteChannel")
+                deleteOnPress
+                [ Ui.paddingXY 16 8
+                , Ui.background
+                    (if deleteEnabled then
+                        MyUi.deleteButtonBackground
+
+                     else
+                        MyUi.disabledButtonBackground
+                    )
+                , Ui.width Ui.shrink
+                , Ui.rounded 8
+                , Ui.Font.color MyUi.deleteButtonFont
+                , Ui.Font.bold
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
                 ]
-
-          else
-            Ui.none
-        , Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
-        , if not isEmpty && form.showDeleteConfirmation then
-            deleteConfirmationInput channelNameString form
-                |> Ui.map (EditChannelFormChanged guildId channelId)
-
-          else
-            Ui.none
-        , MyUi.elButton
-            (Dom.id "guild_deleteChannel")
-            deleteOnPress
-            [ Ui.paddingXY 16 8
-            , Ui.background
-                (if deleteEnabled then
-                    MyUi.deleteButtonBackground
-
-                 else
-                    MyUi.disabledButtonBackground
-                )
-            , Ui.width Ui.shrink
-            , Ui.rounded 8
-            , Ui.Font.color MyUi.deleteButtonFont
-            , Ui.Font.bold
-            , Ui.borderColor MyUi.buttonBorder
-            , Ui.border 1
+                (Ui.text "Delete channel")
             ]
-            (Ui.text "Delete channel")
         ]
 
 
