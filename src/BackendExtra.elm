@@ -41,8 +41,11 @@ import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
+import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
+import HmacSha1
+import HmacSha1.Key
 import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera.Wire3
 import List.Extra

@@ -4090,20 +4090,18 @@ updateLoaded msg model =
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Call.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
+                                (Call.Local_Join model.time roomId EmptyPlaceholder |> Local_VoiceChatChange |> Just)
                                 loggedIn
                                 (case SeqDict.get roomId local.calls.voiceChats of
                                     Just nonempty ->
                                         List.map
                                             (\otherSession ->
-                                                Call.toJs
-                                                    (Call.ToJs_Start
-                                                        (Call.startArgs
-                                                            model.clientId
-                                                            { roomId = roomId, otherClientId = otherSession }
-                                                            loggedIn.voiceChat
-                                                        )
-                                                    )
+                                                Call.startArgs
+                                                    model.clientId
+                                                    local.localUser.session.userId
+                                                    { roomId = roomId, otherClientId = otherSession }
+                                                    local.calls
+                                                    loggedIn.voiceChat
                                             )
                                             (NonemptySet.toList nonempty)
                                             |> Command.batch
@@ -6151,6 +6149,7 @@ updateLoadedFromBackend msg model =
                                     , Call.serverChangeCmd
                                         voiceChatChange
                                         model.clientId
+                                        local.localUser.session.userId
                                         local.calls
                                         loggedIn2.voiceChat
                                     )

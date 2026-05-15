@@ -213,7 +213,7 @@ pendingChangesText localChange =
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
-                Call.Local_Join _ _ ->
+                Call.Local_Join _ _ _ ->
                     "Joined voice chat"
 
                 Call.Local_Leave _ ->
@@ -2640,7 +2640,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Local_Join time roomId ->
+                        Call.Local_Join time roomId credentials ->
                             let
                                 local2 =
                                     case local.calls.currentRoom of
@@ -2653,7 +2653,17 @@ changeUpdate localMsg local =
                             case roomId of
                                 DmRoomId otherUserId ->
                                     { local2
-                                        | calls = { calls | currentRoom = Just roomId }
+                                        | calls =
+                                            { calls
+                                                | currentRoom = Just roomId
+                                                , turnCredentials =
+                                                    case credentials of
+                                                        FilledInByBackend credentials2 ->
+                                                            Just credentials2
+
+                                                        EmptyPlaceholder ->
+                                                            calls.turnCredentials
+                                            }
                                         , dmChannels =
                                             if SeqDict.member roomId calls.voiceChats then
                                                 local2.dmChannels

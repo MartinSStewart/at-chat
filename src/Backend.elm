@@ -22,7 +22,7 @@ import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
-import Duration
+import Duration exposing (Duration)
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -36,6 +36,8 @@ import Env
 import FileStatus exposing (FileData, FileId)
 import Go
 import GuildName
+import HmacSha1
+import HmacSha1.Key
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -58,7 +60,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, ServerSecret, TurnCredentials)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
@@ -4812,7 +4814,7 @@ handleVoiceChatChange :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
-        Call.Local_Join _ voiceChatId ->
+        Call.Local_Join _ voiceChatId _ ->
             case voiceChatId of
                 Call.DmRoomId otherUserId ->
                     asDmUser
@@ -4981,6 +4983,10 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
                                 Nothing ->
                                     ( model, Command.none )
+
+                        turnCredentials : SecretId TurnCredentials
+                        turnCredentials =
+                            turnServerCredentials model.serverSecret session.userId time
                     in
                     ( { model2
                         | connections =
@@ -4999,9 +5005,8 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 model2.dmChannels
                       }
                     , Command.batch
-                        [ LocalChangeResponse
-                            changeId
-                            (Local_VoiceChatChange (Call.Local_Join time voiceChatId))
+                        [ Local_VoiceChatChange (Call.Local_Join time voiceChatId (FilledInByBackend turnCredentials))
+                            |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toDmChannelExcludingOne
                             clientId
@@ -5025,6 +5030,26 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
         Nothing ->
             ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+
+turnServerCredentials : SecretId ServerSecret -> Id UserId -> Time.Posix -> SecretId TurnCredentials
+turnServerCredentials secret userId now =
+    let
+        ttl : Duration
+        ttl =
+            Duration.hours 4
+
+        expiry : Int
+        expiry =
+            Time.posixToMillis (Duration.addTo now ttl) // 1000
+
+        username : String
+        username =
+            String.fromInt expiry ++ ":" ++ Id.toString userId
+    in
+    HmacSha1.fromString (HmacSha1.Key.fromString (SecretId.toString secret)) username
+        |> HmacSha1.toBase64
+        |> SecretId.fromString
 
 
 voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool

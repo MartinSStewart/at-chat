@@ -53,6 +53,7 @@
             "myrho/elm-round": "1.0.5",
             "noahzgordon/elm-color-extra": "1.0.2",
             "pablohirafuji/elm-qrcode": "4.0.2",
+            "rlopzc/elm-hmac-sha1": "1.0.0",
             "rtfeldman/elm-hex": "1.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         },
@@ -72,7 +73,6 @@
             "justgook/elm-image": "5.0.0",
             "ktonon/elm-crypto": "1.1.2",
             "ktonon/elm-word": "2.1.2",
-            "rlopzc/elm-hmac-sha1": "1.0.0",
             "waratuman/elm-coder": "3.0.1"
         }
     },

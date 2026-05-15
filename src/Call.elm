@@ -46,11 +46,15 @@ import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel
+import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
+import Env
+import HmacSha1
+import HmacSha1.Key
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -65,14 +69,16 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import Route exposing (DmChannelHeaderTab(..), Route(..))
+import SecretId exposing (SecretId, TurnCredentials)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (SecretId TurnCredentials))
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
 
@@ -100,6 +106,7 @@ type Msg
 type alias Local =
     { currentRoom : Maybe RoomId
     , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    , turnCredentials : Maybe (SecretId TurnCredentials)
     }
 
 
@@ -145,6 +152,7 @@ init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
+    , turnCredentials = Nothing
     }
 
 
@@ -894,14 +902,14 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-serverChangeCmd : ServerChange -> ClientId -> Local -> Model -> Command FrontendOnly toBackend msg
-serverChangeCmd change clientId local model =
+serverChangeCmd : ServerChange -> ClientId -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd change clientId currentUserId local model =
     case change of
         Server_Joined _ connectionId ->
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
-                        toJs (ToJs_Start (startArgs clientId connectionId model))
+                        startArgs clientId currentUserId connectionId local model
 
                     else
                         Command.none
@@ -971,6 +979,8 @@ type alias StartData =
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
+    , turnCredentials : Maybe (SecretId TurnCredentials)
+    , userId : Id UserId
     }
 
 
@@ -983,6 +993,8 @@ startDataCodec =
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
+        |> Codec.field "turnCredentials" .turnCredentials (Codec.nullable SecretId.codec)
+        |> Codec.field "userId" .userId Id.codec
         |> Codec.buildObject
 
 
@@ -1042,8 +1054,8 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startArgs : ClientId -> ConnectionId -> Model -> StartData
-startArgs clientId connectionId model =
+startArgs : ClientId -> Id UserId -> ConnectionId -> Local -> Model -> Command FrontendOnly toMsg msg
+startArgs clientId currentUserId connectionId local model =
     { peerUserId = connectionId
     , shouldOffer =
         Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
@@ -1051,7 +1063,11 @@ startArgs clientId connectionId model =
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.audioInputEnabled
     , videoInputEnabled = model.videoInputEnabled
+    , turnCredentials = local.turnCredentials
+    , userId = currentUserId
     }
+        |> ToJs_Start
+        |> toJs
 
 
 type MediaDeviceId
