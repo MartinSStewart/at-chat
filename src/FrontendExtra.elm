@@ -3239,10 +3239,7 @@ changeUpdate localMsg local =
                 Server_SetGuildIcon guildId icon ->
                     { local
                         | guilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (\guild -> { guild | icon = Just icon })
-                                local.guilds
+                            SeqDict.updateIfExists guildId (\guild -> { guild | icon = Just icon }) local.guilds
                     }
 
                 Server_PushNotificationsReset publicVapidKey ->
