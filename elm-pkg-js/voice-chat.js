@@ -394,7 +394,6 @@ exports.init = async function init(app) {
         // and only feed the video tracks into the preview element so the
         // mic audio can't leak through srcObject either.
         videoNode.muted = true;
-        videoNode.volume = 0;
         const previewStream = new MediaStream();
         localStreamPreview.getVideoTracks().forEach(function (track) {
             previewStream.addTrack(track);

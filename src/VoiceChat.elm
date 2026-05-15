@@ -588,15 +588,6 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
             , Html.Attributes.style "pointer-events" "none"
             , Html.Attributes.attribute "playsinline" ""
             , Html.Attributes.attribute "webkit-playsinline" ""
-            , case id of
-                IsConnection _ ->
-                    Html.Attributes.classList []
-
-                IsLocal ->
-                    -- iOS Safari ignores videoNode.volume, so the local preview
-                    -- must be muted via the HTML attribute to avoid feedback
-                    -- from the mic being played back through the speakers.
-                    Html.Attributes.property "muted" (Json.Encode.bool True)
             ]
             []
         , case id of
