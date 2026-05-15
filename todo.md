@@ -10,7 +10,7 @@
 * Make it more clear when a message hasn't been sent yet
 * Message stickers and message custom emojis gets added to a user's available emojis on the frontend when it shouldn't
   do that
-* @ pinging doesn't work in Discord threads
+* Video call not previewing when loaded directly via url
 
 Requested features:
 
