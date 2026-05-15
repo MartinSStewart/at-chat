@@ -518,22 +518,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
             (Dom.id "guild_voiceChat")
             DmChannelHeaderTab_VoiceChat
             currentTab
-            (Ui.row
-                [ Ui.spacing 2, Ui.width Ui.shrink, Ui.contentCenterY ]
-                [ Ui.html Icons.phone
-                , if VoiceChat.hasJoined (DmRoomId otherUserId) calls then
-                    Ui.el
-                        [ Ui.width (Ui.px 8)
-                        , Ui.height (Ui.px 8)
-                        , Ui.background (Ui.rgb 40 190 80)
-                        , Ui.rounded 4
-                        ]
-                        Ui.none
-
-                  else
-                    Ui.none
-                ]
-            )
+            (Ui.html Icons.phone)
         ]
 
 

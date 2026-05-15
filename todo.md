@@ -11,6 +11,7 @@
 * Message stickers and message custom emojis gets added to a user's available emojis on the frontend when it shouldn't
   do that
 * Video call not previewing when loaded directly via url
+* Video call preview not closed when leaving channel on mobile
 
 Requested features:
 
