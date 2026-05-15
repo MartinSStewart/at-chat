@@ -231,13 +231,9 @@ exports.init = async function init(app) {
             }
         });
 
-        const videoNode = document.getElementById("local-video");
-        if (videoNode.srcObject) {
-            let tracks = videoNode.srcObject.getTracks();
-            tracks.forEach((track) => {
-                if (track.kind === "audio") {
-                    track.enabled = enabled;
-                }
+        if (localStreamPreview) {
+            localStreamPreview.getAudioTracks().forEach((track) => {
+                track.enabled = enabled;
             });
         }
     }
@@ -253,13 +249,9 @@ exports.init = async function init(app) {
             }
         });
 
-        const videoNode = document.getElementById("local-video");
-        if (videoNode.srcObject) {
-            let tracks = videoNode.srcObject.getTracks();
-            tracks.forEach((track) => {
-                if (track.kind === "video") {
-                    track.enabled = enabled;
-                }
+        if (localStreamPreview) {
+            localStreamPreview.getVideoTracks().forEach((track) => {
+                track.enabled = enabled;
             });
         }
     }
@@ -364,12 +356,14 @@ exports.init = async function init(app) {
 
     async function stopLocalStream() {
         const videoNode = document.getElementById("local-video");
+        if (localStreamPreview) {
+            localStreamPreview.getTracks().forEach((s) => s.stop());
+        }
         if (videoNode.srcObject) {
-            let tracks = videoNode.srcObject.getTracks();
-            console.log(tracks);
-            tracks.forEach((s) => s.stop());
+            videoNode.srcObject.getTracks().forEach((s) => s.stop());
         }
         videoNode.srcObject = null;
+        localStreamPreview = null;
         removeAudioStream("local-video");
     }
 
@@ -394,8 +388,18 @@ exports.init = async function init(app) {
         }
 
         const videoNode = document.getElementById("local-video");
-        videoNode.srcObject = localStreamPreview;
+        // iOS Safari ignores HTMLMediaElement.volume (controllable only via
+        // hardware buttons), so volume = 0 doesn't silence the local preview
+        // and the mic gets echoed back to the speakers. Use muted instead,
+        // and only feed the video tracks into the preview element so the
+        // mic audio can't leak through srcObject either.
+        videoNode.muted = true;
         videoNode.volume = 0;
+        const previewStream = new MediaStream();
+        localStreamPreview.getVideoTracks().forEach(function (track) {
+            previewStream.addTrack(track);
+        });
+        videoNode.srcObject = previewStream;
 
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
