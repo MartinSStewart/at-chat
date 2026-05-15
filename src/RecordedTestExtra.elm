@@ -1644,6 +1644,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_Go _ _ _ ->
                             True
 
+                        Types.Server_SetGuildIcon _ _ ->
+                            True
+
         TwoFactorAuthenticationToFrontend _ ->
             False
 

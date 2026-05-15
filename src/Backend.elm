@@ -4725,7 +4725,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model
                 sessionId
                 guildId
-                (\session _ guild ->
+                (\_ _ guild ->
                     ( { model
                         | guilds =
                             SeqDict.insert guildId { guild | icon = Just fileHash } model.guilds
