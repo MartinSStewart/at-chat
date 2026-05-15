@@ -584,6 +584,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
                  else
                     "0 solid aliceblue"
                 )
+            , Html.Attributes.style "transition" "outline-width 150ms ease-out"
             , Html.Attributes.style "border-radius" "8px"
             , Html.Attributes.style "pointer-events" "none"
             , Html.Attributes.attribute "playsinline" ""
