@@ -551,7 +551,7 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
         , Html.Attributes.style "height" (String.fromFloat height ++ "px")
         , Html.Attributes.style "position" "absolute"
         , Html.Attributes.style "left" (String.fromInt x ++ "px")
-        , Html.Attributes.style "top" (String.fromInt y ++ "px")
+        , Html.Attributes.style "top" ("calc(" ++ MyUi.insetTop ++ " + " ++ String.fromInt y ++ "px)")
         , Html.Attributes.style
             "pointer-events"
             (if isHidden then
