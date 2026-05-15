@@ -520,7 +520,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
             currentTab
             (Ui.row
                 [ Ui.spacing 2, Ui.width Ui.shrink, Ui.contentCenterY ]
-                [ Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.phone)
+                [ Ui.html Icons.phone
                 , if VoiceChat.hasJoined (DmRoomId otherUserId) calls then
                     Ui.el
                         [ Ui.width (Ui.px 8)
