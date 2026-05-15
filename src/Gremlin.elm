@@ -54,23 +54,44 @@ pickGremlinTargetMessage counter local =
 
 pickGremlinWord : List WordBoundingBox -> Maybe WordBoundingBox
 pickGremlinWord boxes =
-    -- Prefer the widest word so the gremlin has somewhere comfortable to sit.
-    case boxes of
-        [] ->
-            Nothing
+    -- Skip timestamps, usernames (e.g. "12:20", "AT") and other non-content
+    -- words so the gremlin lands somewhere inside the user's actual text.
+    let
+        widest : List WordBoundingBox -> Maybe WordBoundingBox
+        widest list =
+            case list of
+                [] ->
+                    Nothing
 
-        first :: rest ->
-            List.foldl
-                (\b best ->
-                    if b.width > best.width then
-                        b
+                first :: rest ->
+                    List.foldl
+                        (\b best ->
+                            if b.width > best.width then
+                                b
 
-                    else
-                        best
+                            else
+                                best
+                        )
+                        first
+                        rest
+                        |> Just
+
+        contentWords : List WordBoundingBox
+        contentWords =
+            List.filter
+                (\b ->
+                    String.length b.word
+                        >= 3
+                        && String.all Char.isAlpha b.word
                 )
-                first
-                rest
-                |> Just
+                boxes
+    in
+    case widest contentWords of
+        Just b ->
+            Just b
+
+        Nothing ->
+            widest boxes
 
 
 view : LoggedIn2 -> Element msg

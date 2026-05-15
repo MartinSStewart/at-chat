@@ -220,6 +220,7 @@ type alias LoggedIn2 =
     , enableGremlins : Bool
     , gremlinTick : Int
     , gremlinReqId : Int
+    , gremlinPendingMessageId : Maybe Dom.HtmlId
     , gremlinSpot : Maybe GremlinSpot
     }
 

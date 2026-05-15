@@ -446,6 +446,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , enableGremlins = False
             , gremlinTick = 0
             , gremlinReqId = 0
+            , gremlinPendingMessageId = Nothing
             , gremlinSpot = Nothing
             }
     in
@@ -2853,22 +2854,27 @@ updateLoaded msg model =
                             else
                                 loggedIn.gremlinReqId
 
-                        respawnCmd : Command FrontendOnly ToBackend FrontendMsg
-                        respawnCmd =
+                        targetMessage : Maybe HtmlId
+                        targetMessage =
                             if shouldRespawn then
-                                case Gremlin.pickGremlinTargetMessage nextTick local of
-                                    Just htmlId ->
-                                        Ports.getWordBoundingBoxes nextReqId htmlId
-
-                                    Nothing ->
-                                        Command.none
+                                Gremlin.pickGremlinTargetMessage nextReqId local
 
                             else
-                                Command.none
+                                loggedIn.gremlinPendingMessageId
+
+                        respawnCmd : Command FrontendOnly ToBackend FrontendMsg
+                        respawnCmd =
+                            case ( shouldRespawn, targetMessage ) of
+                                ( True, Just htmlId ) ->
+                                    Ports.getWordBoundingBoxes nextReqId htmlId
+
+                                _ ->
+                                    Command.none
                     in
                     ( { loggedIn
                         | gremlinTick = nextTick
                         , gremlinReqId = nextReqId
+                        , gremlinPendingMessageId = targetMessage
                       }
                     , respawnCmd
                     )
@@ -2884,27 +2890,17 @@ updateLoaded msg model =
                                 ( loggedIn, Command.none )
 
                             else
-                                case Gremlin.pickGremlinWord response.boxes of
-                                    Just word ->
-                                        let
-                                            local : LocalState
-                                            local =
-                                                Local.model loggedIn.localState
-                                        in
+                                case ( Gremlin.pickGremlinWord response.boxes, loggedIn.gremlinPendingMessageId ) of
+                                    ( Just word, Just htmlId ) ->
                                         ( loggedIn
-                                        , case Gremlin.pickGremlinTargetMessage loggedIn.gremlinTick local of
-                                            Just htmlId ->
-                                                Task.map3 (\a b c -> ( a, b, c ))
-                                                    (Dom.getElement htmlId)
-                                                    (Dom.getElement Pages.Guild.conversationContainerId)
-                                                    (Dom.getViewportOf Pages.Guild.conversationContainerId)
-                                                    |> Task.attempt (GotGremlinPosition word)
-
-                                            Nothing ->
-                                                Command.none
+                                        , Task.map3 (\a b c -> ( a, b, c ))
+                                            (Dom.getElement htmlId)
+                                            (Dom.getElement Pages.Guild.conversationContainerId)
+                                            (Dom.getViewportOf Pages.Guild.conversationContainerId)
+                                            |> Task.attempt (GotGremlinPosition word)
                                         )
 
-                                    Nothing ->
+                                    _ ->
                                         ( loggedIn, Command.none )
 
                         Err _ ->
@@ -2918,13 +2914,13 @@ updateLoaded msg model =
                     case result of
                         Ok ( messageEl, containerEl, containerVp ) ->
                             let
+                                -- Sit his bottom-left on the top-left of the word
+                                -- (he's facing right so his butt is on the left side of the sprite).
                                 scrollContentX : Float
                                 scrollContentX =
                                     (messageEl.element.x - containerEl.element.x)
                                         + containerVp.viewport.x
                                         + word.x
-                                        + word.width
-                                        - Gremlin.gremlinWidth
 
                                 scrollContentY : Float
                                 scrollContentY =
@@ -2932,7 +2928,6 @@ updateLoaded msg model =
                                         + containerVp.viewport.y
                                         + word.y
                                         - Gremlin.gremlinHeight
-                                        + 2
                             in
                             ( { loggedIn | gremlinSpot = Just { x = scrollContentX, y = scrollContentY } }
                             , Command.none
