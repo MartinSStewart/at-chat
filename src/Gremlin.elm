@@ -19,14 +19,12 @@ import Ui exposing (Element)
 
 gremlinWidth : Float
 gremlinWidth =
-    -- Source frames are 112 x 150 px; we render the gremlin at 2x the
-    -- previous on-screen size (was 28 tall, now 56).
-    toFloat (round (gremlinHeight * 112 / 150))
+    112
 
 
 gremlinHeight : Float
 gremlinHeight =
-    56
+    150
 
 
 pickGremlinTargetMessage : Int -> LocalState -> Maybe HtmlId
