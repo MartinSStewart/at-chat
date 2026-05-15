@@ -486,7 +486,7 @@ type FrontendMsg
     | PressedToggleGremlins Bool
     | GremlinTick
     | GotGremlinWordBoxes (Result String Ports.WordBoundingBoxesResponse)
-    | GotGremlinElement Ports.WordBoundingBox (Result Dom.Error Dom.Element)
+    | GotGremlinPosition Ports.WordBoundingBox (Result Dom.Error ( Dom.Element, Dom.Element, Dom.Viewport ))
     | PressedLinkDiscordUser
     | PressedReloadDiscordUser (Discord.Id Discord.UserId)
     | PressedUnlinkDiscordUser (Discord.Id Discord.UserId)

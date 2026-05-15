@@ -92,7 +92,7 @@ view loggedIn =
                             ++ ".png"
                         )
                     , Html.Attributes.alt ""
-                    , Html.Attributes.style "position" "fixed"
+                    , Html.Attributes.style "position" "absolute"
                     , Html.Attributes.style "left" (String.fromFloat spot.x ++ "px")
                     , Html.Attributes.style "top" (String.fromFloat spot.y ++ "px")
                     , Html.Attributes.style "width" (String.fromFloat gremlinWidth ++ "px")

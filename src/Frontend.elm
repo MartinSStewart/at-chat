@@ -2894,8 +2894,11 @@ updateLoaded msg model =
                                         ( loggedIn
                                         , case Gremlin.pickGremlinTargetMessage loggedIn.gremlinTick local of
                                             Just htmlId ->
-                                                Dom.getElement htmlId
-                                                    |> Task.attempt (GotGremlinElement word)
+                                                Task.map3 (\a b c -> ( a, b, c ))
+                                                    (Dom.getElement htmlId)
+                                                    (Dom.getElement Pages.Guild.conversationContainerId)
+                                                    (Dom.getViewportOf Pages.Guild.conversationContainerId)
+                                                    |> Task.attempt (GotGremlinPosition word)
 
                                             Nothing ->
                                                 Command.none
@@ -2909,18 +2912,29 @@ updateLoaded msg model =
                 )
                 model
 
-        GotGremlinElement word result ->
+        GotGremlinPosition word result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     case result of
-                        Ok element ->
-                            ( { loggedIn
-                                | gremlinSpot =
-                                    Just
-                                        { x = element.element.x + word.x + word.width - Gremlin.gremlinWidth
-                                        , y = element.element.y + word.y - Gremlin.gremlinHeight + 2
-                                        }
-                              }
+                        Ok ( messageEl, containerEl, containerVp ) ->
+                            let
+                                scrollContentX : Float
+                                scrollContentX =
+                                    (messageEl.element.x - containerEl.element.x)
+                                        + containerVp.viewport.x
+                                        + word.x
+                                        + word.width
+                                        - Gremlin.gremlinWidth
+
+                                scrollContentY : Float
+                                scrollContentY =
+                                    (messageEl.element.y - containerEl.element.y)
+                                        + containerVp.viewport.y
+                                        + word.y
+                                        - Gremlin.gremlinHeight
+                                        + 2
+                            in
+                            ( { loggedIn | gremlinSpot = Just { x = scrollContentX, y = scrollContentY } }
                             , Command.none
                             )
 
@@ -6381,8 +6395,7 @@ view model =
                                 in
                                 FrontendExtra.layout
                                     loaded
-                                    [ Gremlin.view loggedIn |> Ui.inFront
-                                    , case loggedIn.userOptions of
+                                    [ case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
                                                 (MyUi.isMobile loaded)

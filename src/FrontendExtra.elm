@@ -1672,7 +1672,7 @@ isPressMsg msg =
         GotGremlinWordBoxes _ ->
             False
 
-        GotGremlinElement _ _ ->
+        GotGremlinPosition _ _ ->
             False
 
         PressedLinkDiscordUser ->
