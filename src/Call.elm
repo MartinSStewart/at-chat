@@ -1,4 +1,4 @@
-port module VoiceChat exposing
+port module Call exposing
     ( ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)

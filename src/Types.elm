@@ -44,6 +44,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
+import Call exposing (ChannelSidebarMode, FromJs, RoomId)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
@@ -109,7 +110,6 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (ChannelSidebarMode, FromJs, RoomId)
 
 
 type FrontendModel
@@ -214,7 +214,7 @@ type alias LoggedIn2 =
     , guildIconEditor : Maybe ( Id GuildId, ImageEditor.Model )
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
-    , voiceChat : VoiceChat.Model
+    , voiceChat : Call.Model
     , currentDmGoMatch : SeqDict ( Id UserId, Maybe (Id ChannelMessageId) ) Go.Model
     , fileDragOverCount : Int
     }
@@ -493,7 +493,7 @@ type FrontendMsg
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | GotVoiceChatRecording Bytes
-    | VoiceChatMsg VoiceChat.Msg
+    | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
     | FileDragEnter
     | FileDragLeave
@@ -802,7 +802,7 @@ type ServerChange
     | Server_DiscordGuildMemberJoined Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (Discord.Id Discord.UserId) PersonName
     | Server_LinkedDiscordUserStickersLoaded (SeqDict (Id StickerId) StickerData)
     | Server_LinkedDiscordUserCustomEmojisLoaded (SeqDict (Id CustomEmojiId) CustomEmojiData)
-    | Server_VoiceChatChange VoiceChat.ServerChange
+    | Server_VoiceChatChange Call.ServerChange
     | Server_Go (Id UserId) { otherUserId : Id UserId } Go.LocalChange
 
 
@@ -843,5 +843,5 @@ type LocalChange
     | Local_SetEmojiCategory Emoji.Category
     | Local_SetEmojiSkinTone (Maybe SkinTone)
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
-    | Local_VoiceChatChange VoiceChat.LocalChange
+    | Local_VoiceChatChange Call.LocalChange
     | Local_Go { otherUserId : Id UserId } Go.LocalChange

@@ -9,6 +9,7 @@ module ChannelHeader exposing
     )
 
 import Array exposing (Array)
+import Call exposing (RoomId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
@@ -33,7 +34,6 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import User exposing (LocalUser)
-import VoiceChat exposing (RoomId(..))
 
 
 channel : Bool -> String -> GuildOrDmId -> LocalState -> LoggedIn2 -> LoadedFrontend -> Element FrontendMsg
@@ -449,7 +449,7 @@ goGameButton isMobile currentTab userId goMatches =
         )
 
 
-voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> VoiceChat.Local -> Element FrontendMsg
+voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
 voiceChatButton isMobile currentTab otherUserId localUser calls =
     let
         joinedUsers : SeqDict (Id UserId) (NonemptySet ClientId)
@@ -589,7 +589,7 @@ tabBodyView local loggedIn model =
                                 |> Just
 
                         Just DmChannelHeaderTab_VoiceChat ->
-                            VoiceChat.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
+                            Call.view model.windowSize (DmRoomId otherUserId) local.calls loggedIn.voiceChat
                                 |> Ui.map VoiceChatMsg
                                 |> Just
 

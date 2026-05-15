@@ -67,6 +67,7 @@ import AiChat exposing (AiModelName(..))
 import Array
 import Backend
 import Broadcast
+import Call
 import ChannelDescription
 import Codec
 import Dict
@@ -115,7 +116,6 @@ import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
-import VoiceChat
 
 
 domain : Url
@@ -1821,14 +1821,14 @@ allAttackerLocalChanges =
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
-    , Local_VoiceChatChange (VoiceChat.Local_Join startTime (VoiceChat.DmRoomId normalUserId))
-    , Local_VoiceChatChange (VoiceChat.Local_Leave startTime)
+    , Local_VoiceChatChange (Call.Local_Join startTime (Call.DmRoomId normalUserId))
+    , Local_VoiceChatChange (Call.Local_Leave startTime)
     , Local_VoiceChatChange
-        (VoiceChat.Local_Signal
-            { roomId = VoiceChat.DmRoomId normalUserId
+        (Call.Local_Signal
+            { roomId = Call.DmRoomId normalUserId
             , otherClientId = ( normalUserId, Lamdera.clientIdFromString "clientId0" )
             }
-            (VoiceChat.OfferSignal { sdp = "" })
+            (Call.OfferSignal { sdp = "" })
         )
     , Local_Go
         { otherUserId = Broadcast.adminUserId }

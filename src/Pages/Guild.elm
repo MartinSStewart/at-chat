@@ -20,6 +20,7 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import Array.Extra
 import Bitwise
+import Call
 import ChannelDescription
 import ChannelHeader
 import ChannelName
@@ -80,7 +81,6 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -505,7 +505,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                         , Ui.move
-                                            { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                             , y = 0
                                             , z = 0
                                             }
@@ -522,7 +522,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                         , Ui.move
-                                            { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                            { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                             , y = 0
                                             , z = 0
                                             }
@@ -833,7 +833,7 @@ guildView model guildId channelRoute loggedIn local =
                                             , Ui.background MyUi.background3
                                             , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                             , Ui.move
-                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                 , y = 0
                                                 , z = 0
                                                 }
@@ -855,7 +855,7 @@ guildView model guildId channelRoute loggedIn local =
 
                                         HideMembersTab ->
                                             Ui.move
-                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                 , y = 0
                                                 , z = 0
                                                 }
@@ -1025,7 +1025,7 @@ discordGuildView model routeData loggedIn local =
                                             , Ui.background MyUi.background3
                                             , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                             , Ui.move
-                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                 , y = 0
                                                 , z = 0
                                                 }
@@ -1047,7 +1047,7 @@ discordGuildView model routeData loggedIn local =
 
                                         HideMembersTab ->
                                             Ui.move
-                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                { x = Call.sidebarOffsetAttr loggedIn.sidebarMode model
                                                 , y = 0
                                                 , z = 0
                                                 }

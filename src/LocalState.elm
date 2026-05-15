@@ -106,6 +106,7 @@ module LocalState exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData)
@@ -147,7 +148,6 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendUser, FrontendUser, LocalUser)
 import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
-import VoiceChat
 
 
 type alias LocalState =
@@ -161,7 +161,7 @@ type alias LocalState =
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
-    , calls : VoiceChat.Local
+    , calls : Call.Local
     }
 
 
@@ -505,7 +505,7 @@ type alias AdminData =
 
 
 type alias ConnectionData =
-    { lastRequest : LastRequest, call : Maybe VoiceChat.RoomId }
+    { lastRequest : LastRequest, call : Maybe Call.RoomId }
 
 
 type ServerSecretStatus

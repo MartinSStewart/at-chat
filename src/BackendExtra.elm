@@ -29,6 +29,7 @@ import Array
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
+import Call exposing (RoomId(..))
 import Discord
 import DiscordUserData exposing (DiscordUserData(..), DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
@@ -74,7 +75,6 @@ import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUs
 import UserAgent exposing (UserAgent)
 import UserSession exposing (UserSession)
 import VisibleMessages
-import VoiceChat exposing (RoomId(..))
 
 
 addLogWithCmd :

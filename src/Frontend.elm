@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import Bytes.Decode
+import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
 import Coord exposing (Coord)
@@ -107,7 +108,6 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
 
 
 app :
@@ -159,8 +159,8 @@ subscriptions model =
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
-        , VoiceChat.fromJs GotVoiceChatSignalFromJs
-        , VoiceChat.gotRecordedData GotVoiceChatRecording
+        , Call.fromJs GotVoiceChatSignalFromJs
+        , Call.gotRecordedData GotVoiceChatRecording
         , case model of
             Loading _ ->
                 Subscription.none
@@ -437,7 +437,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , guildIconEditor = Nothing
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
-            , voiceChat = VoiceChat.initModel
+            , voiceChat = Call.initModel
             , currentDmGoMatch = SeqDict.empty
             , fileDragOverCount = 0
             }
@@ -458,9 +458,9 @@ loadedInitHelper timezone userAgent loginData loading =
             _ ->
                 Command.none
         , -- We need to check if a video preview is visible immediately since we might be on the call route
-          VoiceChat.displayModeChangeCmd
-            VoiceChat.NoVideo
-            (VoiceChat.displayMode local.localUser.session.userId loading.route local.calls)
+          Call.displayModeChangeCmd
+            Call.NoVideo
+            (Call.displayMode local.localUser.session.userId loading.route local.calls)
             loggedIn.voiceChat
         ]
     )
@@ -497,7 +497,7 @@ loginDataToLocalState userAgent timezone loginData =
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     , textEditor = loginData.textEditor
-    , calls = VoiceChat.init loginData.voiceChatPeers
+    , calls = Call.init loginData.voiceChatPeers
     }
 
 
@@ -3867,19 +3867,19 @@ updateLoaded msg model =
                     case result of
                         Ok event ->
                             case event of
-                                VoiceChat.FromJs_GotSignal connectionId signal ->
+                                Call.FromJs_GotSignal connectionId signal ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (VoiceChat.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                                        (Call.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
                                         loggedIn
                                         Command.none
 
-                                VoiceChat.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
-                                    ( { loggedIn | voiceChat = VoiceChat.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat }
+                                Call.FromJs_GotUserMediaDevices mediaDevices defaultDevices ->
+                                    ( { loggedIn | voiceChat = Call.gotUserMediaDevices mediaDevices defaultDevices loggedIn.voiceChat }
                                     , Command.none
                                     )
 
-                                VoiceChat.FromJs_GotUserMediaDevicesError error ->
+                                Call.FromJs_GotUserMediaDevicesError error ->
                                     let
                                         voiceChat =
                                             loggedIn.voiceChat
@@ -3888,16 +3888,16 @@ updateLoaded msg model =
                                     , Command.none
                                     )
 
-                                VoiceChat.FromJs_SpeakingChanged connectionId isSpeaking ->
+                                Call.FromJs_SpeakingChanged connectionId isSpeaking ->
                                     let
-                                        voiceChat : VoiceChat.Model
+                                        voiceChat : Call.Model
                                         voiceChat =
                                             loggedIn.voiceChat
                                     in
                                     ( { loggedIn
                                         | voiceChat =
                                             case connectionId of
-                                                VoiceChat.IsConnection connection2 ->
+                                                Call.IsConnection connection2 ->
                                                     { voiceChat
                                                         | isSpeaking =
                                                             if isSpeaking then
@@ -3907,15 +3907,15 @@ updateLoaded msg model =
                                                                 SeqSet.remove connection2 voiceChat.isSpeaking
                                                     }
 
-                                                VoiceChat.IsLocal ->
+                                                Call.IsLocal ->
                                                     { voiceChat | localIsSpeaking = isSpeaking }
                                       }
                                     , Command.none
                                     )
 
-                                VoiceChat.FromJs_StartConnectionError string ->
+                                Call.FromJs_StartConnectionError string ->
                                     let
-                                        voiceChat : VoiceChat.Model
+                                        voiceChat : Call.Model
                                         voiceChat =
                                             loggedIn.voiceChat
                                     in
@@ -4004,11 +4004,11 @@ updateLoaded msg model =
 
         VoiceChatMsg voiceChatMsg ->
             case voiceChatMsg of
-                VoiceChat.SelectedAudioInputDevice deviceId ->
+                Call.SelectedAudioInputDevice deviceId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
 
@@ -4017,18 +4017,18 @@ updateLoaded msg model =
                             in
                             ( { loggedIn | voiceChat = voiceChat2 }
                             , Command.batch
-                                [ VoiceChat.toJs (VoiceChat.ToJs_SetInput True deviceId)
-                                , VoiceChat.startLocalStream voiceChat2
+                                [ Call.toJs (Call.ToJs_SetInput True deviceId)
+                                , Call.startLocalStream voiceChat2
                                 ]
                             )
                         )
                         model
 
-                VoiceChat.SelectedVideoInputDevice deviceId ->
+                Call.SelectedVideoInputDevice deviceId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
 
@@ -4037,18 +4037,18 @@ updateLoaded msg model =
                             in
                             ( { loggedIn | voiceChat = voiceChat2 }
                             , Command.batch
-                                [ VoiceChat.toJs (VoiceChat.ToJs_SetInput False deviceId)
-                                , VoiceChat.startLocalStream voiceChat2
+                                [ Call.toJs (Call.ToJs_SetInput False deviceId)
+                                , Call.startLocalStream voiceChat2
                                 ]
                             )
                         )
                         model
 
-                VoiceChat.PressedToggleMute ->
+                Call.PressedToggleMute ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
 
@@ -4057,16 +4057,16 @@ updateLoaded msg model =
                                     not voiceChat.audioInputEnabled
                             in
                             ( { loggedIn | voiceChat = { voiceChat | audioInputEnabled = audioInputEnabled } }
-                            , VoiceChat.toJs (VoiceChat.ToJs_SetAudioInputEnabled audioInputEnabled)
+                            , Call.toJs (Call.ToJs_SetAudioInputEnabled audioInputEnabled)
                             )
                         )
                         model
 
-                VoiceChat.PressedTogglePauseVideo ->
+                Call.PressedTogglePauseVideo ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
 
@@ -4075,12 +4075,12 @@ updateLoaded msg model =
                                     not voiceChat.videoInputEnabled
                             in
                             ( { loggedIn | voiceChat = { voiceChat | videoInputEnabled = videoInputEnabled } }
-                            , VoiceChat.toJs (VoiceChat.ToJs_SetVideoInputEnabled videoInputEnabled)
+                            , Call.toJs (Call.ToJs_SetVideoInputEnabled videoInputEnabled)
                             )
                         )
                         model
 
-                VoiceChat.PressedJoinCall roomId ->
+                Call.PressedJoinCall roomId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
@@ -4090,15 +4090,15 @@ updateLoaded msg model =
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (VoiceChat.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
+                                (Call.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
                                 loggedIn
                                 (case SeqDict.get roomId local.calls.voiceChats of
                                     Just nonempty ->
                                         List.map
                                             (\otherSession ->
-                                                VoiceChat.toJs
-                                                    (VoiceChat.ToJs_Start
-                                                        (VoiceChat.startArgs
+                                                Call.toJs
+                                                    (Call.ToJs_Start
+                                                        (Call.startArgs
                                                             model.clientId
                                                             { roomId = roomId, otherClientId = otherSession }
                                                             loggedIn.voiceChat
@@ -4109,12 +4109,12 @@ updateLoaded msg model =
                                             |> Command.batch
 
                                     Nothing ->
-                                        VoiceChat.toJs VoiceChat.ToJs_GetMediaDevices
+                                        Call.toJs Call.ToJs_GetMediaDevices
                                 )
                         )
                         model
 
-                VoiceChat.PressedLeaveCall ->
+                Call.PressedLeaveCall ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
@@ -4124,17 +4124,17 @@ updateLoaded msg model =
                             in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_VoiceChatChange (VoiceChat.Local_Leave model.time) |> Just)
+                                (Local_VoiceChatChange (Call.Local_Leave model.time) |> Just)
                                 loggedIn
-                                (VoiceChat.leaveVoiceChatCmds local.calls)
+                                (Call.leaveVoiceChatCmds local.calls)
                         )
                         model
 
-                VoiceChat.PressedDownloadRecording roomId ->
+                Call.PressedDownloadRecording roomId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
                             in
@@ -4163,16 +4163,16 @@ updateLoaded msg model =
                         )
                         model
 
-                VoiceChat.PressedCopyError text ->
+                Call.PressedCopyError text ->
                     ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
                     , Ports.copyToClipboard text
                     )
 
-                VoiceChat.ChangedVolume connectionId volume ->
+                Call.ChangedVolume connectionId volume ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
                             in
@@ -4183,16 +4183,16 @@ updateLoaded msg model =
                                             SeqDict.insert connectionId.otherClientId volume voiceChat.volume
                                     }
                               }
-                            , VoiceChat.toJs (VoiceChat.ToJs_SetVolume connectionId volume)
+                            , Call.toJs (Call.ToJs_SetVolume connectionId volume)
                             )
                         )
                         model
 
-                VoiceChat.MouseEnterVideoNode connectionId ->
+                Call.MouseEnterVideoNode connectionId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
                             in
@@ -4202,11 +4202,11 @@ updateLoaded msg model =
                         )
                         model
 
-                VoiceChat.MouseExitVideoNode connectionId ->
+                Call.MouseExitVideoNode connectionId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             let
-                                voiceChat : VoiceChat.Model
+                                voiceChat : Call.Model
                                 voiceChat =
                                     loggedIn.voiceChat
                             in
@@ -4233,7 +4233,7 @@ updateLoaded msg model =
                         voiceChat =
                             loggedIn.voiceChat
                     in
-                    case Bytes.Decode.decode (VoiceChat.decodeVoiceChatRecorder bytes) bytes of
+                    case Bytes.Decode.decode (Call.decodeVoiceChatRecorder bytes) bytes of
                         Just ( connectionId, recording ) ->
                             ( { loggedIn
                                 | voiceChat =
@@ -4385,9 +4385,9 @@ checkCallDisplayModeChange modelOld modelNew =
                 localNew =
                     Local.model loggedInNew.localState
             in
-            VoiceChat.displayModeChangeCmd
-                (VoiceChat.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
-                (VoiceChat.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+            Call.displayModeChangeCmd
+                (Call.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
+                (Call.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
                 loggedInNew.voiceChat
 
         ( NotLoggedIn _, LoggedIn loggedInNew ) ->
@@ -4395,9 +4395,9 @@ checkCallDisplayModeChange modelOld modelNew =
                 localNew =
                     Local.model loggedInNew.localState
             in
-            VoiceChat.displayModeChangeCmd
-                VoiceChat.NoVideo
-                (VoiceChat.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+            Call.displayModeChangeCmd
+                Call.NoVideo
+                (Call.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
                 loggedInNew.voiceChat
 
         ( LoggedIn loggedInOld, NotLoggedIn _ ) ->
@@ -4405,9 +4405,9 @@ checkCallDisplayModeChange modelOld modelNew =
                 localOld =
                     Local.model loggedInOld.localState
             in
-            VoiceChat.displayModeChangeCmd
-                (VoiceChat.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
-                VoiceChat.NoVideo
+            Call.displayModeChangeCmd
+                (Call.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
+                Call.NoVideo
                 loggedInOld.voiceChat
 
         _ ->
@@ -6148,7 +6148,7 @@ updateLoadedFromBackend msg model =
 
                                 Server_VoiceChatChange voiceChatChange ->
                                     ( loggedIn2
-                                    , VoiceChat.serverChangeCmd
+                                    , Call.serverChangeCmd
                                         voiceChatChange
                                         model.clientId
                                         local.calls
@@ -6352,7 +6352,7 @@ view model =
 
                                       else
                                         Ui.noAttr
-                                    , VoiceChat.videoNodes
+                                    , Call.videoNodes
                                         local.localUser.session.userId
                                         loaded
                                         loggedIn

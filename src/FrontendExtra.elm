@@ -21,6 +21,7 @@ module FrontendExtra exposing
 
 import AiChat
 import Array exposing (Array)
+import Call exposing (ChannelSidebarMode(..), RoomId(..))
 import ChannelDescription
 import ChannelName
 import Discord
@@ -86,7 +87,6 @@ import Url exposing (Url)
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat exposing (ChannelSidebarMode(..), RoomId(..))
 
 
 pendingChangesText : LocalChange -> String
@@ -213,13 +213,13 @@ pendingChangesText localChange =
 
         Local_VoiceChatChange voiceChatChange ->
             case voiceChatChange of
-                VoiceChat.Local_Join _ _ ->
+                Call.Local_Join _ _ ->
                     "Joined voice chat"
 
-                VoiceChat.Local_Leave _ ->
+                Call.Local_Leave _ ->
                     "Left voice chat"
 
-                VoiceChat.Local_Signal _ _ ->
+                Call.Local_Signal _ _ ->
                     "Voice chat state change"
 
         Local_Go _ change ->
@@ -1748,7 +1748,7 @@ isPressMsg msg =
             False
 
         VoiceChatMsg voiceChatMsg ->
-            VoiceChat.isPressMsg voiceChatMsg
+            Call.isPressMsg voiceChatMsg
 
         GotVoiceChatRecording _ ->
             False
@@ -2635,12 +2635,12 @@ changeUpdate localMsg local =
 
                 Local_VoiceChatChange voiceChatChange ->
                     let
-                        calls : VoiceChat.Local
+                        calls : Call.Local
                         calls =
                             local.calls
                     in
                     case voiceChatChange of
-                        VoiceChat.Local_Join time roomId ->
+                        Call.Local_Join time roomId ->
                             let
                                 local2 =
                                     case local.calls.currentRoom of
@@ -2670,10 +2670,10 @@ changeUpdate localMsg local =
                                                     local2.dmChannels
                                     }
 
-                        VoiceChat.Local_Leave time ->
+                        Call.Local_Leave time ->
                             leaveCall time local
 
-                        VoiceChat.Local_Signal _ _ ->
+                        Call.Local_Signal _ _ ->
                             local
 
                 Local_Go { otherUserId } goChange ->
@@ -3728,7 +3728,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        VoiceChat.Server_Joined time { roomId, otherClientId } ->
+                        Call.Server_Joined time { roomId, otherClientId } ->
                             { local
                                 | calls =
                                     { calls
@@ -3764,10 +3764,10 @@ changeUpdate localMsg local =
                                                     local.dmChannels
                             }
 
-                        VoiceChat.Server_Left time connectionId ->
+                        Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
 
-                        VoiceChat.Server_SignalReceived _ _ ->
+                        Call.Server_SignalReceived _ _ ->
                             local
 
                 Server_Go changeBy { otherUserId } goChange ->
@@ -3823,7 +3823,7 @@ goChangeUpdate changeBy otherUserId goChange local =
     }
 
 
-otherUserLeaveCall : Time.Posix -> VoiceChat.ConnectionId -> LocalState -> LocalState
+otherUserLeaveCall : Time.Posix -> Call.ConnectionId -> LocalState -> LocalState
 otherUserLeaveCall time { roomId, otherClientId } local =
     let
         calls =
