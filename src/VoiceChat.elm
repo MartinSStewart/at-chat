@@ -26,7 +26,6 @@ port module VoiceChat exposing
     , fromJs
     , gotRecordedData
     , gotUserMediaDevices
-    , hasJoined
     , init
     , initModel
     , isPressMsg
@@ -380,7 +379,7 @@ videoNodes currentUserId route windowSize model local =
                 MyUi.channelAndGuildColumnWidth windowSize
 
         voiceChatY =
-            MyUi.channelHeaderHeight + 8
+            MyUi.channelHeaderHeight
 
         maxWidth : Int
         maxWidth =
@@ -399,7 +398,7 @@ videoNodes currentUserId route windowSize model local =
                   )
 
         padding =
-            0
+            8
 
         spacing =
             8
@@ -579,12 +578,12 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
             , Html.Attributes.style
                 "outline"
                 (if isSpeaking then
-                    "4px solid aliceblue"
+                    "4px solid rgb(131, 147, 167)"
 
                  else
-                    "0 solid aliceblue"
+                    "0 solid rgb(131, 147, 167)"
                 )
-            , Html.Attributes.style "transition" "outline-width 150ms ease-out"
+            , Html.Attributes.style "transition" "outline-width 50ms ease-out"
             , Html.Attributes.style "border-radius" "8px"
             , Html.Attributes.style "pointer-events" "none"
             , Html.Attributes.attribute "playsinline" ""
