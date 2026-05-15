@@ -376,13 +376,13 @@ loadedInitHelper :
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
 loadedInitHelper timezone userAgent loginData loading =
     let
-        localState : LocalState
-        localState =
+        local : LocalState
+        local =
             loginDataToLocalState userAgent timezone loginData
 
         loggedIn : LoggedIn2
         loggedIn =
-            { localState = Local.init localState
+            { localState = Local.init local
             , admin =
                 case loginData.adminData of
                     IsAdminLoginData _ ->
@@ -444,19 +444,26 @@ loadedInitHelper timezone userAgent loginData loading =
             }
     in
     ( loggedIn
-    , case loading.route of
-        AdminRoute params ->
-            case params.highlightLog of
-                Just _ ->
-                    Dom.getElement Pages.Admin.logSectionId
-                        |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
-                        |> Task.attempt (\_ -> ScrolledToLogSection)
+    , Command.batch
+        [ case loading.route of
+            AdminRoute params ->
+                case params.highlightLog of
+                    Just _ ->
+                        Dom.getElement Pages.Admin.logSectionId
+                            |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
+                            |> Task.attempt (\_ -> ScrolledToLogSection)
 
-                Nothing ->
-                    Command.none
+                    Nothing ->
+                        Command.none
 
-        _ ->
-            Command.none
+            _ ->
+                Command.none
+        , -- We need to check if a video preview is visible immediately since we might be on the call route
+          VoiceChat.displayModeChangeCmd
+            VoiceChat.NoVideo
+            (VoiceChat.displayMode local.localUser.session.userId loading.route local.calls)
+            loggedIn.voiceChat
+        ]
     )
 
 
@@ -4380,17 +4387,29 @@ checkCallDisplayModeChange modelOld modelNew =
                     Local.model loggedInNew.localState
             in
             VoiceChat.displayModeChangeCmd
-                (VoiceChat.displayMode
-                    localOld.localUser.session.userId
-                    modelOld.route
-                    localOld.calls
-                )
-                (VoiceChat.displayMode
-                    localNew.localUser.session.userId
-                    modelNew.route
-                    localNew.calls
-                )
+                (VoiceChat.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
+                (VoiceChat.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
                 loggedInNew.voiceChat
+
+        ( NotLoggedIn _, LoggedIn loggedInNew ) ->
+            let
+                localNew =
+                    Local.model loggedInNew.localState
+            in
+            VoiceChat.displayModeChangeCmd
+                VoiceChat.NoVideo
+                (VoiceChat.displayMode localNew.localUser.session.userId modelNew.route localNew.calls)
+                loggedInNew.voiceChat
+
+        ( LoggedIn loggedInOld, NotLoggedIn _ ) ->
+            let
+                localOld =
+                    Local.model loggedInOld.localState
+            in
+            VoiceChat.displayModeChangeCmd
+                (VoiceChat.displayMode localOld.localUser.session.userId modelOld.route localOld.calls)
+                VoiceChat.NoVideo
+                loggedInOld.voiceChat
 
         _ ->
             Command.none

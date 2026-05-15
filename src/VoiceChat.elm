@@ -1,7 +1,7 @@
 port module VoiceChat exposing
     ( ConnectionId
     , DeviceKind(..)
-    , DisplayMode
+    , DisplayMode(..)
     , FromJs(..)
     , Ice
     , Local
