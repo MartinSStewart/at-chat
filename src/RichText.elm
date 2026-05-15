@@ -3220,7 +3220,7 @@ textInputViewHelper state allUsers attachedFiles customEmojis stickers2 index se
                                 |> Array.fromList
 
                          else
-                            Array.fromList [ Html.text text2 ]
+                            Array.fromList [ helper text2 ]
                         )
                     )
 
