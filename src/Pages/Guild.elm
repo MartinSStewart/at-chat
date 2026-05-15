@@ -23,8 +23,7 @@ import Bitwise
 import ChannelDescription
 import ChannelHeader
 import ChannelName
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
+import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
