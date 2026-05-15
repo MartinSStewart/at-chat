@@ -4720,6 +4720,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest guildId fileHash) ->
+            asUser
+                model
+                sessionId
+                (\session _ ->
+                    case SeqDict.get guildId model.guilds of
+                        Just guild ->
+                            if MembersAndOwner.owner guild.membersAndOwner == session.userId then
+                                ( { model
+                                    | guilds =
+                                        SeqDict.insert guildId { guild | icon = Just fileHash } model.guilds
+                                  }
+                                , Command.batch
+                                    [ Broadcast.toGuild
+                                        guildId
+                                        (Server_SetGuildIcon guildId fileHash |> ServerChange)
+                                        model
+                                    , Lamdera.sendToFrontend
+                                        clientId
+                                        (ProfilePictureEditorToFrontend (ImageEditor.ChangeGuildIconResponse guildId))
+                                    ]
+                                )
+
+                            else
+                                ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+                )
+
         AdminDataRequest logPage ->
             asAdmin
                 model

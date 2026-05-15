@@ -212,6 +212,7 @@ type alias LoggedIn2 =
     , channelScrollPosition : ScrollPosition
     , textEditor : TextEditor.Model
     , profilePictureEditor : ImageEditor.Model
+    , guildIconEditor : Maybe ( Id GuildId, ImageEditor.Model )
     , externalLinkWarning : Maybe Url
     , emojiSelector : Emoji.Model
     , voiceChat : VoiceChat.Model
@@ -450,6 +451,7 @@ type FrontendMsg
     | GoMsg Go.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
+    | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
     | OneFrameAfterDragEnd
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
@@ -772,6 +774,7 @@ type ServerChange
     | Server_DiscordDeleteDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
     | Server_SetUserIcon (Id UserId) FileHash
+    | Server_SetGuildIcon (Id GuildId) FileHash
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_SetDiscordGuildNotificationLevel (Discord.Id Discord.GuildId) NotificationLevel

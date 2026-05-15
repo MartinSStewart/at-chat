@@ -40,6 +40,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, StickerId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import ImageEditor
 import Json.Decode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -1531,7 +1532,7 @@ channelView channelRoute guildId guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         GuildSettingsRoute ->
-            inviteLinkCreatorForm model local guildId guild
+            guildSettingsForm model loggedIn local guildId guild
 
         JoinRoute _ ->
             Ui.none
@@ -1645,11 +1646,28 @@ discordGuildSettingsView userId guildId local =
         )
 
 
-inviteLinkCreatorForm : LoadedFrontend -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
-inviteLinkCreatorForm model local guildId guild =
+guildSettingsForm : LoadedFrontend -> LoggedIn2 -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
+guildSettingsForm model loggedIn local guildId guild =
     let
         isMobile =
             MyUi.isMobile model
+
+        isOwner : Bool
+        isOwner =
+            MembersAndOwner.owner guild.membersAndOwner == local.localUser.session.userId
+
+        guildIconEditor : ImageEditor.Model
+        guildIconEditor =
+            case loggedIn.guildIconEditor of
+                Just ( existingGuildId, editor ) ->
+                    if existingGuildId == guildId then
+                        editor
+
+                    else
+                        ImageEditor.init
+
+                Nothing ->
+                    ImageEditor.init
     in
     Ui.el
         [ Ui.height Ui.fill ]
@@ -1659,7 +1677,21 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
             ]
-            [ ChannelHeader.channelHeader isMobile False (Ui.text "Invite member to guild") Nothing
+            [ ChannelHeader.channelHeader isMobile False (Ui.text "Guild settings") Nothing
+            , if isOwner then
+                Ui.column
+                    [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                    [ Ui.el [ Ui.Font.bold ] (Ui.text "Guild icon")
+                    , Ui.row
+                        [ Ui.spacing 12, Ui.alignLeft ]
+                        [ GuildIcon.view (GuildIcon.Normal NoNotification) guild
+                        , ImageEditor.view model.windowSize guildIconEditor
+                            |> Ui.map (GuildIconEditorMsg guildId)
+                        ]
+                    ]
+
+              else
+                Ui.none
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")

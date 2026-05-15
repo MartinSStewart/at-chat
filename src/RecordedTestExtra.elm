@@ -1679,6 +1679,7 @@ allAttackerToBackendChanges =
     , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }
     , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
+    , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (FileStatus.FileHash "fake-hash"))
     , AdminDataRequest Nothing
     , -- Make sure this one is last
       LogOutRequest

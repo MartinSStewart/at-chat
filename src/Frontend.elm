@@ -236,6 +236,12 @@ subscriptions model =
                                             MessageMenuFixed _ ->
                                                 Subscription.none
                                 , ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
+                                , case loggedIn.guildIconEditor of
+                                    Just ( guildId, _ ) ->
+                                        ImageEditor.subscriptions |> Subscription.map (GuildIconEditorMsg guildId)
+
+                                    Nothing ->
+                                        Subscription.none
                                 ]
 
                         NotLoggedIn _ ->
@@ -429,6 +435,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , channelScrollPosition = ScrolledToBottom
             , textEditor = TextEditor.init
             , profilePictureEditor = ImageEditor.init
+            , guildIconEditor = Nothing
             , externalLinkWarning = Nothing
             , emojiSelector = Emoji.selectorInit
             , voiceChat = VoiceChat.initModel
@@ -2679,6 +2686,7 @@ updateLoaded msg model =
 
                         ( newImageEditor, cmd ) =
                             ImageEditor.update
+                                ImageEditor.ChangeUserAvatarRequest
                                 local.localUser.session.sessionIdHash
                                 model.windowSize
                                 imageEditorMsg
@@ -2686,6 +2694,41 @@ updateLoaded msg model =
                     in
                     ( { loggedIn | profilePictureEditor = newImageEditor }
                     , Command.map ProfilePictureEditorToBackend ProfilePictureEditorMsg cmd
+                    )
+                )
+                model
+
+        GuildIconEditorMsg guildId imageEditorMsg ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+
+                        currentEditor : ImageEditor.Model
+                        currentEditor =
+                            case loggedIn.guildIconEditor of
+                                Just ( existingGuildId, editor ) ->
+                                    if existingGuildId == guildId then
+                                        editor
+
+                                    else
+                                        ImageEditor.init
+
+                                Nothing ->
+                                    ImageEditor.init
+
+                        ( newImageEditor, cmd ) =
+                            ImageEditor.update
+                                (ImageEditor.ChangeGuildIconRequest guildId)
+                                local.localUser.session.sessionIdHash
+                                model.windowSize
+                                imageEditorMsg
+                                currentEditor
+                    in
+                    ( { loggedIn | guildIconEditor = Just ( guildId, newImageEditor ) }
+                    , Command.map ProfilePictureEditorToBackend (GuildIconEditorMsg guildId) cmd
                     )
                 )
                 model
@@ -6197,6 +6240,9 @@ updateLoadedFromBackend msg model =
                     case imageEditorToFrontend of
                         ImageEditor.ChangeUserAvatarResponse ->
                             ( { loggedIn | profilePictureEditor = ImageEditor.init }, Command.none )
+
+                        ImageEditor.ChangeGuildIconResponse _ ->
+                            ( { loggedIn | guildIconEditor = Nothing }, Command.none )
                 )
                 model
 

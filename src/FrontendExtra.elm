@@ -1585,6 +1585,9 @@ isPressMsg msg =
         ProfilePictureEditorMsg imageEditorMsg ->
             ImageEditor.isPressMsg imageEditorMsg
 
+        GuildIconEditorMsg _ imageEditorMsg ->
+            ImageEditor.isPressMsg imageEditorMsg
+
         OneFrameAfterDragEnd ->
             False
 
@@ -3231,6 +3234,15 @@ changeUpdate localMsg local =
                                 , otherUsers =
                                     SeqDict.updateIfExists userId (User.setIcon icon) localUser.otherUsers
                             }
+                    }
+
+                Server_SetGuildIcon guildId icon ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> { guild | icon = Just icon })
+                                local.guilds
                     }
 
                 Server_PushNotificationsReset publicVapidKey ->

@@ -17,6 +17,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Html.Events.Extra.Touch
+import Id exposing (GuildId, Id)
 import Json.Decode
 import List.Extra as List
 import MyUi
@@ -45,10 +46,12 @@ type Msg
 
 type ToBackend
     = ChangeUserAvatarRequest FileHash
+    | ChangeGuildIconRequest (Id GuildId) FileHash
 
 
 type ToFrontend
     = ChangeUserAvatarResponse
+    | ChangeGuildIconResponse (Id GuildId)
 
 
 type alias DragState =
@@ -142,8 +145,8 @@ init =
     }
 
 
-update : SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
-update sessionIdHash windowSize msg model =
+update : (FileHash -> ToBackend) -> SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+update toBackendMsg sessionIdHash windowSize msg model =
     case msg of
         PressedProfileImage ->
             ( model, FileSelect.file [ "image/png", "image/jpg", "image/jpeg" ] SelectedImage )
@@ -257,22 +260,27 @@ update sessionIdHash windowSize msg model =
                     ( model, Command.none )
 
         CroppedImage result ->
-            case result of
-                Ok imageData ->
-                    case String.split ";base64," imageData.croppedImageUrl of
-                        [ _, base64 ] ->
-                            case Base64.toBytes base64 of
-                                Just bytes ->
-                                    ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
+            case model.status of
+                Cropping ->
+                    case result of
+                        Ok imageData ->
+                            case String.split ";base64," imageData.croppedImageUrl of
+                                [ _, base64 ] ->
+                                    case Base64.toBytes base64 of
+                                        Just bytes ->
+                                            ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
 
-                                Nothing ->
+                                        Nothing ->
+                                            ( { model | status = UploadingError }, Command.none )
+
+                                _ ->
                                     ( { model | status = UploadingError }, Command.none )
 
-                        _ ->
+                        Err _ ->
                             ( { model | status = UploadingError }, Command.none )
 
-                Err _ ->
-                    ( { model | status = UploadingError }, Command.none )
+                _ ->
+                    ( model, Command.none )
 
         PressedCancel ->
             ( { model | imageUrl = Nothing, imageSize = Nothing }, Command.none )
@@ -281,7 +289,7 @@ update sessionIdHash windowSize msg model =
             case result of
                 Ok uploaded ->
                     ( { model | status = Uploading uploaded.fileHash }
-                    , Lamdera.sendToBackend (ChangeUserAvatarRequest uploaded.fileHash)
+                    , Lamdera.sendToBackend (toBackendMsg uploaded.fileHash)
                     )
 
                 Err _ ->
