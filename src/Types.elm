@@ -3,7 +3,6 @@ module Types exposing
     , BackendFileData
     , BackendModel
     , BackendMsg(..)
-    , ChannelSidebarMode(..)
     , DiscordAttachmentData
     , Drag(..)
     , EditChannelForm
@@ -110,7 +109,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
-import VoiceChat exposing (FromJs, RoomId)
+import VoiceChat exposing (ChannelSidebarMode, FromJs, RoomId)
 
 
 type FrontendModel
@@ -226,14 +225,6 @@ type alias UserOptionsModel =
     , showLinkDiscordSetup : Bool
     , domainWhitelistInput : String
     }
-
-
-type ChannelSidebarMode
-    = ChannelSidebarClosed
-    | ChannelSidebarOpened
-    | ChannelSidebarClosing { offset : Float }
-    | ChannelSidebarOpening { offset : Float }
-    | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
 type MessageHover

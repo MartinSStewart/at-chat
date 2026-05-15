@@ -23,7 +23,8 @@ import Bitwise
 import ChannelDescription
 import ChannelHeader
 import ChannelName
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
 import Discord
@@ -80,6 +81,7 @@ import Ui.Prose
 import Ui.Shadow
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LocalUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
+import VoiceChat
 
 
 {-| In the case of a channel, it's just the channel, not the threads it contains
@@ -503,7 +505,11 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , sidebarOffsetAttr loggedIn model
+                                        , Ui.move
+                                            { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                            , y = 0
+                                            , z = 0
+                                            }
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -516,7 +522,11 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
                                         , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , sidebarOffsetAttr loggedIn model
+                                        , Ui.move
+                                            { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                            , y = 0
+                                            , z = 0
+                                            }
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -823,7 +833,11 @@ guildView model guildId channelRoute loggedIn local =
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
                                             , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                            , sidebarOffsetAttr loggedIn model
+                                            , Ui.move
+                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                , y = 0
+                                                , z = 0
+                                                }
                                             , Ui.heightMin 0
                                             ]
 
@@ -841,7 +855,11 @@ guildView model guildId channelRoute loggedIn local =
                                             Ui.noAttr
 
                                         HideMembersTab ->
-                                            sidebarOffsetAttr loggedIn model
+                                            Ui.move
+                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                , y = 0
+                                                , z = 0
+                                                }
                                     , Ui.heightMin 0
                                     ]
                                 |> Ui.inFront
@@ -1007,7 +1025,11 @@ discordGuildView model routeData loggedIn local =
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
                                             , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                            , sidebarOffsetAttr loggedIn model
+                                            , Ui.move
+                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                , y = 0
+                                                , z = 0
+                                                }
                                             , Ui.heightMin 0
                                             ]
 
@@ -1025,7 +1047,11 @@ discordGuildView model routeData loggedIn local =
                                             Ui.noAttr
 
                                         HideMembersTab ->
-                                            sidebarOffsetAttr loggedIn model
+                                            Ui.move
+                                                { x = VoiceChat.sidebarOffsetAttr loggedIn.sidebarMode model
+                                                , y = 0
+                                                , z = 0
+                                                }
                                     , Ui.heightMin 0
                                     ]
                                 |> Ui.inFront
@@ -1378,48 +1404,6 @@ discordMemberLabel isMobile localUser currentUserId userId =
             Nothing ->
                 []
         )
-
-
-sidebarOffsetAttr : LoggedIn2 -> LoadedFrontend -> Ui.Attribute msg
-sidebarOffsetAttr loggedIn model =
-    let
-        width : Int
-        width =
-            Coord.xRaw model.windowSize
-
-        offset : Float
-        offset =
-            (case loggedIn.sidebarMode of
-                Types.ChannelSidebarClosed ->
-                    1
-
-                Types.ChannelSidebarOpened ->
-                    0
-
-                Types.ChannelSidebarClosing a ->
-                    a.offset
-
-                Types.ChannelSidebarOpening a ->
-                    a.offset
-
-                Types.ChannelSidebarDragging a ->
-                    a.offset
-            )
-                * toFloat width
-    in
-    Ui.move
-        { x =
-            --if offset < 20 then
-            --    0
-            --
-            --else if offset > toFloat width - 20 then
-            --    width
-            --
-            --else
-            round offset
-        , y = 0
-        , z = 0
-        }
 
 
 pageMissing : String -> Element msg

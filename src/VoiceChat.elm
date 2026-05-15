@@ -1,5 +1,6 @@
 port module VoiceChat exposing
-    ( ConnectionId
+    ( ChannelSidebarMode(..)
+    , ConnectionId
     , DeviceKind(..)
     , DisplayMode(..)
     , FromJs(..)
@@ -31,6 +32,7 @@ port module VoiceChat exposing
     , isPressMsg
     , leaveVoiceChatCmds
     , serverChangeCmd
+    , sidebarOffsetAttr
     , startArgs
     , startLocalStream
     , toJs
@@ -129,6 +131,14 @@ type MediaDevicesStatus
     = MediaDevicesNotLoaded
     | HasMediaDevices (List MediaDevice)
     | FailedToGetMediaDevices String
+
+
+type ChannelSidebarMode
+    = ChannelSidebarClosed
+    | ChannelSidebarOpened
+    | ChannelSidebarClosing { offset : Float }
+    | ChannelSidebarOpening { offset : Float }
+    | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
 init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
@@ -359,36 +369,45 @@ localVideoNodeId =
     "local-video"
 
 
-videoNodes : Id UserId -> Route -> Coord CssPixels -> Model -> Local -> Html Msg
-videoNodes currentUserId route windowSize model local =
+videoNodes :
+    Id UserId
+    -> { a | windowSize : Coord CssPixels, route : Route }
+    -> { b | voiceChat : Model, sidebarMode : ChannelSidebarMode }
+    -> Local
+    -> Html Msg
+videoNodes currentUserId config loggedIn local =
     let
+        model =
+            loggedIn.voiceChat
+
         viewingRoomId : Maybe RoomId
         viewingRoomId =
-            case Route.toGuildOrDmId currentUserId route of
+            case Route.toGuildOrDmId currentUserId config.route of
                 Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
                     DmRoomId otherUserId |> Just
 
                 _ ->
                     Nothing
 
+        voiceChatX : Int
         voiceChatX =
             if isMobile then
                 0
 
             else
-                MyUi.channelAndGuildColumnWidth windowSize
+                MyUi.channelAndGuildColumnWidth config.windowSize
 
         voiceChatY =
             MyUi.channelHeaderHeight
 
         maxWidth : Int
         maxWidth =
-            Coord.xRaw windowSize - voiceChatX
+            Coord.xRaw config.windowSize - voiceChatX
 
         --|> min (ceiling (toFloat voiceChatHeight * 16 / 9))
         maxHeight : Int
         maxHeight =
-            viewHeight windowSize
+            viewHeight config.windowSize
                 - voiceChatY
                 - (if isMobile then
                     150
@@ -412,7 +431,7 @@ videoNodes currentUserId route windowSize model local =
                             min (round (toFloat maxHeight * aspectRatio)) maxWidth - padding * 2
 
                         voiceChatX2 =
-                            voiceChatX + (maxWidth - width) // 2
+                            voiceChatX + (maxWidth - width) // 2 + sidebarOffsetAttr loggedIn.sidebarMode config
                     in
                     ( voiceChatX2
                     , voiceChatY + padding
@@ -425,7 +444,7 @@ videoNodes currentUserId route windowSize model local =
                             min (round (toFloat maxHeight * aspectRatio * 2)) maxWidth
 
                         voiceChatX2 =
-                            voiceChatX + (maxWidth - width) // 2
+                            voiceChatX + (maxWidth - width) // 2 + sidebarOffsetAttr loggedIn.sidebarMode config
 
                         width2 =
                             (width - padding * 2 - spacing) // 2
@@ -437,17 +456,20 @@ videoNodes currentUserId route windowSize model local =
                         ( voiceChatX2 + padding + spacing + width2, voiceChatY + padding, width2 )
 
                 _ ->
-                    ( padding + index * 20, voiceChatY + padding, maxWidth // total )
+                    ( padding + index * 20 + sidebarOffsetAttr loggedIn.sidebarMode config
+                    , voiceChatY + padding
+                    , maxWidth // total
+                    )
 
         isMobile : Bool
         isMobile =
-            MyUi.isMobile { windowSize = windowSize }
+            MyUi.isMobile { windowSize = config.windowSize }
     in
     (case viewingRoomId of
         Just viewingRoomId2 ->
             let
                 isTabExpanded =
-                    case route of
+                    case config.route of
                         DmRoute dmRoute ->
                             dmRoute.tab == Just DmChannelHeaderTab_VoiceChat
 
@@ -1394,3 +1416,30 @@ deviceDropdown isMobile labelText icon devices selected onSelect =
                 )
             )
         ]
+
+
+sidebarOffsetAttr : ChannelSidebarMode -> { a | windowSize : Coord CssPixels } -> Int
+sidebarOffsetAttr sidebarMode model =
+    let
+        width : Int
+        width =
+            Coord.xRaw model.windowSize
+    in
+    (case sidebarMode of
+        ChannelSidebarClosed ->
+            1
+
+        ChannelSidebarOpened ->
+            0
+
+        ChannelSidebarClosing a ->
+            a.offset
+
+        ChannelSidebarOpening a ->
+            a.offset
+
+        ChannelSidebarDragging a ->
+            a.offset
+    )
+        * toFloat width
+        |> round

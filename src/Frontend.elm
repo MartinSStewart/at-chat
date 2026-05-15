@@ -72,7 +72,6 @@ import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types
     exposing
         ( AdminStatusLoginData(..)
-        , ChannelSidebarMode(..)
         , Drag(..)
         , EmojiSelector(..)
         , FrontendModel(..)
@@ -108,7 +107,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VoiceChat exposing (MediaDevicesStatus(..))
+import VoiceChat exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
 
 
 app :
@@ -6355,9 +6354,8 @@ view model =
                                         Ui.noAttr
                                     , VoiceChat.videoNodes
                                         local.localUser.session.userId
-                                        loaded.route
-                                        loaded.windowSize
-                                        loggedIn.voiceChat
+                                        loaded
+                                        loggedIn
                                         local.calls
                                         |> Html.map VoiceChatMsg
                                         |> Ui.html

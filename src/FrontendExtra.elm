@@ -75,7 +75,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (ChannelSidebarMode(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
+import Types exposing (FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -86,7 +86,7 @@ import Url exposing (Url)
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
-import VoiceChat exposing (RoomId(..))
+import VoiceChat exposing (ChannelSidebarMode(..), RoomId(..))
 
 
 pendingChangesText : LocalChange -> String
