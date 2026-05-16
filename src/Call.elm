@@ -21,11 +21,9 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
-    , decodeVoiceChatRecorder
     , displayMode
     , displayModeChangeCmd
     , fromJs
-    , gotRecordedData
     , gotUserMediaDevices
     , init
     , initModel
@@ -41,7 +39,6 @@ port module Call exposing
     )
 
 import Bytes exposing (Bytes)
-import Bytes.Decode
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -1113,70 +1110,6 @@ voiceChatFromJsCodec =
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
         |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
         |> Codec.buildCustom
-
-
-
---port got_recorded_data : (Bytes -> msg) -> Sub msg
-
-
-gotRecordedData : (Bytes -> msg) -> Subscription FrontendOnly msg
-gotRecordedData _ =
-    Subscription.none
-
-
-
---Subscription.fromJsBytes "got_recorded_data" got_recorded_data msg
-
-
-decodeVoiceChatRecorder : Bytes -> Bytes.Decode.Decoder ( ConnectionId, Recording )
-decodeVoiceChatRecorder bytes =
-    Bytes.Decode.map4 (\a b c d -> ( a, b, ( c, d ) )) decodeString decodeMimeType decodeTime decodeTime
-        |> Bytes.Decode.andThen
-            (\( ( connectionIdLength, connectionId ), ( mimeTypeLength, ( mimeType, extraData ) ), ( startTime, endTime ) ) ->
-                case connectionIdFromString connectionId of
-                    Ok connectionId2 ->
-                        Bytes.Decode.bytes (Bytes.width bytes - (connectionIdLength + mimeTypeLength + 8 + 8))
-                            |> Bytes.Decode.map
-                                (\recording ->
-                                    ( connectionId2
-                                    , { mimeType = mimeType
-                                      , extraData = extraData
-                                      , data = recording
-                                      , startTime = startTime
-                                      , endTime = endTime
-                                      }
-                                    )
-                                )
-
-                    Err () ->
-                        Bytes.Decode.fail
-            )
-
-
-decodeMimeType : Bytes.Decode.Decoder ( Int, ( String, String ) )
-decodeMimeType =
-    Bytes.Decode.map
-        (\( length, text ) ->
-            ( length
-            , case String.split ";" text of
-                mimeType :: extraData ->
-                    ( mimeType, String.join ";" extraData )
-
-                _ ->
-                    ( "", "" )
-            )
-        )
-        decodeString
-
-
-decodeString : Bytes.Decode.Decoder ( Int, String )
-decodeString =
-    Bytes.Decode.andThen (\length -> Bytes.Decode.map (Tuple.pair (length + 1)) (Bytes.Decode.string length)) Bytes.Decode.unsignedInt8
-
-
-decodeTime : Bytes.Decode.Decoder Time.Posix
-decodeTime =
-    Bytes.Decode.map (\a -> Time.millisToPosix (round a)) (Bytes.Decode.float64 Bytes.BE)
 
 
 type alias MediaDevice =

@@ -492,7 +492,6 @@ type FrontendMsg
     | DomFocusChanged ( Maybe HtmlId, Maybe ( Range, SelectionDirection ) )
     | PageUpGotViewport (Result Dom.Error Dom.Viewport)
     | GotVoiceChatSignalFromJs (Result String FromJs)
-    | GotVoiceChatRecording Bytes
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
     | FileDragEnter

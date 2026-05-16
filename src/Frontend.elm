@@ -4,7 +4,6 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
-import Bytes.Decode
 import Call exposing (ChannelSidebarMode(..), MediaDevicesStatus(..))
 import ChannelDescription
 import ChannelName
@@ -160,7 +159,6 @@ subscriptions model =
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
         , Call.fromJs GotVoiceChatSignalFromJs
-        , Call.gotRecordedData GotVoiceChatRecording
         , case model of
             Loading _ ->
                 Subscription.none
@@ -4225,40 +4223,6 @@ updateLoaded msg model =
                             )
                         )
                         model
-
-        GotVoiceChatRecording bytes ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    let
-                        voiceChat =
-                            loggedIn.voiceChat
-                    in
-                    case Bytes.Decode.decode (Call.decodeVoiceChatRecorder bytes) bytes of
-                        Just ( connectionId, recording ) ->
-                            ( { loggedIn
-                                | voiceChat =
-                                    { voiceChat
-                                        | recordings =
-                                            SeqDict.update
-                                                connectionId.roomId
-                                                (\maybe ->
-                                                    case maybe of
-                                                        Just nonempty ->
-                                                            List.Nonempty.cons recording nonempty |> Just
-
-                                                        Nothing ->
-                                                            Nonempty recording [] |> Just
-                                                )
-                                                voiceChat.recordings
-                                    }
-                              }
-                            , Command.none
-                            )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
 
         FileDragEnter ->
             FrontendExtra.updateLoggedIn

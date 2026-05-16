@@ -1750,9 +1750,6 @@ isPressMsg msg =
         VoiceChatMsg voiceChatMsg ->
             Call.isPressMsg voiceChatMsg
 
-        GotVoiceChatRecording _ ->
-            False
-
         PressedChannelHeaderTab _ ->
             True
 
