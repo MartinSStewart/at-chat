@@ -261,7 +261,11 @@ layout model attributes child =
                         |> Json.Decode.map (\list -> ( FileDropped list, True ))
                     )
                     |> Ui.htmlAttribute
-                , Ui.inFront (fileDragOverlay (loggedIn.fileDragOverCount > 0) model)
+                , if loggedIn.fileDragOverCount > 0 then
+                    Ui.inFront (fileDragOverlay True model)
+
+                  else
+                    Ui.noAttr
                 , Local.networkError
                     (\change ->
                         case change of
@@ -523,7 +527,7 @@ canDropFileHelper guildOrDmId threadRoute2 files model =
 
 
 fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
-fileDragOverlay isVisible model =
+fileDragOverlay _ model =
     let
         canDrop : Bool
         canDrop =
@@ -554,14 +558,6 @@ fileDragOverlay isVisible model =
         , MyUi.htmlStyle "border" "8px dashed"
         , MyUi.htmlStyle "box-sizing" "border-box"
         , MyUi.htmlStyle "pointer-events" "none"
-        , MyUi.htmlStyle "transition" "opacity 0.15s ease-in"
-        , MyUi.htmlStyle "opacity"
-            (if isVisible then
-                "1"
-
-             else
-                "0"
-            )
         ]
         (if canDrop then
             Ui.text "Drop files anywhere to upload"
