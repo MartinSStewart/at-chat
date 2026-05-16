@@ -499,7 +499,7 @@ voiceChatTest normalConfig =
             startTime
             normalConfig
             [ connectTwoUsersAndJoinNewGuild
-                desktopWindow
+                tallDesktopWindow
                 (\adminA user ->
                     let
                         adminUserId : Id UserId
@@ -772,7 +772,7 @@ voiceChatTest normalConfig =
                         100
                         sessionId0
                         "/"
-                        desktopWindow
+                        tallDesktopWindow
                         (\adminB ->
                             [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                             , adminB.click 100 (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
