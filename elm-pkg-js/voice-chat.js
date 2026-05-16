@@ -2,6 +2,12 @@ exports.init = async function init(app) {
     const connections = new Map();
     const pendingSignals = new Map();
     let localStreamPreview = null;
+    // Map from screen-share source id -> { stream, label, track }
+    const screenShareStreams = new Map();
+    let activeScreenShareId = null;
+    // Cache the user's camera-track senders so we can restore them when
+    // screen sharing stops.
+    const cameraTrackBySender = new Map();
 
     async function startConnection(args) {
         try {
@@ -326,8 +332,120 @@ exports.init = async function init(app) {
 
         } else if (msg.tag === "stop-local-stream") {
             stopLocalStream();
+        } else if (msg.tag === "start-screen-share") {
+            await startScreenShare();
+        } else if (msg.tag === "stop-screen-share") {
+            stopScreenShare();
+        } else if (msg.tag === "switch-screen-share") {
+            switchScreenShare(msg.args[0]);
         }
     });
+
+    async function startScreenShare() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            console.error("Voice chat: getDisplayMedia is not supported in this browser");
+            return;
+        }
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        } catch (e) {
+            // User cancelled or permission denied. Not an error worth surfacing.
+            console.log("Voice chat: getDisplayMedia cancelled or failed", e);
+            return;
+        }
+
+        const videoTrack = stream.getVideoTracks()[0];
+        if (!videoTrack) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
+        }
+
+        const sourceId = videoTrack.id;
+        const label = videoTrack.label || "Screen";
+
+        screenShareStreams.set(sourceId, { stream: stream, label: label, track: videoTrack });
+
+        videoTrack.addEventListener("ended", function () {
+            handleScreenShareEnded(sourceId);
+        });
+
+        app.ports.voice_chat_from_js.send(
+            { tag: "got-screen-share-source"
+            , args: [ { sourceId: sourceId, label: label } ]
+            });
+
+        applyScreenShareTrack(sourceId);
+    }
+
+    function applyScreenShareTrack(sourceId) {
+        const entry = screenShareStreams.get(sourceId);
+        if (!entry) return;
+        activeScreenShareId = sourceId;
+        connections.forEach(function (conn) {
+            if (!conn.pc) return;
+            const sender = conn.pc.getSenders().find((s) => s.track && s.track.kind === "video");
+            if (!sender) return;
+            if (!cameraTrackBySender.has(sender)) {
+                cameraTrackBySender.set(sender, sender.track);
+            }
+            sender.replaceTrack(entry.track);
+        });
+    }
+
+    function switchScreenShare(sourceId) {
+        if (screenShareStreams.has(sourceId)) {
+            applyScreenShareTrack(sourceId);
+        }
+    }
+
+    function stopScreenShare() {
+        screenShareStreams.forEach(function (entry, sourceId) {
+            try { entry.track.stop(); } catch (e) {}
+            try { entry.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+            app.ports.voice_chat_from_js.send(
+                { tag: "screen-share-ended"
+                , args: [ sourceId ]
+                });
+        });
+        screenShareStreams.clear();
+        activeScreenShareId = null;
+        restoreCameraTracks();
+    }
+
+    function handleScreenShareEnded(sourceId) {
+        const entry = screenShareStreams.get(sourceId);
+        if (entry) {
+            try { entry.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+            screenShareStreams.delete(sourceId);
+        }
+        if (activeScreenShareId === sourceId) {
+            activeScreenShareId = null;
+            const next = screenShareStreams.keys().next();
+            if (!next.done) {
+                applyScreenShareTrack(next.value);
+            } else {
+                restoreCameraTracks();
+            }
+        }
+        app.ports.voice_chat_from_js.send(
+            { tag: "screen-share-ended"
+            , args: [ sourceId ]
+            });
+    }
+
+    function restoreCameraTracks() {
+        cameraTrackBySender.forEach(function (cameraTrack, sender) {
+            try {
+                if (cameraTrack) {
+                    sender.replaceTrack(cameraTrack);
+                }
+            } catch (e) {
+                console.error("Voice chat: failed to restore camera track", e);
+            }
+        });
+        cameraTrackBySender.clear();
+    }
 
     async function getDevices() {
         let devices = await navigator.mediaDevices.enumerateDevices();

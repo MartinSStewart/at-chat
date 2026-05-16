@@ -15,6 +15,7 @@ port module Call exposing
     , Msg(..)
     , Recording
     , RoomId(..)
+    , ScreenShareSource
     , Sdp
     , ServerChange(..)
     , Signal(..)
@@ -86,8 +87,10 @@ type ServerChange
 type Msg
     = SelectedAudioInputDevice (IdString MediaDeviceId)
     | SelectedVideoInputDevice (IdString MediaDeviceId)
+    | SelectedScreenShareSource (IdString MediaDeviceId)
     | PressedToggleMute
     | PressedTogglePauseVideo
+    | PressedToggleScreenShare
     | PressedJoinCall RoomId
     | PressedLeaveCall
     | PressedDownloadRecording RoomId
@@ -109,12 +112,21 @@ type alias Model =
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
+    , screenShareSources : List ScreenShareSource
+    , selectedScreenShareSource : Maybe (IdString MediaDeviceId)
+    , screenShareEnabled : Bool
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
     , videoHover : Maybe LocalOrConnection
+    }
+
+
+type alias ScreenShareSource =
+    { sourceId : IdString MediaDeviceId
+    , label : String
     }
 
 
@@ -155,6 +167,9 @@ initModel =
     , selectedVideoInputDevice = Nothing
     , audioInputEnabled = True
     , videoInputEnabled = True
+    , screenShareSources = []
+    , selectedScreenShareSource = Nothing
+    , screenShareEnabled = False
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , localIsSpeaking = False
@@ -820,6 +835,15 @@ view windowSize roomId calls model =
                             (Ui.html Icons.camera)
                             model.videoInputEnabled
                             PressedTogglePauseVideo
+                        , if hasJoined2 then
+                            voiceChatControlButton
+                                "guild_voiceChatScreenShare"
+                                (Ui.html Icons.screenShare)
+                                model.screenShareEnabled
+                                PressedToggleScreenShare
+
+                          else
+                            Ui.none
                         ]
                     ]
                 ]
@@ -933,6 +957,9 @@ type ToJs
     | ToJs_StartLocalStream StartLocalStreamData
     | ToJs_StopLocalStream
     | ToJs_SetVolume ConnectionId Float
+    | ToJs_StartScreenShare
+    | ToJs_StopScreenShare
+    | ToJs_SwitchScreenShare (IdString MediaDeviceId)
 
 
 type alias StartLocalStreamData =
@@ -989,7 +1016,7 @@ startDataCodec =
 voiceChatToJsCodec : Codec ToJs
 voiceChatToJsCodec =
     Codec.custom
-        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume value ->
+        (\eStart eStop eSignal eSetMuted eSetAudioInput eSetVideoPaused eGetMediaDevices eStartLocalStream eStopLocalStream eSetVolume eStartScreenShare eStopScreenShare eSwitchScreenShare value ->
             case value of
                 ToJs_Start a ->
                     eStart a
@@ -1020,6 +1047,15 @@ voiceChatToJsCodec =
 
                 ToJs_SetVolume a b ->
                     eSetVolume a b
+
+                ToJs_StartScreenShare ->
+                    eStartScreenShare
+
+                ToJs_StopScreenShare ->
+                    eStopScreenShare
+
+                ToJs_SwitchScreenShare a ->
+                    eSwitchScreenShare a
         )
         |> Codec.variant1 "start" ToJs_Start startDataCodec
         |> Codec.variant1 "stop" ToJs_Stop connectionIdCodec
@@ -1031,6 +1067,9 @@ voiceChatToJsCodec =
         |> Codec.variant1 "start-local-stream" ToJs_StartLocalStream startLocalStreamDataCodec
         |> Codec.variant0 "stop-local-stream" ToJs_StopLocalStream
         |> Codec.variant2 "set-volume" ToJs_SetVolume connectionIdCodec Codec.float
+        |> Codec.variant0 "start-screen-share" ToJs_StartScreenShare
+        |> Codec.variant0 "stop-screen-share" ToJs_StopScreenShare
+        |> Codec.variant1 "switch-screen-share" ToJs_SwitchScreenShare IdString.codec
         |> Codec.buildCustom
 
 
@@ -1064,6 +1103,8 @@ type FromJs
     | FromJs_GotUserMediaDevicesError String
     | FromJs_SpeakingChanged LocalOrConnection Bool
     | FromJs_StartConnectionError String
+    | FromJs_GotScreenShareSource ScreenShareSource
+    | FromJs_ScreenShareEnded (IdString MediaDeviceId)
 
 
 type LocalOrConnection
@@ -1090,7 +1131,7 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\aEncoder cEncoder dEncoder eEncoder fEncoder value ->
+        (\aEncoder cEncoder dEncoder eEncoder fEncoder gEncoder hEncoder value ->
             case value of
                 FromJs_GotSignal a b ->
                     aEncoder a b
@@ -1106,13 +1147,29 @@ voiceChatFromJsCodec =
 
                 FromJs_StartConnectionError string ->
                     fEncoder string
+
+                FromJs_GotScreenShareSource source ->
+                    gEncoder source
+
+                FromJs_ScreenShareEnded sourceId ->
+                    hEncoder sourceId
         )
         |> Codec.variant2 "got-signal" FromJs_GotSignal connectionIdCodec signalCodec
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
         |> Codec.variant1 "got-media-devices-error" FromJs_GotUserMediaDevicesError Codec.string
         |> Codec.variant2 "is-speaking-changed" FromJs_SpeakingChanged localOrConnectionCodec Codec.bool
         |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
+        |> Codec.variant1 "got-screen-share-source" FromJs_GotScreenShareSource screenShareSourceCodec
+        |> Codec.variant1 "screen-share-ended" FromJs_ScreenShareEnded IdString.codec
         |> Codec.buildCustom
+
+
+screenShareSourceCodec : Codec ScreenShareSource
+screenShareSourceCodec =
+    Codec.object ScreenShareSource
+        |> Codec.field "sourceId" .sourceId IdString.codec
+        |> Codec.field "label" .label Codec.string
+        |> Codec.buildObject
 
 
 
@@ -1312,6 +1369,17 @@ mediaDeviceSelectors isMobile roomId model =
                         Ui.none
                 , deviceDropdown isMobile "Microphone" Icons.microphone audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
                 , deviceDropdown isMobile "Camera" Icons.camera videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
+                , if List.isEmpty model.screenShareSources then
+                    Ui.none
+
+                  else
+                    deviceDropdown
+                        isMobile
+                        "Screen share"
+                        Icons.screenShare
+                        (List.map screenShareToMediaDevice model.screenShareSources)
+                        model.selectedScreenShareSource
+                        SelectedScreenShareSource
                 ]
 
 
@@ -1324,10 +1392,16 @@ isPressMsg msg =
         SelectedVideoInputDevice _ ->
             False
 
+        SelectedScreenShareSource _ ->
+            False
+
         PressedToggleMute ->
             True
 
         PressedTogglePauseVideo ->
+            True
+
+        PressedToggleScreenShare ->
             True
 
         PressedJoinCall _ ->
@@ -1350,6 +1424,15 @@ isPressMsg msg =
 
         MouseExitVideoNode _ ->
             False
+
+
+screenShareToMediaDevice : ScreenShareSource -> MediaDevice
+screenShareToMediaDevice source =
+    { deviceId = source.sourceId
+    , groupId = ""
+    , kind = VideoInput
+    , label = source.label
+    }
 
 
 deviceDropdown :
