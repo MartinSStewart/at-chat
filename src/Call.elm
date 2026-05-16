@@ -36,6 +36,7 @@ port module Call exposing
     , toJs
     , turnUsername
     , videoNodes
+    , videoPosAndSize
     , view
     )
 
@@ -55,7 +56,7 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), Id, UserId, VideoNodeId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -437,8 +438,8 @@ videoNodes currentUserId config loggedIn local =
         spacing =
             8
 
-        videoPosAndSize : Int -> Int -> ( Int, Int, Int )
-        videoPosAndSize total index =
+        legacyVideoPosAndSize : Int -> Int -> ( Int, Int, Int )
+        legacyVideoPosAndSize total index =
             case total of
                 1 ->
                     let
@@ -523,7 +524,7 @@ videoNodes currentUserId config loggedIn local =
                             total =
                                 NonemptySet.size sessions + 1
                         in
-                        videoNode IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
+                        videoNode IsLocal False (legacyVideoPosAndSize total 0) model.localIsSpeaking model
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -534,23 +535,23 @@ videoNodes currentUserId config loggedIn local =
                                     videoNode
                                         (IsConnection connectionId)
                                         False
-                                        (videoPosAndSize total (index + 1))
+                                        (legacyVideoPosAndSize total (index + 1))
                                         (SeqSet.member connectionId model.isSpeaking)
                                         model
                                 )
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                        [ videoNode IsLocal False (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else if isTabExpanded then
-                [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal False (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
 
             else
-                [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal True (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
 
         Nothing ->
-            [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+            [ videoNode IsLocal True (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
     )
         |> Html.Keyed.node "div" []
 
@@ -558,6 +559,139 @@ videoNodes currentUserId config loggedIn local =
 aspectRatio : Float
 aspectRatio =
     16 / 9
+
+
+videoPosAndSize :
+    { containerWidth : Int, containerHeight : Int }
+    -> List { id : Id VideoNodeId, aspectRatio : Float }
+    -> List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int }
+videoPosAndSize container videos =
+    let
+        count : Int
+        count =
+            List.length videos
+    in
+    if count == 0 then
+        []
+
+    else
+        let
+            bestCols : Int
+            bestCols =
+                List.range 1 count
+                    |> List.Extra.maximumBy
+                        (\cols -> layoutScore container videos cols)
+                    |> Maybe.withDefault 1
+        in
+        layoutVideos container videos bestCols
+
+
+layoutScore :
+    { containerWidth : Int, containerHeight : Int }
+    -> List { a | aspectRatio : Float }
+    -> Int
+    -> Float
+layoutScore container videos cols =
+    let
+        rows : Int
+        rows =
+            (List.length videos + cols - 1) // cols
+
+        cellWidth : Float
+        cellWidth =
+            toFloat container.containerWidth / toFloat cols
+
+        cellHeight : Float
+        cellHeight =
+            toFloat container.containerHeight / toFloat rows
+    in
+    List.foldl
+        (\video total ->
+            let
+                fittedWidth : Float
+                fittedWidth =
+                    min cellWidth (cellHeight * video.aspectRatio)
+
+                fittedHeight : Float
+                fittedHeight =
+                    fittedWidth / video.aspectRatio
+            in
+            total + fittedWidth * fittedHeight
+        )
+        0
+        videos
+
+
+layoutVideos :
+    { containerWidth : Int, containerHeight : Int }
+    -> List { id : Id VideoNodeId, aspectRatio : Float }
+    -> Int
+    -> List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int }
+layoutVideos container videos cols =
+    let
+        count : Int
+        count =
+            List.length videos
+
+        rows : Int
+        rows =
+            (count + cols - 1) // cols
+
+        cellWidth : Float
+        cellWidth =
+            toFloat container.containerWidth / toFloat cols
+
+        cellHeight : Float
+        cellHeight =
+            toFloat container.containerHeight / toFloat rows
+    in
+    List.indexedMap
+        (\index video ->
+            let
+                row : Int
+                row =
+                    index // cols
+
+                col : Int
+                col =
+                    modBy cols index
+
+                videosInThisRow : Int
+                videosInThisRow =
+                    if row == rows - 1 then
+                        count - row * cols
+
+                    else
+                        cols
+
+                rowOffset : Float
+                rowOffset =
+                    toFloat (cols - videosInThisRow) * cellWidth / 2
+
+                fittedWidth : Float
+                fittedWidth =
+                    min cellWidth (cellHeight * video.aspectRatio)
+
+                fittedHeight : Float
+                fittedHeight =
+                    fittedWidth / video.aspectRatio
+
+                x : Float
+                x =
+                    rowOffset + toFloat col * cellWidth + (cellWidth - fittedWidth) / 2
+
+                y : Float
+                y =
+                    toFloat row * cellHeight + (cellHeight - fittedHeight) / 2
+            in
+            { id = video.id
+            , x = round x
+            , y = round y
+            , width = round fittedWidth
+            , height = round fittedHeight
+            }
+        )
+        videos
 
 
 videoNode :

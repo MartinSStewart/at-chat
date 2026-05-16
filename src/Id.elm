@@ -15,6 +15,7 @@ module Id exposing
     , ThreadRouteWithMaybeMessage(..)
     , ThreadRouteWithMessage(..)
     , UserId(..)
+    , VideoNodeId(..)
     , changeType
     , fromInt
     , fromString
@@ -128,6 +129,10 @@ type StickerId
 
 type CustomEmojiId
     = CustomEmojiId Never
+
+
+type VideoNodeId
+    = VideoNodeId Never
 
 
 type Id a
