@@ -18,6 +18,7 @@ import Env
 import Expect
 import FileStatus
 import Frontend
+import Html.Attributes
 import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import Json.Encode
@@ -898,12 +899,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , RecordedTestExtra.writeMessage admin 100 "First message"
                 , RecordedTestExtra.writeMessage admin 100 "Next message"
                 , RecordedTestExtra.writeMessage admin 100 "Third message"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ])
                 , user.click 100 (Dom.id "guild_openGuild_1")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ])
                 , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve Hello!"
                 , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve Hello again!"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
                 , T.connectFrontend
                     100
                     RecordedTestExtra.sessionId1

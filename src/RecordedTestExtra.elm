@@ -92,6 +92,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
+import MyUi
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -778,14 +779,13 @@ voiceChatTest normalConfig =
                             , adminB.click 100 (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                             , adminB.click 100 (Dom.id "guild_voiceChat")
                             , adminB.click 100 (Dom.id "guild_startVoiceChat")
-
-                            -- adminB's initial state does not list any peers
-                            -- (the connecting client only sees other-user
-                            -- peers in its DMs), so adminB's first click only
-                            -- queries the media devices. The existing peers
-                            -- learn of adminB via Server_Joined and open peer
-                            -- connections back to adminB; that produces a
-                            -- ToJs_Start on each of them.
+                            , adminB.checkView
+                                100
+                                (Test.Html.Query.has
+                                    [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "AT is in a call")
+                                    , Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "Stevie Steve is in a call")
+                                    ]
+                                )
                             , expectGetMediaDevices adminB.clientId
                             , adminB.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
                             , expectStartFor adminA.clientId
