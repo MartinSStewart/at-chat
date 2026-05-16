@@ -4835,17 +4835,15 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
                             ( model
                             , Command.batch
                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange voiceMsg))
-                                , Broadcast.toUser
-                                    Nothing
-                                    Nothing
-                                    otherUserId
+                                , Lamdera.sendToFrontend
+                                    (Tuple.second connectionId.otherClientId)
                                     (Call.Server_SignalReceived
                                         { roomId = Call.DmRoomId session.userId, otherClientId = ( session.userId, clientId ) }
                                         signal
                                         |> Server_VoiceChatChange
                                         |> ServerChange
+                                        |> ChangeBroadcast
                                     )
-                                    model
                                 ]
                             )
                         )
