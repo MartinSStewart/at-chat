@@ -21,6 +21,7 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
+    , decodeToJs
     , displayMode
     , displayModeChangeCmd
     , encodeFromJs
@@ -1145,6 +1146,11 @@ deviceKindCodec =
 encodeFromJs : FromJs -> Json.Encode.Value
 encodeFromJs value =
     Codec.encodeToValue voiceChatFromJsCodec value
+
+
+decodeToJs : Json.Decode.Value -> Result Codec.Error ToJs
+decodeToJs value =
+    Codec.decodeValue voiceChatToJsCodec value
 
 
 fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg

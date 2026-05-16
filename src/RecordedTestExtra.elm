@@ -557,15 +557,133 @@ voiceChatTest normalConfig =
                             , sdpMid = "0"
                             , usernameFragment = "frag"
                             }
+
+                        matchingToJs :
+                            Lamdera.ClientId
+                            -> (Call.ToJs -> Bool)
+                            -> T.Data FrontendModel BackendModel
+                            -> List Call.ToJs
+                        matchingToJs clientId predicate data =
+                            List.filterMap
+                                (\req ->
+                                    if req.clientId == clientId && req.portName == "voice_chat_to_js" then
+                                        case Call.decodeToJs req.value of
+                                            Ok toJs ->
+                                                if predicate toJs then
+                                                    Just toJs
+
+                                                else
+                                                    Nothing
+
+                                            Err _ ->
+                                                Nothing
+
+                                    else
+                                        Nothing
+                                )
+                                data.portRequests
+
+                        expectToJs :
+                            Lamdera.ClientId
+                            -> String
+                            -> (Call.ToJs -> Bool)
+                            -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        expectToJs clientId description predicate =
+                            T.checkState
+                                100
+                                (\data ->
+                                    case matchingToJs clientId predicate data of
+                                        _ :: _ ->
+                                            Ok ()
+
+                                        [] ->
+                                            let
+                                                allFromClient =
+                                                    List.filterMap
+                                                        (\req ->
+                                                            if req.clientId == clientId && req.portName == "voice_chat_to_js" then
+                                                                case Call.decodeToJs req.value of
+                                                                    Ok toJs ->
+                                                                        Just (Debug.toString toJs)
+
+                                                                    Err err ->
+                                                                        Just ("DECODE_ERR: " ++ Debug.toString err)
+
+                                                            else
+                                                                Nothing
+                                                        )
+                                                        data.portRequests
+                                            in
+                                            Err
+                                                ("Expected "
+                                                    ++ Lamdera.clientIdToString clientId
+                                                    ++ " to have sent voice_chat_to_js: "
+                                                    ++ description
+                                                    ++ " (saw: "
+                                                    ++ String.join ", " allFromClient
+                                                    ++ ")"
+                                                )
+                                )
+
+                        expectGetMediaDevices :
+                            Lamdera.ClientId
+                            -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        expectGetMediaDevices clientId =
+                            expectToJs clientId
+                                "ToJs_GetMediaDevices"
+                                (\toJs -> toJs == Call.ToJs_GetMediaDevices)
+
+                        expectStartFor :
+                            Lamdera.ClientId
+                            -> Call.ConnectionId
+                            -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        expectStartFor clientId peer =
+                            expectToJs clientId
+                                ("ToJs_Start for peer " ++ Debug.toString peer)
+                                (\toJs ->
+                                    case toJs of
+                                        Call.ToJs_Start startData ->
+                                            startData.peerUserId == peer
+
+                                        _ ->
+                                            False
+                                )
+
+                        expectSignalReceived :
+                            Lamdera.ClientId
+                            -> Call.ConnectionId
+                            -> (Call.Signal -> Bool)
+                            -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+                        expectSignalReceived clientId peer signalPredicate =
+                            expectToJs clientId
+                                ("ToJs_Signal from peer " ++ Debug.toString peer)
+                                (\toJs ->
+                                    case toJs of
+                                        Call.ToJs_Signal connectionId signal ->
+                                            connectionId == peer && signalPredicate signal
+
+                                        _ ->
+                                            False
+                                )
+
+                        isOffer : Call.Signal -> Bool
+                        isOffer signal =
+                            case signal of
+                                Call.OfferSignal _ ->
+                                    True
+
+                                _ ->
+                                    False
                     in
-                    [ adminA.click 100 (Dom.id "guild_openDm_0")
-                    , user.click 100 (Dom.id "guild_openDm_0")
+                    [ adminA.click 100 (Dom.id ("guild_openDm_" ++ Id.toString otherUserId))
+                    , user.click 100 (Dom.id ("guild_openDm_" ++ Id.toString adminUserId))
                     , adminA.click 100 (Dom.id "guild_voiceChat")
                     , user.click 100 (Dom.id "guild_voiceChat")
 
                     -- adminA starts the call. No peers in the room yet so the
                     -- frontend only asks JS for media devices.
                     , adminA.click 100 (Dom.id "guild_startVoiceChat")
+                    , expectGetMediaDevices adminA.clientId
                     , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
 
                     -- user joins the call. user's frontend sees adminA already
@@ -574,12 +692,18 @@ voiceChatTest normalConfig =
                     -- receives Server_Joined and starts its own peer connection
                     -- to user.
                     , user.click 100 (Dom.id "guild_startVoiceChat")
+                    , expectStartFor user.clientId
+                        { roomId = userRoom, otherClientId = ( adminUserId, adminA.clientId ) }
                     , user.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+                    , expectStartFor adminA.clientId
+                        { roomId = adminRoom, otherClientId = ( otherUserId, user.clientId ) }
                     , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
 
                     -- adminA's JS creates an SDP offer for the connection with
                     -- user. The offer is forwarded through the backend and
                     -- ends up at user's JS as a ToJs_Signal.
+                    , expectStartFor adminA.clientId
+                        { roomId = adminRoom, otherClientId = ( otherUserId, user.clientId ) }
                     , adminA.portEvent
                         10
                         "voice_chat_from_js"
@@ -593,7 +717,12 @@ voiceChatTest normalConfig =
                         )
 
                     -- user's JS replies with an SDP answer that is forwarded
-                    -- back to adminA.
+                    -- back to adminA. The answer is only sent in response to
+                    -- an incoming offer, so verify user's frontend received the
+                    -- offer signal first.
+                    , expectSignalReceived user.clientId
+                        { roomId = userRoom, otherClientId = ( adminUserId, adminA.clientId ) }
+                        isOffer
                     , user.portEvent
                         10
                         "voice_chat_from_js"
@@ -606,7 +735,11 @@ voiceChatTest normalConfig =
                             )
                         )
 
-                    -- Both peers trickle ICE candidates to each other.
+                    -- Both peers trickle ICE candidates to each other. ICE
+                    -- candidates only show up once the peer connection has
+                    -- been started, so verify ToJs_Start happened.
+                    , expectStartFor adminA.clientId
+                        { roomId = adminRoom, otherClientId = ( otherUserId, user.clientId ) }
                     , adminA.portEvent
                         10
                         "voice_chat_from_js"
@@ -618,6 +751,8 @@ voiceChatTest normalConfig =
                                 (Call.IceSignal (iceCandidate "candidate:1 1 udp 2113937151 192.168.1.10 50000 typ host"))
                             )
                         )
+                    , expectStartFor user.clientId
+                        { roomId = userRoom, otherClientId = ( adminUserId, adminA.clientId ) }
                     , user.portEvent
                         10
                         "voice_chat_from_js"
@@ -644,26 +779,29 @@ voiceChatTest normalConfig =
                             , adminB.click 100 (Dom.id "guild_voiceChat")
                             , adminB.click 100 (Dom.id "guild_startVoiceChat")
 
-                            -- adminB sees adminA and user already in the room
-                            -- and starts a peer connection to each of them.
-                            -- Both existing peers also receive Server_Joined
-                            -- for adminB and open connections back.
+                            -- adminB's initial state does not list any peers
+                            -- (the connecting client only sees other-user
+                            -- peers in its DMs), so adminB's first click only
+                            -- queries the media devices. The existing peers
+                            -- learn of adminB via Server_Joined and open peer
+                            -- connections back to adminB; that produces a
+                            -- ToJs_Start on each of them.
+                            , expectGetMediaDevices adminB.clientId
                             , adminB.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+                            , expectStartFor adminA.clientId
+                                { roomId = adminRoom, otherClientId = ( adminUserId, adminB.clientId ) }
                             , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+                            , expectStartFor user.clientId
+                                { roomId = userRoom, otherClientId = ( adminUserId, adminB.clientId ) }
                             , user.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
 
-                            -- adminB <-> adminA offer/answer exchange.
-                            , adminB.portEvent
-                                10
-                                "voice_chat_from_js"
-                                (Call.encodeFromJs
-                                    (Call.FromJs_GotSignal
-                                        { roomId = adminRoom
-                                        , otherClientId = ( adminUserId, adminA.clientId )
-                                        }
-                                        (Call.OfferSignal { sdp = "adminB-to-adminA-offer" })
-                                    )
-                                )
+                            -- ICE candidates trickled in from the established
+                            -- peer connections on adminA and user. ICE
+                            -- candidates only show up once the peer
+                            -- connection has been started, so verify the
+                            -- ToJs_Start happened.
+                            , expectStartFor adminA.clientId
+                                { roomId = adminRoom, otherClientId = ( adminUserId, adminB.clientId ) }
                             , adminA.portEvent
                                 10
                                 "voice_chat_from_js"
@@ -672,22 +810,11 @@ voiceChatTest normalConfig =
                                         { roomId = adminRoom
                                         , otherClientId = ( adminUserId, adminB.clientId )
                                         }
-                                        (Call.AnswerSignal { sdp = "adminA-answer-to-adminB" })
+                                        (Call.IceSignal (iceCandidate "adminA-ice-to-adminB"))
                                     )
                                 )
-
-                            -- adminB <-> user offer/answer exchange.
-                            , adminB.portEvent
-                                10
-                                "voice_chat_from_js"
-                                (Call.encodeFromJs
-                                    (Call.FromJs_GotSignal
-                                        { roomId = adminRoom
-                                        , otherClientId = ( otherUserId, user.clientId )
-                                        }
-                                        (Call.OfferSignal { sdp = "adminB-to-user-offer" })
-                                    )
-                                )
+                            , expectStartFor user.clientId
+                                { roomId = userRoom, otherClientId = ( adminUserId, adminB.clientId ) }
                             , user.portEvent
                                 10
                                 "voice_chat_from_js"
@@ -696,31 +823,7 @@ voiceChatTest normalConfig =
                                         { roomId = userRoom
                                         , otherClientId = ( adminUserId, adminB.clientId )
                                         }
-                                        (Call.AnswerSignal { sdp = "user-answer-to-adminB" })
-                                    )
-                                )
-
-                            -- ICE candidates for the new pairs.
-                            , adminB.portEvent
-                                10
-                                "voice_chat_from_js"
-                                (Call.encodeFromJs
-                                    (Call.FromJs_GotSignal
-                                        { roomId = adminRoom
-                                        , otherClientId = ( adminUserId, adminA.clientId )
-                                        }
-                                        (Call.IceSignal (iceCandidate "adminB-ice-to-adminA"))
-                                    )
-                                )
-                            , adminB.portEvent
-                                10
-                                "voice_chat_from_js"
-                                (Call.encodeFromJs
-                                    (Call.FromJs_GotSignal
-                                        { roomId = adminRoom
-                                        , otherClientId = ( otherUserId, user.clientId )
-                                        }
-                                        (Call.IceSignal (iceCandidate "adminB-ice-to-user"))
+                                        (Call.IceSignal (iceCandidate "user-ice-to-adminB"))
                                     )
                                 )
 
