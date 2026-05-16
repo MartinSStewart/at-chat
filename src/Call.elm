@@ -611,61 +611,76 @@ layoutVideos container videos cols =
         rows =
             (count + cols - 1) // cols
 
-        cellWidth : Float
-        cellWidth =
-            toFloat container.containerWidth / toFloat cols
-
-        cellHeight : Float
-        cellHeight =
+        rowBudget : Float
+        rowBudget =
             toFloat container.containerHeight / toFloat rows
-    in
-    List.indexedMap
-        (\index video ->
+
+        videoRows : List (List { id : Id VideoNodeId, aspectRatio : Float })
+        videoRows =
+            List.Extra.greedyGroupsOf cols videos
+
+        rowHeight : List { id : Id VideoNodeId, aspectRatio : Float } -> Float
+        rowHeight rowVideos =
             let
-                row : Int
-                row =
-                    index // cols
-
-                col : Int
-                col =
-                    modBy cols index
-
-                videosInThisRow : Int
-                videosInThisRow =
-                    if row == rows - 1 then
-                        count - row * cols
-
-                    else
-                        cols
-
-                rowOffset : Float
-                rowOffset =
-                    toFloat (cols - videosInThisRow) * cellWidth / 2
-
-                fittedWidth : Float
-                fittedWidth =
-                    min cellWidth (cellHeight * video.aspectRatio)
-
-                fittedHeight : Float
-                fittedHeight =
-                    fittedWidth / video.aspectRatio
-
-                x : Float
-                x =
-                    rowOffset + toFloat col * cellWidth + (cellWidth - fittedWidth) / 2
-
-                y : Float
-                y =
-                    toFloat row * cellHeight + (cellHeight - fittedHeight) / 2
+                sumAspectRatio : Float
+                sumAspectRatio =
+                    List.sum (List.map .aspectRatio rowVideos)
             in
-            { id = video.id
-            , x = round x
-            , y = round y
-            , width = round fittedWidth
-            , height = round fittedHeight
-            }
-        )
-        videos
+            if sumAspectRatio <= 0 then
+                0
+
+            else
+                min rowBudget (toFloat container.containerWidth / sumAspectRatio)
+
+        rowsWithHeights : List ( List { id : Id VideoNodeId, aspectRatio : Float }, Float )
+        rowsWithHeights =
+            List.map (\rowVideos -> ( rowVideos, rowHeight rowVideos )) videoRows
+
+        totalHeight : Float
+        totalHeight =
+            List.sum (List.map Tuple.second rowsWithHeights)
+
+        yStart : Float
+        yStart =
+            (toFloat container.containerHeight - totalHeight) / 2
+
+        layoutRow : ( List { id : Id VideoNodeId, aspectRatio : Float }, Float ) -> ( Float, List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int } ) -> ( Float, List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int } )
+        layoutRow ( rowVideos, height ) ( y, acc ) =
+            let
+                rowWidth : Float
+                rowWidth =
+                    height * List.sum (List.map .aspectRatio rowVideos)
+
+                xStart : Float
+                xStart =
+                    (toFloat container.containerWidth - rowWidth) / 2
+
+                ( _, rowResults ) =
+                    List.foldl
+                        (\video ( x, list ) ->
+                            let
+                                w : Float
+                                w =
+                                    height * video.aspectRatio
+                            in
+                            ( x + w
+                            , { id = video.id
+                              , x = round x
+                              , y = round y
+                              , width = round w
+                              , height = round height
+                              }
+                                :: list
+                            )
+                        )
+                        ( xStart, [] )
+                        rowVideos
+            in
+            ( y + height, List.reverse rowResults ++ acc )
+    in
+    List.foldl layoutRow ( yStart, [] ) rowsWithHeights
+        |> Tuple.second
+        |> List.reverse
 
 
 videoNode :
