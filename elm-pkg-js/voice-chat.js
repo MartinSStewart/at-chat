@@ -29,41 +29,6 @@ exports.init = async function init(app) {
                 return;
             }
 
-
-    //        let mediaRecorder = new MediaRecorder(localStream);
-    //
-    //        let startTime = Date.now();
-    //        console.log("Start", startTime);
-    //
-    //        mediaRecorder.addEventListener("dataavailable", async (e) => {
-    //            let endTime = Date.now();
-    //            const peerIdBytes = new TextEncoder().encode(peerUserId);
-    //            const typeBytes = new TextEncoder().encode(e.data.type);
-    //            const dataBuffer = await e.data.arrayBuffer();
-    //            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + 8 + 8 + dataBuffer.byteLength);
-    //            const view = new DataView(result);
-    //            const bytes = new Uint8Array(result);
-    //
-    //            view.setUint8(0, peerIdBytes.length);
-    //            bytes.set(peerIdBytes, 1);
-    //            let offset = 1 + peerIdBytes.length;
-    //            view.setUint8(offset, typeBytes.length);
-    //            offset += 1;
-    //            bytes.set(typeBytes, offset);
-    //            offset += typeBytes.length;
-    //
-    //            view.setFloat64(offset, startTime);
-    //            offset += 8;
-    //            view.setFloat64(offset, endTime);
-    //            offset += 8;
-    //
-    //            bytes.set(new Uint8Array(dataBuffer), offset);
-    //            app.ports.got_recorded_data.send(new DataView(result));
-    //        });
-    //        mediaRecorder.start();
-
-
-
             console.log("Voice chat: startConnection", args.peerUserId);
 
             const videoNode = document.getElementById(args.peerUserId);

@@ -4822,7 +4822,17 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
                         (joinDmVoiceChat sessionId clientId time changeId otherUserId model)
 
         Call.Local_Leave _ ->
-            asUser model sessionId (leaveVoice sessionId clientId time changeId model)
+            asUser
+                model
+                sessionId
+                (\session user ->
+                    case currentCall sessionId clientId model of
+                        Just roomId ->
+                            leaveVoiceHelper sessionId clientId time (Just changeId) model session roomId
+
+                        Nothing ->
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
 
         Call.Local_Signal connectionId signal ->
             case connectionId.roomId of
@@ -4850,38 +4860,36 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
                             )
                         )
 
-
-leaveVoice :
-    SessionId
-    -> ClientId
-    -> Time.Posix
-    -> ChangeId
-    -> BackendModel
-    -> UserSession
-    -> BackendUser
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-leaveVoice sessionId clientId time changeId model session _ =
-    let
-        maybeRoomId : Maybe Call.RoomId
-        maybeRoomId =
-            case SeqDict.get sessionId model.connections of
-                Just connections ->
-                    case NonemptyDict.get clientId connections of
-                        Just connection ->
-                            connection.call
+        Call.Local_TryRecording ->
+            asUser
+                model
+                sessionId
+                (\session user ->
+                    case currentCall sessionId clientId model of
+                        Just roomId ->
+                            Broadcast.toDmChannelExcludingOne clientId
 
                         Nothing ->
-                            Nothing
+                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                )
+
+        Call.Local_AllowRecording ->
+            0
+
+
+currentCall : SessionId -> ClientId -> BackendModel -> Maybe Call.RoomId
+currentCall sessionId clientId model =
+    case SeqDict.get sessionId model.connections of
+        Just connections ->
+            case NonemptyDict.get clientId connections of
+                Just connection ->
+                    connection.call
 
                 Nothing ->
                     Nothing
-    in
-    case maybeRoomId of
-        Just roomId ->
-            leaveVoiceHelper sessionId clientId time (Just changeId) model session roomId
 
         Nothing ->
-            ( model, BackendExtra.invalidChangeResponse changeId clientId )
+            Nothing
 
 
 leaveVoiceHelper :

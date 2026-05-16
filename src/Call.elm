@@ -21,6 +21,7 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
+    , VoiceChatData
     , displayMode
     , displayModeChangeCmd
     , fromJs
@@ -72,12 +73,16 @@ type LocalChange
     = Local_Join Time.Posix RoomId
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
+    | Local_TryRecording
+    | Local_AllowRecording
 
 
 type ServerChange
     = Server_Joined Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
+    | Server_TryRecording (Id UserId)
+    | Server_AllowRecording (Id UserId)
 
 
 type Msg
@@ -92,11 +97,19 @@ type Msg
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
     | MouseExitVideoNode LocalOrConnection
+    | PressedTryRecording
+    | PressedAllowRecording
 
 
 type alias Local =
     { currentRoom : Maybe RoomId
-    , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    , voiceChats : SeqDict RoomId VoiceChatData
+    }
+
+
+type alias VoiceChatData =
+    { allowRecording : SeqSet (Id UserId)
+    , connections : NonemptySet ( Id UserId, ClientId )
     }
 
 
@@ -138,7 +151,7 @@ type ChannelSidebarMode
     | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
-init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
+init : SeqDict RoomId VoiceChatData -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
@@ -503,7 +516,7 @@ videoNodes currentUserId config loggedIn local =
                         let
                             total : Int
                             total =
-                                NonemptySet.size sessions + 1
+                                NonemptySet.size sessions.connections + 1
                         in
                         videoNode IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
                             :: List.indexedMap
@@ -520,7 +533,7 @@ videoNodes currentUserId config loggedIn local =
                                         (SeqSet.member connectionId model.isSpeaking)
                                         model
                                 )
-                                (NonemptySet.toList sessions)
+                                (NonemptySet.toList sessions.connections)
 
                     Nothing ->
                         [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
@@ -724,7 +737,7 @@ viewHeight windowSize =
 view : Coord CssPixels -> RoomId -> Local -> Model -> Element Msg
 view windowSize roomId calls model =
     let
-        ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
+        ongoingCall : Maybe VoiceChatData
         ongoingCall =
             SeqDict.get roomId calls.voiceChats
 
@@ -876,7 +889,7 @@ leaveVoiceChatCmds model =
         Just currentRoom ->
             case SeqDict.get currentRoom model.voiceChats of
                 Just voiceChat ->
-                    NonemptySet.toList voiceChat
+                    NonemptySet.toList voiceChat.connections
                         |> List.map
                             (\sessionIdHash2 ->
                                 toJs
@@ -911,6 +924,12 @@ serverChangeCmd change clientId local model =
 
         Server_SignalReceived connectionId signal ->
             toJs (ToJs_Signal connectionId signal)
+
+        Server_TryRecording id ->
+            Debug.todo ""
+
+        Server_AllowRecording id ->
+            Debug.todo ""
 
 
 port voice_chat_to_js : Json.Encode.Value -> Cmd msg
@@ -1283,6 +1302,12 @@ isPressMsg msg =
 
         MouseExitVideoNode _ ->
             False
+
+        PressedTryRecording ->
+            True
+
+        PressedAllowRecording ->
+            True
 
 
 deviceDropdown :
