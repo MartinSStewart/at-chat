@@ -1,5 +1,6 @@
-module SeqDictHelper exposing (increment)
+module SeqDictHelper exposing (addItem, increment)
 
+import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
 import SeqDict exposing (SeqDict)
 
@@ -19,8 +20,16 @@ increment key dict =
         dict
 
 
+addItem : a -> b -> SeqDict a (NonemptySet b) -> SeqDict a (NonemptySet b)
+addItem key item dict =
+    SeqDict.update
+        key
+        (\maybe ->
+            case maybe of
+                Just nonempty ->
+                    NonemptySet.insert item nonempty |> Just
 
---
---addItem :  a -> SeqDict a OneOrGreater -> SeqDict a OneOrGreater
---addItem a seqDict =
---
+                Nothing ->
+                    NonemptySet.singleton item |> Just
+        )
+        dict

@@ -70,6 +70,7 @@ import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
@@ -3728,20 +3729,7 @@ changeUpdate localMsg local =
                         Call.Server_Joined time { roomId, otherClientId } ->
                             { local
                                 | calls =
-                                    { calls
-                                        | voiceChats =
-                                            SeqDict.update
-                                                roomId
-                                                (\maybe ->
-                                                    case maybe of
-                                                        Just nonemptySet ->
-                                                            NonemptySet.insert otherClientId nonemptySet |> Just
-
-                                                        Nothing ->
-                                                            NonemptySet.singleton otherClientId |> Just
-                                                )
-                                                calls.voiceChats
-                                    }
+                                    { calls | voiceChats = SeqDictHelper.addItem roomId otherClientId calls.voiceChats }
                                 , dmChannels =
                                     case roomId of
                                         DmRoomId otherUserId ->

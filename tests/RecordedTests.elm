@@ -912,7 +912,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     RecordedTestExtra.desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
-                        , userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
                         ]
                     )
                 ]

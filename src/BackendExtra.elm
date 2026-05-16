@@ -64,6 +64,7 @@ import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
@@ -605,21 +606,7 @@ getVoiceChatData clientId session model =
                                     case roomId of
                                         DmRoomId dmingWith ->
                                             if dmingWith == session.userId then
-                                                SeqDict.update
-                                                    roomId
-                                                    (\maybe ->
-                                                        (case maybe of
-                                                            Just nonempty ->
-                                                                NonemptySet.insert
-                                                                    ( otherSession.userId, otherClientId )
-                                                                    nonempty
-
-                                                            Nothing ->
-                                                                NonemptySet.singleton ( otherSession.userId, otherClientId )
-                                                        )
-                                                            |> Just
-                                                    )
-                                                    dict2
+                                                SeqDictHelper.addItem roomId ( otherSession.userId, otherClientId ) dict2
 
                                             else
                                                 dict2
