@@ -23,6 +23,7 @@ port module Call exposing
     , ToJs(..)
     , displayMode
     , displayModeChangeCmd
+    , encodeFromJs
     , fromJs
     , gotUserMediaDevices
     , init
@@ -1139,6 +1140,11 @@ mediaDevicesCodec =
 deviceKindCodec : Codec DeviceKind
 deviceKindCodec =
     Codec.enum Codec.string [ ( "audioinput", AudioInput ), ( "audiooutput", AudioOutput ), ( "videoinput", VideoInput ) ]
+
+
+encodeFromJs : FromJs -> Json.Encode.Value
+encodeFromJs value =
+    Codec.encodeToValue voiceChatFromJsCodec value
 
 
 fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg

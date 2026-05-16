@@ -84,6 +84,7 @@ import FileStatus
 import Go
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import IdString
 import ImageEditor
 import Json.Decode
 import Json.Encode
@@ -91,6 +92,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
+import NonemptyDict
 import NonemptySet
 import Pages.Admin
 import Pages.Guild
@@ -487,6 +489,264 @@ voiceChatTest normalConfig =
                             , adminB.click 100 (Dom.id "guild_friendLabel_0")
                             , adminB.click 100 (Dom.id "guild_voiceChat")
                             , adminA.click 100 (Dom.id "guild_voiceChat")
+                            ]
+                        )
+                    ]
+                )
+            ]
+        , startTest
+            "Two admin instances and one user join a voice chat together"
+            startTime
+            normalConfig
+            [ connectTwoUsersAndJoinNewGuild
+                desktopWindow
+                (\adminA user ->
+                    let
+                        adminUserId : Id UserId
+                        adminUserId =
+                            Id.fromInt 0
+
+                        otherUserId : Id UserId
+                        otherUserId =
+                            Id.fromInt 1
+
+                        adminRoom : Call.RoomId
+                        adminRoom =
+                            Call.DmRoomId otherUserId
+
+                        userRoom : Call.RoomId
+                        userRoom =
+                            Call.DmRoomId adminUserId
+
+                        audioDeviceId : IdString.IdString Call.MediaDeviceId
+                        audioDeviceId =
+                            IdString.fromString "default-audio-input"
+
+                        videoDeviceId : IdString.IdString Call.MediaDeviceId
+                        videoDeviceId =
+                            IdString.fromString "default-video-input"
+
+                        testMediaDevices : List Call.MediaDevice
+                        testMediaDevices =
+                            [ { deviceId = audioDeviceId
+                              , groupId = "audio-group"
+                              , kind = Call.AudioInput
+                              , label = "Default microphone"
+                              }
+                            , { deviceId = videoDeviceId
+                              , groupId = "video-group"
+                              , kind = Call.VideoInput
+                              , label = "Default camera"
+                              }
+                            , { deviceId = IdString.fromString "default-audio-output"
+                              , groupId = "audio-group"
+                              , kind = Call.AudioOutput
+                              , label = "Default speaker"
+                              }
+                            ]
+
+                        gotMediaDevicesEvent : Json.Encode.Value
+                        gotMediaDevicesEvent =
+                            Call.encodeFromJs
+                                (Call.FromJs_GotUserMediaDevices testMediaDevices [ audioDeviceId, videoDeviceId ])
+
+                        iceCandidate : String -> Call.Ice
+                        iceCandidate candidate =
+                            { candidate = candidate
+                            , sdpMLineIndex = 0
+                            , sdpMid = "0"
+                            , usernameFragment = "frag"
+                            }
+                    in
+                    [ adminA.click 100 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openDm_0")
+                    , adminA.click 100 (Dom.id "guild_voiceChat")
+                    , user.click 100 (Dom.id "guild_voiceChat")
+
+                    -- adminA starts the call. No peers in the room yet so the
+                    -- frontend only asks JS for media devices.
+                    , adminA.click 100 (Dom.id "guild_startVoiceChat")
+                    , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+
+                    -- user joins the call. user's frontend sees adminA already
+                    -- in the room and starts a peer connection (which also
+                    -- enumerates media devices on the JS side). adminA in turn
+                    -- receives Server_Joined and starts its own peer connection
+                    -- to user.
+                    , user.click 100 (Dom.id "guild_startVoiceChat")
+                    , user.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+                    , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+
+                    -- adminA's JS creates an SDP offer for the connection with
+                    -- user. The offer is forwarded through the backend and
+                    -- ends up at user's JS as a ToJs_Signal.
+                    , adminA.portEvent
+                        10
+                        "voice_chat_from_js"
+                        (Call.encodeFromJs
+                            (Call.FromJs_GotSignal
+                                { roomId = adminRoom
+                                , otherClientId = ( otherUserId, user.clientId )
+                                }
+                                (Call.OfferSignal { sdp = "v=0\u{000D}\no=adminA 0 0 IN IP4 0.0.0.0\u{000D}\ns=-\u{000D}\nt=0 0\u{000D}\n" })
+                            )
+                        )
+
+                    -- user's JS replies with an SDP answer that is forwarded
+                    -- back to adminA.
+                    , user.portEvent
+                        10
+                        "voice_chat_from_js"
+                        (Call.encodeFromJs
+                            (Call.FromJs_GotSignal
+                                { roomId = userRoom
+                                , otherClientId = ( adminUserId, adminA.clientId )
+                                }
+                                (Call.AnswerSignal { sdp = "v=0\u{000D}\no=user 0 0 IN IP4 0.0.0.0\u{000D}\ns=-\u{000D}\nt=0 0\u{000D}\n" })
+                            )
+                        )
+
+                    -- Both peers trickle ICE candidates to each other.
+                    , adminA.portEvent
+                        10
+                        "voice_chat_from_js"
+                        (Call.encodeFromJs
+                            (Call.FromJs_GotSignal
+                                { roomId = adminRoom
+                                , otherClientId = ( otherUserId, user.clientId )
+                                }
+                                (Call.IceSignal (iceCandidate "candidate:1 1 udp 2113937151 192.168.1.10 50000 typ host"))
+                            )
+                        )
+                    , user.portEvent
+                        10
+                        "voice_chat_from_js"
+                        (Call.encodeFromJs
+                            (Call.FromJs_GotSignal
+                                { roomId = userRoom
+                                , otherClientId = ( adminUserId, adminA.clientId )
+                                }
+                                (Call.IceSignal (iceCandidate "candidate:2 1 udp 2113937151 192.168.1.20 50001 typ host"))
+                            )
+                        )
+
+                    -- A second admin device connects on the same session as
+                    -- adminA. It is already logged in but needs to navigate
+                    -- to the DM and join the call.
+                    , T.connectFrontend
+                        100
+                        sessionId0
+                        "/"
+                        desktopWindow
+                        (\adminB ->
+                            [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                            , adminB.click 100 (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
+                            , adminB.click 100 (Dom.id "guild_voiceChat")
+                            , adminB.click 100 (Dom.id "guild_startVoiceChat")
+
+                            -- adminB sees adminA and user already in the room
+                            -- and starts a peer connection to each of them.
+                            -- Both existing peers also receive Server_Joined
+                            -- for adminB and open connections back.
+                            , adminB.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+                            , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+                            , user.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
+
+                            -- adminB <-> adminA offer/answer exchange.
+                            , adminB.portEvent
+                                10
+                                "voice_chat_from_js"
+                                (Call.encodeFromJs
+                                    (Call.FromJs_GotSignal
+                                        { roomId = adminRoom
+                                        , otherClientId = ( adminUserId, adminA.clientId )
+                                        }
+                                        (Call.OfferSignal { sdp = "adminB-to-adminA-offer" })
+                                    )
+                                )
+                            , adminA.portEvent
+                                10
+                                "voice_chat_from_js"
+                                (Call.encodeFromJs
+                                    (Call.FromJs_GotSignal
+                                        { roomId = adminRoom
+                                        , otherClientId = ( adminUserId, adminB.clientId )
+                                        }
+                                        (Call.AnswerSignal { sdp = "adminA-answer-to-adminB" })
+                                    )
+                                )
+
+                            -- adminB <-> user offer/answer exchange.
+                            , adminB.portEvent
+                                10
+                                "voice_chat_from_js"
+                                (Call.encodeFromJs
+                                    (Call.FromJs_GotSignal
+                                        { roomId = adminRoom
+                                        , otherClientId = ( otherUserId, user.clientId )
+                                        }
+                                        (Call.OfferSignal { sdp = "adminB-to-user-offer" })
+                                    )
+                                )
+                            , user.portEvent
+                                10
+                                "voice_chat_from_js"
+                                (Call.encodeFromJs
+                                    (Call.FromJs_GotSignal
+                                        { roomId = userRoom
+                                        , otherClientId = ( adminUserId, adminB.clientId )
+                                        }
+                                        (Call.AnswerSignal { sdp = "user-answer-to-adminB" })
+                                    )
+                                )
+
+                            -- ICE candidates for the new pairs.
+                            , adminB.portEvent
+                                10
+                                "voice_chat_from_js"
+                                (Call.encodeFromJs
+                                    (Call.FromJs_GotSignal
+                                        { roomId = adminRoom
+                                        , otherClientId = ( adminUserId, adminA.clientId )
+                                        }
+                                        (Call.IceSignal (iceCandidate "adminB-ice-to-adminA"))
+                                    )
+                                )
+                            , adminB.portEvent
+                                10
+                                "voice_chat_from_js"
+                                (Call.encodeFromJs
+                                    (Call.FromJs_GotSignal
+                                        { roomId = adminRoom
+                                        , otherClientId = ( otherUserId, user.clientId )
+                                        }
+                                        (Call.IceSignal (iceCandidate "adminB-ice-to-user"))
+                                    )
+                                )
+
+                            -- All three clients should now be in the call on
+                            -- the backend.
+                            , T.checkState
+                                100
+                                (\data ->
+                                    let
+                                        activeCalls : Int
+                                        activeCalls =
+                                            SeqDict.values data.backend.connections
+                                                |> List.concatMap
+                                                    (\clients ->
+                                                        NonemptyDict.values clients
+                                                            |> List.Nonempty.toList
+                                                            |> List.filter (\c -> c.call /= Nothing)
+                                                    )
+                                                |> List.length
+                                    in
+                                    if activeCalls == 3 then
+                                        Ok ()
+
+                                    else
+                                        Err ("Expected three clients in the voice chat, found " ++ String.fromInt activeCalls)
+                                )
                             ]
                         )
                     ]
