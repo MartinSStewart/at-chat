@@ -1181,12 +1181,15 @@ connectionIdToString { roomId, otherClientId } =
 connectionIdFromString : String -> Result () ConnectionId
 connectionIdFromString text =
     case String.split " " text of
-        [ first, second, third ] ->
+        first :: second :: rest0 :: rest ->
             case ( String.toInt first, String.toInt second ) of
                 ( Just int, Just userId ) ->
                     Ok
                         { roomId = DmRoomId (Id.fromInt int)
-                        , otherClientId = ( Id.fromInt userId, Lamdera.clientIdFromString third )
+                        , otherClientId =
+                            ( Id.fromInt userId
+                            , Lamdera.clientIdFromString (String.join " " (rest0 :: rest))
+                            )
                         }
 
                 _ ->
