@@ -112,6 +112,7 @@ type alias Model =
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
     , screenShare : Maybe ScreenShareSource
+    , remoteScreenShares : SeqDict ConnectionId (List (IdString MediaDeviceId))
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
     , localIsSpeaking : Bool
@@ -165,6 +166,7 @@ initModel =
     , audioInputEnabled = True
     , videoInputEnabled = True
     , screenShare = Nothing
+    , remoteScreenShares = SeqDict.empty
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , localIsSpeaking = False
@@ -379,6 +381,16 @@ localVideoNodeId =
     "local-video"
 
 
+localScreenShareNodeId : IdString MediaDeviceId -> String
+localScreenShareNodeId sourceId =
+    "local-screen-share " ++ IdString.toString sourceId
+
+
+remoteScreenShareNodeId : ConnectionId -> IdString MediaDeviceId -> String
+remoteScreenShareNodeId connectionId sourceId =
+    "screen-share " ++ connectionIdToString connectionId ++ " " ++ IdString.toString sourceId
+
+
 videoNodes :
     Id UserId
     -> { a | windowSize : Coord CssPixels, route : Route }
@@ -514,38 +526,139 @@ videoNodes currentUserId config loggedIn local =
                 case SeqDict.get viewingRoomId2 local.voiceChats of
                     Just sessions ->
                         let
+                            sessionList =
+                                NonemptySet.toList sessions
+
+                            peerNodes : List LocalOrConnection
+                            peerNodes =
+                                List.concatMap
+                                    (\session ->
+                                        let
+                                            connectionId : ConnectionId
+                                            connectionId =
+                                                { roomId = viewingRoomId2, otherClientId = session }
+
+                                            remoteShares =
+                                                SeqDict.get connectionId model.remoteScreenShares
+                                                    |> Maybe.withDefault []
+                                                    |> List.map (IsRemoteScreenShare connectionId)
+                                        in
+                                        IsConnection connectionId :: remoteShares
+                                    )
+                                    sessionList
+
+                            localScreenShareNodes : List LocalOrConnection
+                            localScreenShareNodes =
+                                localScreenShareNodesFor model
+
+                            allNodes : List LocalOrConnection
+                            allNodes =
+                                IsLocal :: localScreenShareNodes ++ peerNodes
+
                             total : Int
                             total =
-                                NonemptySet.size sessions + 1
+                                List.length allNodes
                         in
-                        videoNode IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
-                            :: List.indexedMap
-                                (\index session ->
-                                    let
-                                        connectionId : ConnectionId
-                                        connectionId =
-                                            { roomId = viewingRoomId2, otherClientId = session }
-                                    in
-                                    videoNode
-                                        (IsConnection connectionId)
-                                        False
-                                        (videoPosAndSize total (index + 1))
-                                        (SeqSet.member connectionId model.isSpeaking)
-                                        model
-                                )
-                                (NonemptySet.toList sessions)
+                        List.indexedMap
+                            (\index node ->
+                                videoNode
+                                    node
+                                    False
+                                    (videoPosAndSize total index)
+                                    (case node of
+                                        IsConnection connectionId ->
+                                            SeqSet.member connectionId model.isSpeaking
+
+                                        IsLocal ->
+                                            model.localIsSpeaking
+
+                                        IsLocalScreenShare _ ->
+                                            False
+
+                                        IsRemoteScreenShare _ _ ->
+                                            False
+                                    )
+                                    model
+                            )
+                            allNodes
 
                     Nothing ->
-                        [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                        let
+                            localScreenShareNodes : List LocalOrConnection
+                            localScreenShareNodes =
+                                localScreenShareNodesFor model
+
+                            allNodes : List LocalOrConnection
+                            allNodes =
+                                IsLocal :: localScreenShareNodes
+
+                            total : Int
+                            total =
+                                List.length allNodes
+                        in
+                        List.indexedMap
+                            (\index node ->
+                                videoNode
+                                    node
+                                    False
+                                    (videoPosAndSize total index)
+                                    (case node of
+                                        IsLocal ->
+                                            model.localIsSpeaking
+
+                                        _ ->
+                                            False
+                                    )
+                                    model
+                            )
+                            allNodes
 
             else if isTabExpanded then
-                [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                let
+                    localScreenShareNodes : List LocalOrConnection
+                    localScreenShareNodes =
+                        localScreenShareNodesFor model
+
+                    allNodes : List LocalOrConnection
+                    allNodes =
+                        IsLocal :: localScreenShareNodes
+
+                    total : Int
+                    total =
+                        List.length allNodes
+                in
+                List.indexedMap
+                    (\index node ->
+                        videoNode
+                            node
+                            False
+                            (videoPosAndSize total index)
+                            (case node of
+                                IsLocal ->
+                                    model.localIsSpeaking
+
+                                _ ->
+                                    False
+                            )
+                            model
+                    )
+                    allNodes
 
             else
-                [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model
+                    :: List.map
+                        (\node ->
+                            videoNode node True (videoPosAndSize 1 0) False model
+                        )
+                        (localScreenShareNodesFor model)
 
         Nothing ->
-            [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+            videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model
+                :: List.map
+                    (\node ->
+                        videoNode node True (videoPosAndSize 1 0) False model
+                    )
+                    (localScreenShareNodesFor model)
     )
         |> Html.Keyed.node "div" []
 
@@ -575,6 +688,12 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
 
                 IsConnection connectionId ->
                     connectionIdToString connectionId
+
+                IsLocalScreenShare sourceId ->
+                    localScreenShareNodeId sourceId
+
+                IsRemoteScreenShare connectionId sourceId ->
+                    remoteScreenShareNodeId connectionId sourceId
     in
     ( idString
     , Html.div
@@ -709,6 +828,12 @@ videoNode id isHidden ( x, y, width ) isSpeaking model =
                     ]
 
             IsLocal ->
+                Html.text ""
+
+            IsLocalScreenShare _ ->
+                Html.text ""
+
+            IsRemoteScreenShare _ _ ->
                 Html.text ""
         ]
     )
@@ -1100,33 +1225,45 @@ type FromJs
     | FromJs_StartConnectionError String
     | FromJs_GotScreenShareSource ScreenShareSource
     | FromJs_ScreenShareEnded (IdString MediaDeviceId)
+    | FromJs_GotRemoteScreenShare ConnectionId (IdString MediaDeviceId)
+    | FromJs_RemoteScreenShareEnded ConnectionId (IdString MediaDeviceId)
 
 
 type LocalOrConnection
     = IsLocal
     | IsConnection ConnectionId
+    | IsLocalScreenShare (IdString MediaDeviceId)
+    | IsRemoteScreenShare ConnectionId (IdString MediaDeviceId)
 
 
 localOrConnectionCodec : Codec LocalOrConnection
 localOrConnectionCodec =
     Codec.custom
-        (\aEncoder bEncoder value ->
+        (\aEncoder bEncoder cEncoder dEncoder value ->
             case value of
                 IsLocal ->
                     aEncoder
 
                 IsConnection a ->
                     bEncoder a
+
+                IsLocalScreenShare a ->
+                    cEncoder a
+
+                IsRemoteScreenShare a b ->
+                    dEncoder a b
         )
         |> Codec.variant0 localVideoNodeId IsLocal
         |> Codec.variant1 "is-connection" IsConnection connectionIdCodec
+        |> Codec.variant1 "is-local-screen-share" IsLocalScreenShare IdString.codec
+        |> Codec.variant2 "is-remote-screen-share" IsRemoteScreenShare connectionIdCodec IdString.codec
         |> Codec.buildCustom
 
 
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\aEncoder cEncoder dEncoder eEncoder fEncoder gEncoder hEncoder value ->
+        (\aEncoder cEncoder dEncoder eEncoder fEncoder gEncoder hEncoder iEncoder jEncoder value ->
             case value of
                 FromJs_GotSignal a b ->
                     aEncoder a b
@@ -1148,6 +1285,12 @@ voiceChatFromJsCodec =
 
                 FromJs_ScreenShareEnded sourceId ->
                     hEncoder sourceId
+
+                FromJs_GotRemoteScreenShare connectionId sourceId ->
+                    iEncoder connectionId sourceId
+
+                FromJs_RemoteScreenShareEnded connectionId sourceId ->
+                    jEncoder connectionId sourceId
         )
         |> Codec.variant2 "got-signal" FromJs_GotSignal connectionIdCodec signalCodec
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
@@ -1156,6 +1299,8 @@ voiceChatFromJsCodec =
         |> Codec.variant1 "start-connection-error" FromJs_StartConnectionError Codec.string
         |> Codec.variant1 "got-screen-share-source" FromJs_GotScreenShareSource screenShareSourceCodec
         |> Codec.variant1 "screen-share-ended" FromJs_ScreenShareEnded IdString.codec
+        |> Codec.variant2 "got-remote-screen-share" FromJs_GotRemoteScreenShare connectionIdCodec IdString.codec
+        |> Codec.variant2 "remote-screen-share-ended" FromJs_RemoteScreenShareEnded connectionIdCodec IdString.codec
         |> Codec.buildCustom
 
 
@@ -1407,13 +1552,14 @@ isPressMsg msg =
             False
 
 
-screenShareToMediaDevice : ScreenShareSource -> MediaDevice
-screenShareToMediaDevice source =
-    { deviceId = source.sourceId
-    , groupId = ""
-    , kind = VideoInput
-    , label = source.label
-    }
+localScreenShareNodesFor : Model -> List LocalOrConnection
+localScreenShareNodesFor model =
+    case model.screenShare of
+        Just s ->
+            [ IsLocalScreenShare s.sourceId ]
+
+        Nothing ->
+            []
 
 
 deviceDropdown :

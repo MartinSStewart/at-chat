@@ -2,12 +2,8 @@ exports.init = async function init(app) {
     const connections = new Map();
     const pendingSignals = new Map();
     let localStreamPreview = null;
-    // Map from screen-share source id -> { stream, label, track }
+    // Map from screen-share source id (= stream id) -> { stream, label, track }
     const screenShareStreams = new Map();
-    let activeScreenShareId = null;
-    // Cache the user's camera-track senders so we can restore them when
-    // screen sharing stops.
-    const cameraTrackBySender = new Map();
 
     async function startConnection(args) {
         try {
@@ -18,6 +14,27 @@ exports.init = async function init(app) {
                 iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
             });
 
+            // Suppress the negotiationneeded that fires from the initial
+            // addTrack calls below — startConnection handles that offer
+            // itself. Flipped to false after the initial offer is sent.
+            let suppressNegotiation = true;
+            pc.onnegotiationneeded = function () {
+                if (suppressNegotiation) return;
+                if (pc.signalingState !== "stable") return;
+                (async function () {
+                    try {
+                        const offer = await pc.createOffer();
+                        if (pc.signalingState !== "stable") return;
+                        await pc.setLocalDescription(offer);
+                        app.ports.voice_chat_from_js.send(
+                            { tag: "got-signal"
+                            , args: [ args.peerUserId, { tag: "offer", args: [ offer ] }]
+                            });
+                    } catch (e) {
+                        console.error("Voice chat: renegotiation failed", e);
+                    }
+                })();
+            };
 
             try {
                 let localStream = await getUserMedia(args);
@@ -74,27 +91,69 @@ exports.init = async function init(app) {
 
             const videoNode = document.getElementById(args.peerUserId);
 
+            // The first remote stream we see (the peer's combined camera+mic
+            // stream) is the "primary". Any additional stream is a screen
+            // share and gets its own remote <video> element.
+            let primaryStreamId = null;
+            const remoteScreenShareStreams = new Map();
+
             pc.ontrack = function (event) {
                 console.log("Voice chat: ontrack", args.peerUserId, event.streams);
 
                 let remoteStream;
                 if (event.streams && event.streams[0]) {
                     remoteStream = event.streams[0];
-                    videoNode.srcObject = remoteStream;
                 } else {
                     // Fallback: build a stream from the single track.
                     remoteStream = new MediaStream();
                     remoteStream.addTrack(event.track);
+                }
+
+                if (primaryStreamId === null) {
+                    primaryStreamId = remoteStream.id;
+                }
+
+                if (remoteStream.id === primaryStreamId) {
                     videoNode.srcObject = remoteStream;
-                }
-                if (event.track.kind === "audio" && !audioStreams.has(args.peerUserId)) {
-                    handleAudioStream(remoteStream, args.peerUserId);
-                }
-                const playPromise = videoNode.play();
-                if (playPromise && typeof playPromise.catch === "function") {
-                    playPromise.catch(function (err) {
-                        console.error("Voice chat: audio play() rejected", err);
-                    });
+                    if (event.track.kind === "audio" && !audioStreams.has(args.peerUserId)) {
+                        handleAudioStream(remoteStream, args.peerUserId);
+                    }
+                    const playPromise = videoNode.play();
+                    if (playPromise && typeof playPromise.catch === "function") {
+                        playPromise.catch(function (err) {
+                            console.error("Voice chat: audio play() rejected", err);
+                        });
+                    }
+                } else {
+                    // A remote screen share.
+                    const sourceId = remoteStream.id;
+                    if (!remoteScreenShareStreams.has(sourceId)) {
+                        remoteScreenShareStreams.set(sourceId, remoteStream);
+                        app.ports.voice_chat_from_js.send(
+                            { tag: "got-remote-screen-share"
+                            , args: [ args.peerUserId, sourceId ]
+                            });
+                        bindStreamWhenReady(
+                            remoteScreenShareElementId(args.peerUserId, sourceId),
+                            remoteStream,
+                            false
+                        );
+                        function endRemoteShare() {
+                            if (!remoteScreenShareStreams.has(sourceId)) return;
+                            remoteScreenShareStreams.delete(sourceId);
+                            app.ports.voice_chat_from_js.send(
+                                { tag: "remote-screen-share-ended"
+                                , args: [ args.peerUserId, sourceId ]
+                                });
+                        }
+                        event.track.addEventListener("ended", endRemoteShare);
+                        event.track.addEventListener("mute", endRemoteShare);
+                        remoteStream.addEventListener("removetrack", function (e) {
+                            if (e.track && e.track.id === event.track.id) {
+                                endRemoteShare();
+                            }
+                        });
+                    }
                 }
             };
 
@@ -123,6 +182,16 @@ exports.init = async function init(app) {
             };
             connections.set(args.peerUserId, conn);
 
+            // If we are already screen sharing, attach those tracks to the
+            // new peer connection too.
+            screenShareStreams.forEach(function (entry) {
+                try {
+                    pc.addTrack(entry.track, entry.stream);
+                } catch (e) {
+                    console.error("Voice chat: failed to add existing screen share to new peer", e);
+                }
+            });
+
             const pending = pendingSignals.get(args.peerUserId) || [];
             pendingSignals.set(args.peerUserId, []);
             for (let i = 0; i < pending.length; i++) {
@@ -141,6 +210,7 @@ exports.init = async function init(app) {
                     console.error("Voice chat: failed to create offer", e);
                 }
             }
+            suppressNegotiation = false;
         }
         catch (e) {
             app.ports.voice_chat_from_js.send( { tag: "start-connection-error" , args: [ e.toString() ] });
@@ -247,8 +317,8 @@ exports.init = async function init(app) {
     function setVideoInputEnabled(enabled) {
         connections.forEach(function (conn) {
             if (conn.pc) {
-                const sender = conn.pc.getSenders().forEach((s) => {
-                    if (s.track.kind === "video") {
+                conn.pc.getSenders().forEach((s) => {
+                    if (s.track && s.track.kind === "video" && !s.track._isScreenShare) {
                         s.track.enabled = enabled;
                     }
                 });
@@ -280,7 +350,10 @@ exports.init = async function init(app) {
         let track = tracks[0];
         connections.forEach(function (conn) {
             if (conn.pc) {
-                const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
+                const sender = conn.pc.getSenders().find(
+                    (s) => s.track && s.track.kind === track.kind && !s.track._isScreenShare
+                );
+                if (!sender) return;
                 let oldTrack = sender.track;
                 track.enabled = oldTrack.enabled;
                 sender.replaceTrack(track);
@@ -360,8 +433,10 @@ exports.init = async function init(app) {
             stream.getTracks().forEach(t => t.stop());
             return;
         }
+        // Tag so other helpers (setInput, setVideoInputEnabled) can skip it.
+        videoTrack._isScreenShare = true;
 
-        const sourceId = videoTrack.id;
+        const sourceId = stream.id;
         const label = videoTrack.label || "Screen";
 
         screenShareStreams.set(sourceId, { stream: stream, label: label, track: videoTrack });
@@ -370,81 +445,107 @@ exports.init = async function init(app) {
             handleScreenShareEnded(sourceId);
         });
 
+        // Add the screen-share track as a NEW track on every existing peer
+        // connection. The browser will fire onnegotiationneeded which our
+        // handler turns into a fresh offer/answer round-trip.
+        connections.forEach(function (conn) {
+            if (!conn.pc) return;
+            try {
+                conn.pc.addTrack(videoTrack, stream);
+            } catch (e) {
+                console.error("Voice chat: failed to addTrack for screen share", e);
+            }
+        });
+
         app.ports.voice_chat_from_js.send(
             { tag: "got-screen-share-source"
             , args: [ { sourceId: sourceId, label: label } ]
             });
 
-        applyScreenShareTrack(sourceId);
-    }
-
-    function applyScreenShareTrack(sourceId) {
-        const entry = screenShareStreams.get(sourceId);
-        if (!entry) return;
-        activeScreenShareId = sourceId;
-        connections.forEach(function (conn) {
-            if (!conn.pc) return;
-            const sender = conn.pc.getSenders().find((s) => s.track && s.track.kind === "video");
-            if (!sender) return;
-            if (!cameraTrackBySender.has(sender)) {
-                cameraTrackBySender.set(sender, sender.track);
-            }
-            sender.replaceTrack(entry.track);
-        });
+        bindStreamWhenReady(localScreenShareElementId(sourceId), stream, true);
     }
 
     function switchScreenShare(sourceId) {
-        if (screenShareStreams.has(sourceId)) {
-            applyScreenShareTrack(sourceId);
+        // With addTrack semantics every share is independent — selecting from
+        // the dropdown is just a label/UI hint, the stream is already live.
+        // Re-bind the local preview in case the element was re-keyed.
+        const entry = screenShareStreams.get(sourceId);
+        if (entry) {
+            bindStreamWhenReady(localScreenShareElementId(sourceId), entry.stream, true);
         }
     }
 
     function stopScreenShare() {
-        screenShareStreams.forEach(function (entry, sourceId) {
-            try { entry.track.stop(); } catch (e) {}
-            try { entry.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
-            app.ports.voice_chat_from_js.send(
-                { tag: "screen-share-ended"
-                , args: [ sourceId ]
-                });
+        // Snapshot keys first since handleScreenShareEnded mutates the map.
+        const sourceIds = Array.from(screenShareStreams.keys());
+        sourceIds.forEach(function (sourceId) {
+            handleScreenShareEnded(sourceId);
         });
-        screenShareStreams.clear();
-        activeScreenShareId = null;
-        restoreCameraTracks();
     }
 
     function handleScreenShareEnded(sourceId) {
         const entry = screenShareStreams.get(sourceId);
-        if (entry) {
-            try { entry.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
-            screenShareStreams.delete(sourceId);
+        if (!entry) {
+            return;
         }
-        if (activeScreenShareId === sourceId) {
-            activeScreenShareId = null;
-            const next = screenShareStreams.keys().next();
-            if (!next.done) {
-                applyScreenShareTrack(next.value);
-            } else {
-                restoreCameraTracks();
+
+        connections.forEach(function (conn) {
+            if (!conn.pc) return;
+            const sender = conn.pc.getSenders().find(
+                (s) => s.track && s.track.id === entry.track.id
+            );
+            if (sender) {
+                try {
+                    conn.pc.removeTrack(sender);
+                } catch (e) {
+                    console.error("Voice chat: failed to removeTrack", e);
+                }
             }
-        }
+        });
+
+        try { entry.track.stop(); } catch (e) {}
+        try { entry.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+        screenShareStreams.delete(sourceId);
+
         app.ports.voice_chat_from_js.send(
             { tag: "screen-share-ended"
             , args: [ sourceId ]
             });
     }
 
-    function restoreCameraTracks() {
-        cameraTrackBySender.forEach(function (cameraTrack, sender) {
-            try {
-                if (cameraTrack) {
-                    sender.replaceTrack(cameraTrack);
+    function localScreenShareElementId(sourceId) {
+        return "local-screen-share " + sourceId;
+    }
+
+    function remoteScreenShareElementId(peerUserId, sourceId) {
+        return "screen-share " + peerUserId + " " + sourceId;
+    }
+
+    // Bind a MediaStream to a <video> element. Because Elm renders on its own
+    // schedule, the element may not exist yet — retry on rAF until it shows
+    // up or we give up.
+    function bindStreamWhenReady(elementId, stream, muted) {
+        let attempts = 0;
+        function tick() {
+            const el = document.getElementById(elementId);
+            if (el) {
+                if (muted) el.muted = true;
+                el.srcObject = stream;
+                const p = el.play();
+                if (p && typeof p.catch === "function") {
+                    p.catch(function (err) {
+                        console.error("Voice chat: screen-share play() rejected", err);
+                    });
                 }
-            } catch (e) {
-                console.error("Voice chat: failed to restore camera track", e);
+                return;
             }
-        });
-        cameraTrackBySender.clear();
+            if (attempts++ < 60) {
+                requestAnimationFrame(tick);
+            } else {
+                console.error("Voice chat: gave up waiting for element", elementId);
+            }
+        }
+        tick();
     }
 
     async function getDevices() {

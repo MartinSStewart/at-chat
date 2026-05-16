@@ -3909,6 +3909,12 @@ updateLoaded msg model =
 
                                                 Call.IsLocal ->
                                                     { voiceChat | localIsSpeaking = isSpeaking }
+
+                                                Call.IsLocalScreenShare _ ->
+                                                    voiceChat
+
+                                                Call.IsRemoteScreenShare _ _ ->
+                                                    voiceChat
                                       }
                                     , Command.none
                                     )
@@ -3933,13 +3939,65 @@ updateLoaded msg model =
                                     , Command.none
                                     )
 
-                                Call.FromJs_ScreenShareEnded sourceId ->
+                                Call.FromJs_ScreenShareEnded _ ->
                                     let
                                         voiceChat : Call.Model
                                         voiceChat =
                                             loggedIn.voiceChat
                                     in
                                     ( { loggedIn | voiceChat = { voiceChat | screenShare = Nothing } }
+                                    , Command.none
+                                    )
+
+                                Call.FromJs_GotRemoteScreenShare connectionId sourceId ->
+                                    let
+                                        voiceChat : Call.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+
+                                        existing =
+                                            SeqDict.get connectionId voiceChat.remoteScreenShares
+                                                |> Maybe.withDefault []
+
+                                        updated =
+                                            if List.member sourceId existing then
+                                                existing
+
+                                            else
+                                                sourceId :: existing
+                                    in
+                                    ( { loggedIn
+                                        | voiceChat =
+                                            { voiceChat
+                                                | remoteScreenShares =
+                                                    SeqDict.insert connectionId updated voiceChat.remoteScreenShares
+                                            }
+                                      }
+                                    , Command.none
+                                    )
+
+                                Call.FromJs_RemoteScreenShareEnded connectionId sourceId ->
+                                    let
+                                        voiceChat : Call.Model
+                                        voiceChat =
+                                            loggedIn.voiceChat
+
+                                        remaining =
+                                            SeqDict.get connectionId voiceChat.remoteScreenShares
+                                                |> Maybe.withDefault []
+                                                |> List.filter (\s -> s /= sourceId)
+
+                                        updatedDict =
+                                            if List.isEmpty remaining then
+                                                SeqDict.remove connectionId voiceChat.remoteScreenShares
+
+                                            else
+                                                SeqDict.insert connectionId remaining voiceChat.remoteScreenShares
+                                    in
+                                    ( { loggedIn
+                                        | voiceChat =
+                                            { voiceChat | remoteScreenShares = updatedDict }
+                                      }
                                     , Command.none
                                     )
 
