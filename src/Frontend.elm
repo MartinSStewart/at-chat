@@ -3928,20 +3928,8 @@ updateLoaded msg model =
                                         voiceChat : Call.Model
                                         voiceChat =
                                             loggedIn.voiceChat
-
-                                        withoutDup =
-                                            List.filter
-                                                (\s -> s.sourceId /= source.sourceId)
-                                                voiceChat.screenShareSources
                                     in
-                                    ( { loggedIn
-                                        | voiceChat =
-                                            { voiceChat
-                                                | screenShareSources = source :: withoutDup
-                                                , selectedScreenShareSource = Just source.sourceId
-                                                , screenShareEnabled = True
-                                            }
-                                      }
+                                    ( { loggedIn | voiceChat = { voiceChat | screenShare = Just source } }
                                     , Command.none
                                     )
 
@@ -3950,33 +3938,8 @@ updateLoaded msg model =
                                         voiceChat : Call.Model
                                         voiceChat =
                                             loggedIn.voiceChat
-
-                                        remaining =
-                                            List.filter
-                                                (\s -> s.sourceId /= sourceId)
-                                                voiceChat.screenShareSources
-
-                                        stillSelected =
-                                            voiceChat.selectedScreenShareSource /= Just sourceId
                                     in
-                                    ( { loggedIn
-                                        | voiceChat =
-                                            { voiceChat
-                                                | screenShareSources = remaining
-                                                , selectedScreenShareSource =
-                                                    if stillSelected then
-                                                        voiceChat.selectedScreenShareSource
-
-                                                    else
-                                                        Nothing
-                                                , screenShareEnabled =
-                                                    if stillSelected then
-                                                        voiceChat.screenShareEnabled
-
-                                                    else
-                                                        False
-                                            }
-                                      }
+                                    ( { loggedIn | voiceChat = { voiceChat | screenShare = Nothing } }
                                     , Command.none
                                     )
 
@@ -4145,41 +4108,14 @@ updateLoaded msg model =
                                 voiceChat =
                                     loggedIn.voiceChat
                             in
-                            if voiceChat.screenShareEnabled then
-                                ( { loggedIn
-                                    | voiceChat =
-                                        { voiceChat
-                                            | screenShareEnabled = False
-                                            , selectedScreenShareSource = Nothing
-                                        }
-                                  }
-                                , Call.toJs Call.ToJs_StopScreenShare
-                                )
+                            case voiceChat.screenShare of
+                                Just _ ->
+                                    ( { loggedIn | voiceChat = { voiceChat | screenShare = Nothing } }
+                                    , Call.toJs Call.ToJs_StopScreenShare
+                                    )
 
-                            else
-                                ( loggedIn
-                                , Call.toJs Call.ToJs_StartScreenShare
-                                )
-                        )
-                        model
-
-                Call.SelectedScreenShareSource sourceId ->
-                    FrontendExtra.updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                voiceChat : Call.Model
-                                voiceChat =
-                                    loggedIn.voiceChat
-                            in
-                            ( { loggedIn
-                                | voiceChat =
-                                    { voiceChat
-                                        | selectedScreenShareSource = Just sourceId
-                                        , screenShareEnabled = True
-                                    }
-                              }
-                            , Call.toJs (Call.ToJs_SwitchScreenShare sourceId)
-                            )
+                                Nothing ->
+                                    ( loggedIn, Call.toJs Call.ToJs_StartScreenShare )
                         )
                         model
 

@@ -87,7 +87,6 @@ type ServerChange
 type Msg
     = SelectedAudioInputDevice (IdString MediaDeviceId)
     | SelectedVideoInputDevice (IdString MediaDeviceId)
-    | SelectedScreenShareSource (IdString MediaDeviceId)
     | PressedToggleMute
     | PressedTogglePauseVideo
     | PressedToggleScreenShare
@@ -112,9 +111,7 @@ type alias Model =
     , selectedVideoInputDevice : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
-    , screenShareSources : List ScreenShareSource
-    , selectedScreenShareSource : Maybe (IdString MediaDeviceId)
-    , screenShareEnabled : Bool
+    , screenShare : Maybe ScreenShareSource
     , isSpeaking : SeqSet ConnectionId
     , recordings : SeqDict RoomId (Nonempty Recording)
     , localIsSpeaking : Bool
@@ -167,9 +164,7 @@ initModel =
     , selectedVideoInputDevice = Nothing
     , audioInputEnabled = True
     , videoInputEnabled = True
-    , screenShareSources = []
-    , selectedScreenShareSource = Nothing
-    , screenShareEnabled = False
+    , screenShare = Nothing
     , isSpeaking = SeqSet.empty
     , recordings = SeqDict.empty
     , localIsSpeaking = False
@@ -839,7 +834,7 @@ view windowSize roomId calls model =
                             voiceChatControlButton
                                 "guild_voiceChatScreenShare"
                                 (Ui.html Icons.screenShare)
-                                model.screenShareEnabled
+                                (model.screenShare /= Nothing)
                                 PressedToggleScreenShare
 
                           else
@@ -1369,17 +1364,6 @@ mediaDeviceSelectors isMobile roomId model =
                         Ui.none
                 , deviceDropdown isMobile "Microphone" Icons.microphone audioDevices model.selectedAudioInputDevice SelectedAudioInputDevice
                 , deviceDropdown isMobile "Camera" Icons.camera videoDevices model.selectedVideoInputDevice SelectedVideoInputDevice
-                , if List.isEmpty model.screenShareSources then
-                    Ui.none
-
-                  else
-                    deviceDropdown
-                        isMobile
-                        "Screen share"
-                        Icons.screenShare
-                        (List.map screenShareToMediaDevice model.screenShareSources)
-                        model.selectedScreenShareSource
-                        SelectedScreenShareSource
                 ]
 
 
@@ -1390,9 +1374,6 @@ isPressMsg msg =
             False
 
         SelectedVideoInputDevice _ ->
-            False
-
-        SelectedScreenShareSource _ ->
             False
 
         PressedToggleMute ->
