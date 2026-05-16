@@ -408,17 +408,17 @@ videoNodes currentUserId config loggedIn local =
         voiceChatX : Int
         voiceChatX =
             if isMobile then
-                0
+                padding
 
             else
-                MyUi.channelAndGuildColumnWidth config.windowSize
+                MyUi.channelAndGuildColumnWidth config.windowSize + padding
 
         voiceChatY =
             MyUi.channelHeaderHeight
 
         maxWidth : Int
         maxWidth =
-            Coord.xRaw config.windowSize - voiceChatX
+            Coord.xRaw config.windowSize - voiceChatX - padding
 
         --|> min (ceiling (toFloat voiceChatHeight * 16 / 9))
         maxHeight : Int
@@ -431,6 +431,7 @@ videoNodes currentUserId config loggedIn local =
                    else
                     120
                   )
+                - (padding * 2)
 
         padding =
             8
@@ -438,44 +439,14 @@ videoNodes currentUserId config loggedIn local =
         spacing =
             8
 
-        legacyVideoPosAndSize : Int -> Int -> ( Int, Int, Int )
-        legacyVideoPosAndSize total index =
-            case total of
-                1 ->
-                    let
-                        width =
-                            min (round (toFloat maxHeight * aspectRatio)) maxWidth - padding * 2
+        posAndSizes total =
+            videoPosAndSize
+                { containerWidth = maxWidth, containerHeight = maxHeight }
+                (List.range 1 total |> List.map (\index -> { id = Id.fromInt index, aspectRatio = 16 / 9 }))
+                |> List.map (\a -> ( a.x + voiceChatX, a.y + voiceChatY, a.width ))
 
-                        voiceChatX2 =
-                            voiceChatX + (maxWidth - width) // 2 + sidebarOffsetAttr loggedIn.sidebarMode config
-                    in
-                    ( voiceChatX2
-                    , voiceChatY + padding
-                    , width
-                    )
-
-                2 ->
-                    let
-                        width =
-                            min (round (toFloat maxHeight * aspectRatio * 2)) maxWidth
-
-                        voiceChatX2 =
-                            voiceChatX + (maxWidth - width) // 2 + sidebarOffsetAttr loggedIn.sidebarMode config
-
-                        width2 =
-                            (width - padding * 2 - spacing) // 2
-                    in
-                    if index == 0 then
-                        ( voiceChatX2 + padding, voiceChatY + padding, width2 )
-
-                    else
-                        ( voiceChatX2 + padding + spacing + width2, voiceChatY + padding, width2 )
-
-                _ ->
-                    ( padding + index * 20 + sidebarOffsetAttr loggedIn.sidebarMode config
-                    , voiceChatY + padding
-                    , maxWidth // total
-                    )
+        getPosAndSize index list =
+            List.Extra.getAt index list |> Maybe.withDefault ( 0, 0, 100 )
 
         isMobile : Bool
         isMobile =
@@ -523,8 +494,11 @@ videoNodes currentUserId config loggedIn local =
                             total : Int
                             total =
                                 NonemptySet.size sessions + 1
+
+                            list =
+                                posAndSizes total
                         in
-                        videoNode IsLocal False (legacyVideoPosAndSize total 0) model.localIsSpeaking model
+                        videoNode IsLocal False (getPosAndSize 0 list) model.localIsSpeaking model
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -535,23 +509,23 @@ videoNodes currentUserId config loggedIn local =
                                     videoNode
                                         (IsConnection connectionId)
                                         False
-                                        (legacyVideoPosAndSize total (index + 1))
+                                        (getPosAndSize (index + 1) list)
                                         (SeqSet.member connectionId model.isSpeaking)
                                         model
                                 )
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode IsLocal False (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
+                        [ videoNode IsLocal False (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
 
             else if isTabExpanded then
-                [ videoNode IsLocal False (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal False (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
 
             else
-                [ videoNode IsLocal True (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal True (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
 
         Nothing ->
-            [ videoNode IsLocal True (legacyVideoPosAndSize 1 0) model.localIsSpeaking model ]
+            [ videoNode IsLocal True (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
     )
         |> Html.Keyed.node "div" []
 
