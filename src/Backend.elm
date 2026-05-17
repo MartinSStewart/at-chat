@@ -60,7 +60,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, TurnCredentials)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
@@ -4983,6 +4983,22 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
                                 Nothing ->
                                     ( model, Command.none )
+
+                        userCredentials : SecretId TurnCredentials
+                        userCredentials =
+                            HmacSha1.fromString
+                                (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
+                                (Call.turnUsername time session.userId)
+                                |> HmacSha1.toBase64
+                                |> SecretId.fromString
+
+                        otherUserCredentials : SecretId TurnCredentials
+                        otherUserCredentials =
+                            HmacSha1.fromString
+                                (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
+                                (Call.turnUsername time otherUserId)
+                                |> HmacSha1.toBase64
+                                |> SecretId.fromString
                     in
                     ( { model2
                         | connections =
@@ -5005,16 +5021,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                             (Call.Local_Join
                                 time
                                 voiceChatId
-                                (FilledInByBackend
-                                    { credentials =
-                                        HmacSha1.fromString
-                                            (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
-                                            (Call.turnUsername time session.userId)
-                                            |> HmacSha1.toBase64
-                                            |> SecretId.fromString
-                                    , expiresAt = time
-                                    }
-                                )
+                                (FilledInByBackend userCredentials)
                             )
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
@@ -5028,6 +5035,12 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( session.userId, clientId )
                                     }
+                                    (if otherUserId2 == session.userId then
+                                        userCredentials
+
+                                     else
+                                        otherUserCredentials
+                                    )
                                     |> Server_VoiceChatChange
                             )
                             model2

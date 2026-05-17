@@ -21,7 +21,6 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
-    , Turn
     , displayMode
     , displayModeChangeCmd
     , fromJs
@@ -74,17 +73,13 @@ import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend Turn)
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (SecretId TurnCredentials))
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
 
 
-type alias Turn =
-    { credentials : SecretId TurnCredentials, expiresAt : Time.Posix }
-
-
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId
+    = Server_Joined Time.Posix ConnectionId (SecretId TurnCredentials)
     | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
 
@@ -106,7 +101,6 @@ type Msg
 type alias Local =
     { currentRoom : Maybe RoomId
     , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
-    , turnCredentials : Maybe Turn
     }
 
 
@@ -152,7 +146,6 @@ init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
-    , turnCredentials = Nothing
     }
 
 
@@ -382,7 +375,7 @@ turnUsername expirationTime userId =
     let
         ttl : Duration
         ttl =
-            Duration.hours 4
+            Duration.minutes 10
 
         expiry : Int
         expiry =
@@ -919,11 +912,11 @@ leaveVoiceChatCmds model =
 serverChangeCmd : ServerChange -> ClientId -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
 serverChangeCmd change clientId currentUserId local model =
     case change of
-        Server_Joined _ connectionId ->
+        Server_Joined time connectionId turnCredentials ->
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
-                        startArgs clientId currentUserId connectionId local model
+                        startArgs clientId currentUserId connectionId time turnCredentials model
 
                     else
                         Command.none
@@ -993,7 +986,7 @@ type alias StartData =
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
-    , turnCredentials : Maybe (SecretId TurnCredentials)
+    , turnCredentials : SecretId TurnCredentials
     , username : String
     }
 
@@ -1007,7 +1000,7 @@ startDataCodec =
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
-        |> Codec.field "turnCredentials" .turnCredentials (Codec.nullable SecretId.codec)
+        |> Codec.field "turnCredentials" .turnCredentials SecretId.codec
         |> Codec.field "username" .username Codec.string
         |> Codec.buildObject
 
@@ -1068,8 +1061,8 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startArgs : ClientId -> Id UserId -> ConnectionId -> Local -> Model -> Command FrontendOnly toMsg msg
-startArgs clientId currentUserId connectionId local model =
+startArgs : ClientId -> Id UserId -> ConnectionId -> Time.Posix -> SecretId TurnCredentials -> Model -> Command FrontendOnly toMsg msg
+startArgs clientId currentUserId connectionId credentialsExpiresAt turnCredentials model =
     { peerUserId = connectionId
     , shouldOffer =
         Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
@@ -1077,14 +1070,8 @@ startArgs clientId currentUserId connectionId local model =
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.audioInputEnabled
     , videoInputEnabled = model.videoInputEnabled
-    , turnCredentials = Maybe.map .credentials local.turnCredentials
-    , username =
-        case local.turnCredentials of
-            Just credentials ->
-                turnUsername credentials.expiresAt currentUserId
-
-            Nothing ->
-                ""
+    , turnCredentials = turnCredentials
+    , username = turnUsername credentialsExpiresAt currentUserId
     }
         |> ToJs_Start
         |> toJs

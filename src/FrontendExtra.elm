@@ -2650,17 +2650,7 @@ changeUpdate localMsg local =
                             case roomId of
                                 DmRoomId otherUserId ->
                                     { local2
-                                        | calls =
-                                            { calls
-                                                | currentRoom = Just roomId
-                                                , turnCredentials =
-                                                    case credentials of
-                                                        FilledInByBackend credentials2 ->
-                                                            Just credentials2
-
-                                                        EmptyPlaceholder ->
-                                                            calls.turnCredentials
-                                            }
+                                        | calls = { calls | currentRoom = Just roomId }
                                         , dmChannels =
                                             if SeqDict.member roomId calls.voiceChats then
                                                 local2.dmChannels
@@ -3735,7 +3725,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Server_Joined time { roomId, otherClientId } ->
+                        Call.Server_Joined time { roomId, otherClientId } turnCredentials ->
                             { local
                                 | calls =
                                     { calls

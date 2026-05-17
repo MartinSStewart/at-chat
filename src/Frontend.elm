@@ -4090,23 +4090,24 @@ updateLoaded msg model =
                                 model.time
                                 (Call.Local_Join model.time roomId EmptyPlaceholder |> Local_VoiceChatChange |> Just)
                                 loggedIn
-                                (case SeqDict.get roomId local.calls.voiceChats of
-                                    Just nonempty ->
-                                        List.map
-                                            (\otherSession ->
-                                                Call.startArgs
-                                                    model.clientId
-                                                    local.localUser.session.userId
-                                                    { roomId = roomId, otherClientId = otherSession }
-                                                    local.calls
-                                                    loggedIn.voiceChat
-                                            )
-                                            (NonemptySet.toList nonempty)
-                                            |> Command.batch
-
-                                    Nothing ->
-                                        Call.toJs Call.ToJs_GetMediaDevices
-                                )
+                                Command.none
+                         --(case SeqDict.get roomId local.calls.voiceChats of
+                         --    Just nonempty ->
+                         --        List.map
+                         --            (\otherSession ->
+                         --                Call.startArgs
+                         --                    model.clientId
+                         --                    local.localUser.session.userId
+                         --                    { roomId = roomId, otherClientId = otherSession }
+                         --                    local.calls
+                         --                    loggedIn.voiceChat
+                         --            )
+                         --            (NonemptySet.toList nonempty)
+                         --            |> Command.batch
+                         --
+                         --    Nothing ->
+                         --        Call.toJs Call.ToJs_GetMediaDevices
+                         --)
                         )
                         model
 
@@ -5733,6 +5734,37 @@ updateLoadedFromBackend msg model =
                     in
                     ( { loggedIn | localState = localState }
                     , case localChange of
+                        Local_VoiceChatChange callChange ->
+                            case callChange of
+                                Call.Local_Join time roomId (FilledInByBackend turn) ->
+                                    case SeqDict.get roomId local.calls.voiceChats of
+                                        Just nonempty ->
+                                            List.map
+                                                (\otherSession ->
+                                                    Call.startArgs
+                                                        model.clientId
+                                                        local.localUser.session.userId
+                                                        { roomId = roomId, otherClientId = otherSession }
+                                                        time
+                                                        turn
+                                                        loggedIn.voiceChat
+                                                )
+                                                (NonemptySet.toList nonempty)
+                                                |> Command.batch
+
+                                        Nothing ->
+                                            Command.none
+
+                                Call.Local_Join _ _ EmptyPlaceholder ->
+                                    -- Backend should never return EmptyPlaceholder
+                                    Command.none
+
+                                Call.Local_Leave posix ->
+                                    Command.none
+
+                                Call.Local_Signal connectionId signal ->
+                                    Command.none
+
                         Local_TextEditor TextEditor.Local_Undo ->
                             case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
                                 Just range ->
