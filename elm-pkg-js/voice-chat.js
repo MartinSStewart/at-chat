@@ -103,10 +103,10 @@ exports.init = async function init(app) {
             };
 
             pc.oniceconnectionstatechange = function () {
-                console.log("Voice chat: ICE state", args.peerUserId, pc.iceConnectionState);
+                console.log("oniceconnectionstatechange", args.peerUserId, pc.iceConnectionState);
             };
             pc.onconnectionstatechange = function () {
-                console.log("Voice chat: PC state", args.peerUserId, pc.connectionState);
+                console.log("onconnectionstatechange", args.peerUserId, pc.connectionState);
             };
 
             pc.onicecandidate = function (event) {
@@ -118,6 +118,10 @@ exports.init = async function init(app) {
                 }
             };
 
+            pc.onicecandidateerror = function (event) {
+                console.log("onicecandidateerror", event);
+            };
+            
             const conn = {
                 pc: pc,
                 videoNode: videoNode,
