@@ -4986,7 +4986,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
                         turnCredentials : SecretId TurnCredentials
                         turnCredentials =
-                            turnServerCredentials model.serverSecret session.userId time
+                            turnServerCredentials model2.serverSecret session.userId time
                     in
                     ( { model2
                         | connections =

@@ -46,15 +46,11 @@ import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel
-import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Time as Time
-import Env
-import HmacSha1
-import HmacSha1.Key
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
