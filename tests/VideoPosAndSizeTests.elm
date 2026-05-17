@@ -52,7 +52,7 @@ tests =
                     [ a ] ->
                         Expect.all
                             [ \v -> Expect.equal 1000 v.width
-                            , \v -> Expect.equal 562 v.height
+                            , \v -> Expect.equal 563 v.height
                             , \v -> Expect.equal 0 v.x
                             , \v -> Expect.equal 219 v.y
                             ]
@@ -68,7 +68,7 @@ tests =
 
                     result =
                         Call.videoPosAndSize
-                            { containerWidth = 1000, containerHeight = 1000, spacing = spacing }
+                            { containerWidth = 1600, containerHeight = 600, spacing = spacing }
                             [ makeVideo 1 (16 / 9), makeVideo 2 (16 / 9) ]
                 in
                 case result of
@@ -91,7 +91,7 @@ tests =
 
                     result =
                         Call.videoPosAndSize
-                            { containerWidth = 1000, containerHeight = 1000, spacing = spacing }
+                            { containerWidth = 1600, containerHeight = 1000, spacing = spacing }
                             [ makeVideo 1 (16 / 9), makeVideo 2 (16 / 9), makeVideo 3 (16 / 9) ]
                 in
                 case result of

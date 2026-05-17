@@ -700,7 +700,7 @@ layoutVideos container videos cols =
                         ( xStart, [] )
                         rowVideos
             in
-            ( y + height + spacing, List.reverse rowResults ++ acc )
+            ( y + height + spacing, rowResults ++ acc )
     in
     List.foldl layoutRow ( yStart, [] ) rowsWithHeights
         |> Tuple.second
