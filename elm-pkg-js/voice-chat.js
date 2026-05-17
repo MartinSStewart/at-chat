@@ -8,18 +8,16 @@ exports.init = async function init(app) {
 
             stopConnection(args.peerUserId);
 
+            console.log(args);
+
             const pc = new RTCPeerConnection({
                 iceServers:
-                    args.turnCredentials
-                        ? [
-                            { urls: "stun:stun.l.google.com:19302" },
-                            {
-                                urls: ["turn:turn.at-chat.app:3478", "turns:turn.at-chat.app:5349"],
-                                username: args.username,
-                                credential: args.turnCredentials
-                            }
-                          ]
-                        : [ { urls: "stun:stun.l.google.com:19302" } ]
+                    [ { urls: "stun:stun.l.google.com:19302" }
+                    , { urls: ["turn:turn.at-chat.app:3478", "turns:turn.at-chat.app:5349"]
+                      , username: args.username
+                      , credential: args.turnCredentials
+                      }
+                    ]
             });
 
 
