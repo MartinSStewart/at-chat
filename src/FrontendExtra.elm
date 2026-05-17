@@ -2637,7 +2637,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Local_Join time roomId credentials ->
+                        Call.Local_Join time roomId _ ->
                             let
                                 local2 =
                                     case local.calls.currentRoom of
@@ -3725,7 +3725,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Server_Joined time { roomId, otherClientId } turnCredentials ->
+                        Call.Server_Joined time { roomId, otherClientId } _ ->
                             { local
                                 | calls =
                                     { calls

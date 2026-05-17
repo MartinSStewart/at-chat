@@ -4081,33 +4081,11 @@ updateLoaded msg model =
                 Call.PressedJoinCall roomId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
                             FrontendExtra.handleLocalChange
                                 model.time
                                 (Call.Local_Join model.time roomId EmptyPlaceholder |> Local_VoiceChatChange |> Just)
                                 loggedIn
                                 Command.none
-                         --(case SeqDict.get roomId local.calls.voiceChats of
-                         --    Just nonempty ->
-                         --        List.map
-                         --            (\otherSession ->
-                         --                Call.startArgs
-                         --                    model.clientId
-                         --                    local.localUser.session.userId
-                         --                    { roomId = roomId, otherClientId = otherSession }
-                         --                    local.calls
-                         --                    loggedIn.voiceChat
-                         --            )
-                         --            (NonemptySet.toList nonempty)
-                         --            |> Command.batch
-                         --
-                         --    Nothing ->
-                         --        Call.toJs Call.ToJs_GetMediaDevices
-                         --)
                         )
                         model
 
@@ -5759,10 +5737,10 @@ updateLoadedFromBackend msg model =
                                     -- Backend should never return EmptyPlaceholder
                                     Command.none
 
-                                Call.Local_Leave posix ->
+                                Call.Local_Leave _ ->
                                     Command.none
 
-                                Call.Local_Signal connectionId signal ->
+                                Call.Local_Signal _ _ ->
                                     Command.none
 
                         Local_TextEditor TextEditor.Local_Undo ->
