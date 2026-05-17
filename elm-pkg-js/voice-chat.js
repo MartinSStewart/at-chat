@@ -119,7 +119,14 @@ exports.init = async function init(app) {
             };
 
             pc.onicecandidateerror = function (event) {
-                console.log("onicecandidateerror", event);
+                console.log("onicecandidateerror", {
+                    url: event.url,
+                    address: event.address,
+                    port: event.port,
+                    errorCode: event.errorCode,
+                    errorText: event.errorText,
+                    hostCandidate: event.hostCandidate
+                });
             };
             
             const conn = {
