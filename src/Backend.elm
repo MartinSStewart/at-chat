@@ -4983,10 +4983,6 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
                                 Nothing ->
                                     ( model, Command.none )
-
-                        turnCredentials : SecretId TurnCredentials
-                        turnCredentials =
-                            turnServerCredentials model2.serverSecret session.userId time
                     in
                     ( { model2
                         | connections =
@@ -5005,7 +5001,21 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 model2.dmChannels
                       }
                     , Command.batch
-                        [ Local_VoiceChatChange (Call.Local_Join time voiceChatId (FilledInByBackend turnCredentials))
+                        [ Local_VoiceChatChange
+                            (Call.Local_Join
+                                time
+                                voiceChatId
+                                (FilledInByBackend
+                                    { credentials =
+                                        HmacSha1.fromString
+                                            (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
+                                            (Call.turnUsername time session.userId)
+                                            |> HmacSha1.toBase64
+                                            |> SecretId.fromString
+                                    , expiresAt = time
+                                    }
+                                )
+                            )
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toDmChannelExcludingOne
@@ -5030,26 +5040,6 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
         Nothing ->
             ( model, BackendExtra.invalidChangeResponse changeId clientId )
-
-
-turnServerCredentials : SecretId ServerSecret -> Id UserId -> Time.Posix -> SecretId TurnCredentials
-turnServerCredentials secret userId now =
-    let
-        ttl : Duration
-        ttl =
-            Duration.hours 4
-
-        expiry : Int
-        expiry =
-            Time.posixToMillis (Duration.addTo now ttl) // 1000
-
-        username : String
-        username =
-            String.fromInt expiry ++ ":" ++ Id.toString userId
-    in
-    HmacSha1.fromString (HmacSha1.Key.fromString (SecretId.toString secret)) username
-        |> HmacSha1.toBase64
-        |> SecretId.fromString
 
 
 voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool

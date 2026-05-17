@@ -34,6 +34,7 @@ port module Call exposing
     , startArgs
     , startLocalStream
     , toJs
+    , turnUsername
     , videoNodes
     , view
     )
@@ -43,6 +44,7 @@ import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -71,9 +73,13 @@ import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (SecretId TurnCredentials))
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend Turn)
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
+
+
+type alias Turn =
+    { credentials : SecretId TurnCredentials, expiresAt : Time.Posix }
 
 
 type ServerChange
@@ -99,7 +105,7 @@ type Msg
 type alias Local =
     { currentRoom : Maybe RoomId
     , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
-    , turnCredentials : Maybe (SecretId TurnCredentials)
+    , turnCredentials : Maybe Turn
     }
 
 
@@ -368,6 +374,20 @@ displayMode currentUserId route local =
 localVideoNodeId : String
 localVideoNodeId =
     "local-video"
+
+
+turnUsername : Time.Posix -> Id UserId -> String
+turnUsername expirationTime userId =
+    let
+        ttl : Duration
+        ttl =
+            Duration.hours 4
+
+        expiry : Int
+        expiry =
+            Time.posixToMillis (Duration.addTo expirationTime ttl) // 1000
+    in
+    String.fromInt expiry ++ ":" ++ Id.toString userId
 
 
 videoNodes :
@@ -973,7 +993,7 @@ type alias StartData =
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
     , turnCredentials : Maybe (SecretId TurnCredentials)
-    , userId : Id UserId
+    , username : String
     }
 
 
@@ -987,7 +1007,7 @@ startDataCodec =
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
         |> Codec.field "turnCredentials" .turnCredentials (Codec.nullable SecretId.codec)
-        |> Codec.field "userId" .userId Id.codec
+        |> Codec.field "username" .username Codec.string
         |> Codec.buildObject
 
 
@@ -1056,8 +1076,14 @@ startArgs clientId currentUserId connectionId local model =
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.audioInputEnabled
     , videoInputEnabled = model.videoInputEnabled
-    , turnCredentials = local.turnCredentials
-    , userId = currentUserId
+    , turnCredentials = Maybe.map .credentials local.turnCredentials
+    , username =
+        case local.turnCredentials of
+            Just credentials ->
+                turnUsername credentials.expiresAt currentUserId
+
+            Nothing ->
+                ""
     }
         |> ToJs_Start
         |> toJs
