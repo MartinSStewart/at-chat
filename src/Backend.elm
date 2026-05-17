@@ -22,7 +22,7 @@ import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DiscordUserData exposing (DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserLoadingData(..), NeedsAuthAgainData)
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
-import Duration exposing (Duration)
+import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -60,7 +60,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import SecretId exposing (SecretId, ServerSecret, TurnCredentials)
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack

@@ -21,6 +21,7 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
+    , Turn
     , displayMode
     , displayModeChangeCmd
     , fromJs

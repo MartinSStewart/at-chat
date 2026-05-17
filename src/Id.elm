@@ -16,7 +16,6 @@ module Id exposing
     , ThreadRouteWithMessage(..)
     , UserId(..)
     , changeType
-    , codec
     , fromInt
     , fromString
     , increment
@@ -28,7 +27,6 @@ module Id exposing
     , toString
     )
 
-import Codec exposing (Codec)
 import Discord
 import List.Extra
 import SeqDict exposing (SeqDict)
@@ -174,8 +172,3 @@ changeType (Id a) =
 increment : Id a -> Id a
 increment (Id id) =
     Id (id + 1)
-
-
-codec : Codec (Id a)
-codec =
-    Codec.map fromInt toInt Codec.int
