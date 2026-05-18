@@ -828,6 +828,13 @@ body {
                 ++ colorToStyle font1
                 ++ """ transparent
 }
+.file-drag-overlay {
+  opacity: 0;
+  transition: opacity 0.15s ease-in;
+}
+.file-drag-overlay-visible {
+  opacity: 1;
+}
 """
             )
         ]

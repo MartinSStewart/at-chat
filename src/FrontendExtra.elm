@@ -42,6 +42,7 @@ import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import Go
 import Html exposing (Html)
+import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -541,6 +542,14 @@ fileDragOverlay isVisible model =
 
             else
                 MyUi.errorColor
+
+        className : String
+        className =
+            if isVisible then
+                "file-drag-overlay file-drag-overlay-visible"
+
+            else
+                "file-drag-overlay"
     in
     Ui.el
         [ Ui.background (Ui.rgba 0 0 0 0.6)
@@ -554,14 +563,7 @@ fileDragOverlay isVisible model =
         , MyUi.htmlStyle "border" "8px dashed"
         , MyUi.htmlStyle "box-sizing" "border-box"
         , MyUi.htmlStyle "pointer-events" "none"
-        , MyUi.htmlStyle "transition" "opacity 0.15s ease-in"
-        , MyUi.htmlStyle "opacity"
-            (if isVisible then
-                "1"
-
-             else
-                "0"
-            )
+        , Ui.htmlAttribute (Html.Attributes.class className)
         ]
         (if canDrop then
             Ui.text "Drop files anywhere to upload"
