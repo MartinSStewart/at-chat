@@ -1347,6 +1347,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_DeleteChannel _ _ ->
                     True
 
+                Local_DeleteGuild _ ->
+                    True
+
                 Local_NewInviteLink _ _ _ ->
                     True
 
@@ -1484,6 +1487,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_DeleteChannel _ _ ->
+                            True
+
+                        Types.Server_DeleteGuild _ ->
                             True
 
                         Types.Server_NewInviteLink _ _ _ _ ->
@@ -1770,6 +1776,7 @@ allAttackerLocalChanges =
     , Local_Admin (Pages.Admin.SetSignupsEnabled True)
     , Local_CurrentlyViewing StopViewingChannel
     , Local_DeleteChannel legitGuildId channelId
+    , Local_DeleteGuild legitGuildId
     , Local_DeleteMessage guildOrDmId_dm threadRouteWithMessage
     , Local_DeleteMessage guildOrDmId_guild threadRouteWithMessage
     , Local_Discord_LoadChannelMessages discordGuildOrDmId_guild (Id.fromInt 0) EmptyPlaceholder

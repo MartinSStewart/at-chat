@@ -1249,6 +1249,9 @@ toBackendLog toBackend =
                 Local_DeleteChannel _ _ ->
                     ToBackendLog_Local_DeleteChannel
 
+                Local_DeleteGuild _ ->
+                    ToBackendLog_Local_DeleteGuild
+
                 Local_NewInviteLink _ _ _ ->
                     ToBackendLog_Local_NewInviteLink
 

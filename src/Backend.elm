@@ -187,7 +187,9 @@ init =
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
+      , nextGuildId = Id.fromInt 1
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
+      , deletedGuilds = SeqDict.empty
       , isInitialized = False
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
@@ -1541,6 +1543,12 @@ update msg model =
 
                             Nothing ->
                                 Just time
+                    , deletedGuilds =
+                        SeqDict.filter
+                            (\_ deletedGuild ->
+                                Duration.from deletedGuild.deletedAt time |> Quantity.lessThan (Duration.days 30)
+                            )
+                            model.deletedGuilds
                 }
             , Discord.getStickerPacksPayload
                 |> DiscordSync.http model.serverSecret
@@ -2557,6 +2565,32 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_DeleteGuild guildId ->
+                    asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( { model
+                                | guilds = SeqDict.remove guildId model.guilds
+                                , deletedGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild = guild, deletedAt = time }
+                                        model.deletedGuilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_DeleteGuild guildId |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_NewInviteLink _ guildId _ ->
                     asGuildMember
                         model
@@ -2592,27 +2626,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         (\{ userId } _ ->
-                            let
-                                guildId : Id GuildId
-                                guildId =
-                                    Id.nextId model.guilds
-
-                                newGuild : BackendGuild
-                                newGuild =
-                                    LocalState.createGuild time userId guildName
-                            in
                             ( { model
-                                | guilds = SeqDict.insert guildId newGuild model.guilds
+                                | nextGuildId = Id.increment model.nextGuildId
+                                , guilds =
+                                    SeqDict.insert
+                                        model.nextGuildId
+                                        (LocalState.createGuild time userId guildName)
+                                        model.guilds
                               }
                             , Command.batch
-                                [ Local_NewGuild time guildName (FilledInByBackend guildId)
+                                [ Local_NewGuild time guildName (FilledInByBackend model.nextGuildId)
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
                                 , Broadcast.toUser
                                     (Just clientId)
                                     Nothing
                                     userId
-                                    (Local_NewGuild time guildName (FilledInByBackend guildId) |> LocalChange userId)
+                                    (Local_NewGuild time guildName (FilledInByBackend model.nextGuildId) |> LocalChange userId)
                                     model
                                 ]
                             )

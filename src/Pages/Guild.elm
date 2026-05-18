@@ -68,7 +68,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditChannelForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1721,8 +1721,99 @@ guildSettingsForm model loggedIn local guildId guild =
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
                 )
+            , if isOwner then
+                deleteGuildSection guildId
+                    guild
+                    (SeqDict.get guildId loggedIn.editGuildForm
+                        |> Maybe.withDefault editGuildFormInit
+                    )
+
+              else
+                Ui.none
             ]
         )
+
+
+editGuildFormInit : EditGuildForm
+editGuildFormInit =
+    { deleteConfirmation = "", showDeleteConfirmation = False }
+
+
+deleteGuildSection : Id GuildId -> FrontendGuild -> EditGuildForm -> Element FrontendMsg
+deleteGuildSection guildId guild form =
+    let
+        guildNameString : String
+        guildNameString =
+            GuildName.toString guild.name
+
+        confirmationMatches : Bool
+        confirmationMatches =
+            form.deleteConfirmation == guildNameString
+
+        ( deleteOnPress, deleteEnabled ) =
+            if not form.showDeleteConfirmation then
+                ( EditGuildFormChanged guildId { form | showDeleteConfirmation = True }, True )
+
+            else if confirmationMatches then
+                ( PressedDeleteGuild guildId, True )
+
+            else
+                ( FrontendNoOp, False )
+    in
+    Ui.column
+        [ Ui.spacing 12, Ui.paddingXY 16 0 ]
+        [ Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
+        , if form.showDeleteConfirmation then
+            deleteGuildConfirmationInput guildId guildNameString form
+
+          else
+            Ui.none
+        , MyUi.elButton
+            (Dom.id "guild_deleteGuild")
+            deleteOnPress
+            [ Ui.paddingXY 16 8
+            , Ui.background
+                (if deleteEnabled then
+                    MyUi.deleteButtonBackground
+
+                 else
+                    MyUi.disabledButtonBackground
+                )
+            , Ui.width Ui.shrink
+            , Ui.rounded 8
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.Font.bold
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.border 1
+            ]
+            (Ui.text "Delete guild")
+        ]
+
+
+deleteGuildConfirmationInput : Id GuildId -> String -> EditGuildForm -> Element FrontendMsg
+deleteGuildConfirmationInput guildId guildNameString form =
+    let
+        confirmLabel =
+            Ui.Input.label
+                "deleteGuildConfirmation"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text ("Type \"" ++ guildNameString ++ "\" to confirm deletion"))
+    in
+    Ui.column
+        []
+        [ confirmLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> EditGuildFormChanged guildId { form | deleteConfirmation = text }
+            , text = form.deleteConfirmation
+            , placeholder = Nothing
+            , label = confirmLabel.id
+            }
+        ]
 
 
 copyableText : String -> LoadedFrontend -> Element FrontendMsg

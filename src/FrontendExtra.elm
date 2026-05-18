@@ -115,6 +115,9 @@ pendingChangesText localChange =
         Local_DeleteChannel _ _ ->
             "Deleted channel"
 
+        Local_DeleteGuild _ ->
+            "Deleted guild"
+
         Local_NewInviteLink _ _ _ ->
             "Created invite link"
 
@@ -1455,6 +1458,12 @@ isPressMsg msg =
         PressedDeleteChannel _ _ ->
             True
 
+        EditGuildFormChanged _ _ ->
+            False
+
+        PressedDeleteGuild _ ->
+            True
+
         PressedCreateInviteLink _ ->
             True
 
@@ -2085,6 +2094,9 @@ changeUpdate localMsg local =
                                 (LocalState.deleteChannelFrontend channelId)
                                 local.guilds
                     }
+
+                Local_DeleteGuild guildId ->
+                    { local | guilds = SeqDict.remove guildId local.guilds }
 
                 Local_NewInviteLink time guildId inviteLinkId ->
                     case inviteLinkId of
@@ -2985,6 +2997,9 @@ changeUpdate localMsg local =
                                 (LocalState.deleteChannelFrontend channelId)
                                 local.guilds
                     }
+
+                Server_DeleteGuild guildId ->
+                    { local | guilds = SeqDict.remove guildId local.guilds }
 
                 Server_NewInviteLink time userId guildId inviteLinkId ->
                     { local

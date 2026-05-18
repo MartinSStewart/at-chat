@@ -11,6 +11,7 @@ module LocalState exposing
     , BackendGuild
     , ChannelStatus(..)
     , ConnectionData
+    , DeletedBackendGuild
     , DiscordBackendChannel
     , DiscordBackendGuild
     , DiscordFrontendChannel
@@ -179,6 +180,10 @@ type alias BackendGuild =
     , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
+
+
+type alias DeletedBackendGuild =
+    { guild : BackendGuild, deletedAt : Time.Posix }
 
 
 type alias DiscordBackendGuild =
