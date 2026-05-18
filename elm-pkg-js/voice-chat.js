@@ -3,6 +3,43 @@ exports.init = async function init(app) {
     const pendingSignals = new Map();
     let localStreamPreview = null;
 
+    async function logSelectedPair(pc, peerUserId) {
+        try {
+            const stats = await pc.getStats();
+            const candidates = new Map();
+            let pair = null;
+            stats.forEach(function (r) {
+                if (r.type === "local-candidate" || r.type === "remote-candidate") {
+                    candidates.set(r.id, r);
+                }
+                if (r.type === "candidate-pair" && (r.nominated || r.selected || r.state === "succeeded")) {
+                    if (!pair || r.nominated) pair = r;
+                }
+            });
+            if (!pair) {
+                console.log("Voice chat: getStats", peerUserId, "no nominated/succeeded pair yet");
+                return;
+            }
+            const local = candidates.get(pair.localCandidateId);
+            const remote = candidates.get(pair.remoteCandidateId);
+            console.log("Voice chat: getStats", peerUserId, {
+                state: pair.state,
+                nominated: pair.nominated,
+                bytesSent: pair.bytesSent,
+                bytesReceived: pair.bytesReceived,
+                requestsSent: pair.requestsSent,
+                responsesReceived: pair.responsesReceived,
+                responsesSent: pair.responsesSent,
+                consentRequestsSent: pair.consentRequestsSent,
+                currentRoundTripTime: pair.currentRoundTripTime,
+                local: local && { type: local.candidateType, protocol: local.protocol, address: local.address, port: local.port, url: local.url, relayProtocol: local.relayProtocol },
+                remote: remote && { type: remote.candidateType, protocol: remote.protocol, address: remote.address, port: remote.port }
+            });
+        } catch (e) {
+            console.error("Voice chat: getStats failed", peerUserId, e);
+        }
+    }
+
     async function startConnection(args) {
         try {
 
@@ -103,6 +140,7 @@ exports.init = async function init(app) {
 
             pc.oniceconnectionstatechange = function () {
                 console.log("oniceconnectionstatechange", args.peerUserId, pc.iceConnectionState);
+                logSelectedPair(pc, args.peerUserId);
             };
             pc.onconnectionstatechange = function () {
                 console.log("onconnectionstatechange", args.peerUserId, pc.connectionState);
