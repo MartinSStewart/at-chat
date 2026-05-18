@@ -42,6 +42,7 @@ import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import Go
 import Html exposing (Html)
+import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -261,11 +262,7 @@ layout model attributes child =
                         |> Json.Decode.map (\list -> ( FileDropped list, True ))
                     )
                     |> Ui.htmlAttribute
-                , if loggedIn.fileDragOverCount > 0 then
-                    Ui.inFront (fileDragOverlay True model)
-
-                  else
-                    Ui.noAttr
+                , Ui.inFront (fileDragOverlay (loggedIn.fileDragOverCount > 0) model)
                 , Local.networkError
                     (\change ->
                         case change of
@@ -527,7 +524,7 @@ canDropFileHelper guildOrDmId threadRoute2 files model =
 
 
 fileDragOverlay : Bool -> LoadedFrontend -> Element FrontendMsg
-fileDragOverlay _ model =
+fileDragOverlay isVisible model =
     let
         canDrop : Bool
         canDrop =
@@ -545,6 +542,14 @@ fileDragOverlay _ model =
 
             else
                 MyUi.errorColor
+
+        className : String
+        className =
+            if isVisible then
+                "file-drag-overlay file-drag-overlay-visible"
+
+            else
+                "file-drag-overlay"
     in
     Ui.el
         [ Ui.background (Ui.rgba 0 0 0 0.6)
@@ -558,6 +563,7 @@ fileDragOverlay _ model =
         , MyUi.htmlStyle "border" "8px dashed"
         , MyUi.htmlStyle "box-sizing" "border-box"
         , MyUi.htmlStyle "pointer-events" "none"
+        , Ui.htmlAttribute (Html.Attributes.class className)
         ]
         (if canDrop then
             Ui.text "Drop files anywhere to upload"
