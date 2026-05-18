@@ -92,7 +92,6 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LoginForm
-import MyUi
 import NonemptyDict
 import NonemptySet
 import Pages.Admin
@@ -604,11 +603,12 @@ voiceChatTest normalConfig =
                                                         (\req ->
                                                             if req.clientId == clientId && req.portName == "voice_chat_to_js" then
                                                                 case Call.decodeToJs req.value of
-                                                                    Ok toJs ->
-                                                                        Just (Debug.toString toJs)
+                                                                    Ok _ ->
+                                                                        --Just (Debug.toString toJs)
+                                                                        Just "ok value"
 
                                                                     Err err ->
-                                                                        Just ("DECODE_ERR: " ++ Debug.toString err)
+                                                                        Just ("DECODE_ERR: " ++ Json.Decode.errorToString err)
 
                                                             else
                                                                 Nothing
@@ -632,7 +632,7 @@ voiceChatTest normalConfig =
                             -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                         expectStartFor clientId peer =
                             expectToJs clientId
-                                ("ToJs_Start for peer " ++ Debug.toString peer)
+                                ("ToJs_Start for peer " ++ Lamdera.clientIdToString (Tuple.second peer.otherClientId))
                                 (\toJs ->
                                     case toJs of
                                         Call.ToJs_Start startData ->
@@ -649,7 +649,7 @@ voiceChatTest normalConfig =
                             -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
                         expectSignalReceived clientId peer signalPredicate =
                             expectToJs clientId
-                                ("ToJs_Signal from peer " ++ Debug.toString peer)
+                                ("ToJs_Signal from peer " ++ Lamdera.clientIdToString (Tuple.second peer.otherClientId))
                                 (\toJs ->
                                     case toJs of
                                         Call.ToJs_Signal connectionId signal ->

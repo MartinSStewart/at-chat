@@ -14,7 +14,6 @@ import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Lamdera exposing (ClientId)
 import Go
 import GuildIcon
 import Html.Attributes
@@ -23,7 +22,7 @@ import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
