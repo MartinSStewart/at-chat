@@ -44,7 +44,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
