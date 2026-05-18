@@ -497,7 +497,7 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
                                     , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in call")
                                         |> Ui.htmlAttribute
                                     ]
-                                    (User.profileImage user.icon)
+                                    (User.profileImage userId user.icon)
 
                             Nothing ->
                                 Ui.none
