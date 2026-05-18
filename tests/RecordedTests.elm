@@ -2039,7 +2039,7 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
-                                                            ++ (if Id.toInt before.backend.nextGuildId >= Id.toInt after.backend.nextGuildId then
+                                                            ++ (if Id.toInt before.backend.nextGuildId <= Id.toInt after.backend.nextGuildId then
                                                                     []
 
                                                                 else
