@@ -1369,7 +1369,7 @@ memberLabel isMobile localUser userId =
         ]
         (case User.getUser userId localUser of
             Just user ->
-                [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+                [ User.profileImage userId user.icon, Ui.text (PersonName.toString user.name) ]
 
             Nothing ->
                 []
@@ -1398,7 +1398,7 @@ discordMemberLabel isMobile localUser currentUserId userId =
         ]
         (case User.getDiscordUser userId localUser of
             Just user ->
-                [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+                [ User.discordProfileImage userId user.icon, Ui.text (PersonName.toString user.name) ]
 
             Nothing ->
                 []
@@ -2219,14 +2219,13 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                             Just edit ->
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
-                                    messageView
+                                    discordMessageView
                                         isMobile
                                         containerWidth
                                         False
                                         revealedSpoilers
                                         highlight
                                         messageHover2
-                                        otherUserIsEditing
                                         currentDiscordUserId
                                         (LocalState.allDiscordUsers local.localUser)
                                         local.localUser
@@ -2271,14 +2270,13 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                     Nothing ->
                                         case maybeRepliedTo2 of
                                             Just _ ->
-                                                messageView
+                                                discordMessageView
                                                     isMobile
                                                     containerWidth
                                                     False
                                                     revealedSpoilers
                                                     highlight
                                                     messageHover2
-                                                    otherUserIsEditing
                                                     currentDiscordUserId
                                                     (LocalState.allDiscordUsers local.localUser)
                                                     local.localUser
@@ -2302,14 +2300,13 @@ discordConversationViewHelper lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                     Just thread ->
                                         case maybeRepliedTo2 of
                                             Just _ ->
-                                                messageView
+                                                discordMessageView
                                                     isMobile
                                                     containerWidth
                                                     False
                                                     revealedSpoilers
                                                     highlight
                                                     messageHover2
-                                                    otherUserIsEditing
                                                     currentDiscordUserId
                                                     (LocalState.allDiscordUsers local.localUser)
                                                     local.localUser
@@ -2722,13 +2719,12 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             Just editing ->
                                 if MyUi.isMobile model then
                                     -- On mobile, we show the editor at the bottom instead
-                                    threadMessageView
+                                    discordThreadMessageView
                                         isMobile
                                         containerWidth
                                         revealedSpoilers
                                         highlight
                                         messageHover2
-                                        otherUserIsEditing
                                         (LocalState.allDiscordUsers local.localUser)
                                         currentDiscordUserId
                                         local.localUser
@@ -2770,13 +2766,12 @@ discordThreadConversationViewHelper lastViewedIndex currentDiscordUserId guildOr
                             Nothing ->
                                 case maybeRepliedTo2 of
                                     Just _ ->
-                                        threadMessageView
+                                        discordThreadMessageView
                                             isMobile
                                             containerWidth
                                             revealedSpoilers
                                             highlight
                                             messageHover2
-                                            otherUserIsEditing
                                             (LocalState.allDiscordUsers local.localUser)
                                             currentDiscordUserId
                                             local.localUser
@@ -4145,14 +4140,13 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             local
 
                     else
-                        messageView
+                        discordMessageView
                             isMobile
                             (conversationWidth model)
                             True
                             revealedSpoilers
                             NoHighlight
                             (messageHover guildOrDmIdNoThread threadRoute loggedIn)
-                            False
                             currentUserId
                             (LocalState.allDiscordUsers local.localUser)
                             local.localUser
@@ -4163,14 +4157,13 @@ discordThreadStarterMessage isMobile discordGuildOrDmId threadMessageIndex chann
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
 
                 Nothing ->
-                    messageView
+                    discordMessageView
                         isMobile
                         (conversationWidth model)
                         True
                         revealedSpoilers
                         NoHighlight
                         (messageHover guildOrDmIdNoThread threadRoute loggedIn)
-                        False
                         currentUserId
                         (LocalState.allDiscordUsers local.localUser)
                         local.localUser
@@ -4584,7 +4577,7 @@ discordMessageViewNotThreadStarter :
     -> Element MessageViewMsg
 discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
-        { containerWidth, isEditing, highlight, isHovered, isMobile } =
+        { containerWidth, highlight, isHovered, isMobile } =
             decodeMessageView data
 
         _ =
@@ -4598,14 +4591,13 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
     --    , Ui.inFront (MyUi.lazyChangedValue "data" data)
     --    , Ui.inFront (MyUi.lazyChangedValue "currentDiscordUserId" currentDiscordUserId)
     --    ]
-    messageView
+    discordMessageView
         isMobile
         containerWidth
         False
         revealedSpoilers
         highlight
         isHovered
-        isEditing
         currentDiscordUserId
         (LocalState.allDiscordUsers localUser)
         localUser
@@ -4659,7 +4651,7 @@ discordMessageViewThreadStarter :
     -> Element MessageViewMsg
 discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId localUser messageIndex thread message =
     let
-        { containerWidth, isEditing, highlight, isHovered, isMobile } =
+        { containerWidth, highlight, isHovered, isMobile } =
             decodeMessageView data
 
         -- TODO, figure out why this lazy keeps getting triggered even though all the values seem reference unchanged
@@ -4675,14 +4667,13 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId local
     --    , Ui.inFront (MyUi.lazyChangedValue "data" data)
     --    , Ui.inFront (MyUi.lazyChangedValue "currentDiscordUserId" currentDiscordUserId)
     --    ]
-    messageView
+    discordMessageView
         isMobile
         containerWidth
         False
         revealedSpoilers
         highlight
         isHovered
-        isEditing
         currentDiscordUserId
         (LocalState.allDiscordUsers localUser)
         localUser
@@ -4732,19 +4723,18 @@ discordThreadMessageViewLazy :
     -> Element MessageViewMsg
 discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUser messageIndex message =
     let
-        { containerWidth, isEditing, highlight, isHovered, isMobile } =
+        { containerWidth, highlight, isHovered, isMobile } =
             decodeMessageView data
 
         _ =
             Debug.log "discord rerender threadMessageViewLazy" ()
     in
-    threadMessageView
+    discordThreadMessageView
         isMobile
         containerWidth
         revealedSpoilers
         highlight
         isHovered
-        isEditing
         (LocalState.allDiscordUsers localUser)
         currentDiscordUserId
         localUser
@@ -4773,13 +4763,13 @@ messageView :
     -> HighlightMessage
     -> IsHovered
     -> Bool
-    -> userId
-    -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
+    -> Id UserId
+    -> SeqDict (Id UserId) FrontendUser
     -> LocalUser
-    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId )
-    -> Maybe (FrontendGenericThread userId)
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
+    -> Maybe (FrontendGenericThread (Id UserId))
     -> Id ChannelMessageId
-    -> Message ChannelMessageId userId
+    -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
     case message of
@@ -4926,6 +4916,165 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 )
 
 
+discordMessageView :
+    Bool
+    -> Int
+    -> Bool
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    -> HighlightMessage
+    -> IsHovered
+    -> Discord.Id Discord.UserId
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> LocalUser
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Discord.Id Discord.UserId) )
+    -> Maybe (FrontendGenericThread (Discord.Id Discord.UserId))
+    -> Id ChannelMessageId
+    -> Message ChannelMessageId (Discord.Id Discord.UserId)
+    -> Element MessageViewMsg
+discordMessageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered currentUserId allUsers localUser maybeRepliedTo2 maybeThreadStarter messageId message =
+    case message of
+        UserTextMessage data ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                (case highlight of
+                    NoHighlight ->
+                        if SeqSet.member currentUserId (RichText.mentionsUser data.content) then
+                            MentionHighlight
+
+                        else
+                            highlight
+
+                    _ ->
+                        highlight
+                )
+                messageId
+                (currentUserId == data.createdBy)
+                currentUserId
+                localUser.user
+                data.reactions
+                maybeThreadStarter
+                isHovered
+                (discordUserTextMessageContent
+                    (Dom.id "spoiler")
+                    containerWidth
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    isHovered
+                    messageId
+                    data
+                )
+
+        UserJoinedMessage joinedAt userId reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    []
+                    [ userJoinedContent userId allUsers
+                    , messageTimestamp joinedAt localUser.timezone |> Ui.html
+                    , messageIdView messageId
+                    ]
+                )
+
+        DeletedMessage createdAt ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                SeqDict.empty
+                maybeThreadStarter
+                isHovered
+                (deletedMessageContent highlight createdAt localUser.timezone)
+
+        CallStarted time userId reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    [ Ui.contentTop ]
+                    [ callStartedCard userId allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    , messageIdView messageId
+                    ]
+                )
+
+        CallEnded time reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    []
+                    [ callEnded
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    , messageIdView messageId
+                    ]
+                )
+
+        GoMatchStarted time userId reactions ->
+            messageContainer
+                isThreadStarter
+                localUser.timezone
+                localUser.customEmojis
+                allUsers
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    [ Ui.contentTop ]
+                    [ goMatchStartedCard messageId userId allUsers
+                    , messageTimestamp time localUser.timezone |> Ui.html
+                    , messageIdView messageId
+                    ]
+                )
+
+
 threadMessageView :
     Bool
     -> Int
@@ -4933,12 +5082,12 @@ threadMessageView :
     -> HighlightMessage
     -> IsHovered
     -> Bool
-    -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
-    -> userId
+    -> SeqDict (Id UserId) FrontendUser
+    -> Id UserId
     -> LocalUser
-    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId userId )
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
     -> Id ThreadMessageId
-    -> Message ThreadMessageId userId
+    -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
 threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited allUsers currentUserId localUser maybeRepliedTo2 messageId message =
     case message of
@@ -5042,6 +5191,120 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 (Ui.row [] [ goMatchStartedCard messageId userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
 
 
+discordThreadMessageView :
+    Bool
+    -> Int
+    -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
+    -> HighlightMessage
+    -> IsHovered
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> Discord.Id Discord.UserId
+    -> LocalUser
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Discord.Id Discord.UserId) )
+    -> Id ThreadMessageId
+    -> Message ThreadMessageId (Discord.Id Discord.UserId)
+    -> Element MessageViewMsg
+discordThreadMessageView isMobile containerWidth revealedSpoilers highlight isHovered allUsers currentUserId localUser maybeRepliedTo2 messageId message =
+    case message of
+        UserTextMessage message2 ->
+            threadMessageContainer
+                (case highlight of
+                    NoHighlight ->
+                        if SeqSet.member currentUserId (RichText.mentionsUser message2.content) then
+                            MentionHighlight
+
+                        else
+                            highlight
+
+                    _ ->
+                        highlight
+                )
+                messageId
+                (currentUserId == message2.createdBy)
+                currentUserId
+                localUser.user
+                message2.reactions
+                localUser.customEmojis
+                isHovered
+                (discordUserTextMessageContent
+                    (Dom.id "threadSpoiler")
+                    containerWidth
+                    isMobile
+                    maybeRepliedTo2
+                    localUser
+                    revealedSpoilers
+                    allUsers
+                    isHovered
+                    messageId
+                    message2
+                )
+
+        UserJoinedMessage joinedAt userId reactions ->
+            threadMessageContainer
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row
+                    []
+                    [ userJoinedContent userId allUsers
+                    , messageTimestamp joinedAt localUser.timezone |> Ui.html
+                    ]
+                )
+
+        DeletedMessage createdAt ->
+            threadMessageContainer
+                highlight
+                messageId
+                False
+                localUser.session.userId
+                localUser.user
+                SeqDict.empty
+                localUser.customEmojis
+                isHovered
+                (deletedMessageContent highlight createdAt localUser.timezone)
+
+        CallStarted time userId reactions ->
+            threadMessageContainer
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row [] [ callStartedCard userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+
+        CallEnded time reactions ->
+            threadMessageContainer
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row [] [ callEnded, messageTimestamp time localUser.timezone |> Ui.html ])
+
+        GoMatchStarted time userId reactions ->
+            threadMessageContainer
+                highlight
+                messageId
+                False
+                currentUserId
+                localUser.user
+                reactions
+                localUser.customEmojis
+                isHovered
+                (Ui.row [] [ goMatchStartedCard messageId userId allUsers, messageTimestamp time localUser.timezone |> Ui.html ])
+
+
 isHoveredToAnimationMode : IsHovered -> AnimationMode
 isHoveredToAnimationMode isHovered =
     case isHovered of
@@ -5060,13 +5323,13 @@ userTextMessageContent :
     -> Int
     -> Bool
     -> Bool
-    -> Maybe ( Id messageId, Message messageId userId )
+    -> Maybe ( Id messageId, Message messageId (Id UserId) )
     -> LocalUser
     -> SeqDict (Id messageId) (NonemptySet Int)
-    -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
+    -> SeqDict (Id UserId) FrontendUser
     -> IsHovered
     -> Id messageId
-    -> UserTextMessageData messageId userId
+    -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
 userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageIndex message2 =
     Ui.row
@@ -5089,10 +5352,10 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             ]
             (case SeqDict.get message2.createdBy allUsers of
                 Just user ->
-                    User.profileImage user.icon
+                    User.profileImage message2.createdBy user.icon
 
                 Nothing ->
-                    User.profileImage Nothing
+                    User.profileImage message2.createdBy Nothing
             )
         , Ui.column
             []
@@ -5150,6 +5413,98 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
                                 Nothing ->
                                     []
+                       )
+                )
+                |> Ui.html
+            ]
+        ]
+
+
+discordUserTextMessageContent :
+    HtmlId
+    -> Int
+    -> Bool
+    -> Maybe ( Id messageId, Message messageId (Discord.Id Discord.UserId) )
+    -> LocalUser
+    -> SeqDict (Id messageId) (NonemptySet Int)
+    -> SeqDict (Discord.Id Discord.UserId) DiscordFrontendUser
+    -> IsHovered
+    -> Id messageId
+    -> UserTextMessageData messageId (Discord.Id Discord.UserId)
+    -> Element MessageViewMsg
+discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeRepliedTo2 localUser revealedSpoilers allUsers isHovered messageIndex message2 =
+    Ui.row
+        []
+        [ Ui.el
+            [ Ui.paddingWith
+                { left = 0
+                , right = profileImagePaddingRight
+                , top =
+                    case maybeRepliedTo2 of
+                        Just _ ->
+                            24
+
+                        Nothing ->
+                            2
+                , bottom = 0
+                }
+            , Ui.width Ui.shrink
+            , Ui.alignTop
+            ]
+            (case SeqDict.get message2.createdBy allUsers of
+                Just user ->
+                    User.discordProfileImage message2.createdBy user.icon
+
+                Nothing ->
+                    User.discordProfileImage message2.createdBy Nothing
+            )
+        , Ui.column
+            []
+            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
+            , Ui.row
+                []
+                [ User.toString message2.createdBy allUsers
+                    ++ " "
+                    |> Ui.text
+                    |> Ui.el [ Ui.Font.bold ]
+                , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
+                , messageIdView messageIndex
+                ]
+            , Html.div
+                [ Html.Attributes.style "white-space" "pre-wrap" ]
+                (RichText.view
+                    (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageIndex))
+                    containerWidth
+                    MessageView_PressedNonWhitelistLink
+                    MessageView_PressedSpoiler
+                    { revealedSpoilers =
+                        case SeqDict.get messageIndex revealedSpoilers of
+                            Just nonempty ->
+                                NonemptySet.toSeqSet nonempty
+
+                            Nothing ->
+                                SeqSet.empty
+                    , users = allUsers
+                    , attachedFiles = message2.attachedFiles
+                    , domainWhitelist = localUser.user.domainWhitelist
+                    , customEmojis = localUser.customEmojis
+                    , stickers = localUser.stickers
+                    , animationMode = isHoveredToAnimationMode isHovered
+                    }
+                    message2.embeds
+                    message2.content
+                    ++ (case message2.editedAt of
+                            Just editedAt ->
+                                [ Html.span
+                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                    , Html.Attributes.style "font-size" "12px"
+                                    , MyUi.datestamp editedAt |> Html.Attributes.title
+                                    ]
+                                    [ Html.text " (edited)" ]
+                                ]
+
+                            Nothing ->
+                                []
                        )
                 )
                 |> Ui.html
@@ -6857,7 +7212,7 @@ friendLabel isMobile time isSelected localUser otherUserId otherUser channel =
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
-        [ User.profileImage otherUser.icon
+        [ User.profileImage otherUserId otherUser.icon
         , Ui.column
             []
             [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
@@ -7010,7 +7365,7 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
                     [] ->
                         case User.getDiscordUser currentUserId localUser of
                             Just otherUser ->
-                                [ User.profileImage otherUser.icon
+                                [ User.discordProfileImage currentUserId otherUser.icon
                                 , Ui.column
                                     []
                                     [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
@@ -7023,7 +7378,14 @@ discordFriendLabel isMobile time isSelected dmChannelId channel localUser =
 
                     rest ->
                         [ List.filterMap
-                            (\userId -> User.getDiscordUser userId localUser |> Maybe.map .icon)
+                            (\userId ->
+                                case User.getDiscordUser userId localUser of
+                                    Just user ->
+                                        Just ( userId, user.icon )
+
+                                    Nothing ->
+                                        Nothing
+                            )
                             members2
                             |> User.multipleProfileImages
                         , Ui.column

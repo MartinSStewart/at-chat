@@ -502,10 +502,10 @@ voiceChatButton isMobile currentTab otherUserId localUser calls =
                             ]
                             (case User.getUser userId localUser of
                                 Just user ->
-                                    User.profileImage user.icon
+                                    User.profileImage userId user.icon
 
                                 Nothing ->
-                                    User.profileImage Nothing
+                                    User.profileImage userId Nothing
                             )
                     )
                 |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]

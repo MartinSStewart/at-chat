@@ -2091,7 +2091,7 @@ guildsSection user adminData =
                                     [ Ui.text "Owner:"
                                     , case NonemptyDict.get guild.owner adminData.users of
                                         Just user2 ->
-                                            userLabel user2
+                                            userLabel guild.owner user2
 
                                         Nothing ->
                                             Ui.text (Id.toString guild.owner)
@@ -2173,7 +2173,7 @@ discordGuildsSection user adminData =
                                     [ Ui.text "Owner:"
                                     , case SeqDict.get owner adminData.discordUsers of
                                         Just discordUser ->
-                                            discordUserLabel discordUser
+                                            discordUserLabel owner discordUser
 
                                         Nothing ->
                                             Ui.text (Discord.idToString owner)
@@ -2386,7 +2386,7 @@ discordDmChannelsSection user adminData =
                                         (\( discordUserId, _ ) ->
                                             case SeqDict.get discordUserId adminData.discordUsers of
                                                 Just discordUser ->
-                                                    discordUserLabel discordUser
+                                                    discordUserLabel discordUserId discordUser
 
                                                 Nothing ->
                                                     Ui.text (Discord.idToString discordUserId)
@@ -2421,7 +2421,7 @@ discordUsersSection user adminData =
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
                             [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.idToString discordUserId))
-                            , discordUserLabel discordUser
+                            , discordUserLabel discordUserId discordUser
                             , Ui.el
                                 [ Ui.width (Ui.px 200) ]
                                 (case discordUser of
@@ -2441,22 +2441,23 @@ discordUsersSection user adminData =
         ]
 
 
-userLabel : BackendUser -> Element msg
-userLabel user =
+userLabel : Id UserId -> BackendUser -> Element msg
+userLabel userId user =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        [ User.profileImage user.icon
+        [ User.profileImage userId user.icon
         , Ui.el
             [ Ui.width Ui.shrink ]
             (Ui.text (PersonName.toString user.name))
         ]
 
 
-discordUserLabel : DiscordUserData_ForAdmin -> Element msg
-discordUserLabel discordUser =
+discordUserLabel : Discord.Id Discord.UserId -> DiscordUserData_ForAdmin -> Element msg
+discordUserLabel userId discordUser =
     Ui.row
         [ Ui.spacing 8, Ui.width Ui.shrink ]
-        [ User.profileImage
+        [ User.discordProfileImage
+            userId
             (case discordUser of
                 FullData_ForAdmin data ->
                     data.icon
@@ -2486,7 +2487,9 @@ linkedToView : AdminData -> Id UserId -> Element msg
 linkedToView adminData userId =
     case NonemptyDict.get userId adminData.users of
         Just user ->
-            Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ] [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+            Ui.row
+                [ Ui.spacing 8, Ui.width Ui.shrink ]
+                [ User.profileImage userId user.icon, Ui.text (PersonName.toString user.name) ]
 
         Nothing ->
             Ui.none

@@ -19,6 +19,7 @@ module User exposing
     , commonlyUsedEmojis
     , discordCurrentUserToFrontend
     , discordFullDataUserToFrontendCurrentUser
+    , discordProfileImage
     , getDiscordUser
     , getUser
     , init
@@ -52,6 +53,7 @@ import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Category(..), EmojiCategory(..), EmojiConfig, EmojiOrCustomEmoji(..), SkinTone)
 import FileStatus exposing (FileHash)
+import GuildIcon
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, GuildId, Id, StickerId, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import MyUi
@@ -660,17 +662,36 @@ smallProfileImageSize =
     25
 
 
-profileImageRounding : Ui.Attribute msg
+profileImageRounding : Int
 profileImageRounding =
-    Ui.rounded 8
+    8
 
 
-profileImage : Maybe FileHash -> Element msg
-profileImage maybeFileHash =
+profileImage : Id UserId -> Maybe FileHash -> Element msg
+profileImage userId maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
             Ui.image
-                [ profileImageRounding
+                [ Ui.rounded profileImageRounding
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
+                , Ui.clip
+                ]
+                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+
+        Nothing ->
+            GuildIcon.defaultUser profileImageSize 8 userId
+
+
+discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
+discordProfileImage _ maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Ui.image
+                [ Ui.rounded profileImageRounding
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
                 , Ui.clip
@@ -683,7 +704,7 @@ profileImage maybeFileHash =
         Nothing ->
             Ui.el
                 [ Ui.background (Ui.rgb 100 100 100)
-                , profileImageRounding
+                , Ui.rounded profileImageRounding
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
                 ]
@@ -712,14 +733,14 @@ profileImageNoRounding maybeFileHash =
                 Ui.none
 
 
-multipleProfileImages : List (Maybe FileHash) -> Element msg
+multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
 multipleProfileImages profileImages =
     case profileImages of
         [] ->
             Ui.none
 
-        [ single ] ->
-            profileImage single
+        [ ( userId, single ) ] ->
+            discordProfileImage userId single
 
         [ one, two ] ->
             Ui.el
@@ -778,8 +799,8 @@ multipleProfileImages profileImages =
                 Ui.none
 
 
-smallProfileImage : Maybe FileHash -> Element msg
-smallProfileImage maybeFileHash =
+smallProfileImage : ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
+smallProfileImage ( _, maybeFileHash ) =
     case maybeFileHash of
         Just fileHash ->
             Ui.image

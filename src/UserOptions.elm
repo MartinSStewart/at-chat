@@ -240,7 +240,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Profile Picture")
                         , Ui.row
                             [ Ui.spacing 12, Ui.alignLeft ]
-                            [ User.profileImage local.localUser.user.icon
+                            [ User.profileImage local.localUser.session.userId local.localUser.user.icon
                             , ImageEditor.view
                                 loaded.windowSize
                                 loggedIn.profilePictureEditor
@@ -576,7 +576,7 @@ discordUserCard loaded discordUserId data =
         ]
         [ Ui.row
             [ Ui.spacing 8 ]
-            [ User.profileImage data.icon
+            [ User.discordProfileImage discordUserId data.icon
             , Ui.column
                 [ Ui.spacing 2 ]
                 [ Ui.text (PersonName.toString data.name)
