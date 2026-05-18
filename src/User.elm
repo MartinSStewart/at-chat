@@ -683,7 +683,7 @@ profileImage userId maybeFileHash =
                 }
 
         Nothing ->
-            GuildIcon.defaultUser profileImageSize 8 userId
+            GuildIcon.defaultUser False profileImageSize 8 userId
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg

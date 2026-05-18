@@ -161,18 +161,22 @@ userView notification maybeIcon userId =
                 iconView (Normal notification) icon
 
             Nothing ->
-                defaultUser size (round (toFloat size * 8 / 50)) userId
+                defaultUser True size (round (toFloat size * 8 / 50)) userId
         )
 
 
-defaultUser : Int -> Int -> Id UserId -> Element msg
-defaultUser size2 rounded userId =
+defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
+defaultUser centerX size2 rounded userId =
     Ui.el
         [ Ui.contentCenterX
         , Ui.contentCenterY
         , Ui.rounded rounded
         , Ui.background (userDefaultColor userId)
-        , Ui.centerX
+        , if centerX then
+            Ui.centerX
+
+          else
+            Ui.noAttr
         , Ui.width (Ui.px size2)
         , Ui.height (Ui.px size2)
         , Ui.paddingXY 4 0
