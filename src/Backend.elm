@@ -5036,10 +5036,10 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                     , otherClientId = ( session.userId, clientId )
                                     }
                                     (if otherUserId2 == session.userId then
-                                        userCredentials
+                                        otherUserCredentials
 
                                      else
-                                        otherUserCredentials
+                                        userCredentials
                                     )
                                     |> Server_VoiceChatChange
                             )
