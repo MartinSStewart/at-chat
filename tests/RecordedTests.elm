@@ -1806,6 +1806,27 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             ( False, Nothing ) ->
                                 Err "Guild should be present in deletedGuilds"
                     )
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My second guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        let
+                            newGuildId : Id GuildId
+                            newGuildId =
+                                Id.fromInt 2
+                        in
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.member newGuildId backend.guilds ) of
+                            ( False, True ) ->
+                                Ok ()
+
+                            ( True, _ ) ->
+                                Err "Deleted guild ID should not be reused"
+
+                            ( False, False ) ->
+                                Err ("Expected newly created guild at id 2, got ids: " ++ String.join "," (List.map (Id.toInt >> String.fromInt) (SeqDict.keys backend.guilds)))
+                    )
                 ]
             )
         , T.checkBackend
