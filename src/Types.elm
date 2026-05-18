@@ -301,6 +301,7 @@ type alias BackendModel =
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
+    , nextGuildId : Id GuildId
     , guilds : SeqDict (Id GuildId) BackendGuild
     , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool

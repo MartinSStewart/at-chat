@@ -1758,7 +1758,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
-    , RecordedTestExtra.startTest
+    , T.start
         "Owner deletes a guild and it is purged after 30 days"
         RecordedTestExtra.startTime
         normalConfig
@@ -1806,22 +1806,16 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             ( False, Nothing ) ->
                                 Err "Guild should be present in deletedGuilds"
                     )
-                , T.fastForward (Duration.days 31)
-                , T.andThen
-                    100
-                    (\data ->
-                        [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ]
-                    )
-                , T.checkBackend
-                    100
-                    (\backend ->
-                        if SeqDict.isEmpty backend.deletedGuilds then
-                            Ok ()
-
-                        else
-                            Err "deletedGuilds should be pruned after 30 days"
-                    )
                 ]
+            )
+        , T.checkBackend
+            (Duration.days 31 |> Duration.inMilliseconds)
+            (\backend ->
+                if SeqDict.isEmpty backend.deletedGuilds then
+                    Ok ()
+
+                else
+                    Err "deletedGuilds should be pruned after 30 days"
             )
         ]
     , RecordedTestExtra.goMatchTest normalConfig
@@ -2024,6 +2018,18 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
+                                                            ++ (if Id.toInt before.backend.nextGuildId >= Id.toInt after.backend.nextGuildId then
+                                                                    []
+
+                                                                else
+                                                                    [ "Next guild ID data was modified by attacker" ]
+                                                               )
+                                                            ++ (if SeqDict.get guildId before.backend.deletedGuilds == SeqDict.get guildId after.backend.deletedGuilds then
+                                                                    []
+
+                                                                else
+                                                                    [ "Deleted guild data was modified by attacker" ]
+                                                               )
                                                             ++ (if before.backend.discordGuilds == after.backend.discordGuilds then
                                                                     []
 

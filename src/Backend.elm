@@ -187,6 +187,7 @@ init =
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
+      , nextGuildId = Id.fromInt 1
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
       , deletedGuilds = SeqDict.empty
       , isInitialized = False
@@ -1529,25 +1530,12 @@ update msg model =
 
                         Just lastScheduledExportTime ->
                             Duration.from lastScheduledExportTime time |> Quantity.greaterThanOrEqualTo (Duration.hours 4)
-
-                prunedDeletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
-                prunedDeletedGuilds =
-                    SeqDict.filter
-                        (\_ deletedGuild ->
-                            Duration.from deletedGuild.deletedAt time
-                                |> Quantity.lessThan (Duration.days 30)
-                        )
-                        model.deletedGuilds
-
-                model2 : BackendModel
-                model2 =
-                    { model | deletedGuilds = prunedDeletedGuilds }
             in
             ( if shouldExport then
-                startExport time model2
+                startExport time model
 
               else
-                { model2
+                { model
                     | lastScheduledExportTime =
                         case model.lastScheduledExportTime of
                             Just _ ->
@@ -1555,6 +1543,12 @@ update msg model =
 
                             Nothing ->
                                 Just time
+                    , deletedGuilds =
+                        SeqDict.filter
+                            (\_ deletedGuild ->
+                                Duration.from deletedGuild.deletedAt time |> Quantity.lessThan (Duration.days 30)
+                            )
+                            model.deletedGuilds
                 }
             , Discord.getStickerPacksPayload
                 |> DiscordSync.http model.serverSecret
@@ -2632,31 +2626,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         (\{ userId } _ ->
-                            let
-                                guildId : Id GuildId
-                                guildId =
-                                    Id.fromInt
-                                        (max
-                                            (Id.toInt (Id.nextId model.guilds))
-                                            (Id.toInt (Id.nextId model.deletedGuilds))
-                                        )
-
-                                newGuild : BackendGuild
-                                newGuild =
-                                    LocalState.createGuild time userId guildName
-                            in
                             ( { model
-                                | guilds = SeqDict.insert guildId newGuild model.guilds
+                                | nextGuildId = Id.increment model.nextGuildId
+                                , guilds =
+                                    SeqDict.insert
+                                        model.nextGuildId
+                                        (LocalState.createGuild time userId guildName)
+                                        model.guilds
                               }
                             , Command.batch
-                                [ Local_NewGuild time guildName (FilledInByBackend guildId)
+                                [ Local_NewGuild time guildName (FilledInByBackend model.nextGuildId)
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
                                 , Broadcast.toUser
                                     (Just clientId)
                                     Nothing
                                     userId
-                                    (Local_NewGuild time guildName (FilledInByBackend guildId) |> LocalChange userId)
+                                    (Local_NewGuild time guildName (FilledInByBackend model.nextGuildId) |> LocalChange userId)
                                     model
                                 ]
                             )
