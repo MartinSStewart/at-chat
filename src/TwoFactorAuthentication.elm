@@ -4,6 +4,7 @@ module TwoFactorAuthentication exposing
     , ToFrontend(..)
     , TwoFactorAuthentication
     , TwoFactorAuthenticationSetup
+    , TwoFactorDisableData
     , TwoFactorSecret(..)
     , TwoFactorSetupData
     , TwoFactorState(..)
@@ -115,26 +116,36 @@ type TwoFactorState
     | TwoFactorSetup TwoFactorSetupData
     | TwoFactorComplete
     | TwoFactorAlreadyComplete Time.Posix
+    | TwoFactorDisable Time.Posix TwoFactorDisableData
 
 
 type alias TwoFactorSetupData =
     { qrCodeUrl : String, code : String, attempts : SeqDict Int CodeStatus }
 
 
+type alias TwoFactorDisableData =
+    { code : String, attempts : SeqDict Int CodeStatus }
+
+
 type Msg
     = PressedStart2FaSetup
     | PressedCopy String
     | TypedTwoFactorCode String
+    | PressedStartDisable2Fa
+    | PressedCancelDisable2Fa
+    | TypedDisableTwoFactorCode String
 
 
 type ToBackend
     = EnableTwoFactorAuthenticationRequest
     | ConfirmTwoFactorAuthenticationRequest Int
+    | DisableTwoFactorAuthenticationRequest Int
 
 
 type ToFrontend
     = EnableTwoFactorAuthenticationResponse { qrCodeUrl : String }
     | ConfirmTwoFactorAuthenticationResponse Int Bool
+    | DisableTwoFactorAuthenticationResponse Int Bool
 
 
 update : Msg -> TwoFactorState -> ( TwoFactorState, Command FrontendOnly ToBackend Msg )
@@ -169,6 +180,40 @@ update msg twoFactorStatus =
                 _ ->
                     ( twoFactorStatus, Command.none )
 
+        PressedStartDisable2Fa ->
+            case twoFactorStatus of
+                TwoFactorAlreadyComplete enabledAt ->
+                    ( TwoFactorDisable enabledAt { code = "", attempts = SeqDict.empty }
+                    , Command.none
+                    )
+
+                _ ->
+                    ( twoFactorStatus, Command.none )
+
+        PressedCancelDisable2Fa ->
+            case twoFactorStatus of
+                TwoFactorDisable enabledAt _ ->
+                    ( TwoFactorAlreadyComplete enabledAt, Command.none )
+
+                _ ->
+                    ( twoFactorStatus, Command.none )
+
+        TypedDisableTwoFactorCode code ->
+            case twoFactorStatus of
+                TwoFactorDisable enabledAt state ->
+                    let
+                        ( state2, cmd ) =
+                            LoginForm.typedCode
+                                LoginForm.twoFactorCodeLength
+                                (\a -> Lamdera.sendToBackend (DisableTwoFactorAuthenticationRequest a))
+                                code
+                                { state | attempts = SeqDict.empty }
+                    in
+                    ( TwoFactorDisable enabledAt state2, cmd )
+
+                _ ->
+                    ( twoFactorStatus, Command.none )
+
 
 updateFromBackend : ToFrontend -> TwoFactorState -> TwoFactorState
 updateFromBackend toFrontend model =
@@ -193,6 +238,23 @@ updateFromBackend toFrontend model =
 
                     else
                         TwoFactorSetup
+                            { data
+                                | attempts =
+                                    SeqDict.insert code NotValid data.attempts
+                            }
+
+                _ ->
+                    model
+
+        DisableTwoFactorAuthenticationResponse code isSuccessful ->
+            case model of
+                TwoFactorDisable enabledAt data ->
+                    if isSuccessful then
+                        TwoFactorNotStarted
+
+                    else
+                        TwoFactorDisable
+                            enabledAt
                             { data
                                 | attempts =
                                     SeqDict.insert code NotValid data.attempts
@@ -232,12 +294,59 @@ view isMobile textInputFocus time twoFactorStatus =
                     ]
 
             TwoFactorAlreadyComplete enabledAt ->
-                Ui.Prose.paragraph
-                    [ Ui.paddingXY 0 4 ]
-                    [ Ui.text "Two factor authentication was enabled "
-                    , MyUi.timeElapsedView time enabledAt
-                    , Ui.text "."
+                Ui.column
+                    [ Ui.spacing 12 ]
+                    [ Ui.Prose.paragraph
+                        [ Ui.paddingXY 0 4 ]
+                        [ Ui.text "Two factor authentication was enabled "
+                        , MyUi.timeElapsedView time enabledAt
+                        , Ui.text "."
+                        ]
+                    , MyUi.simpleButton
+                        (Dom.id "userOverview_startDisable2Fa")
+                        PressedStartDisable2Fa
+                        (Ui.text "Disable two factor authentication")
                     ]
+
+            TwoFactorDisable _ data ->
+                disableView textInputFocus data
+        ]
+
+
+disableView : Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorDisableData -> Element Msg
+disableView textInputFocus { code, attempts } =
+    let
+        label : { element : Element msg, id : Ui.Input.Label }
+        label =
+            Ui.Input.label
+                "userOverview_disableTwoFactorCodeInput"
+                []
+                (Ui.text
+                    ("Enter the "
+                        ++ String.fromInt LoginForm.twoFactorCodeLength
+                        ++ " digit code from your authenticator app to disable two factor authentication:"
+                    )
+                )
+    in
+    Ui.column
+        [ Ui.spacing 16 ]
+        [ label.element
+        , LoginForm.loginCodeInput LoginForm.twoFactorCodeLength TypedDisableTwoFactorCode textInputFocus code label
+        , case LoginForm.validateCode LoginForm.twoFactorCodeLength code of
+            Ok code2 ->
+                case SeqDict.get code2 attempts of
+                    Just NotValid ->
+                        LoginForm.errorView "Incorrect code"
+
+                    _ ->
+                        Ui.Prose.paragraph [] [ Ui.text "Submitting..." ]
+
+            Err error ->
+                LoginForm.errorView error
+        , MyUi.simpleButton
+            (Dom.id "userOverview_cancelDisable2Fa")
+            PressedCancelDisable2Fa
+            (Ui.text "Cancel")
         ]
 
 
@@ -359,4 +468,13 @@ isPressMsg msg =
             True
 
         TypedTwoFactorCode _ ->
+            False
+
+        PressedStartDisable2Fa ->
+            True
+
+        PressedCancelDisable2Fa ->
+            True
+
+        TypedDisableTwoFactorCode _ ->
             False

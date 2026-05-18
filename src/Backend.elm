@@ -5436,6 +5436,29 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model session 
                 Nothing ->
                     ( model, Command.none )
 
+        TwoFactorAuthentication.DisableTwoFactorAuthenticationRequest code ->
+            case SeqDict.get session.userId model.twoFactorAuthentication of
+                Just data ->
+                    if TwoFactorAuthentication.isValidCode time code data.secret then
+                        ( { model
+                            | twoFactorAuthentication =
+                                SeqDict.remove session.userId model.twoFactorAuthentication
+                          }
+                        , TwoFactorAuthentication.DisableTwoFactorAuthenticationResponse code True
+                            |> TwoFactorAuthenticationToFrontend
+                            |> Lamdera.sendToFrontend clientId
+                        )
+
+                    else
+                        ( model
+                        , TwoFactorAuthentication.DisableTwoFactorAuthenticationResponse code False
+                            |> TwoFactorAuthenticationToFrontend
+                            |> Lamdera.sendToFrontend clientId
+                        )
+
+                Nothing ->
+                    ( model, Command.none )
+
 
 adminChangeUpdate :
     ClientId

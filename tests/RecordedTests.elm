@@ -1176,6 +1176,33 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                         ]
                                                     )
                                                 , user.snapshotView 100 { name = "user overview with two factor already complete" }
+                                                , user.click 100 (Dom.id "userOverview_startDisable2Fa")
+                                                , user.snapshotView 100 { name = "2FA disable prompt" }
+                                                , user.input 100 (Dom.id "userOverview_disableTwoFactorCodeInput") "123123"
+                                                , user.snapshotView 100 { name = "2FA disable with wrong code" }
+                                                , user.input
+                                                    100
+                                                    (Dom.id "userOverview_disableTwoFactorCodeInput")
+                                                    (TwoFactorAuthentication.getCode RecordedTestExtra.startTime key
+                                                        |> Maybe.withDefault 0
+                                                        |> String.fromInt
+                                                        |> String.padLeft LoginForm.twoFactorCodeLength '0'
+                                                    )
+                                                , user.checkView
+                                                    100
+                                                    (Test.Html.Query.has
+                                                        [ Test.Html.Selector.exactText "Add two factor authentication" ]
+                                                    )
+                                                , T.checkState
+                                                    100
+                                                    (\data2 ->
+                                                        if SeqDict.member userId data2.backend.twoFactorAuthentication then
+                                                            Err "2FA should have been disabled for the user"
+
+                                                        else
+                                                            Ok ()
+                                                    )
+                                                , user.snapshotView 100 { name = "2FA disabled" }
                                                 ]
 
                                             Err _ ->

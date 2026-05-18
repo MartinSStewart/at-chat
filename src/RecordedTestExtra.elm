@@ -1681,6 +1681,7 @@ allAttackerToBackendChanges =
     , AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll)
     , LocalModelChangeRequest (ChangeId 0) Local_Invalid
     , TwoFactorToBackend TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest
+    , TwoFactorToBackend (TwoFactorAuthentication.DisableTwoFactorAuthenticationRequest 123456)
     , JoinGuildByInviteRequest (Id.fromInt 0) (SecretId "fake-invite-link")
     , FinishUserCreationRequest InitialLoadRequested_None (Unsafe.personName "hacked") UserAgent.init
     , AiChatToBackend (AiChat.AiMessageRequestSimple (AiModelName "model") (AiChat.RespondId 0) "hacked")
