@@ -4064,34 +4064,11 @@ updateLoaded msg model =
                 Call.PressedJoinCall roomId ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Call.Local_Join model.time roomId |> Local_VoiceChatChange |> Just)
+                                (Call.Local_Join model.time roomId EmptyPlaceholder |> Local_VoiceChatChange |> Just)
                                 loggedIn
-                                (case SeqDict.get roomId local.calls.voiceChats of
-                                    Just nonempty ->
-                                        List.map
-                                            (\otherSession ->
-                                                Call.toJs
-                                                    (Call.ToJs_Start
-                                                        (Call.startArgs
-                                                            model.clientId
-                                                            { roomId = roomId, otherClientId = otherSession }
-                                                            loggedIn.voiceChat
-                                                        )
-                                                    )
-                                            )
-                                            (NonemptySet.toList nonempty)
-                                            |> Command.batch
-
-                                    Nothing ->
-                                        Call.toJs Call.ToJs_GetMediaDevices
-                                )
+                                Command.none
                         )
                         model
 
@@ -5718,6 +5695,37 @@ updateLoadedFromBackend msg model =
                     in
                     ( { loggedIn | localState = localState }
                     , case localChange of
+                        Local_VoiceChatChange callChange ->
+                            case callChange of
+                                Call.Local_Join time roomId (FilledInByBackend turn) ->
+                                    case SeqDict.get roomId local.calls.voiceChats of
+                                        Just nonempty ->
+                                            List.map
+                                                (\otherSession ->
+                                                    Call.startArgs
+                                                        model.clientId
+                                                        local.localUser.session.userId
+                                                        { roomId = roomId, otherClientId = otherSession }
+                                                        time
+                                                        turn
+                                                        loggedIn.voiceChat
+                                                )
+                                                (NonemptySet.toList nonempty)
+                                                |> Command.batch
+
+                                        Nothing ->
+                                            Command.none
+
+                                Call.Local_Join _ _ EmptyPlaceholder ->
+                                    -- Backend should never return EmptyPlaceholder
+                                    Command.none
+
+                                Call.Local_Leave _ ->
+                                    Command.none
+
+                                Call.Local_Signal _ _ ->
+                                    Command.none
+
                         Local_TextEditor TextEditor.Local_Undo ->
                             case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
                                 Just range ->
@@ -6098,6 +6106,7 @@ updateLoadedFromBackend msg model =
                                     , Call.serverChangeCmd
                                         voiceChatChange
                                         model.clientId
+                                        local.localUser.session.userId
                                         local.calls
                                         loggedIn2.voiceChat
                                     )

@@ -36,6 +36,8 @@ import Env
 import FileStatus exposing (FileData, FileId)
 import Go
 import GuildName
+import HmacSha1
+import HmacSha1.Key
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -58,7 +60,7 @@ import Postmark
 import Quantity
 import RateLimit
 import RichText exposing (DiscordCustomEmojiIdAndName, RichText)
-import SecretId exposing (SecretId)
+import SecretId exposing (SecretId, TurnCredentials)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
@@ -4812,7 +4814,7 @@ handleVoiceChatChange :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
     case voiceMsg of
-        Call.Local_Join _ voiceChatId ->
+        Call.Local_Join _ voiceChatId _ ->
             case voiceChatId of
                 Call.DmRoomId otherUserId ->
                     asDmUser
@@ -4979,6 +4981,22 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
                                 Nothing ->
                                     ( model, Command.none )
+
+                        userCredentials : SecretId TurnCredentials
+                        userCredentials =
+                            HmacSha1.fromString
+                                (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
+                                (Call.turnUsername time session.userId)
+                                |> HmacSha1.toBase64
+                                |> SecretId.fromString
+
+                        otherUserCredentials : SecretId TurnCredentials
+                        otherUserCredentials =
+                            HmacSha1.fromString
+                                (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
+                                (Call.turnUsername time otherUserId)
+                                |> HmacSha1.toBase64
+                                |> SecretId.fromString
                     in
                     ( { model2
                         | connections =
@@ -4997,9 +5015,13 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 model2.dmChannels
                       }
                     , Command.batch
-                        [ LocalChangeResponse
-                            changeId
-                            (Local_VoiceChatChange (Call.Local_Join time voiceChatId))
+                        [ Local_VoiceChatChange
+                            (Call.Local_Join
+                                time
+                                voiceChatId
+                                (FilledInByBackend userCredentials)
+                            )
+                            |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toDmChannelExcludingOne
                             clientId
@@ -5011,6 +5033,12 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( session.userId, clientId )
                                     }
+                                    (if otherUserId2 == session.userId then
+                                        otherUserCredentials
+
+                                     else
+                                        userCredentials
+                                    )
                                     |> Server_VoiceChatChange
                             )
                             model2

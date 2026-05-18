@@ -1916,7 +1916,7 @@ clockChip maybeUser seconds isActive stone setup captures =
                     ( Ui.rgb 20 20 20, MyUi.white )
     in
     Ui.row
-        [ User.profileImageRounding
+        [ Ui.rounded User.profileImageRounding
         , Ui.width (Ui.px 170)
         , Ui.border 2
         , Ui.spacing 8

@@ -2184,7 +2184,7 @@ allAttackerLocalChanges =
     , Local_SetEmojiSkinTone Nothing
     , Local_SetEmojiSkinTone (Just SkinTone5)
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
-    , Local_VoiceChatChange (Call.Local_Join startTime (Call.DmRoomId normalUserId))
+    , Local_VoiceChatChange (Call.Local_Join startTime (Call.DmRoomId normalUserId) EmptyPlaceholder)
     , Local_VoiceChatChange (Call.Local_Leave startTime)
     , Local_VoiceChatChange
         (Call.Local_Signal

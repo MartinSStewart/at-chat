@@ -36,6 +36,7 @@ port module Call exposing
     , startArgs
     , startLocalStream
     , toJs
+    , turnUsername
     , videoNodes
     , view
     )
@@ -45,6 +46,7 @@ import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -64,20 +66,22 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import Route exposing (DmChannelHeaderTab(..), Route(..))
+import SecretId exposing (SecretId, TurnCredentials)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
 import Ui.Font
+import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (SecretId TurnCredentials))
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId
+    = Server_Joined Time.Posix ConnectionId (SecretId TurnCredentials)
     | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
 
@@ -366,6 +370,20 @@ displayMode currentUserId route local =
 localVideoNodeId : String
 localVideoNodeId =
     "local-video"
+
+
+turnUsername : Time.Posix -> Id UserId -> String
+turnUsername expirationTime userId =
+    let
+        ttl : Duration
+        ttl =
+            Duration.minutes 10
+
+        expiry : Int
+        expiry =
+            Time.posixToMillis (Duration.addTo expirationTime ttl) // 1000
+    in
+    String.fromInt expiry ++ ":" ++ Id.toString userId
 
 
 videoNodes :
@@ -893,14 +911,14 @@ leaveVoiceChatCmds model =
             Command.none
 
 
-serverChangeCmd : ServerChange -> ClientId -> Local -> Model -> Command FrontendOnly toBackend msg
-serverChangeCmd change clientId local model =
+serverChangeCmd : ServerChange -> ClientId -> Id UserId -> Local -> Model -> Command FrontendOnly toBackend msg
+serverChangeCmd change clientId currentUserId local model =
     case change of
-        Server_Joined _ connectionId ->
+        Server_Joined time connectionId turnCredentials ->
             case local.currentRoom of
                 Just roomId ->
                     if roomId == connectionId.roomId then
-                        toJs (ToJs_Start (startArgs clientId connectionId model))
+                        startArgs clientId currentUserId connectionId time turnCredentials model
 
                     else
                         Command.none
@@ -970,6 +988,8 @@ type alias StartData =
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
+    , turnCredentials : SecretId TurnCredentials
+    , username : String
     }
 
 
@@ -982,6 +1002,8 @@ startDataCodec =
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
+        |> Codec.field "turnCredentials" .turnCredentials SecretId.codec
+        |> Codec.field "username" .username Codec.string
         |> Codec.buildObject
 
 
@@ -1041,8 +1063,8 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startArgs : ClientId -> ConnectionId -> Model -> StartData
-startArgs clientId connectionId model =
+startArgs : ClientId -> Id UserId -> ConnectionId -> Time.Posix -> SecretId TurnCredentials -> Model -> Command FrontendOnly toMsg msg
+startArgs clientId currentUserId connectionId credentialsExpiresAt turnCredentials model =
     { peerUserId = connectionId
     , shouldOffer =
         Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
@@ -1050,7 +1072,11 @@ startArgs clientId connectionId model =
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.audioInputEnabled
     , videoInputEnabled = model.videoInputEnabled
+    , turnCredentials = turnCredentials
+    , username = turnUsername credentialsExpiresAt currentUserId
     }
+        |> ToJs_Start
+        |> toJs
 
 
 type MediaDeviceId

@@ -2,6 +2,7 @@ module GuildIcon exposing
     ( ChannelNotificationType(..)
     , Mode(..)
     , addGuildButton
+    , defaultUser
     , fullWidth
     , notificationHelper
     , notificationView
@@ -161,22 +162,24 @@ userView notification maybeIcon userId =
                 iconView (Normal notification) icon
 
             Nothing ->
-                Ui.el
-                    [ Ui.contentCenterX
-                    , Ui.contentCenterY
-                    , Ui.rounded (round (toFloat size * 8 / 50))
-                    , MyUi.montserrat
-                    , Ui.Font.weight 600
-                    , Ui.background (userDefaultColor userId)
-                    , Ui.centerX
-                    , Ui.width (Ui.px size)
-                    , Ui.height (Ui.px size)
-                    , Ui.Font.size (round (toFloat size * 18 / 50))
-                    , Ui.Font.color (Ui.rgb 20 20 20)
-                    , Ui.paddingXY 4 0
-                    ]
-                    (Ui.html Icons.person)
+                defaultUser size (round (toFloat size * 8 / 50)) userId
         )
+
+
+defaultUser : Int -> Int -> Id UserId -> Element msg
+defaultUser size2 rounded userId =
+    Ui.el
+        [ Ui.contentCenterX
+        , Ui.contentCenterY
+        , Ui.rounded rounded
+        , Ui.background (userDefaultColor userId)
+        , Ui.centerX
+        , Ui.width (Ui.px size2)
+        , Ui.height (Ui.px size2)
+        , Ui.paddingXY 4 0
+        , Ui.Font.color (Ui.rgb 20 20 20)
+        ]
+        (Ui.html Icons.person)
 
 
 iconView : Mode -> FileHash -> Element msg

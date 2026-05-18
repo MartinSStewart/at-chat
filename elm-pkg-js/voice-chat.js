@@ -8,8 +8,17 @@ exports.init = async function init(app) {
 
             stopConnection(args.peerUserId);
 
+            console.log(args);
+
             const pc = new RTCPeerConnection({
-                iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                iceTransportPolicy: "relay",
+                iceServers:
+                    [ { urls: "stun:stun.l.google.com:19302" }
+                    , { urls: ["turn:turn.at-chat.app:3478", "turns:turn.at-chat.app:5349"]
+                      , username: args.username
+                      , credential: args.turnCredentials
+                      }
+                    ]
             });
 
 
@@ -93,10 +102,10 @@ exports.init = async function init(app) {
             };
 
             pc.oniceconnectionstatechange = function () {
-                console.log("Voice chat: ICE state", args.peerUserId, pc.iceConnectionState);
+                console.log("oniceconnectionstatechange", args.peerUserId, pc.iceConnectionState);
             };
             pc.onconnectionstatechange = function () {
-                console.log("Voice chat: PC state", args.peerUserId, pc.connectionState);
+                console.log("onconnectionstatechange", args.peerUserId, pc.connectionState);
             };
 
             pc.onicecandidate = function (event) {
@@ -108,6 +117,17 @@ exports.init = async function init(app) {
                 }
             };
 
+            pc.onicecandidateerror = function (event) {
+                console.log("onicecandidateerror", {
+                    url: event.url,
+                    address: event.address,
+                    port: event.port,
+                    errorCode: event.errorCode,
+                    errorText: event.errorText,
+                    hostCandidate: event.hostCandidate
+                });
+            };
+            
             const conn = {
                 pc: pc,
                 videoNode: videoNode,

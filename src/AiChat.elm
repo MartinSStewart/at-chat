@@ -97,8 +97,6 @@ type alias FrontendModel =
     , responseCounter : Int
     , showOptions : Bool
     , selectedModel : Maybe AiModelName
-    , userPrefix : String
-    , botPrefix : String
     , debounceCounter : Int
     , sendMessageWith : SendMessageWith
     , aiModels : AiModelsStatus
@@ -115,8 +113,6 @@ type alias LocalStorage =
     , pendingResponses : SeqDict ResponseId PendingResponse
     , showOptions : Bool
     , selectedModel : Maybe AiModelName
-    , userPrefix : String
-    , botPrefix : String
     , sendMessageWith : SendMessageWith
     , responseCounter : Int
     }
@@ -149,8 +145,6 @@ type Msg
     | PressedOptionsButton
     | SelectedAiModel AiModelName
     | SelectedSendMessageWith SendMessageWith
-    | TypedUserPrefix String
-    | TypedBotPrefix String
     | CheckDebounce Int
     | GotLocalStorage String
     | EditedResponse ResponseId String
@@ -190,14 +184,22 @@ init =
       , responseCounter = 0
       , showOptions = True
       , selectedModel = Nothing
-      , userPrefix = "[user]"
-      , botPrefix = "[bot]"
       , debounceCounter = 0
       , sendMessageWith = SendWithShiftEnter
       , aiModels = LoadingAiModels
       }
     , loadUserSettingsToJs
     )
+
+
+userPrefix : String
+userPrefix =
+    "[user]"
+
+
+botPrefix : String
+botPrefix =
+    "[bot]"
 
 
 isPressMsg : Msg -> Bool
@@ -234,12 +236,6 @@ isPressMsg msg =
             False
 
         SelectedSendMessageWith _ ->
-            False
-
-        TypedUserPrefix _ ->
-            False
-
-        TypedBotPrefix _ ->
             False
 
         CheckDebounce _ ->
@@ -304,8 +300,6 @@ localStorageCodec =
         |> Serialize.field .pendingResponses (seqDictCodec responseIdCodec pendingResponseCodec)
         |> Serialize.field .showOptions Serialize.bool
         |> Serialize.field .selectedModel (Serialize.maybe aiModelCodec)
-        |> Serialize.field .userPrefix Serialize.string
-        |> Serialize.field .botPrefix Serialize.string
         |> Serialize.field .sendMessageWith sendMessageWithCodec
         |> Serialize.field .responseCounter Serialize.int
         |> Serialize.finishRecord
@@ -412,8 +406,6 @@ modelToLocalStorage model =
     , pendingResponses = model.pendingResponses
     , showOptions = model.showOptions
     , selectedModel = model.selectedModel
-    , userPrefix = model.userPrefix
-    , botPrefix = model.botPrefix
     , sendMessageWith = model.sendMessageWith
     , responseCounter = model.responseCounter
     }
@@ -556,9 +548,9 @@ update msg model =
 
                                 else
                                     String.trimRight model.chatHistory
-                                        ++ prefixWrapper model.userPrefix
+                                        ++ prefixWrapper userPrefix
                                         ++ String.trim model.message
-                                        ++ prefixWrapper model.botPrefix
+                                        ++ prefixWrapper botPrefix
                                         |> String.trimLeft
 
                             responseId =
@@ -656,12 +648,6 @@ update msg model =
         SelectedSendMessageWith sendMessageWith ->
             saveToLocalStorage { model | sendMessageWith = sendMessageWith }
 
-        TypedUserPrefix prefix ->
-            startDebounceSave { model | userPrefix = prefix }
-
-        TypedBotPrefix prefix ->
-            startDebounceSave { model | botPrefix = prefix }
-
         CheckDebounce counter ->
             if counter == model.debounceCounter then
                 saveToLocalStorage model
@@ -678,8 +664,6 @@ update msg model =
                         , pendingResponses = ok.pendingResponses
                         , showOptions = ok.showOptions
                         , selectedModel = ok.selectedModel
-                        , userPrefix = ok.userPrefix
-                        , botPrefix = ok.botPrefix
                         , sendMessageWith = ok.sendMessageWith
                         , responseCounter = ok.responseCounter
                       }
@@ -807,9 +791,9 @@ updateFromBackend msg model =
                                     Ok aiMessage ->
                                         let
                                             aiMessage2 =
-                                                case String.split (prefixWrapper model.botPrefix) aiMessage.content of
+                                                case String.split (prefixWrapper botPrefix) aiMessage.content of
                                                     aiMessage3 :: _ ->
-                                                        case String.split (prefixWrapper model.userPrefix) aiMessage3 of
+                                                        case String.split (prefixWrapper userPrefix) aiMessage3 of
                                                             aiMessage4 :: _ ->
                                                                 aiMessage4
 
@@ -1139,27 +1123,6 @@ showOptionsButton =
 
 optionsView : FrontendModel -> Element Msg
 optionsView model =
-    let
-        userPrefixLabel : { element : Element Msg, id : Ui.Input.Label }
-        userPrefixLabel =
-            Ui.Input.label
-                "user-label"
-                [ Ui.Font.weight 500
-                , Ui.Font.size 14
-                , Ui.paddingXY 4 4
-                ]
-                (Ui.text "User's name")
-
-        botPrefixLabel : { element : Element Msg, id : Ui.Input.Label }
-        botPrefixLabel =
-            Ui.Input.label
-                "bot-label"
-                [ Ui.Font.weight 500
-                , Ui.Font.size 14
-                , Ui.paddingXY 4 4
-                ]
-                (Ui.text "Bot's name")
-    in
     Ui.column
         [ Ui.widthMax 1000
         , Ui.centerX
@@ -1225,38 +1188,6 @@ optionsView model =
                             ]
                         }
                     ]
-                ]
-            , Ui.column
-                []
-                [ userPrefixLabel.element
-                , Ui.Input.text
-                    [ Ui.paddingXY 8 6
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.inputBorder
-                    , Ui.rounded 4
-                    , Ui.background MyUi.inputBackground
-                    ]
-                    { onChange = TypedUserPrefix
-                    , text = model.userPrefix
-                    , placeholder = Nothing
-                    , label = userPrefixLabel.id
-                    }
-                ]
-            , Ui.column
-                []
-                [ botPrefixLabel.element
-                , Ui.Input.text
-                    [ Ui.paddingXY 8 6
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.inputBorder
-                    , Ui.rounded 4
-                    , Ui.background MyUi.inputBackground
-                    ]
-                    { onChange = TypedBotPrefix
-                    , text = model.botPrefix
-                    , placeholder = Nothing
-                    , label = Ui.Input.labelHidden "bot-prefix"
-                    }
                 ]
             ]
         ]
