@@ -614,7 +614,7 @@ getVoiceChatData clientId session model =
                                                 Just otherUserId ->
                                                     SeqDictHelper.addItem
                                                         (DmRoomId otherUserId)
-                                                        ( otherUserId, otherClientId )
+                                                        ( otherSession.userId, otherClientId )
                                                         dict2
 
                                                 Nothing ->
