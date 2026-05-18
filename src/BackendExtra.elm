@@ -54,7 +54,7 @@ import LoginForm
 import MembersAndOwner
 import Message
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet
+import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (InitAdminData)
 import Pagination exposing (PageId)
 import PersonName
@@ -64,6 +64,7 @@ import RateLimit
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash
 import String.Nonempty exposing (NonemptyString(..))
@@ -588,49 +589,48 @@ getLoginData sessionId clientId session user requestMessagesFor model =
     , textEditor = model.textEditor
     , stickers = model.stickers
     , customEmojis = model.customEmojis
-    , voiceChatPeers =
-        SeqDict.foldl
-            (\otherSessionId connections dict ->
-                case SeqDict.get otherSessionId model.sessions of
-                    Just otherSession ->
-                        NonemptyDict.foldl
-                            (\otherClientId data dict2 ->
-                                case ( data.call, otherClientId == clientId ) of
-                                    ( Just roomId, False ) ->
-                                        case roomId of
-                                            DmRoomId dmingWith ->
-                                                if dmingWith == session.userId then
-                                                    SeqDict.update
-                                                        roomId
-                                                        (\maybe ->
-                                                            (case maybe of
-                                                                Just nonempty ->
-                                                                    NonemptySet.insert
-                                                                        ( otherSession.userId, otherClientId )
-                                                                        nonempty
+    , voiceChatPeers = getVoiceChatData clientId session model
+    }
 
-                                                                Nothing ->
-                                                                    NonemptySet.singleton ( otherSession.userId, otherClientId )
-                                                            )
-                                                                |> Just
-                                                        )
+
+getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+getVoiceChatData clientId session model =
+    SeqDict.foldl
+        (\otherSessionId connections dict ->
+            case SeqDict.get otherSessionId model.sessions of
+                Just otherSession ->
+                    NonemptyDict.foldl
+                        (\otherClientId data dict2 ->
+                            case ( data.call, otherClientId == clientId ) of
+                                ( Just roomId, False ) ->
+                                    case roomId of
+                                        DmRoomId dmingWith ->
+                                            let
+                                                dmChannelId : DmChannelId
+                                                dmChannelId =
+                                                    DmChannel.channelIdFromUserIds otherSession.userId dmingWith
+                                            in
+                                            case DmChannel.otherUserId session.userId dmChannelId of
+                                                Just otherUserId ->
+                                                    SeqDictHelper.addItem
+                                                        (DmRoomId otherUserId)
+                                                        ( otherSession.userId, otherClientId )
                                                         dict2
 
-                                                else
+                                                Nothing ->
                                                     dict2
 
-                                    _ ->
-                                        dict2
-                            )
-                            dict
-                            connections
-
-                    Nothing ->
+                                _ ->
+                                    dict2
+                        )
                         dict
-            )
-            SeqDict.empty
-            model.connections
-    }
+                        connections
+
+                Nothing ->
+                    dict
+        )
+        SeqDict.empty
+        model.connections
 
 
 discordGuildToFrontendForUser :

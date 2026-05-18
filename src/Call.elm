@@ -21,8 +21,10 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
+    , decodeToJs
     , displayMode
     , displayModeChangeCmd
+    , encodeFromJs
     , fromJs
     , gotUserMediaDevices
     , init
@@ -1167,6 +1169,16 @@ deviceKindCodec =
     Codec.enum Codec.string [ ( "audioinput", AudioInput ), ( "audiooutput", AudioOutput ), ( "videoinput", VideoInput ) ]
 
 
+encodeFromJs : FromJs -> Json.Encode.Value
+encodeFromJs value =
+    Codec.encodeToValue voiceChatFromJsCodec value
+
+
+decodeToJs : Json.Decode.Value -> Result Codec.Error ToJs
+decodeToJs value =
+    Codec.decodeValue voiceChatToJsCodec value
+
+
 fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg
 fromJs msg =
     Subscription.fromJs
@@ -1201,12 +1213,15 @@ connectionIdToString { roomId, otherClientId } =
 connectionIdFromString : String -> Result () ConnectionId
 connectionIdFromString text =
     case String.split " " text of
-        [ first, second, third ] ->
+        first :: second :: rest0 :: rest ->
             case ( String.toInt first, String.toInt second ) of
                 ( Just int, Just userId ) ->
                     Ok
                         { roomId = DmRoomId (Id.fromInt int)
-                        , otherClientId = ( Id.fromInt userId, Lamdera.clientIdFromString third )
+                        , otherClientId =
+                            ( Id.fromInt userId
+                            , Lamdera.clientIdFromString (String.join " " (rest0 :: rest))
+                            )
                         }
 
                 _ ->

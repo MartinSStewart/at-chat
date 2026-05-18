@@ -60,6 +60,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Sticker
 import String.Extra
@@ -2258,18 +2259,9 @@ updateLoaded msg model =
                                                     SeqDict.update
                                                         threadMessageIndex
                                                         (\maybe ->
-                                                            SeqDict.update
+                                                            SeqDictHelper.addItem
                                                                 messageId
-                                                                (\maybe2 ->
-                                                                    (case maybe2 of
-                                                                        Just revealed ->
-                                                                            NonemptySet.insert spoilerIndex revealed
-
-                                                                        Nothing ->
-                                                                            NonemptySet.singleton spoilerIndex
-                                                                    )
-                                                                        |> Just
-                                                                )
+                                                                spoilerIndex
                                                                 (Maybe.withDefault SeqDict.empty maybe)
                                                                 |> Just
                                                         )
@@ -2279,18 +2271,9 @@ updateLoaded msg model =
                                         NoThreadWithMessage messageId ->
                                             { revealedSpoilers
                                                 | messages =
-                                                    SeqDict.update
+                                                    SeqDictHelper.addItem
                                                         messageId
-                                                        (\maybe ->
-                                                            (case maybe of
-                                                                Just revealed ->
-                                                                    NonemptySet.insert spoilerIndex revealed
-
-                                                                Nothing ->
-                                                                    NonemptySet.singleton spoilerIndex
-                                                            )
-                                                                |> Just
-                                                        )
+                                                        spoilerIndex
                                                         revealedSpoilers.messages
                                             }
                                     )
