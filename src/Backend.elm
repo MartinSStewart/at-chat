@@ -5657,8 +5657,8 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
         Pages.Admin.RestoreGuild guildId ->
-            case SeqDict.get guildId model.deletedGuilds of
-                Just deletedGuild ->
+            case ( SeqDict.get guildId model.deletedGuilds, SeqDict.get guildId model.guilds ) of
+                ( Just deletedGuild, Nothing ) ->
                     let
                         model2 : BackendModel
                         model2 =
@@ -5674,7 +5674,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         ]
                     )
 
-                Nothing ->
+                _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
         Pages.Admin.StartReloadingDiscordGuildChannel _ userIdToLoadWith guildId channelId ->
