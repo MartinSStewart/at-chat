@@ -176,6 +176,7 @@ defaultUser size2 rounded userId =
         , Ui.width (Ui.px size2)
         , Ui.height (Ui.px size2)
         , Ui.paddingXY 4 0
+        , Ui.Font.color (Ui.rgb 20 20 20)
         ]
         (Ui.html Icons.person)
 
