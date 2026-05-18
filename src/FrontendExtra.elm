@@ -4005,6 +4005,7 @@ initAdminData adminData =
     , discordUsers = adminData.discordUsers
     , discordGuilds = adminData.discordGuilds
     , guilds = adminData.guilds
+    , deletedGuilds = adminData.deletedGuilds
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
     , logs = adminData.logs

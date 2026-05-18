@@ -55,7 +55,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -117,6 +117,7 @@ type Msg
     | PressedExpandDiscordGuild (Discord.Id Discord.GuildId)
     | PressedExpandGuild (Id GuildId)
     | PressedDeleteGuild (Id GuildId)
+    | PressedRestoreGuild (Id GuildId)
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
@@ -216,6 +217,7 @@ type alias InitAdminData =
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
@@ -247,6 +249,7 @@ type AdminChange
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
     | DeleteGuild (Id GuildId)
+    | RestoreGuild (Id GuildId)
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ExpandGuild (Id GuildId)
@@ -407,6 +410,29 @@ updateAdmin changedBy change adminData local =
 
         DeleteGuild guildId ->
             { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
+
+        RestoreGuild guildId ->
+            case SeqDict.get guildId adminData.deletedGuilds of
+                Just deletedGuild ->
+                    { local
+                        | adminData =
+                            IsAdmin
+                                { adminData
+                                    | deletedGuilds = SeqDict.remove guildId adminData.deletedGuilds
+                                    , guilds =
+                                        SeqDict.insert
+                                            guildId
+                                            { name = deletedGuild.name
+                                            , channels = SeqDict.empty
+                                            , memberCount = deletedGuild.memberCount
+                                            , owner = deletedGuild.owner
+                                            }
+                                            adminData.guilds
+                                }
+                    }
+
+                Nothing ->
+                    local
 
         StartReloadingDiscordGuildChannel time userId guildId channelId ->
             if LocalState.userIsLoadingDiscordChannel userId adminData.loadingDiscordChannels then
@@ -1006,6 +1032,9 @@ update navigationKey time adminData localState msg model =
         PressedDeleteGuild guildId ->
             ( model, Command.none, AdminChange (DeleteGuild guildId) )
 
+        PressedRestoreGuild guildId ->
+            ( model, Command.none, AdminChange (RestoreGuild guildId) )
+
         SlackClientSecretEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1276,6 +1305,11 @@ deleteGuildButtonId guildId =
     "Admin_deleteGuildButton_" ++ Id.toString guildId |> Dom.id
 
 
+restoreGuildButtonId : Id GuildId -> HtmlId
+restoreGuildButtonId guildId =
+    "Admin_restoreGuildButton_" ++ Id.toString guildId |> Dom.id
+
+
 deleteDiscordGuildButtonId : Discord.Id Discord.GuildId -> HtmlId
 deleteDiscordGuildButtonId guildId =
     "Admin_deleteDiscordGuildButton_" ++ Discord.idToString guildId |> Dom.id
@@ -1339,6 +1373,9 @@ pendingChangesText change =
         DeleteGuild _ ->
             "Deleted guild"
 
+        RestoreGuild _ ->
+            "Restored guild"
+
         StartReloadingDiscordGuildChannel _ _ _ _ ->
             "Reset Discord channel"
 
@@ -1396,6 +1433,7 @@ view isMobile2 version local adminData user model =
             , adminData.vulnerabilityChecks |> Ui.text
             , userSection user adminData model
             , guildsSection user adminData
+            , deletedGuildsSection user adminData
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
@@ -2119,6 +2157,46 @@ guildsSection user adminData =
                             ]
                     )
                     (SeqDict.toList adminData.guilds)
+                )
+        ]
+
+
+deletedGuildsSection : BackendUser -> AdminData -> Element Msg
+deletedGuildsSection user adminData =
+    section
+        8
+        user.expandedSections
+        DeletedGuildsSection
+        [ if SeqDict.isEmpty adminData.deletedGuilds then
+            Ui.text "No deleted guilds"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( guildId, deletedGuild ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ Ui.text (Id.toString guildId)
+                            , Ui.text (GuildName.toString deletedGuild.name)
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.text "Owner:"
+                                , case NonemptyDict.get deletedGuild.owner adminData.users of
+                                    Just user2 ->
+                                        userLabel deletedGuild.owner user2
+
+                                    Nothing ->
+                                        Ui.text (Id.toString deletedGuild.owner)
+                                ]
+                            , Ui.text ("Members: " ++ String.fromInt deletedGuild.memberCount)
+                            , MyUi.simpleButton
+                                (restoreGuildButtonId guildId)
+                                (PressedRestoreGuild guildId)
+                                (Ui.text "Restore")
+                            ]
+                    )
+                    (SeqDict.toList adminData.deletedGuilds)
                 )
         ]
 

@@ -461,6 +461,7 @@ type AdminUiSection
     | DiscordUsersSection
     | DiscordGuildsSection
     | GuildsSection
+    | DeletedGuildsSection
     | ApiKeysSection
     | ExportSection
     | ConnectionsSection
@@ -490,6 +491,9 @@ sectionToString section2 =
 
         GuildsSection ->
             "Guilds"
+
+        DeletedGuildsSection ->
+            "Deleted guilds"
 
         ApiKeysSection ->
             "API keys"

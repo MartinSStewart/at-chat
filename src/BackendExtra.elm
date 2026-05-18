@@ -829,6 +829,16 @@ adminData model lastLogPageViewed =
                 }
             )
             model.guilds
+    , deletedGuilds =
+        SeqDict.map
+            (\_ deletedGuild ->
+                { name = deletedGuild.guild.name
+                , owner = MembersAndOwner.owner deletedGuild.guild.membersAndOwner
+                , memberCount = SeqDict.size (MembersAndOwner.members deletedGuild.guild.membersAndOwner)
+                , deletedAt = deletedGuild.deletedAt
+                }
+            )
+            model.deletedGuilds
     , loadingDiscordChannels =
         SeqDict.map
             (\_ channel ->

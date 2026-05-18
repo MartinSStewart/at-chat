@@ -1869,6 +1869,56 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     Err "deletedGuilds should be pruned after 30 days"
             )
         ]
+    , T.start
+        "Admin restores a deleted guild"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+                in
+                [ RecordedTestExtra.writeMessage admin 100 "hello world"
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "My new guild!"
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.get guildId backend.deletedGuilds ) of
+                            ( False, Just _ ) ->
+                                Ok ()
+
+                            _ ->
+                                Err "Guild should be in deletedGuilds after deletion"
+                    )
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_Deleted guilds")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild!" ])
+                , admin.click 100 (Dom.id ("Admin_restoreGuildButton_" ++ Id.toString guildId))
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.member guildId backend.deletedGuilds ) of
+                            ( True, False ) ->
+                                Ok ()
+
+                            ( False, _ ) ->
+                                Err "Guild should be restored to active guilds"
+
+                            ( True, True ) ->
+                                Err "Guild should be removed from deletedGuilds after restore"
+                    )
+                ]
+            )
+        ]
     , RecordedTestExtra.goMatchTest normalConfig
     , RecordedTestExtra.goTurnNotificationDotTest normalConfig
     ]

@@ -1,5 +1,6 @@
 module LocalState exposing
     ( AdminData
+    , AdminData_DeletedGuild
     , AdminData_DiscordChannel
     , AdminData_DiscordDmChannel
     , AdminData_DiscordGuild
@@ -498,6 +499,7 @@ type alias AdminData =
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
@@ -648,6 +650,14 @@ type alias AdminData_Guild =
     , channels : SeqDict (Id ChannelId) AdminData_GuildChannel
     , memberCount : Int
     , owner : Id UserId
+    }
+
+
+type alias AdminData_DeletedGuild =
+    { name : GuildName
+    , owner : Id UserId
+    , memberCount : Int
+    , deletedAt : Time.Posix
     }
 
 

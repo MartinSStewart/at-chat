@@ -5656,6 +5656,27 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 ]
             )
 
+        Pages.Admin.RestoreGuild guildId ->
+            case SeqDict.get guildId model.deletedGuilds of
+                Just deletedGuild ->
+                    let
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | guilds = SeqDict.insert guildId deletedGuild.guild model.guilds
+                                , deletedGuilds = SeqDict.remove guildId model.deletedGuilds
+                            }
+                    in
+                    ( model2
+                    , Command.batch
+                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                        ]
+                    )
+
+                Nothing ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
         Pages.Admin.StartReloadingDiscordGuildChannel _ userIdToLoadWith guildId channelId ->
             case
                 ( SeqDict.get userIdToLoadWith model.discordUsers
