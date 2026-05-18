@@ -6,6 +6,7 @@ module Types exposing
     , DiscordAttachmentData
     , Drag(..)
     , EditChannelForm
+    , EditGuildForm
     , EditMessage
     , EmojiSelector(..)
     , ExportState
@@ -74,7 +75,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, 
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -191,6 +192,7 @@ type alias LoggedIn2 =
     , drafts : SeqDict ( AnyGuildOrDmId, ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
+    , editGuildForm : SeqDict (Id GuildId) EditGuildForm
     , newGuildForm : Maybe NewGuildForm
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
@@ -300,6 +302,7 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
+    , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
@@ -395,6 +398,8 @@ type FrontendMsg
     | PressedResetEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
+    | EditGuildFormChanged (Id GuildId) EditGuildForm
+    | PressedDeleteGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
     | FrontendNoOp
     | PressedCopyText String
@@ -518,6 +523,12 @@ type alias EditChannelForm =
     , deleteConfirmation : String
     , showDeleteConfirmation : Bool
     , pressedSubmit : Bool
+    }
+
+
+type alias EditGuildForm =
+    { deleteConfirmation : String
+    , showDeleteConfirmation : Bool
     }
 
 
@@ -735,6 +746,7 @@ type ServerChange
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Server_DeleteGuild (Id GuildId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
     | Server_YouJoinedGuildByInvite
@@ -813,6 +825,7 @@ type LocalChange
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Local_DeleteGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )

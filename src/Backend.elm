@@ -44,7 +44,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), DeletedBackendGuild, DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -188,6 +188,7 @@ init =
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
+      , deletedGuilds = SeqDict.empty
       , isInitialized = False
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
@@ -1528,12 +1529,25 @@ update msg model =
 
                         Just lastScheduledExportTime ->
                             Duration.from lastScheduledExportTime time |> Quantity.greaterThanOrEqualTo (Duration.hours 4)
+
+                prunedDeletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
+                prunedDeletedGuilds =
+                    SeqDict.filter
+                        (\_ deletedGuild ->
+                            Duration.from deletedGuild.deletedAt time
+                                |> Quantity.lessThan (Duration.days 30)
+                        )
+                        model.deletedGuilds
+
+                model2 : BackendModel
+                model2 =
+                    { model | deletedGuilds = prunedDeletedGuilds }
             in
             ( if shouldExport then
-                startExport time model
+                startExport time model2
 
               else
-                { model
+                { model2
                     | lastScheduledExportTime =
                         case model.lastScheduledExportTime of
                             Just _ ->
@@ -2557,6 +2571,32 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_DeleteGuild guildId ->
+                    asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( { model
+                                | guilds = SeqDict.remove guildId model.guilds
+                                , deletedGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild = guild, deletedAt = time }
+                                        model.deletedGuilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_DeleteGuild guildId |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_NewInviteLink _ guildId _ ->
                     asGuildMember
                         model
@@ -2595,7 +2635,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             let
                                 guildId : Id GuildId
                                 guildId =
-                                    Id.nextId model.guilds
+                                    Id.fromInt
+                                        (max
+                                            (Id.toInt (Id.nextId model.guilds))
+                                            (Id.toInt (Id.nextId model.deletedGuilds))
+                                        )
 
                                 newGuild : BackendGuild
                                 newGuild =

@@ -1758,6 +1758,72 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.startTest
+        "Owner deletes a guild and it is purged after 30 days"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+                in
+                [ RecordedTestExtra.writeMessage admin 100 "hello world"
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "Type \"My new guild!\" to confirm deletion" ]
+                    )
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "wrong-name"
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.member guildId backend.guilds then
+                            Ok ()
+
+                        else
+                            Err "Wrong confirmation text should not delete the guild"
+                    )
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "My new guild!"
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.get guildId backend.deletedGuilds ) of
+                            ( False, Just _ ) ->
+                                Ok ()
+
+                            ( True, _ ) ->
+                                Err "Guild should be removed from active guilds"
+
+                            ( False, Nothing ) ->
+                                Err "Guild should be present in deletedGuilds"
+                    )
+                , T.fastForward (Duration.days 31)
+                , T.andThen
+                    100
+                    (\data ->
+                        [ T.backendUpdate 0 (Types.HourlyUpdate data.time) ]
+                    )
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.isEmpty backend.deletedGuilds then
+                            Ok ()
+
+                        else
+                            Err "deletedGuilds should be pruned after 30 days"
+                    )
+                ]
+            )
+        ]
     , RecordedTestExtra.goMatchTest normalConfig
     , RecordedTestExtra.goTurnNotificationDotTest normalConfig
     ]

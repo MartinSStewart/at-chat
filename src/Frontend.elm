@@ -407,6 +407,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
+            , editGuildForm = SeqDict.empty
             , newGuildForm = Nothing
             , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
@@ -983,6 +984,38 @@ updateLoaded msg model =
                                             loggedIn.drafts
                                     , editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                                }
+                                cmd
+                    in
+                    ( { model | loginStatus = LoggedIn loggedIn2 }, cmd2 )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        EditGuildFormChanged guildId form ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editGuildForm = SeqDict.insert guildId form loggedIn.editGuildForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedDeleteGuild guildId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        ( model2, cmd ) =
+                            FrontendExtra.routePush model HomePageRoute
+
+                        ( loggedIn2, cmd2 ) =
+                            FrontendExtra.handleLocalChange
+                                model2.time
+                                (Local_DeleteGuild guildId |> Just)
+                                { loggedIn
+                                    | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
                                 }
                                 cmd
                     in
