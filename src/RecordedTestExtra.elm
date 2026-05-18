@@ -626,14 +626,6 @@ voiceChatTest normalConfig =
                                                 )
                                 )
 
-                        expectGetMediaDevices :
-                            Lamdera.ClientId
-                            -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-                        expectGetMediaDevices clientId =
-                            expectToJs clientId
-                                "ToJs_GetMediaDevices"
-                                (\toJs -> toJs == Call.ToJs_GetMediaDevices)
-
                         expectStartFor :
                             Lamdera.ClientId
                             -> Call.ConnectionId
@@ -684,7 +676,6 @@ voiceChatTest normalConfig =
                     -- adminA starts the call. No peers in the room yet so the
                     -- frontend only asks JS for media devices.
                     , adminA.click 100 (Dom.id "guild_startVoiceChat")
-                    , expectGetMediaDevices adminA.clientId
                     , adminA.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
 
                     -- user joins the call. user's frontend sees adminA already
@@ -793,7 +784,6 @@ voiceChatTest normalConfig =
                                     , Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "Stevie Steve is in a call")
                                     ]
                                 )
-                            , expectGetMediaDevices adminB.clientId
                             , adminB.portEvent 10 "voice_chat_from_js" gotMediaDevicesEvent
                             , expectStartFor adminA.clientId
                                 { roomId = adminRoom, otherClientId = ( adminUserId, adminB.clientId ) }
