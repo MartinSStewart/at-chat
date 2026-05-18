@@ -605,11 +605,20 @@ getVoiceChatData clientId session model =
                                 ( Just roomId, False ) ->
                                     case roomId of
                                         DmRoomId dmingWith ->
-                                            if dmingWith == session.userId then
-                                                SeqDictHelper.addItem roomId ( otherSession.userId, otherClientId ) dict2
+                                            let
+                                                dmChannelId : DmChannelId
+                                                dmChannelId =
+                                                    DmChannel.channelIdFromUserIds otherSession.userId dmingWith
+                                            in
+                                            case DmChannel.otherUserId session.userId dmChannelId of
+                                                Just otherUserId ->
+                                                    SeqDictHelper.addItem
+                                                        (DmRoomId otherUserId)
+                                                        ( otherUserId, otherClientId )
+                                                        dict2
 
-                                            else
-                                                dict2
+                                                Nothing ->
+                                                    dict2
 
                                 _ ->
                                     dict2

@@ -778,6 +778,13 @@ voiceChatTest normalConfig =
                             [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                             , adminB.click 100 (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                             , adminB.click 100 (Dom.id "guild_voiceChat")
+                            , adminB.checkView
+                                100
+                                (Test.Html.Query.has
+                                    [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "AT is in a call")
+                                    , Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "Stevie Steve is in a call")
+                                    ]
+                                )
                             , adminB.click 100 (Dom.id "guild_startVoiceChat")
                             , adminB.checkView
                                 100
