@@ -5001,14 +5001,14 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
     case SeqDict.get sessionId model.connections of
         Just connections ->
             case NonemptyDict.get clientId connections of
-                Just _ ->
+                Just connection ->
                     let
                         voiceChatId : Call.RoomId
                         voiceChatId =
                             Call.DmRoomId otherUserId
 
                         ( model2, leaveCmd ) =
-                            case NonemptyDict.get clientId connections |> Maybe.andThen .call of
+                            case connection.call of
                                 Just oldVoiceChatId ->
                                     leaveVoiceHelper sessionId clientId time Nothing model session oldVoiceChatId
 
@@ -5032,7 +5032,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                             ( model2
                             , Command.batch
                                 [ Cloudflare.generateTurnCredentials
-                                    (Cloudflare.turnTokenId Env.cloudflareTurnTokenId)
+                                    (Cloudflare.turnTokenId Cloudflare.cloudflareTurnTokenId)
                                     (Cloudflare.turnApiToken apiToken)
                                     { ttlSeconds = 60 * 60 * 2 }
                                     |> Task.attempt (GotCloudflareTurnCredentials pending)
@@ -5060,7 +5060,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
 handleCloudflareTurnCredentials :
     PendingVoiceChatJoin
-    -> Result Http.Error Cloudflare.CloudflareTurnConfig
+    -> Result Http.Error (List Cloudflare.TurnConfig)
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleCloudflareTurnCredentials pending result model =
@@ -5074,20 +5074,16 @@ handleCloudflareTurnCredentials pending result model =
             )
 
         Ok creds ->
+            let
+                dmChannel =
+                    SeqDict.get pending.dmChannelId model.dmChannels |> Maybe.withDefault DmChannel.backendInit
+            in
             case
-                ( SeqDict.get pending.sessionId model.connections
+                SeqDict.get pending.sessionId model.connections
                     |> Maybe.andThen (NonemptyDict.get pending.clientId)
-                , SeqDict.get pending.dmChannelId model.dmChannels
-                )
             of
-                ( Just connection, Just dmChannel ) ->
+                Just connection ->
                     let
-                        turn : Call.TurnAuth
-                        turn =
-                            { username = creds.username
-                            , credential = SecretId.fromString creds.credential
-                            }
-
                         model2 : BackendModel
                         model2 =
                             { model
@@ -5114,7 +5110,7 @@ handleCloudflareTurnCredentials pending result model =
                     in
                     ( model2
                     , Command.batch
-                        [ Call.Local_Join pending.time pending.roomId (FilledInByBackend turn)
+                        [ Call.Local_Join pending.time pending.roomId (FilledInByBackend creds)
                             |> Local_VoiceChatChange
                             |> LocalChangeResponse pending.changeId
                             |> Lamdera.sendToFrontend pending.clientId
@@ -5128,14 +5124,14 @@ handleCloudflareTurnCredentials pending result model =
                                     { roomId = Call.DmRoomId otherUserId2
                                     , otherClientId = ( pending.userId, pending.clientId )
                                     }
-                                    turn
+                                    creds
                                     |> Server_VoiceChatChange
                             )
                             model2
                         ]
                     )
 
-                _ ->
+                Nothing ->
                     ( model
                     , Call.Local_Leave pending.time
                         |> Local_VoiceChatChange

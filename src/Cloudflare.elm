@@ -1,16 +1,20 @@
 module Cloudflare exposing
-    ( CloudflareTurnConfig
-    , TurnApiToken
+    ( TurnApiToken
+    , TurnConfig
     , TurnTokenId
+    , cloudflareTurnTokenId
+    , codec
     , generateTurnCredentials
     , turnApiToken
     , turnTokenId
     )
 
+import Codec exposing (Codec)
 import Duration
 import Effect.Http as Http
 import Effect.Task exposing (Task)
 import Json.Decode as Decode
+import Json.Decode.Extra
 import Json.Encode as Encode
 
 
@@ -32,17 +36,27 @@ turnApiToken =
     TurnApiToken
 
 
-type alias CloudflareTurnConfig =
-    { username : String
-    , credential : String
+type alias TurnConfig =
+    { urls : List String
+    , username : Maybe String
+    , credential : Maybe String
     }
+
+
+{-| Cloudflare Realtime TURN App identifier. Created in the Cloudflare
+dashboard under Realtime → TURN. Safe to expose; auth uses the API token
+set via the admin panel.
+-}
+cloudflareTurnTokenId : String
+cloudflareTurnTokenId =
+    "ab40bbb274153a438f78898aaca265a5"
 
 
 generateTurnCredentials :
     TurnTokenId
     -> TurnApiToken
     -> { ttlSeconds : Int }
-    -> Task restriction Http.Error CloudflareTurnConfig
+    -> Task restriction Http.Error (List TurnConfig)
 generateTurnCredentials (TurnTokenId tokenId) (TurnApiToken apiToken) { ttlSeconds } =
     Http.task
         { method = "POST"
@@ -70,7 +84,7 @@ generateTurnCredentials (TurnTokenId tokenId) (TurnApiToken apiToken) { ttlSecon
                             Err (Http.BadStatus metadata.statusCode)
 
                         Http.GoodStatus_ _ body ->
-                            case Decode.decodeString decodeIceServers body of
+                            case Codec.decodeString codec body of
                                 Ok result ->
                                     Ok result
 
@@ -81,10 +95,15 @@ generateTurnCredentials (TurnTokenId tokenId) (TurnApiToken apiToken) { ttlSecon
         }
 
 
-decodeIceServers : Decode.Decoder CloudflareTurnConfig
-decodeIceServers =
-    Decode.field "iceServers"
-        (Decode.map2 CloudflareTurnConfig
-            (Decode.field "username" Decode.string)
-            (Decode.field "credential" Decode.string)
-        )
+codec : Codec (List TurnConfig)
+codec =
+    Codec.object identity |> Codec.field "iceServers" identity (Codec.list turnConfigCodec) |> Codec.buildObject
+
+
+turnConfigCodec : Codec TurnConfig
+turnConfigCodec =
+    Codec.object TurnConfig
+        |> Codec.field "urls" .urls (Codec.list Codec.string)
+        |> Codec.optionalField "username" .username Codec.string
+        |> Codec.optionalField "credential" .credential Codec.string
+        |> Codec.buildObject

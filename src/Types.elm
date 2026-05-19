@@ -616,7 +616,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotCloudflareTurnCredentials PendingVoiceChatJoin (Result Http.Error Cloudflare.CloudflareTurnConfig)
+    | GotCloudflareTurnCredentials PendingVoiceChatJoin (Result Http.Error (List Cloudflare.TurnConfig))
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2

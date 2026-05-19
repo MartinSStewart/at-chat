@@ -43,6 +43,7 @@ port module Call exposing
     )
 
 import Bytes exposing (Bytes)
+import Cloudflare
 import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -75,13 +76,13 @@ import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend TurnAuth)
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (List Cloudflare.TurnConfig))
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId TurnAuth
+    = Server_Joined Time.Posix ConnectionId (List Cloudflare.TurnConfig)
     | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
 
@@ -988,8 +989,7 @@ type alias StartData =
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
-    , turnCredentials : SecretId TurnCredentials
-    , username : String
+    , turnConfig : List Cloudflare.TurnConfig
     }
 
 
@@ -1002,8 +1002,7 @@ startDataCodec =
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
-        |> Codec.field "turnCredentials" .turnCredentials SecretId.codec
-        |> Codec.field "username" .username Codec.string
+        |> Codec.field "turnConfig" .turnConfig Cloudflare.codec
         |> Codec.buildObject
 
 
@@ -1063,8 +1062,15 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startArgs : ClientId -> Id UserId -> ConnectionId -> Time.Posix -> TurnAuth -> Model -> Command FrontendOnly toMsg msg
-startArgs clientId _ connectionId _ turn model =
+startArgs :
+    ClientId
+    -> Id UserId
+    -> ConnectionId
+    -> Time.Posix
+    -> List Cloudflare.TurnConfig
+    -> Model
+    -> Command FrontendOnly toMsg msg
+startArgs clientId _ connectionId _ turnConfig model =
     { peerUserId = connectionId
     , shouldOffer =
         Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
@@ -1072,8 +1078,7 @@ startArgs clientId _ connectionId _ turn model =
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.audioInputEnabled
     , videoInputEnabled = model.videoInputEnabled
-    , turnCredentials = turn.credential
-    , username = turn.username
+    , turnConfig = turnConfig
     }
         |> ToJs_Start
         |> toJs

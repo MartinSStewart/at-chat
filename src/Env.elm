@@ -35,12 +35,3 @@ postmarkServerToken_ =
 slackClientId : String
 slackClientId =
     "9460466681300.9470334175105"
-
-
-{-| Cloudflare Realtime TURN App identifier. Created in the Cloudflare
-dashboard under Realtime → TURN. Safe to expose; auth uses the API token
-set via the admin panel.
--}
-cloudflareTurnTokenId : String
-cloudflareTurnTokenId =
-    ""
