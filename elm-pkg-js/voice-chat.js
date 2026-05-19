@@ -48,7 +48,6 @@ exports.init = async function init(app) {
             console.log(args);
 
             const pc = new RTCPeerConnection({
-                iceTransportPolicy: "relay",
                 iceServers: args.turnConfig
             });
 
@@ -114,21 +113,24 @@ exports.init = async function init(app) {
                 let remoteStream;
                 if (event.streams && event.streams[0]) {
                     remoteStream = event.streams[0];
-                    videoNode.srcObject = remoteStream;
                 } else {
                     // Fallback: build a stream from the single track.
                     remoteStream = new MediaStream();
                     remoteStream.addTrack(event.track);
+                }
+                if (videoNode) {
                     videoNode.srcObject = remoteStream;
                 }
                 if (event.track.kind === "audio" && !audioStreams.has(args.peerUserId)) {
                     handleAudioStream(remoteStream, args.peerUserId);
                 }
-                const playPromise = videoNode.play();
-                if (playPromise && typeof playPromise.catch === "function") {
-                    playPromise.catch(function (err) {
-                        console.error("Voice chat: play() rejected", err);
-                    });
+                if (videoNode) {
+                    const playPromise = videoNode.play();
+                    if (playPromise && typeof playPromise.catch === "function") {
+                        playPromise.catch(function (err) {
+                            console.error("Voice chat: play() rejected", err);
+                        });
+                    }
                 }
             };
 
@@ -411,10 +413,12 @@ exports.init = async function init(app) {
         if (localStreamPreview) {
             localStreamPreview.getTracks().forEach((s) => s.stop());
         }
-        if (videoNode.srcObject) {
-            videoNode.srcObject.getTracks().forEach((s) => s.stop());
+        if (videoNode) {
+            if (videoNode.srcObject) {
+                videoNode.srcObject.getTracks().forEach((s) => s.stop());
+            }
+            videoNode.srcObject = null;
         }
-        videoNode.srcObject = null;
         localStreamPreview = null;
         removeAudioStream("local-video");
     }
