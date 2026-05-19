@@ -21,7 +21,6 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
-    , TurnAuth
     , decodeToJs
     , displayMode
     , displayModeChangeCmd
@@ -37,7 +36,6 @@ port module Call exposing
     , startArgs
     , startLocalStream
     , toJs
-    , turnAuthCodec
     , videoNodes
     , view
     )
@@ -67,7 +65,6 @@ import List.Nonempty exposing (Nonempty)
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import Route exposing (DmChannelHeaderTab(..), Route(..))
-import SecretId exposing (SecretId, TurnCredentials)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -85,20 +82,6 @@ type ServerChange
     = Server_Joined Time.Posix ConnectionId (List Cloudflare.TurnConfig)
     | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
-
-
-type alias TurnAuth =
-    { username : String
-    , credential : SecretId TurnCredentials
-    }
-
-
-turnAuthCodec : Codec TurnAuth
-turnAuthCodec =
-    Codec.object TurnAuth
-        |> Codec.field "username" .username Codec.string
-        |> Codec.field "credential" .credential SecretId.codec
-        |> Codec.buildObject
 
 
 type Msg

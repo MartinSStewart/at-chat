@@ -3,7 +3,6 @@ module Cloudflare exposing
     , TurnConfig
     , TurnTokenId
     , cloudflareTurnTokenId
-    , codec
     , generateTurnCredentials
     , turnApiToken
     , turnConfigCodec
@@ -15,7 +14,6 @@ import Duration
 import Effect.Http as Http
 import Effect.Task exposing (Task)
 import Json.Decode as Decode
-import Json.Decode.Extra
 import Json.Encode as Encode
 
 
