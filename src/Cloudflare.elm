@@ -6,6 +6,7 @@ module Cloudflare exposing
     , codec
     , generateTurnCredentials
     , turnApiToken
+    , turnConfigCodec
     , turnTokenId
     )
 

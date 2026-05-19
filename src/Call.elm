@@ -1002,7 +1002,7 @@ startDataCodec =
         |> Codec.field "videoInput" .videoInput (Codec.nullable IdString.codec)
         |> Codec.field "audioInputEnabled" .audioInputEnabled Codec.bool
         |> Codec.field "videoInputEnabled" .videoInputEnabled Codec.bool
-        |> Codec.field "turnConfig" .turnConfig Cloudflare.codec
+        |> Codec.field "turnConfig" .turnConfig (Codec.list Cloudflare.turnConfigCodec)
         |> Codec.buildObject
 
 
