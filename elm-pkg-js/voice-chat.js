@@ -136,7 +136,7 @@ exports.init = async function init(app) {
                 const playPromise = videoNode.play();
                 if (playPromise && typeof playPromise.catch === "function") {
                     playPromise.catch(function (err) {
-                        console.error("Voice chat: audio play() rejected", err);
+                        console.error("Voice chat: play() rejected", err);
                     });
                 }
             };
@@ -464,7 +464,12 @@ exports.init = async function init(app) {
         setAudioInputEnabled(args.audioInputEnabled);
         setVideoInputEnabled(args.videoInputEnabled);
 
-        videoNode.play();
+        const playPromise = videoNode.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+            playPromise.catch(function (err) {
+                console.error("local-video: play() rejected", err);
+            });
+        }
         handleAudioStream(localStreamPreview, "local-video");
     }
 
