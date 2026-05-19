@@ -7,11 +7,12 @@ module Cloudflare exposing
     , SessionId
     , TrackName
     , appId
-    , cloudflareAppId
+    , appIdToString
     , createSession
     , pullRemoteTracks
     , pushLocalTracks
     , realtimeApiToken
+    , realtimeApiTokenToString
     , renegotiate
     , sdpCodec
     , sdpFromString
@@ -43,18 +44,19 @@ appId =
     AppId
 
 
+appIdToString : AppId -> String
+appIdToString (AppId a) =
+    a
+
+
 realtimeApiToken : String -> RealtimeApiToken
 realtimeApiToken =
     RealtimeApiToken
 
 
-{-| Cloudflare Realtime SFU App identifier. Created in the Cloudflare
-dashboard under Realtime → SFU. Safe to expose; auth uses the API token
-set via the admin panel.
--}
-cloudflareAppId : String
-cloudflareAppId =
-    ""
+realtimeApiTokenToString : RealtimeApiToken -> String
+realtimeApiTokenToString (RealtimeApiToken a) =
+    a
 
 
 type SessionId

@@ -214,6 +214,7 @@ init =
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
       , cloudflareRealtimeApiToken = Nothing
+      , cloudflareRealtimeAppId = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -5098,15 +5099,9 @@ handlePublishTracks :
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handlePublishTracks clientId changeId time offerSdp transceiverMids model session _ =
-    case model.cloudflareRealtimeApiToken of
-        Just apiToken ->
+    case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
+        ( Just apiToken, Just cloudflareAppId ) ->
             let
-                cfApp =
-                    Cloudflare.appId Cloudflare.cloudflareAppId
-
-                token =
-                    Cloudflare.realtimeApiToken apiToken
-
                 currentRoomId : Maybe Call.RoomId
                 currentRoomId =
                     findCallForClient clientId model
@@ -5117,11 +5112,11 @@ handlePublishTracks clientId changeId time offerSdp transceiverMids model sessio
             case currentRoomId of
                 Just roomId ->
                     ( model
-                    , Cloudflare.createSession cfApp token
+                    , Cloudflare.createSession cloudflareAppId apiToken
                         |> Task.andThen
                             (\sid ->
-                                Cloudflare.pushLocalTracks cfApp
-                                    token
+                                Cloudflare.pushLocalTracks cloudflareAppId
+                                    apiToken
                                     sid
                                     { offerSdp = offerSdp, transceiverMids = transceiverMids }
                                     |> Task.map (\result -> ( sid, result ))
@@ -5132,7 +5127,7 @@ handlePublishTracks clientId changeId time offerSdp transceiverMids model sessio
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
-        Nothing ->
+        _ ->
             ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
@@ -5325,14 +5320,19 @@ handlePullTracks :
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handlePullTracks sessionId clientId changeId connectionId remoteSessionId trackNames model _ _ =
-    case ( model.cloudflareRealtimeApiToken, SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId) ) of
-        ( Just apiToken, Just connection ) ->
+    case
+        ( model.cloudflareRealtimeApiToken
+        , model.cloudflareRealtimeAppId
+        , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
+        )
+    of
+        ( Just apiToken, Just appId, Just connection ) ->
             case connection.callSfu of
                 Just sfu ->
                     ( model
                     , Cloudflare.pullRemoteTracks
-                        (Cloudflare.appId Cloudflare.cloudflareAppId)
-                        (Cloudflare.realtimeApiToken apiToken)
+                        appId
+                        apiToken
                         sfu.sessionId
                         { remoteSessionId = remoteSessionId, trackNames = trackNames }
                         |> Task.attempt (GotCloudflarePullOffer clientId changeId connectionId remoteSessionId trackNames)
@@ -5377,16 +5377,17 @@ handleRenegotiateAnswer :
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleRenegotiateAnswer sessionId clientId answerSdp model _ _ =
-    case ( model.cloudflareRealtimeApiToken, SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId) ) of
-        ( Just apiToken, Just connection ) ->
+    case
+        ( model.cloudflareRealtimeApiToken
+        , model.cloudflareRealtimeAppId
+        , SeqDict.get sessionId model.connections |> Maybe.andThen (NonemptyDict.get clientId)
+        )
+    of
+        ( Just apiToken, Just appId, Just connection ) ->
             case connection.callSfu of
                 Just sfu ->
                     ( model
-                    , Cloudflare.renegotiate
-                        (Cloudflare.appId Cloudflare.cloudflareAppId)
-                        (Cloudflare.realtimeApiToken apiToken)
-                        sfu.sessionId
-                        { answerSdp = answerSdp }
+                    , Cloudflare.renegotiate appId apiToken sfu.sessionId { answerSdp = answerSdp }
                         |> Task.attempt GotCloudflareRenegotiateAck
                     )
 
@@ -5928,6 +5929,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
             ( { model | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetCloudflareRealtimeAppId maybeAppId ->
+            ( { model | cloudflareRealtimeAppId = maybeAppId }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

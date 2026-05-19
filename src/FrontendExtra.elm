@@ -4010,6 +4010,7 @@ initAdminData adminData =
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
     , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
+    , cloudflareRealtimeAppId = adminData.cloudflareRealtimeAppId
     , postmarkKey = adminData.postmarkApiKey
     , discordDmChannels = adminData.discordDmChannels
     , discordUsers = adminData.discordUsers

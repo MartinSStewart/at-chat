@@ -32,6 +32,7 @@ import Array.Extra
 import Bytes exposing (Bytes)
 import Call exposing (RoomId(..))
 import ChannelName
+import Cloudflare
 import CustomEmoji
 import Discord
 import Duration exposing (Duration)
@@ -122,7 +123,8 @@ type Msg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
-    | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe String))
+    | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.RealtimeApiToken))
+    | CloudflareRealtimeAppIdEditableMsg (Editable.Msg (Maybe Cloudflare.AppId))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -175,6 +177,7 @@ type alias Model =
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
     , cloudflareRealtimeApiToken : Editable.Model
+    , cloudflareRealtimeAppId : Editable.Model
     , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
@@ -214,7 +217,8 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareRealtimeApiToken : Maybe String
+    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
+    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkApiKey : Postmark.ApiKey
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
@@ -248,7 +252,8 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
-    | SetCloudflareRealtimeApiToken (Maybe String)
+    | SetCloudflareRealtimeApiToken (Maybe Cloudflare.RealtimeApiToken)
+    | SetCloudflareRealtimeAppId (Maybe Cloudflare.AppId)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -300,6 +305,7 @@ initForUser =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , cloudflareRealtimeApiToken = Editable.init
+    , cloudflareRealtimeAppId = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -324,6 +330,7 @@ initForAdmin { highlightLog } =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , cloudflareRealtimeApiToken = Editable.init
+    , cloudflareRealtimeAppId = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -407,6 +414,9 @@ updateAdmin changedBy change adminData local =
 
         SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
             { local | adminData = IsAdmin { adminData | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken } }
+
+        SetCloudflareRealtimeAppId cloudflareRealtimeAppId ->
+            { local | adminData = IsAdmin { adminData | cloudflareRealtimeAppId = cloudflareRealtimeAppId } }
 
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
@@ -1084,6 +1094,14 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetCloudflareRealtimeApiToken value |> AdminChange )
 
+        CloudflareRealtimeAppIdEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | cloudflareRealtimeAppId = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetCloudflareRealtimeAppId value |> AdminChange )
+
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1380,6 +1398,9 @@ pendingChangesText change =
 
         SetCloudflareRealtimeApiToken _ ->
             "Set Cloudflare Realtime API token"
+
+        SetCloudflareRealtimeAppId _ ->
+            "Set Cloudflare Realtime App ID"
 
         SetPostmarkKey _ ->
             "Set Postmark key"
@@ -1982,12 +2003,36 @@ apiKeysSection local user adminData2 model =
                     Ok Nothing
 
                 else
-                    Just text2 |> Ok
+                    Just (Cloudflare.realtimeApiToken text2) |> Ok
             )
             CloudflareRealtimeApiTokenEditableMsg
             (case adminData2.cloudflareRealtimeApiToken of
                 Just key ->
-                    key
+                    Cloudflare.realtimeApiTokenToString key
+
+                Nothing ->
+                    ""
+            )
+            model.cloudflareRealtimeApiToken
+        , Editable.view
+            (Dom.id "userOptions_cloudflareRealtimeAppId")
+            True
+            "Cloudflare Realtime App ID"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just (Cloudflare.appId text2) |> Ok
+            )
+            CloudflareRealtimeAppIdEditableMsg
+            (case adminData2.cloudflareRealtimeAppId of
+                Just key ->
+                    Cloudflare.appIdToString key
 
                 Nothing ->
                     ""
