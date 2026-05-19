@@ -16,6 +16,7 @@ import Bytes.Decode
 import Bytes.Encode
 import Call
 import ChannelDescription
+import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
@@ -36,8 +37,6 @@ import Env
 import FileStatus exposing (FileData, FileId)
 import Go
 import GuildName
-import HmacSha1
-import HmacSha1.Key
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, StickerId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Lamdera as LamderaCore
@@ -71,7 +70,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), PendingVoiceChatJoin, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -587,6 +586,9 @@ update msg model =
 
                 Err _ ->
                     ( model, Command.none )
+
+        GotCloudflareTurnCredentials pending result ->
+            handleCloudflareTurnCredentials pending result model
 
         LinkDiscordUserStep1 linkedAt clientId userId auth result ->
             case result of
@@ -4994,85 +4996,44 @@ joinDmVoiceChat :
     -> DmChannelId
     -> DmChannel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ dmChannelId dmChannel =
+joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ dmChannelId _ =
     case SeqDict.get sessionId model.connections of
         Just connections ->
             case NonemptyDict.get clientId connections of
-                Just connection ->
+                Just _ ->
                     let
                         voiceChatId : Call.RoomId
                         voiceChatId =
                             Call.DmRoomId otherUserId
 
-                        ( model2, cmd ) =
-                            case connection.call of
+                        ( model2, leaveCmd ) =
+                            case NonemptyDict.get clientId connections |> Maybe.andThen .call of
                                 Just oldVoiceChatId ->
                                     leaveVoiceHelper sessionId clientId time Nothing model session oldVoiceChatId
 
                                 Nothing ->
                                     ( model, Command.none )
 
-                        userCredentials : SecretId TurnCredentials
-                        userCredentials =
-                            HmacSha1.fromString
-                                (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
-                                (Call.turnUsername time session.userId)
-                                |> HmacSha1.toBase64
-                                |> SecretId.fromString
-
-                        otherUserCredentials : SecretId TurnCredentials
-                        otherUserCredentials =
-                            HmacSha1.fromString
-                                (HmacSha1.Key.fromString (SecretId.toString model2.serverSecret))
-                                (Call.turnUsername time otherUserId)
-                                |> HmacSha1.toBase64
-                                |> SecretId.fromString
+                        pending : PendingVoiceChatJoin
+                        pending =
+                            { sessionId = sessionId
+                            , clientId = clientId
+                            , changeId = changeId
+                            , time = time
+                            , userId = session.userId
+                            , otherUserId = otherUserId
+                            , dmChannelId = dmChannelId
+                            , roomId = voiceChatId
+                            }
                     in
-                    ( { model2
-                        | connections =
-                            SeqDict.insert
-                                sessionId
-                                (NonemptyDict.insert clientId { connection | call = Just voiceChatId } connections)
-                                model2.connections
-                        , dmChannels =
-                            SeqDict.insert
-                                dmChannelId
-                                (LocalState.createChannelMessageBackend
-                                    (CallStarted time session.userId SeqDict.empty)
-                                    dmChannel
-                                    |> Tuple.second
-                                )
-                                model2.dmChannels
-                      }
+                    ( model2
                     , Command.batch
-                        [ Local_VoiceChatChange
-                            (Call.Local_Join
-                                time
-                                voiceChatId
-                                (FilledInByBackend userCredentials)
-                            )
-                            |> LocalChangeResponse changeId
-                            |> Lamdera.sendToFrontend clientId
-                        , Broadcast.toDmChannelExcludingOne
-                            clientId
-                            session.userId
-                            otherUserId
-                            (\otherUserId2 ->
-                                Call.Server_Joined
-                                    time
-                                    { roomId = Call.DmRoomId otherUserId2
-                                    , otherClientId = ( session.userId, clientId )
-                                    }
-                                    (if otherUserId2 == session.userId then
-                                        otherUserCredentials
-
-                                     else
-                                        userCredentials
-                                    )
-                                    |> Server_VoiceChatChange
-                            )
-                            model2
-                        , cmd
+                        [ Cloudflare.generateTurnCredentials
+                            (Cloudflare.turnTokenId Env.cloudflareTurnTokenId)
+                            (Cloudflare.turnApiToken Env.cloudflareTurnApiToken)
+                            { ttlSeconds = 60 * 60 * 2 }
+                            |> Task.attempt (GotCloudflareTurnCredentials pending)
+                        , leaveCmd
                         ]
                     )
 
@@ -5081,6 +5042,92 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
 
         Nothing ->
             ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+
+handleCloudflareTurnCredentials :
+    PendingVoiceChatJoin
+    -> Result Http.Error Cloudflare.CloudflareTurnConfig
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleCloudflareTurnCredentials pending result model =
+    case result of
+        Err _ ->
+            ( model
+            , Call.Local_Leave pending.time
+                |> Local_VoiceChatChange
+                |> LocalChangeResponse pending.changeId
+                |> Lamdera.sendToFrontend pending.clientId
+            )
+
+        Ok creds ->
+            case
+                ( SeqDict.get pending.sessionId model.connections
+                    |> Maybe.andThen (NonemptyDict.get pending.clientId)
+                , SeqDict.get pending.dmChannelId model.dmChannels
+                )
+            of
+                ( Just connection, Just dmChannel ) ->
+                    let
+                        turn : Call.TurnAuth
+                        turn =
+                            { username = creds.username
+                            , credential = SecretId.fromString creds.credential
+                            }
+
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | connections =
+                                    SeqDict.update
+                                        pending.sessionId
+                                        (Maybe.map
+                                            (NonemptyDict.insert
+                                                pending.clientId
+                                                { connection | call = Just pending.roomId }
+                                            )
+                                        )
+                                        model.connections
+                                , dmChannels =
+                                    SeqDict.insert
+                                        pending.dmChannelId
+                                        (LocalState.createChannelMessageBackend
+                                            (CallStarted pending.time pending.userId SeqDict.empty)
+                                            dmChannel
+                                            |> Tuple.second
+                                        )
+                                        model.dmChannels
+                            }
+                    in
+                    ( model2
+                    , Command.batch
+                        [ Call.Local_Join pending.time pending.roomId (FilledInByBackend turn)
+                            |> Local_VoiceChatChange
+                            |> LocalChangeResponse pending.changeId
+                            |> Lamdera.sendToFrontend pending.clientId
+                        , Broadcast.toDmChannelExcludingOne
+                            pending.clientId
+                            pending.userId
+                            pending.otherUserId
+                            (\otherUserId2 ->
+                                Call.Server_Joined
+                                    pending.time
+                                    { roomId = Call.DmRoomId otherUserId2
+                                    , otherClientId = ( pending.userId, pending.clientId )
+                                    }
+                                    turn
+                                    |> Server_VoiceChatChange
+                            )
+                            model2
+                        ]
+                    )
+
+                _ ->
+                    ( model
+                    , Call.Local_Leave pending.time
+                        |> Local_VoiceChatChange
+                        |> LocalChangeResponse pending.changeId
+                        |> Lamdera.sendToFrontend pending.clientId
+                    )
 
 
 voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool

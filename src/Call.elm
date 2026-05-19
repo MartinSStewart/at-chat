@@ -21,6 +21,7 @@ port module Call exposing
     , StartData
     , StartLocalStreamData
     , ToJs(..)
+    , TurnAuth
     , decodeToJs
     , displayMode
     , displayModeChangeCmd
@@ -36,7 +37,7 @@ port module Call exposing
     , startArgs
     , startLocalStream
     , toJs
-    , turnUsername
+    , turnAuthCodec
     , videoNodes
     , view
     )
@@ -46,7 +47,6 @@ import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel
-import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera exposing (ClientId)
@@ -75,15 +75,29 @@ import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (SecretId TurnCredentials))
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend TurnAuth)
     | Local_Leave Time.Posix
     | Local_Signal ConnectionId Signal
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId (SecretId TurnCredentials)
+    = Server_Joined Time.Posix ConnectionId TurnAuth
     | Server_Left Time.Posix ConnectionId
     | Server_SignalReceived ConnectionId Signal
+
+
+type alias TurnAuth =
+    { username : String
+    , credential : SecretId TurnCredentials
+    }
+
+
+turnAuthCodec : Codec TurnAuth
+turnAuthCodec =
+    Codec.object TurnAuth
+        |> Codec.field "username" .username Codec.string
+        |> Codec.field "credential" .credential SecretId.codec
+        |> Codec.buildObject
 
 
 type Msg
@@ -370,20 +384,6 @@ displayMode currentUserId route local =
 localVideoNodeId : String
 localVideoNodeId =
     "local-video"
-
-
-turnUsername : Time.Posix -> Id UserId -> String
-turnUsername expirationTime userId =
-    let
-        ttl : Duration
-        ttl =
-            Duration.minutes 10
-
-        expiry : Int
-        expiry =
-            Time.posixToMillis (Duration.addTo expirationTime ttl) // 1000
-    in
-    String.fromInt expiry ++ ":" ++ Id.toString userId
 
 
 videoNodes :
@@ -1063,8 +1063,8 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startArgs : ClientId -> Id UserId -> ConnectionId -> Time.Posix -> SecretId TurnCredentials -> Model -> Command FrontendOnly toMsg msg
-startArgs clientId currentUserId connectionId credentialsExpiresAt turnCredentials model =
+startArgs : ClientId -> Id UserId -> ConnectionId -> Time.Posix -> TurnAuth -> Model -> Command FrontendOnly toMsg msg
+startArgs clientId _ connectionId _ turn model =
     { peerUserId = connectionId
     , shouldOffer =
         Lamdera.clientIdToString clientId < Lamdera.clientIdToString (Tuple.second connectionId.otherClientId)
@@ -1072,8 +1072,8 @@ startArgs clientId currentUserId connectionId credentialsExpiresAt turnCredentia
     , videoInput = model.selectedVideoInputDevice
     , audioInputEnabled = model.audioInputEnabled
     , videoInputEnabled = model.videoInputEnabled
-    , turnCredentials = turnCredentials
-    , username = turnUsername credentialsExpiresAt currentUserId
+    , turnCredentials = turn.credential
+    , username = turn.username
     }
         |> ToJs_Start
         |> toJs

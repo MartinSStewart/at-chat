@@ -31,6 +31,7 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
+    , PendingVoiceChatJoin
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -48,6 +49,7 @@ import Bytes exposing (Bytes)
 import Call exposing (ChannelSidebarMode, FromJs, RoomId)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import Cloudflare
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
@@ -340,6 +342,18 @@ type alias BackendModel =
     }
 
 
+type alias PendingVoiceChatJoin =
+    { sessionId : SessionId
+    , clientId : ClientId
+    , changeId : ChangeId
+    , time : Time.Posix
+    , userId : Id UserId
+    , otherUserId : Id UserId
+    , dmChannelId : DmChannelId
+    , roomId : RoomId
+    }
+
+
 type alias DiscordAttachmentData =
     { fileHash : FileHash, imageMetadata : Maybe FileStatus.ImageMetadata }
 
@@ -601,6 +615,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
+    | GotCloudflareTurnCredentials PendingVoiceChatJoin (Result Http.Error Cloudflare.CloudflareTurnConfig)
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
