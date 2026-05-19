@@ -11,7 +11,8 @@
 * Message stickers and message custom emojis gets added to a user's available emojis on the frontend when it shouldn't
   do that
 * Video call preview not closed when leaving channel on mobile
-* Messages disappear for one user (are still sent but vanishing locally)
+* Messages disappear for one user (are still sent but vanishing locally). This is happening when backups are created.
+  Need to make backups lock up server less
 
 Requested features:
 
