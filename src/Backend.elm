@@ -213,6 +213,7 @@ init =
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
+      , cloudflareTurnApiToken = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -5026,16 +5027,29 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                             , roomId = voiceChatId
                             }
                     in
-                    ( model2
-                    , Command.batch
-                        [ Cloudflare.generateTurnCredentials
-                            (Cloudflare.turnTokenId Env.cloudflareTurnTokenId)
-                            (Cloudflare.turnApiToken Env.cloudflareTurnApiToken)
-                            { ttlSeconds = 60 * 60 * 2 }
-                            |> Task.attempt (GotCloudflareTurnCredentials pending)
-                        , leaveCmd
-                        ]
-                    )
+                    case model2.cloudflareTurnApiToken of
+                        Just apiToken ->
+                            ( model2
+                            , Command.batch
+                                [ Cloudflare.generateTurnCredentials
+                                    (Cloudflare.turnTokenId Env.cloudflareTurnTokenId)
+                                    (Cloudflare.turnApiToken apiToken)
+                                    { ttlSeconds = 60 * 60 * 2 }
+                                    |> Task.attempt (GotCloudflareTurnCredentials pending)
+                                , leaveCmd
+                                ]
+                            )
+
+                        Nothing ->
+                            ( model2
+                            , Command.batch
+                                [ Call.Local_Leave time
+                                    |> Local_VoiceChatChange
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , leaveCmd
+                                ]
+                            )
 
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -5656,6 +5670,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetOpenRouterKey openRouterKey ->
             ( { model | openRouterKey = openRouterKey }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetCloudflareTurnApiToken cloudflareTurnApiToken ->
+            ( { model | cloudflareTurnApiToken = cloudflareTurnApiToken }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

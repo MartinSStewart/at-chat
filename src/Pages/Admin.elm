@@ -122,6 +122,7 @@ type Msg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | CloudflareTurnApiTokenEditableMsg (Editable.Msg (Maybe String))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -173,6 +174,7 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , cloudflareTurnApiToken : Editable.Model
     , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
@@ -212,6 +214,7 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , cloudflareTurnApiToken : Maybe String
     , postmarkApiKey : Postmark.ApiKey
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
@@ -245,6 +248,7 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
+    | SetCloudflareTurnApiToken (Maybe String)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -295,6 +299,7 @@ initForUser =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , cloudflareTurnApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -318,6 +323,7 @@ initForAdmin { highlightLog } =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , cloudflareTurnApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -398,6 +404,9 @@ updateAdmin changedBy change adminData local =
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
+
+        SetCloudflareTurnApiToken cloudflareTurnApiToken ->
+            { local | adminData = IsAdmin { adminData | cloudflareTurnApiToken = cloudflareTurnApiToken } }
 
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
@@ -1067,6 +1076,14 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetOpenRouterKey value |> AdminChange )
 
+        CloudflareTurnApiTokenEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | cloudflareTurnApiToken = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetCloudflareTurnApiToken value |> AdminChange )
+
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1360,6 +1377,9 @@ pendingChangesText change =
 
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
+
+        SetCloudflareTurnApiToken _ ->
+            "Set Cloudflare TURN API token"
 
         SetPostmarkKey _ ->
             "Set Postmark key"
@@ -1949,6 +1969,30 @@ apiKeysSection local user adminData2 model =
                     ""
             )
             model.openRouterKey
+        , Editable.view
+            (Dom.id "userOptions_cloudflareTurnApiToken")
+            True
+            "Cloudflare TURN API token"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just text2 |> Ok
+            )
+            CloudflareTurnApiTokenEditableMsg
+            (case adminData2.cloudflareTurnApiToken of
+                Just key ->
+                    key
+
+                Nothing ->
+                    ""
+            )
+            model.cloudflareTurnApiToken
         , Editable.view
             (Dom.id "userOptions_postmarkKey")
             True

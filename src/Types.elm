@@ -320,6 +320,7 @@ type alias BackendModel =
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , cloudflareTurnApiToken : Maybe String
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )

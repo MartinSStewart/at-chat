@@ -491,6 +491,7 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , cloudflareTurnApiToken : Maybe String
     , postmarkKey : Postmark.ApiKey
     , discordDmChannels :
         SeqDict

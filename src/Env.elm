@@ -38,16 +38,9 @@ slackClientId =
 
 
 {-| Cloudflare Realtime TURN App identifier. Created in the Cloudflare
-dashboard under Realtime → TURN. Safe to expose; auth uses the API token.
+dashboard under Realtime → TURN. Safe to expose; auth uses the API token
+set via the admin panel.
 -}
 cloudflareTurnTokenId : String
 cloudflareTurnTokenId =
-    ""
-
-
-{-| Cloudflare Realtime TURN App API token. Secret — keep out of the
-frontend bundle. Used by the backend to mint short-lived TURN credentials.
--}
-cloudflareTurnApiToken : String
-cloudflareTurnApiToken =
     ""
