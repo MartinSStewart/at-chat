@@ -23,7 +23,7 @@ import Bitwise
 import Call
 import ChannelDescription
 import ChannelHeader
-import ChannelName
+import ChannelName exposing (ChannelName)
 import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
@@ -6369,7 +6369,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                                 (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
                                 channel
                     in
-                    ( hasNotifications
+                    ( channelSortName hasNotifications channel
                     , Ui.column
                         []
                         [ channelColumnRow
@@ -6403,23 +6403,27 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                     )
                 )
                 (SeqDict.toList guild.channels)
-                |> List.sortBy
-                    (\( hasNotifications, _ ) ->
-                        case hasNotifications of
-                            NoNotification ->
-                                2
-
-                            NewMessage _ ->
-                                1
-
-                            NewMessageForUser _ ->
-                                0
-                    )
+                |> List.sortBy Tuple.first
                 |> List.map Tuple.second
              )
                 ++ [ newChannelButton ]
             )
         )
+
+
+channelSortName : ChannelNotificationType -> { a | name : ChannelName } -> String
+channelSortName hasNotifications channel =
+    (case hasNotifications of
+        NoNotification ->
+            "c"
+
+        NewMessage _ ->
+            "b"
+
+        NewMessageForUser _ ->
+            "a"
+    )
+        ++ ChannelName.toString channel.name
 
 
 discordChannelColumn :
@@ -6494,7 +6498,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                                 (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
                                 channel
                     in
-                    ( hasNotifications
+                    ( channelSortName hasNotifications channel
                     , Ui.column
                         []
                         [ discordChannelColumnRow
@@ -6526,18 +6530,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                     )
                 )
                 (SeqDict.toList guild.channels)
-                |> List.sortBy
-                    (\( hasNotifications, _ ) ->
-                        case hasNotifications of
-                            NoNotification ->
-                                2
-
-                            NewMessage _ ->
-                                1
-
-                            NewMessageForUser _ ->
-                                0
-                    )
+                |> List.sortBy Tuple.first
                 |> List.map Tuple.second
             )
         )
