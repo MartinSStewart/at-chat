@@ -1897,6 +1897,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                               }
                             , getUserAvatars model2.serverSecret model2.discordUsers [ user ] :: cmds
                             )
+
+                        Discord.UserOutMsg_GuildScheduledEventUserAdd _ ->
+                            ( model2, cmds )
+
+                        Discord.UserOutMsg_GuildScheduledEventUserRemove _ ->
+                            ( model2, cmds )
                 )
                 ( { model
                     | discordUsers =
