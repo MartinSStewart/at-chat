@@ -51,7 +51,10 @@ exports.init = async function init(app) {
                 iceTransportPolicy: "relay",
                 iceServers:
                     [ { urls: "stun:stun.l.google.com:19302" }
-                    , { urls: ["turn:turn.at-chat.app:3478", "turns:turn.at-chat.app:5349"]
+                    , { urls: [ "turn:turn.at-chat.app:3478?transport=udp"
+                              , "turn:turn.at-chat.app:3478?transport=tcp"
+                              , "turns:turn.at-chat.app:5349?transport=tcp"
+                              ]
                       , username: args.username
                       , credential: args.turnCredentials
                       }
