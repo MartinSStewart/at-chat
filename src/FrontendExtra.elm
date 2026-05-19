@@ -224,8 +224,14 @@ pendingChangesText localChange =
                 Call.Local_Leave _ ->
                     "Left voice chat"
 
-                Call.Local_Signal _ _ ->
-                    "Voice chat state change"
+                Call.Local_PublishTracks _ _ _ ->
+                    "Publish tracks"
+
+                Call.Local_PullTracks _ _ _ _ ->
+                    "Pull tracks"
+
+                Call.Local_RenegotiateAnswer _ ->
+                    "Renegotiate"
 
         Local_Go _ change ->
             case change of
@@ -2685,7 +2691,13 @@ changeUpdate localMsg local =
                         Call.Local_Leave time ->
                             leaveCall time local
 
-                        Call.Local_Signal _ _ ->
+                        Call.Local_PublishTracks _ _ _ ->
+                            local
+
+                        Call.Local_PullTracks _ _ _ _ ->
+                            local
+
+                        Call.Local_RenegotiateAnswer _ ->
                             local
 
                 Local_Go { otherUserId } goChange ->
@@ -3743,7 +3755,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Server_Joined time { roomId, otherClientId } _ ->
+                        Call.Server_Joined time { roomId, otherClientId } _ _ ->
                             { local
                                 | calls =
                                     { calls | voiceChats = SeqDictHelper.addItem roomId otherClientId calls.voiceChats }
@@ -3768,9 +3780,6 @@ changeUpdate localMsg local =
 
                         Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
-
-                        Call.Server_SignalReceived _ _ ->
-                            local
 
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
@@ -4000,7 +4009,7 @@ initAdminData adminData =
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
-    , cloudflareTurnApiToken = adminData.cloudflareTurnApiToken
+    , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
     , postmarkKey = adminData.postmarkApiKey
     , discordDmChannels = adminData.discordDmChannels
     , discordUsers = adminData.discordUsers

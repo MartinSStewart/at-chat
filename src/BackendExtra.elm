@@ -764,7 +764,7 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
-    , cloudflareTurnApiToken = model.cloudflareTurnApiToken
+    , cloudflareRealtimeApiToken = model.cloudflareRealtimeApiToken
     , postmarkApiKey = model.postmarkApiKey
     , discordDmChannels =
         SeqDict.map

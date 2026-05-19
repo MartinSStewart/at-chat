@@ -31,7 +31,6 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
-    , PendingVoiceChatJoin
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -320,7 +319,7 @@ type alias BackendModel =
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareTurnApiToken : Maybe String
+    , cloudflareRealtimeApiToken : Maybe String
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
@@ -340,18 +339,6 @@ type alias BackendModel =
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
-    }
-
-
-type alias PendingVoiceChatJoin =
-    { sessionId : SessionId
-    , clientId : ClientId
-    , changeId : ChangeId
-    , time : Time.Posix
-    , userId : Id UserId
-    , otherUserId : Id UserId
-    , dmChannelId : DmChannelId
-    , roomId : RoomId
     }
 
 
@@ -616,7 +603,9 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotCloudflareTurnCredentials PendingVoiceChatJoin (Result Http.Error (List Cloudflare.TurnConfig))
+    | GotCloudflareSession ClientId ChangeId Time.Posix Call.RoomId (Result Http.Error ( Cloudflare.SessionId, Cloudflare.PushTracksResult ))
+    | GotCloudflarePullOffer ClientId ChangeId Call.ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
+    | GotCloudflareRenegotiateAck (Result Http.Error ())
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2

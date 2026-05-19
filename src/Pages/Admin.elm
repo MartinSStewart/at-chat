@@ -122,7 +122,7 @@ type Msg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
-    | CloudflareTurnApiTokenEditableMsg (Editable.Msg (Maybe String))
+    | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe String))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -174,7 +174,7 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
-    , cloudflareTurnApiToken : Editable.Model
+    , cloudflareRealtimeApiToken : Editable.Model
     , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
@@ -214,7 +214,7 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareTurnApiToken : Maybe String
+    , cloudflareRealtimeApiToken : Maybe String
     , postmarkApiKey : Postmark.ApiKey
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
@@ -248,7 +248,7 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
-    | SetCloudflareTurnApiToken (Maybe String)
+    | SetCloudflareRealtimeApiToken (Maybe String)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -299,7 +299,7 @@ initForUser =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
-    , cloudflareTurnApiToken = Editable.init
+    , cloudflareRealtimeApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -323,7 +323,7 @@ initForAdmin { highlightLog } =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
-    , cloudflareTurnApiToken = Editable.init
+    , cloudflareRealtimeApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -405,8 +405,8 @@ updateAdmin changedBy change adminData local =
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
 
-        SetCloudflareTurnApiToken cloudflareTurnApiToken ->
-            { local | adminData = IsAdmin { adminData | cloudflareTurnApiToken = cloudflareTurnApiToken } }
+        SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
+            { local | adminData = IsAdmin { adminData | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken } }
 
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
@@ -1076,13 +1076,13 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetOpenRouterKey value |> AdminChange )
 
-        CloudflareTurnApiTokenEditableMsg editableMsg ->
+        CloudflareRealtimeApiTokenEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
-                    ( { model | cloudflareTurnApiToken = editable }, Command.none, NoOutMsg )
+                    ( { model | cloudflareRealtimeApiToken = editable }, Command.none, NoOutMsg )
 
                 Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetCloudflareTurnApiToken value |> AdminChange )
+                    ( model, Command.none, SetCloudflareRealtimeApiToken value |> AdminChange )
 
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
@@ -1378,8 +1378,8 @@ pendingChangesText change =
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
 
-        SetCloudflareTurnApiToken _ ->
-            "Set Cloudflare TURN API token"
+        SetCloudflareRealtimeApiToken _ ->
+            "Set Cloudflare Realtime API token"
 
         SetPostmarkKey _ ->
             "Set Postmark key"
@@ -1970,9 +1970,9 @@ apiKeysSection local user adminData2 model =
             )
             model.openRouterKey
         , Editable.view
-            (Dom.id "userOptions_cloudflareTurnApiToken")
+            (Dom.id "userOptions_cloudflareRealtimeApiToken")
             True
-            "Cloudflare TURN API token"
+            "Cloudflare Realtime API token"
             (\text ->
                 let
                     text2 =
@@ -1984,15 +1984,15 @@ apiKeysSection local user adminData2 model =
                 else
                     Just text2 |> Ok
             )
-            CloudflareTurnApiTokenEditableMsg
-            (case adminData2.cloudflareTurnApiToken of
+            CloudflareRealtimeApiTokenEditableMsg
+            (case adminData2.cloudflareRealtimeApiToken of
                 Just key ->
                     key
 
                 Nothing ->
                     ""
             )
-            model.cloudflareTurnApiToken
+            model.cloudflareRealtimeApiToken
         , Editable.view
             (Dom.id "userOptions_postmarkKey")
             True

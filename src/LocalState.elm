@@ -111,6 +111,7 @@ import Array.Extra
 import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import Cloudflare
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -491,7 +492,7 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , cloudflareTurnApiToken : Maybe String
+    , cloudflareRealtimeApiToken : Maybe String
     , postmarkKey : Postmark.ApiKey
     , discordDmChannels :
         SeqDict
@@ -513,7 +514,10 @@ type alias AdminData =
 
 
 type alias ConnectionData =
-    { lastRequest : LastRequest, call : Maybe Call.RoomId }
+    { lastRequest : LastRequest
+    , call : Maybe Call.RoomId
+    , callSfu : Maybe { sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName }
+    }
 
 
 type ServerSecretStatus

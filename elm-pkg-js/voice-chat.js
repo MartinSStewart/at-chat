@@ -1,392 +1,346 @@
 exports.init = async function init(app) {
-    const connections = new Map();
-    const pendingSignals = new Map();
+    // Single SFU connection. Cloudflare Realtime uses one RTCPeerConnection
+    // per client; we publish our own tracks and subscribe to other
+    // participants' tracks through transceivers on that one PC.
+    let sfu = null;
     let localStreamPreview = null;
 
-    async function logSelectedPair(pc, peerUserId) {
+    // SFU state shape:
+    //   pc: RTCPeerConnection
+    //   localStream: MediaStream from getUserMedia
+    //   audioMid / videoMid: transceiver MIDs we published
+    //   pendingExistingPeers: peers from ToJs_StartCall, drained once publish completes
+    //   peerSubs: Map<connectionIdKey, {
+    //       connectionId,
+    //       trackNames: string[],
+    //       transceivers: RTCRtpTransceiver[],
+    //       videoNode,
+    //   }>
+    //   pendingPullsByTrack: Map<trackName, connectionIdKey>  // for matching incoming tracks
+    //   waitingForPublishAnswer: bool
+
+    function connectionKey(connectionId) {
+        // ConnectionId codec produces { roomId, otherClientId: [userId, clientId] }
+        const [userId, clientId] = connectionId.otherClientId;
+        return userId + "|" + clientId;
+    }
+
+    function peerVideoNodeId(connectionId) {
+        const [userId, clientId] = connectionId.otherClientId;
+        return userId + " " + clientId;
+    }
+
+    async function startCall(args) {
+        await stopCall();
+
+        let localStream;
         try {
-            const stats = await pc.getStats();
-            const candidates = new Map();
-            let pair = null;
-            stats.forEach(function (r) {
-                if (r.type === "local-candidate" || r.type === "remote-candidate") {
-                    candidates.set(r.id, r);
-                }
-                if (r.type === "candidate-pair" && (r.nominated || r.selected || r.state === "succeeded")) {
-                    if (!pair || r.nominated) pair = r;
-                }
+            localStream = await getUserMedia(args);
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const defaultDevices = [];
+            localStream.getTracks().forEach(function (track) {
+                defaultDevices.push(track.getSettings().deviceId);
             });
-            if (!pair) {
-                console.log("Voice chat: getStats", peerUserId, "no nominated/succeeded pair yet");
-                return;
-            }
-            const local = candidates.get(pair.localCandidateId);
-            const remote = candidates.get(pair.remoteCandidateId);
-            console.log("Voice chat: getStats", peerUserId, {
-                state: pair.state,
-                nominated: pair.nominated,
-                bytesSent: pair.bytesSent,
-                bytesReceived: pair.bytesReceived,
-                requestsSent: pair.requestsSent,
-                responsesReceived: pair.responsesReceived,
-                responsesSent: pair.responsesSent,
-                consentRequestsSent: pair.consentRequestsSent,
-                currentRoundTripTime: pair.currentRoundTripTime,
-                local: local && { type: local.candidateType, protocol: local.protocol, address: local.address, port: local.port, url: local.url, relayProtocol: local.relayProtocol },
-                remote: remote && { type: remote.candidateType, protocol: remote.protocol, address: remote.address, port: remote.port }
-            });
+            app.ports.voice_chat_from_js.send({ tag: "got-media-devices", args: [devices, defaultDevices] });
         } catch (e) {
-            console.error("Voice chat: getStats failed", peerUserId, e);
-        }
-    }
-
-    async function startConnection(args) {
-        try {
-
-            stopConnection(args.peerUserId);
-
-            console.log(args);
-
-            const pc = new RTCPeerConnection({
-                iceServers: args.turnConfig
-            });
-
-
-            try {
-                let localStream = await getUserMedia(args);
-                let devices = await navigator.mediaDevices.enumerateDevices();
-
-                let defaultDevices = [];
-                localStream.getTracks().forEach(function (track) {
-                    defaultDevices.push(track.getSettings().deviceId);
-                    pc.addTrack(track, localStream);
-                });
-
-                app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
-            } catch (e) {
-                app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
-                return;
-            }
-
-
-    //        let mediaRecorder = new MediaRecorder(localStream);
-    //
-    //        let startTime = Date.now();
-    //        console.log("Start", startTime);
-    //
-    //        mediaRecorder.addEventListener("dataavailable", async (e) => {
-    //            let endTime = Date.now();
-    //            const peerIdBytes = new TextEncoder().encode(peerUserId);
-    //            const typeBytes = new TextEncoder().encode(e.data.type);
-    //            const dataBuffer = await e.data.arrayBuffer();
-    //            const result = new ArrayBuffer(1 + peerIdBytes.length + 1 + typeBytes.length + 8 + 8 + dataBuffer.byteLength);
-    //            const view = new DataView(result);
-    //            const bytes = new Uint8Array(result);
-    //
-    //            view.setUint8(0, peerIdBytes.length);
-    //            bytes.set(peerIdBytes, 1);
-    //            let offset = 1 + peerIdBytes.length;
-    //            view.setUint8(offset, typeBytes.length);
-    //            offset += 1;
-    //            bytes.set(typeBytes, offset);
-    //            offset += typeBytes.length;
-    //
-    //            view.setFloat64(offset, startTime);
-    //            offset += 8;
-    //            view.setFloat64(offset, endTime);
-    //            offset += 8;
-    //
-    //            bytes.set(new Uint8Array(dataBuffer), offset);
-    //            app.ports.got_recorded_data.send(new DataView(result));
-    //        });
-    //        mediaRecorder.start();
-
-
-
-            console.log("Voice chat: startConnection", args.peerUserId);
-
-            const videoNode = document.getElementById(args.peerUserId);
-
-            pc.ontrack = function (event) {
-                console.log("Voice chat: ontrack", args.peerUserId, event.streams);
-
-                let remoteStream;
-                if (event.streams && event.streams[0]) {
-                    remoteStream = event.streams[0];
-                } else {
-                    // Fallback: build a stream from the single track.
-                    remoteStream = new MediaStream();
-                    remoteStream.addTrack(event.track);
-                }
-                if (videoNode) {
-                    videoNode.srcObject = remoteStream;
-                }
-                if (event.track.kind === "audio" && !audioStreams.has(args.peerUserId)) {
-                    handleAudioStream(remoteStream, args.peerUserId);
-                }
-                if (videoNode) {
-                    const playPromise = videoNode.play();
-                    if (playPromise && typeof playPromise.catch === "function") {
-                        playPromise.catch(function (err) {
-                            console.error("Voice chat: play() rejected", err);
-                        });
-                    }
-                }
-            };
-
-            pc.oniceconnectionstatechange = function () {
-                console.log("oniceconnectionstatechange", args.peerUserId, pc.iceConnectionState);
-                logSelectedPair(pc, args.peerUserId);
-            };
-            pc.onconnectionstatechange = function () {
-                console.log("onconnectionstatechange", args.peerUserId, pc.connectionState);
-            };
-
-            pc.onicecandidate = function (event) {
-                if (event.candidate) {
-                    app.ports.voice_chat_from_js.send(
-                        { tag: "got-signal"
-                        , args: [ args.peerUserId, { tag: "ice", args: [ event.candidate ] }]
-                        });
-                }
-            };
-
-            pc.onicecandidateerror = function (event) {
-                console.log("onicecandidateerror", {
-                    url: event.url,
-                    address: event.address,
-                    port: event.port,
-                    errorCode: event.errorCode,
-                    errorText: event.errorText,
-                    hostCandidate: event.hostCandidate
-                });
-            };
-            
-            const conn = {
-                pc: pc,
-                videoNode: videoNode,
-                remoteDescriptionSet: false,
-                queuedIceCandidates: [],
-                signalChain: Promise.resolve()
-            };
-            connections.set(args.peerUserId, conn);
-
-            const pending = pendingSignals.get(args.peerUserId) || [];
-            pendingSignals.set(args.peerUserId, []);
-            for (let i = 0; i < pending.length; i++) {
-                await handleSignalInternal(conn, args.peerUserId, pending[i]);
-            }
-
-            if (args.shouldOffer) {
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    app.ports.voice_chat_from_js.send(
-                        { tag: "got-signal"
-                        , args: [ args.peerUserId, { tag: "offer", args: [ offer ] }]
-                        });
-                } catch (e) {
-                    console.error("Voice chat: failed to create offer", e);
-                }
-            }
-        }
-        catch (e) {
-            app.ports.voice_chat_from_js.send( { tag: "start-connection-error" , args: [ e.toString() ] });
-        }
-    }
-
-    function stopConnection(peerUserId) {
-        const conn = connections.get(peerUserId);
-        if (!conn) return;
-
-        if (conn.pc) {
-            conn.pc.getSenders().forEach((s) => s.track.stop());
-            conn.pc.ontrack = null;
-            conn.pc.onnicecandidate = null;
-            conn.pc.oniceconnectionstatechange = null;
-            conn.pc.onsignalingstatechange = null;
-            conn.pc.onicegatheringstatechange = null;
-            conn.pc.onnotificationneeded = null;
-            conn.pc.close();
-        }
-        if (conn.videoNode) {
-            conn.videoNode.srcObject = null;
-        }
-        removeAudioStream(peerUserId);
-        connections.delete(peerUserId);
-        pendingSignals.delete(peerUserId);
-    }
-
-    async function drainQueuedIceCandidates(conn, peerUserId) {
-        const queued = conn.queuedIceCandidates;
-        conn.queuedIceCandidates = [];
-        for (let i = 0; i < queued.length; i++) {
-            try {
-                await conn.pc.addIceCandidate(queued[i]);
-            } catch (e) {
-                console.error("Voice chat: failed to add queued ICE candidate", peerUserId, e);
-            }
-        }
-    }
-
-    async function handleSignalInternal(conn, peerUserId, signal) {
-        try {
-            if (signal.tag === "offer") {
-                await conn.pc.setRemoteDescription({ type: "offer", sdp: signal.args[0].sdp });
-                conn.remoteDescriptionSet = true;
-                await drainQueuedIceCandidates(conn, peerUserId);
-                const answer = await conn.pc.createAnswer();
-                await conn.pc.setLocalDescription(answer);
-                app.ports.voice_chat_from_js.send(
-                    { tag: "got-signal"
-                    , args: [ peerUserId, { tag: "answer", args: [ answer ] }]
-                    });
-            } else if (signal.tag === "answer") {
-                await conn.pc.setRemoteDescription({ type: "answer", sdp: signal.args[0].sdp });
-                conn.remoteDescriptionSet = true;
-                await drainQueuedIceCandidates(conn, peerUserId);
-            } else if (signal.tag === "ice") {
-                if (conn.remoteDescriptionSet) {
-                    await conn.pc.addIceCandidate(signal.args[0]);
-                } else {
-                    conn.queuedIceCandidates.push(signal.args[0]);
-                }
-            }
-        } catch (e) {
-            console.error("Voice chat: failed to handle signal", e);
-        }
-    }
-
-    function handleSignal(peerUserId, signalStr) {
-        const conn = connections.get(peerUserId);
-        if (!conn) {
-            let pending = pendingSignals.get(peerUserId);
-            if (!pending) {
-                pending = [];
-                pendingSignals.set(peerUserId, pending);
-            }
-            pending.push(signalStr);
+            app.ports.voice_chat_from_js.send({ tag: "got-media-devices-error", args: [e.toString()] });
             return;
         }
-        // Serialize signal processing per peer so offer/answer/ice never race.
-        conn.signalChain = conn.signalChain.then(function () {
-            return handleSignalInternal(conn, peerUserId, signalStr);
+
+        const pc = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
+
+        const audioTrack = localStream.getAudioTracks()[0];
+        const videoTrack = localStream.getVideoTracks()[0];
+
+        // Always create both transceivers (sendonly) so the SFU answer
+        // includes m-lines for both, even if the user has no camera.
+        const audioTransceiver = pc.addTransceiver(audioTrack || "audio", { direction: "sendonly" });
+        const videoTransceiver = pc.addTransceiver(videoTrack || "video", { direction: "sendonly" });
+
+        sfu = {
+            pc,
+            localStream,
+            audioTransceiver,
+            videoTransceiver,
+            audioMid: null,
+            videoMid: null,
+            pendingExistingPeers: args.existingPeers || [],
+            peerSubs: new Map(),
+            waitingForPublishAnswer: true,
+        };
+
+        pc.oniceconnectionstatechange = function () {
+            console.log("SFU iceConnectionState:", pc.iceConnectionState);
+        };
+        pc.onconnectionstatechange = function () {
+            console.log("SFU connectionState:", pc.connectionState);
+        };
+
+        pc.ontrack = function (event) {
+            console.log("SFU ontrack", event.track.kind, event.track.id, event.transceiver && event.transceiver.mid);
+            attachTrackToPeer(event);
+        };
+
+        pc.onicecandidateerror = function (event) {
+            console.log("SFU onicecandidateerror", {
+                url: event.url,
+                errorCode: event.errorCode,
+                errorText: event.errorText,
+            });
+        };
+
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            sfu.audioMid = audioTransceiver.mid;
+            sfu.videoMid = videoTransceiver.mid;
+            const mids = [audioTransceiver.mid, videoTransceiver.mid].filter((m) => m !== null);
+            app.ports.voice_chat_from_js.send({
+                tag: "publish-offer",
+                args: [offer.sdp, mids],
+            });
+        } catch (e) {
+            console.error("SFU createOffer failed", e);
+            app.ports.voice_chat_from_js.send({ tag: "start-connection-error", args: [e.toString()] });
+        }
+    }
+
+    async function applyPublishAnswer(answerSdp) {
+        if (!sfu) return;
+        try {
+            await sfu.pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+            sfu.waitingForPublishAnswer = false;
+
+            // Now drain pending pulls for existing peers.
+            for (const peer of sfu.pendingExistingPeers) {
+                app.ports.voice_chat_from_js.send({
+                    tag: "request-pull-tracks",
+                    args: [peer.connectionId, peer.sessionId, peer.trackNames],
+                });
+            }
+            sfu.pendingExistingPeers = [];
+        } catch (e) {
+            console.error("SFU setRemoteDescription(publish answer) failed", e);
+        }
+    }
+
+    function handlePeerJoined(args) {
+        if (!sfu) return;
+        // A new peer joined while we're in the call. Pull their tracks.
+        app.ports.voice_chat_from_js.send({
+            tag: "request-pull-tracks",
+            args: [args.connectionId, args.sessionId, args.trackNames],
         });
+    }
+
+    async function applyPullOffer(args) {
+        if (!sfu) return;
+        const key = connectionKey(args.connectionId);
+
+        // Register this peer's video element so ontrack can attach streams.
+        if (!sfu.peerSubs.has(key)) {
+            sfu.peerSubs.set(key, {
+                connectionId: args.connectionId,
+                trackNames: [],
+                videoNode: document.getElementById(peerVideoNodeId(args.connectionId)),
+                stream: new MediaStream(),
+            });
+        }
+
+        try {
+            await sfu.pc.setRemoteDescription({ type: "offer", sdp: args.offerSdp });
+            const answer = await sfu.pc.createAnswer();
+            await sfu.pc.setLocalDescription(answer);
+            app.ports.voice_chat_from_js.send({
+                tag: "pull-answer",
+                args: [args.connectionId, answer.sdp],
+            });
+        } catch (e) {
+            console.error("SFU pull renegotiation failed", e);
+        }
+    }
+
+    function attachTrackToPeer(event) {
+        // The new transceiver carries one peer's audio or video. We rely on
+        // ontrack's event.streams or event.track to attach to *some* peer.
+        // Cloudflare returns one transceiver per pulled track. We don't get
+        // peer identity directly from ontrack; the simplest approach is to
+        // attach the first not-yet-attached track of each kind to the most
+        // recently subscribed peer that's missing that kind. This is
+        // imperfect for >1 simultaneous subscribes but works for typical
+        // 1:1 calls.
+        if (!sfu) return;
+
+        // Find a peer subscription that doesn't yet have this track kind.
+        let target = null;
+        for (const sub of sfu.peerSubs.values()) {
+            const has =
+                event.track.kind === "audio"
+                    ? sub.stream.getAudioTracks().length > 0
+                    : sub.stream.getVideoTracks().length > 0;
+            if (!has) {
+                target = sub;
+                break;
+            }
+        }
+        if (!target) return;
+
+        target.stream.addTrack(event.track);
+        if (target.videoNode) {
+            target.videoNode.srcObject = target.stream;
+            const playPromise = target.videoNode.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+                playPromise.catch(function (err) {
+                    console.error("SFU peer video play() rejected", err);
+                });
+            }
+        }
+        if (event.track.kind === "audio") {
+            const key = connectionKeyFromSub(target);
+            if (key && !audioStreams.has(key)) {
+                handleAudioStream(target.stream, key);
+            }
+        }
+    }
+
+    function connectionKeyFromSub(sub) {
+        if (!sub || !sub.connectionId) return null;
+        return connectionKey(sub.connectionId);
+    }
+
+    function peerLeft(connectionId) {
+        if (!sfu) return;
+        const key = connectionKey(connectionId);
+        const sub = sfu.peerSubs.get(key);
+        if (sub) {
+            if (sub.videoNode) {
+                sub.videoNode.srcObject = null;
+            }
+            sub.stream.getTracks().forEach((t) => t.stop());
+            sfu.peerSubs.delete(key);
+            removeAudioStream(key);
+        }
+    }
+
+    async function stopCall() {
+        if (!sfu) return;
+        try {
+            sfu.pc.getSenders().forEach((s) => {
+                if (s.track) s.track.stop();
+            });
+            sfu.pc.close();
+        } catch (e) {
+            console.error("SFU stop failed", e);
+        }
+        for (const [key, sub] of sfu.peerSubs.entries()) {
+            if (sub.videoNode) sub.videoNode.srcObject = null;
+            sub.stream.getTracks().forEach((t) => t.stop());
+            removeAudioStream(key);
+        }
+        if (sfu.localStream) {
+            sfu.localStream.getTracks().forEach((t) => t.stop());
+        }
+        sfu = null;
     }
 
     function setAudioInputEnabled(enabled) {
-        connections.forEach(function (conn) {
-            if (conn.pc) {
-                const sender = conn.pc.getSenders().forEach((s) => {
-                    if (s.track.kind === "audio") {
-                        s.track.enabled = enabled;
-                    }
-                });
-            }
-        });
-
+        if (sfu && sfu.localStream) {
+            sfu.localStream.getAudioTracks().forEach((t) => {
+                t.enabled = enabled;
+            });
+        }
         if (localStreamPreview) {
-            localStreamPreview.getAudioTracks().forEach((track) => {
-                track.enabled = enabled;
+            localStreamPreview.getAudioTracks().forEach((t) => {
+                t.enabled = enabled;
             });
         }
     }
 
     function setVideoInputEnabled(enabled) {
-        connections.forEach(function (conn) {
-            if (conn.pc) {
-                const sender = conn.pc.getSenders().forEach((s) => {
-                    if (s.track.kind === "video") {
-                        s.track.enabled = enabled;
-                    }
-                });
-            }
-        });
-
+        if (sfu && sfu.localStream) {
+            sfu.localStream.getVideoTracks().forEach((t) => {
+                t.enabled = enabled;
+            });
+        }
         if (localStreamPreview) {
-            localStreamPreview.getVideoTracks().forEach((track) => {
-                track.enabled = enabled;
+            localStreamPreview.getVideoTracks().forEach((t) => {
+                t.enabled = enabled;
             });
         }
     }
 
     async function setInput(isAudioInput, deviceId) {
-        let config;
-        if (isAudioInput) {
-            config = { audio: { deviceId: { exact: deviceId } } };
-        } else {
-            config = { video: { deviceId: { exact: deviceId } } };
-        }
-
-        let stream = await navigator.mediaDevices.getUserMedia(config);
-        let tracks;
-        if (isAudioInput) {
-            tracks = stream.getAudioTracks();
-        } else {
-            tracks = stream.getVideoTracks();
-        }
-        let track = tracks[0];
-        connections.forEach(function (conn) {
-            if (conn.pc) {
-                const sender = conn.pc.getSenders().find((s) => s.track.kind === track.kind);
-                let oldTrack = sender.track;
-                track.enabled = oldTrack.enabled;
-                sender.replaceTrack(track);
-                oldTrack.stop();
+        const config = isAudioInput
+            ? { audio: { deviceId: { exact: deviceId } } }
+            : { video: { deviceId: { exact: deviceId } } };
+        const stream = await navigator.mediaDevices.getUserMedia(config);
+        const tracks = isAudioInput ? stream.getAudioTracks() : stream.getVideoTracks();
+        const track = tracks[0];
+        if (sfu) {
+            const transceiver = isAudioInput ? sfu.audioTransceiver : sfu.videoTransceiver;
+            const sender = transceiver && transceiver.sender;
+            if (sender) {
+                const oldTrack = sender.track;
+                if (oldTrack) {
+                    track.enabled = oldTrack.enabled;
+                    oldTrack.stop();
+                }
+                await sender.replaceTrack(track);
             }
-        });
+        }
     }
 
     app.ports.voice_chat_to_js.subscribe(async function (msg) {
-        if (msg.tag === "start") {
+        if (msg.tag === "start-call") {
             const args = msg.args[0];
-            await startConnection(args);
+            await startCall(args);
             setAudioInputEnabled(args.audioInputEnabled);
             setVideoInputEnabled(args.videoInputEnabled);
-        } else if (msg.tag === "stop") {
-            stopConnection(msg.args[0]);
-        } else if (msg.tag === "signal") {
-            await handleSignal(msg.args[0], msg.args[1]);
+        } else if (msg.tag === "leave-call") {
+            await stopCall();
+        } else if (msg.tag === "publish-answer") {
+            await applyPublishAnswer(msg.args[0].answerSdp);
+        } else if (msg.tag === "peer-joined") {
+            handlePeerJoined(msg.args[0]);
+        } else if (msg.tag === "peer-left") {
+            peerLeft(msg.args[0]);
+        } else if (msg.tag === "accept-pull-offer") {
+            await applyPullOffer(msg.args[0]);
         } else if (msg.tag === "set-audio-input-enabled") {
             setAudioInputEnabled(msg.args[0]);
         } else if (msg.tag === "set-input") {
-            setInput(msg.args[0], msg.args[1]);
+            await setInput(msg.args[0], msg.args[1]);
         } else if (msg.tag === "set-video-input-enabled") {
             setVideoInputEnabled(msg.args[0]);
         } else if (msg.tag === "set-volume") {
-            const conn = connections.get(msg.args[0]);
-            if (conn) {
-                conn.videoNode.volume = msg.args[1];
+            const sub = sfu && sfu.peerSubs.get(connectionKey(msg.args[0]));
+            if (sub && sub.videoNode) {
+                sub.videoNode.volume = msg.args[1];
             }
         } else if (msg.tag === "get-media-devices") {
             try {
-                let stream = await getDevices();
-                let devices = await navigator.mediaDevices.enumerateDevices();
-
-                let defaultDevices = [];
-                stream.getTracks().forEach(track => {
+                const stream = await getDevices();
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const defaultDevices = [];
+                stream.getTracks().forEach((track) => {
                     defaultDevices.push(track.getSettings().deviceId);
                     track.stop();
                 });
-
-                app.ports.voice_chat_from_js.send( { tag: "got-media-devices", args: [ devices, defaultDevices ] });
-
+                app.ports.voice_chat_from_js.send({ tag: "got-media-devices", args: [devices, defaultDevices] });
             } catch (e) {
-                app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error", args: [ e.toString() ] });
+                app.ports.voice_chat_from_js.send({ tag: "got-media-devices-error", args: [e.toString()] });
             }
         } else if (msg.tag === "start-local-stream") {
-            const args = msg.args[0];
-            startLocalStream(args);
-
+            await startLocalStream(msg.args[0]);
         } else if (msg.tag === "stop-local-stream") {
-            stopLocalStream();
+            await stopLocalStream();
         }
     });
 
     async function getDevices() {
-        let devices = await navigator.mediaDevices.enumerateDevices();
-        let hasMic = devices.some(a => a.kind === "audioinput");
-        let hasCamera = devices.some(a => a.kind === "videoinput");
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasMic = devices.some((a) => a.kind === "audioinput");
+        const hasCamera = devices.some((a) => a.kind === "videoinput");
         if (!hasMic && !hasCamera) {
             return new MediaStream();
         }
@@ -394,17 +348,16 @@ exports.init = async function init(app) {
     }
 
     async function getUserMedia(args) {
-        let devices = await navigator.mediaDevices.enumerateDevices();
-
-        let hasMic = devices.some(a => a.kind === "audioinput");
-        let hasCamera = devices.some(a => a.kind === "videoinput");
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasMic = devices.some((a) => a.kind === "audioinput");
+        const hasCamera = devices.some((a) => a.kind === "videoinput");
         if (!hasMic && !hasCamera) {
             return new MediaStream();
         }
-        let config =
-            { audio: args.audioInput ? { deviceId: { exact: args.audioInput } } : hasMic
-            , video: args.videoInput ? { deviceId: { exact: args.videoInput } } : hasCamera
-            };
+        const config = {
+            audio: args.audioInput ? { deviceId: { exact: args.audioInput } } : hasMic,
+            video: args.videoInput ? { deviceId: { exact: args.videoInput } } : hasCamera,
+        };
         return await navigator.mediaDevices.getUserMedia(config);
     }
 
@@ -424,34 +377,29 @@ exports.init = async function init(app) {
     }
 
     async function startLocalStream(args) {
-        stopLocalStream();
+        await stopLocalStream();
 
         try {
             localStreamPreview = await getUserMedia(args);
-            let devices = await navigator.mediaDevices.enumerateDevices();
+            const devices = await navigator.mediaDevices.enumerateDevices();
 
-            let defaultDevices = [];
-            localStreamPreview.getTracks().forEach(function (track) {
+            const defaultDevices = [];
+            localStreamPreview.getTracks().forEach((track) => {
                 defaultDevices.push(track.getSettings().deviceId);
             });
 
-            app.ports.voice_chat_from_js.send( { tag: "got-media-devices" , args: [ devices, defaultDevices ] });
-
-
+            app.ports.voice_chat_from_js.send({ tag: "got-media-devices", args: [devices, defaultDevices] });
         } catch (e) {
-            app.ports.voice_chat_from_js.send( { tag: "got-media-devices-error" , args: [ e.toString() ] });
+            app.ports.voice_chat_from_js.send({ tag: "got-media-devices-error", args: [e.toString()] });
             return;
         }
 
         const videoNode = document.getElementById("local-video");
-        // iOS Safari ignores HTMLMediaElement.volume (controllable only via
-        // hardware buttons), so volume = 0 doesn't silence the local preview
-        // and the mic gets echoed back to the speakers. Use muted instead,
-        // and only feed the video tracks into the preview element so the
-        // mic audio can't leak through srcObject either.
+        // iOS Safari ignores HTMLMediaElement.volume so use muted + only feed
+        // the video tracks into the preview element so the mic doesn't echo.
         videoNode.muted = true;
         const previewStream = new MediaStream();
-        localStreamPreview.getVideoTracks().forEach(function (track) {
+        localStreamPreview.getVideoTracks().forEach((track) => {
             previewStream.addTrack(track);
         });
         videoNode.srcObject = previewStream;
@@ -461,21 +409,22 @@ exports.init = async function init(app) {
 
         const playPromise = videoNode.play();
         if (playPromise && typeof playPromise.catch === "function") {
-            playPromise.catch(function (err) {
+            playPromise.catch((err) => {
                 console.error("local-video: play() rejected", err);
             });
         }
         handleAudioStream(localStreamPreview, "local-video");
     }
 
-    // Original code found here: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
-    // Global variables to keep track of audio streams and their volume level
-    const VOLUME_THRESHOLD = 20; // Adjust this threshold to suit your needs
+    // ------------------------------------------------------------------
+    // Active speaker detection (unchanged from the P2P implementation).
+    // Original technique: https://www.linkedin.com/pulse/webrtc-active-speaker-detection-nilesh-gawande
+    // ------------------------------------------------------------------
+    const VOLUME_THRESHOLD = 20;
     const AUDIO_WINDOW_SIZE = 256;
-    let audioStreams = new Map();
+    const audioStreams = new Map();
 
-    // Function to handle incoming audio streams from WebRTC peers
-    function handleAudioStream(stream, peerUserId) {
+    function handleAudioStream(stream, key) {
         const audioContext = new AudioContext();
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
 
@@ -492,9 +441,9 @@ exports.init = async function init(app) {
             audioContext,
             mediaStreamSource,
             isSpeaking: false,
-            stopped: false
+            stopped: false,
         };
-        audioStreams.set(peerUserId, entry);
+        audioStreams.set(key, entry);
 
         function processAudio() {
             if (entry.stopped) return;
@@ -503,15 +452,14 @@ exports.init = async function init(app) {
             const isSpeaking = averageVolume > VOLUME_THRESHOLD;
             if (isSpeaking !== entry.isSpeaking) {
                 entry.isSpeaking = isSpeaking;
-                app.ports.voice_chat_from_js.send(
-                    { tag: "is-speaking-changed"
-                    , args:
-                        [ peerUserId === "local-video"
-                            ? { tag: "local-video", args: [] }
-                            : { tag: "is-connection", args: [ peerUserId ] }
-                        , isSpeaking
-                        ]
-                    });
+                const speakerArg =
+                    key === "local-video"
+                        ? { tag: "local-video", args: [] }
+                        : { tag: "is-connection", args: [connectionIdFromKey(key)] };
+                app.ports.voice_chat_from_js.send({
+                    tag: "is-speaking-changed",
+                    args: [speakerArg, isSpeaking],
+                });
             }
             requestAnimationFrame(processAudio);
         }
@@ -519,27 +467,31 @@ exports.init = async function init(app) {
         processAudio();
     }
 
-    // Function to remove audio stream and stop active speaker detection
-    function removeAudioStream(peerUserId) {
-        const streamData = audioStreams.get(peerUserId);
+    function connectionIdFromKey(key) {
+        // peerSubs key → ConnectionId structure. Best-effort lookup.
+        if (!sfu) return null;
+        const sub = sfu.peerSubs.get(key);
+        return sub ? sub.connectionId : null;
+    }
+
+    function removeAudioStream(key) {
+        const streamData = audioStreams.get(key);
         if (streamData) {
             streamData.stopped = true;
             try { streamData.mediaStreamSource.disconnect(); } catch (e) {}
             try { streamData.analyserNode.disconnect(); } catch (e) {}
             try { streamData.audioContext.close(); } catch (e) {}
-            audioStreams.delete(peerUserId);
+            audioStreams.delete(key);
             if (streamData.isSpeaking) {
-                app.ports.voice_chat_from_js.send(
-                    { tag: "is-speaking-changed"
-                    , args:
-                        [ peerUserId === "local-video"
-                            ? { tag: "local-video", args: [] }
-                            : { tag: "is-connection", args: [ peerUserId ] }
-                        , false
-                        ]
-                    });
+                const speakerArg =
+                    key === "local-video"
+                        ? { tag: "local-video", args: [] }
+                        : { tag: "is-connection", args: [connectionIdFromKey(key)] };
+                app.ports.voice_chat_from_js.send({
+                    tag: "is-speaking-changed",
+                    args: [speakerArg, false],
+                });
             }
         }
     }
 };
-
