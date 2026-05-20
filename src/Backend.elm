@@ -589,8 +589,11 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotCloudflareSession clientId changeId time roomId result ->
-            handleGotCloudflareSession clientId changeId time roomId result model
+        GotCloudflareSessionCreated clientId changeId time roomId offerSdp transceiverMids result ->
+            handleGotCloudflareSessionCreated clientId changeId time roomId offerSdp transceiverMids result model
+
+        GotCloudflareSession clientId changeId time roomId sessionId result ->
+            handleGotCloudflareSession clientId changeId time roomId sessionId result model
 
         GotCloudflarePullOffer clientId changeId connectionId remoteSessionId trackNames result ->
             handleGotCloudflarePullOffer clientId changeId connectionId remoteSessionId trackNames result model
@@ -5132,15 +5135,7 @@ handlePublishTracks clientId changeId time offerSdp transceiverMids model sessio
                 Just roomId ->
                     ( model
                     , Cloudflare.createSession cloudflareAppId apiToken
-                        |> Task.andThen
-                            (\sid ->
-                                Cloudflare.pushLocalTracks cloudflareAppId
-                                    apiToken
-                                    sid
-                                    { offerSdp = offerSdp, transceiverMids = transceiverMids }
-                                    |> Task.map (\result -> ( sid, result ))
-                            )
-                        |> Task.attempt (GotCloudflareSession clientId changeId time roomId)
+                        |> Task.attempt (GotCloudflareSessionCreated clientId changeId time roomId offerSdp transceiverMids)
                     )
 
                 Nothing ->
@@ -5174,15 +5169,22 @@ findCallForClient clientId model =
         model.connections
 
 
-handleGotCloudflareSession :
+{-| Step 2 of publishing: we have a Cloudflare session, now POST the local
+tracks. Done as a separate backend update so each HTTP call goes through
+its own `Http.task` — required because Lamdera live's CORS proxy only
+wraps the first task in a chain.
+-}
+handleGotCloudflareSessionCreated :
     ClientId
     -> ChangeId
     -> Time.Posix
     -> Call.RoomId
-    -> Result Http.Error ( Cloudflare.SessionId, Cloudflare.PushTracksResult )
+    -> Cloudflare.Sdp
+    -> List String
+    -> Result Http.Error Cloudflare.SessionId
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleGotCloudflareSession clientId changeId time roomId result model =
+handleGotCloudflareSessionCreated clientId changeId time roomId offerSdp transceiverMids result model =
     case result of
         Err _ ->
             ( model
@@ -5192,7 +5194,46 @@ handleGotCloudflareSession clientId changeId time roomId result model =
                 |> Lamdera.sendToFrontend clientId
             )
 
-        Ok ( cfSessionId, push ) ->
+        Ok sessionId ->
+            case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
+                ( Just apiToken, Just cloudflareAppId ) ->
+                    ( model
+                    , Cloudflare.pushLocalTracks cloudflareAppId
+                        apiToken
+                        sessionId
+                        { offerSdp = offerSdp, transceiverMids = transceiverMids }
+                        |> Task.attempt (GotCloudflareSession clientId changeId time roomId sessionId)
+                    )
+
+                _ ->
+                    ( model
+                    , Call.Local_Leave time
+                        |> Local_VoiceChatChange
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+                    )
+
+
+handleGotCloudflareSession :
+    ClientId
+    -> ChangeId
+    -> Time.Posix
+    -> Call.RoomId
+    -> Cloudflare.SessionId
+    -> Result Http.Error Cloudflare.PushTracksResult
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleGotCloudflareSession clientId changeId time roomId cfSessionId result model =
+    case result of
+        Err _ ->
+            ( model
+            , Call.Local_Leave time
+                |> Local_VoiceChatChange
+                |> LocalChangeResponse changeId
+                |> Lamdera.sendToFrontend clientId
+            )
+
+        Ok push ->
             case findClientLocation clientId model of
                 Just ( sessionId2, connection ) ->
                     let
