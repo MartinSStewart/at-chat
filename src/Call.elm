@@ -987,16 +987,17 @@ pullOfferArgsCodec =
         |> Codec.buildObject
 
 
-roomIdCodec : Codec RoomId
-roomIdCodec =
-    Codec.custom
-        (\dmEncoder value ->
-            case value of
-                DmRoomId a ->
-                    dmEncoder a
-        )
-        |> Codec.variant1 "dm" DmRoomId (Codec.map Id.fromInt Id.toInt Codec.int)
-        |> Codec.buildCustom
+
+--roomIdCodec : Codec RoomId
+--roomIdCodec =
+--    Codec.custom
+--        (\dmEncoder value ->
+--            case value of
+--                DmRoomId a ->
+--                    dmEncoder a
+--        )
+--        |> Codec.variant1 "dm" DmRoomId (Codec.map Id.fromInt Id.toInt Codec.int)
+--        |> Codec.buildCustom
 
 
 voiceChatToJsCodec : Codec ToJs
@@ -1209,6 +1210,11 @@ fromJs msg =
         )
 
 
+otherUserIdToString : ( Id UserId, ClientId ) -> String
+otherUserIdToString otherClientId =
+    Id.toString (Tuple.first otherClientId) ++ " " ++ Lamdera.clientIdToString (Tuple.second otherClientId)
+
+
 connectionIdToString : ConnectionId -> String
 connectionIdToString { roomId, otherClientId } =
     (case roomId of
@@ -1216,24 +1222,16 @@ connectionIdToString { roomId, otherClientId } =
             Id.toString otherUserId
     )
         ++ " "
-        ++ Id.toString (Tuple.first otherClientId)
-        ++ " "
-        ++ Lamdera.clientIdToString (Tuple.second otherClientId)
+        ++ otherUserIdToString otherClientId
 
 
-connectionIdFromString : String -> Result () ConnectionId
+connectionIdFromString : String -> Result () ( Id UserId, ClientId )
 connectionIdFromString text =
     case String.split " " text of
-        first :: second :: rest0 :: rest ->
-            case ( String.toInt first, String.toInt second ) of
-                ( Just int, Just userId ) ->
-                    Ok
-                        { roomId = DmRoomId (Id.fromInt int)
-                        , otherClientId =
-                            ( Id.fromInt userId
-                            , Lamdera.clientIdFromString (String.join " " (rest0 :: rest))
-                            )
-                        }
+        second :: rest0 :: rest ->
+            case String.toInt second of
+                Just userId ->
+                    Ok ( Id.fromInt userId, Lamdera.clientIdFromString (String.join " " (rest0 :: rest)) )
 
                 _ ->
                     Err ()
@@ -1242,19 +1240,60 @@ connectionIdFromString text =
             Err ()
 
 
-connectionIdCodec : Codec ConnectionId
-connectionIdCodec =
+otherClientIdCodec : Codec ( Id UserId, ClientId )
+otherClientIdCodec =
     Codec.andThen
         (\text ->
             case connectionIdFromString text of
-                Ok ok ->
-                    Codec.succeed ok
+                Ok id ->
+                    Codec.succeed id
 
                 Err () ->
-                    Codec.fail ("Invalid connectionId: " ++ text)
+                    Codec.fail ("Invalid roomId: " ++ text)
         )
-        connectionIdToString
+        otherUserIdToString
         Codec.string
+
+
+roomIdCodec : Codec RoomId
+roomIdCodec =
+    Codec.andThen
+        (\text ->
+            case Id.fromString text of
+                Just id ->
+                    Codec.succeed (DmRoomId id)
+
+                Nothing ->
+                    Codec.fail ("Invalid roomId: " ++ text)
+        )
+        (\roomId ->
+            case roomId of
+                DmRoomId otherUserId ->
+                    Id.toString otherUserId
+        )
+        Codec.string
+
+
+connectionIdCodec : Codec ConnectionId
+connectionIdCodec =
+    Codec.object ConnectionId
+        |> Codec.field "roomId" .roomId roomIdCodec
+        |> Codec.field "otherClientId" .otherClientId otherClientIdCodec
+        |> Codec.buildObject
+
+
+
+--Codec.andThen
+--    (\text ->
+--        case connectionIdFromString text of
+--            Ok ok ->
+--                Codec.succeed ok
+--
+--            Err () ->
+--                Codec.fail ("Invalid connectionId: " ++ text)
+--    )
+--    connectionIdToString
+--    Codec.string
 
 
 mediaDeviceSelectors : Bool -> RoomId -> Model -> Element Msg
