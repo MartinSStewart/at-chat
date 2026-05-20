@@ -6426,6 +6426,7 @@ view model =
                                                 Pages.Admin.view
                                                     (MyUi.isMobile loaded)
                                                     loaded.versionNumber
+                                                    loaded.time
                                                     local
                                                     adminData
                                                     user

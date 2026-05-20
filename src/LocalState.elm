@@ -509,6 +509,7 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
+    , websocketDisconnects : Array Time.Posix
     }
 
 
