@@ -340,6 +340,7 @@ type alias BackendModel =
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , websocketDisconnects : Array Time.Posix
     }
 
 

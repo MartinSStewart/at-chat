@@ -75,6 +75,8 @@ import Set exposing (Set)
 import Slack
 import Sticker
 import String.Nonempty
+import Svg
+import Svg.Attributes
 import Table
 import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
@@ -229,6 +231,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , websocketDisconnects : Array Time.Posix
     }
 
 
@@ -1427,8 +1430,8 @@ pendingChangesText change =
             "Regenerate server secret"
 
 
-view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
-view isMobile2 version local adminData user model =
+view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
+view isMobile2 version time local adminData user model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background1
@@ -1460,6 +1463,7 @@ view isMobile2 version local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
+            , websocketDisconnectsSection time user adminData
             , voiceChatSection local adminData user
             , filesSection user adminData
             , stickersAndEmojisSection local user
@@ -1512,6 +1516,174 @@ connectionsSection timezone user adminData =
                     )
                     (SeqDict.toList adminData.connections)
                 )
+        ]
+
+
+websocketDisconnectsSection : Time.Posix -> BackendUser -> AdminData -> Element Msg
+websocketDisconnectsSection time user adminData =
+    section
+        8
+        user.expandedSections
+        WebsocketDisconnectsSection
+        [ if Array.isEmpty adminData.websocketDisconnects then
+            Ui.text "No websocket disconnects recorded"
+
+          else
+            Ui.column
+                [ Ui.spacing 8 ]
+                [ Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketDisconnects))
+                , websocketDisconnectsGraph time adminData.websocketDisconnects
+                ]
+        ]
+
+
+websocketDisconnectsGraph : Time.Posix -> Array Time.Posix -> Element msg
+websocketDisconnectsGraph now disconnects =
+    let
+        bucketCount : Int
+        bucketCount =
+            24
+
+        bucketDurationMs : Int
+        bucketDurationMs =
+            60 * 60 * 1000
+
+        windowMs : Int
+        windowMs =
+            bucketCount * bucketDurationMs
+
+        nowMs : Int
+        nowMs =
+            Time.posixToMillis now
+
+        windowStartMs : Int
+        windowStartMs =
+            nowMs - windowMs
+
+        emptyBuckets : Array Int
+        emptyBuckets =
+            Array.repeat bucketCount 0
+
+        buckets : Array Int
+        buckets =
+            Array.foldl
+                (\disconnectTime acc ->
+                    let
+                        ms : Int
+                        ms =
+                            Time.posixToMillis disconnectTime
+                    in
+                    if ms < windowStartMs || ms > nowMs then
+                        acc
+
+                    else
+                        let
+                            index : Int
+                            index =
+                                (ms - windowStartMs) // bucketDurationMs |> min (bucketCount - 1)
+                        in
+                        Array.set index ((Array.get index acc |> Maybe.withDefault 0) + 1) acc
+                )
+                emptyBuckets
+                disconnects
+
+        maxCount : Int
+        maxCount =
+            Array.foldl max 0 buckets
+
+        chartWidth : Int
+        chartWidth =
+            600
+
+        chartHeight : Int
+        chartHeight =
+            120
+
+        barWidth : Float
+        barWidth =
+            toFloat chartWidth / toFloat bucketCount
+
+        barGap : Float
+        barGap =
+            2
+
+        scaleDenominator : Int
+        scaleDenominator =
+            max 1 maxCount
+
+        bars : List (Svg.Svg msg)
+        bars =
+            Array.toList buckets
+                |> List.indexedMap
+                    (\i count ->
+                        let
+                            heightPx : Float
+                            heightPx =
+                                toFloat count / toFloat scaleDenominator * toFloat chartHeight
+
+                            x : Float
+                            x =
+                                toFloat i * barWidth
+                        in
+                        Svg.rect
+                            [ Svg.Attributes.x (String.fromFloat (x + barGap / 2))
+                            , Svg.Attributes.y (String.fromFloat (toFloat chartHeight - heightPx))
+                            , Svg.Attributes.width (String.fromFloat (barWidth - barGap))
+                            , Svg.Attributes.height (String.fromFloat heightPx)
+                            , Svg.Attributes.fill "#e0625e"
+                            ]
+                            [ Svg.title []
+                                [ Svg.text
+                                    (String.fromInt count
+                                        ++ " disconnects, "
+                                        ++ String.fromInt (bucketCount - i)
+                                        ++ "h–"
+                                        ++ String.fromInt (bucketCount - i - 1)
+                                        ++ "h ago"
+                                    )
+                                ]
+                            ]
+                    )
+
+        baseline : Svg.Svg msg
+        baseline =
+            Svg.line
+                [ Svg.Attributes.x1 "0"
+                , Svg.Attributes.y1 (String.fromInt chartHeight)
+                , Svg.Attributes.x2 (String.fromInt chartWidth)
+                , Svg.Attributes.y2 (String.fromInt chartHeight)
+                , Svg.Attributes.stroke "#888"
+                , Svg.Attributes.strokeWidth "1"
+                ]
+                []
+
+        graphSvg : Element msg
+        graphSvg =
+            Svg.svg
+                [ Svg.Attributes.viewBox ("0 0 " ++ String.fromInt chartWidth ++ " " ++ String.fromInt chartHeight)
+                , Svg.Attributes.width (String.fromInt chartWidth)
+                , Svg.Attributes.height (String.fromInt chartHeight)
+                , Html.Attributes.style "max-width" "100%"
+                , Html.Attributes.style "height" "auto"
+                ]
+                (baseline :: bars)
+                |> Ui.html
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        [ Ui.el [ Ui.Font.size 12 ]
+            (Ui.text
+                ("Disconnects per hour over the last 24 hours (peak: "
+                    ++ String.fromInt maxCount
+                    ++ ")"
+                )
+            )
+        , graphSvg
+        , Ui.row
+            [ Ui.Font.size 11, Ui.spacing 8 ]
+            [ Ui.text "24h ago"
+            , Ui.el [ Ui.alignRight, Ui.width Ui.shrink ] (Ui.text "now")
+            ]
         ]
 
 

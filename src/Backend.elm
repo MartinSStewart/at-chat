@@ -233,6 +233,7 @@ init =
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
+      , websocketDisconnects = Array.empty
       }
     , Command.none
     )
@@ -313,7 +314,7 @@ update msg model =
             ( model, Task.perform (UserDisconnectedWithTime sessionId clientId) Time.now )
 
         UserDisconnectedWithTime sessionId clientId time ->
-            disconnectClient time sessionId clientId model
+            disconnectClient time sessionId clientId (recordWebsocketDisconnect time model)
 
         BackendGotTime sessionId clientId toBackend time ->
             let
@@ -1798,6 +1799,32 @@ attachmentsUploadedHelper model message results =
         )
         ( SeqDict.empty, model.discordAttachments )
         message.attachments
+
+
+recordWebsocketDisconnect : Time.Posix -> BackendModel -> BackendModel
+recordWebsocketDisconnect time model =
+    let
+        appended : Array Time.Posix
+        appended =
+            Array.push time model.websocketDisconnects
+
+        excess : Int
+        excess =
+            Array.length appended - maxWebsocketDisconnects
+    in
+    { model
+        | websocketDisconnects =
+            if excess > 0 then
+                Array.slice excess (Array.length appended) appended
+
+            else
+                appended
+    }
+
+
+maxWebsocketDisconnects : Int
+maxWebsocketDisconnects =
+    10000
 
 
 disconnectClient : Time.Posix -> SessionId -> ClientId -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
