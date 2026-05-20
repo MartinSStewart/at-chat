@@ -29,6 +29,8 @@ module LocalState exposing
     , LogWithTime
     , PrivateVapidKey(..)
     , ServerSecretStatus(..)
+    , WebsocketDisconnectEvent
+    , WebsocketDisconnectKind(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -509,8 +511,17 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
-    , websocketDisconnects : Array Time.Posix
+    , websocketDisconnects : Array WebsocketDisconnectEvent
     }
+
+
+type WebsocketDisconnectKind
+    = ClientWebsocketDisconnect
+    | DiscordWebsocketDisconnect
+
+
+type alias WebsocketDisconnectEvent =
+    { time : Time.Posix, kind : WebsocketDisconnectKind }
 
 
 type alias ConnectionData =

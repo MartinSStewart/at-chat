@@ -55,7 +55,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketDisconnectKind(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -231,7 +231,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
-    , websocketDisconnects : Array Time.Posix
+    , websocketDisconnects : Array LocalState.WebsocketDisconnectEvent
     }
 
 
@@ -1521,6 +1521,21 @@ connectionsSection timezone user adminData =
 
 websocketDisconnectsSection : Time.Posix -> BackendUser -> AdminData -> Element Msg
 websocketDisconnectsSection time user adminData =
+    let
+        totals : { client : Int, discord : Int }
+        totals =
+            Array.foldl
+                (\event acc ->
+                    case event.kind of
+                        ClientWebsocketDisconnect ->
+                            { acc | client = acc.client + 1 }
+
+                        DiscordWebsocketDisconnect ->
+                            { acc | discord = acc.discord + 1 }
+                )
+                { client = 0, discord = 0 }
+                adminData.websocketDisconnects
+    in
     section
         8
         user.expandedSections
@@ -1531,13 +1546,51 @@ websocketDisconnectsSection time user adminData =
           else
             Ui.column
                 [ Ui.spacing 8 ]
-                [ Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketDisconnects))
+                [ Ui.text
+                    ("Total recorded: "
+                        ++ String.fromInt (Array.length adminData.websocketDisconnects)
+                        ++ " (client: "
+                        ++ String.fromInt totals.client
+                        ++ ", Discord: "
+                        ++ String.fromInt totals.discord
+                        ++ ")"
+                    )
                 , websocketDisconnectsGraph time adminData.websocketDisconnects
                 ]
         ]
 
 
-websocketDisconnectsGraph : Time.Posix -> Array Time.Posix -> Element msg
+websocketDisconnectKindColor : WebsocketDisconnectKind -> String
+websocketDisconnectKindColor kind =
+    case kind of
+        ClientWebsocketDisconnect ->
+            "#e0625e"
+
+        DiscordWebsocketDisconnect ->
+            "#5865f2"
+
+
+websocketDisconnectKindUiColor : WebsocketDisconnectKind -> Ui.Color
+websocketDisconnectKindUiColor kind =
+    case kind of
+        ClientWebsocketDisconnect ->
+            Ui.rgb 224 98 94
+
+        DiscordWebsocketDisconnect ->
+            Ui.rgb 88 101 242
+
+
+websocketDisconnectKindLabel : WebsocketDisconnectKind -> String
+websocketDisconnectKindLabel kind =
+    case kind of
+        ClientWebsocketDisconnect ->
+            "Client"
+
+        DiscordWebsocketDisconnect ->
+            "Discord"
+
+
+websocketDisconnectsGraph : Time.Posix -> Array LocalState.WebsocketDisconnectEvent -> Element msg
 websocketDisconnectsGraph now disconnects =
     let
         bucketCount : Int
@@ -1560,18 +1613,18 @@ websocketDisconnectsGraph now disconnects =
         windowStartMs =
             nowMs - windowMs
 
-        emptyBuckets : Array Int
+        emptyBuckets : Array { client : Int, discord : Int }
         emptyBuckets =
-            Array.repeat bucketCount 0
+            Array.repeat bucketCount { client = 0, discord = 0 }
 
-        buckets : Array Int
+        buckets : Array { client : Int, discord : Int }
         buckets =
             Array.foldl
-                (\disconnectTime acc ->
+                (\event acc ->
                     let
                         ms : Int
                         ms =
-                            Time.posixToMillis disconnectTime
+                            Time.posixToMillis event.time
                     in
                     if ms < windowStartMs || ms > nowMs then
                         acc
@@ -1581,15 +1634,28 @@ websocketDisconnectsGraph now disconnects =
                             index : Int
                             index =
                                 (ms - windowStartMs) // bucketDurationMs |> min (bucketCount - 1)
+
+                            current : { client : Int, discord : Int }
+                            current =
+                                Array.get index acc |> Maybe.withDefault { client = 0, discord = 0 }
+
+                            updated : { client : Int, discord : Int }
+                            updated =
+                                case event.kind of
+                                    ClientWebsocketDisconnect ->
+                                        { current | client = current.client + 1 }
+
+                                    DiscordWebsocketDisconnect ->
+                                        { current | discord = current.discord + 1 }
                         in
-                        Array.set index ((Array.get index acc |> Maybe.withDefault 0) + 1) acc
+                        Array.set index updated acc
                 )
                 emptyBuckets
                 disconnects
 
         maxCount : Int
         maxCount =
-            Array.foldl max 0 buckets
+            Array.foldl (\b acc -> max acc (max b.client b.discord)) 0 buckets
 
         chartWidth : Int
         chartWidth =
@@ -1599,51 +1665,69 @@ websocketDisconnectsGraph now disconnects =
         chartHeight =
             120
 
-        barWidth : Float
-        barWidth =
+        bucketWidth : Float
+        bucketWidth =
             toFloat chartWidth / toFloat bucketCount
 
-        barGap : Float
-        barGap =
+        bucketGap : Float
+        bucketGap =
             2
+
+        innerBarGap : Float
+        innerBarGap =
+            1
+
+        barWidth : Float
+        barWidth =
+            (bucketWidth - bucketGap - innerBarGap) / 2
 
         scaleDenominator : Int
         scaleDenominator =
             max 1 maxCount
 
+        renderBar : Float -> Int -> WebsocketDisconnectKind -> Int -> Svg.Svg msg
+        renderBar x count kind bucketIndex =
+            let
+                heightPx : Float
+                heightPx =
+                    toFloat count / toFloat scaleDenominator * toFloat chartHeight
+            in
+            Svg.rect
+                [ Svg.Attributes.x (String.fromFloat x)
+                , Svg.Attributes.y (String.fromFloat (toFloat chartHeight - heightPx))
+                , Svg.Attributes.width (String.fromFloat barWidth)
+                , Svg.Attributes.height (String.fromFloat heightPx)
+                , Svg.Attributes.fill (websocketDisconnectKindColor kind)
+                ]
+                [ Svg.title []
+                    [ Svg.text
+                        (websocketDisconnectKindLabel kind
+                            ++ ": "
+                            ++ String.fromInt count
+                            ++ " disconnects, "
+                            ++ String.fromInt (bucketCount - bucketIndex)
+                            ++ "h–"
+                            ++ String.fromInt (bucketCount - bucketIndex - 1)
+                            ++ "h ago"
+                        )
+                    ]
+                ]
+
         bars : List (Svg.Svg msg)
         bars =
             Array.toList buckets
                 |> List.indexedMap
-                    (\i count ->
+                    (\i counts ->
                         let
-                            heightPx : Float
-                            heightPx =
-                                toFloat count / toFloat scaleDenominator * toFloat chartHeight
-
-                            x : Float
-                            x =
-                                toFloat i * barWidth
+                            bucketX : Float
+                            bucketX =
+                                toFloat i * bucketWidth + bucketGap / 2
                         in
-                        Svg.rect
-                            [ Svg.Attributes.x (String.fromFloat (x + barGap / 2))
-                            , Svg.Attributes.y (String.fromFloat (toFloat chartHeight - heightPx))
-                            , Svg.Attributes.width (String.fromFloat (barWidth - barGap))
-                            , Svg.Attributes.height (String.fromFloat heightPx)
-                            , Svg.Attributes.fill "#e0625e"
-                            ]
-                            [ Svg.title []
-                                [ Svg.text
-                                    (String.fromInt count
-                                        ++ " disconnects, "
-                                        ++ String.fromInt (bucketCount - i)
-                                        ++ "h–"
-                                        ++ String.fromInt (bucketCount - i - 1)
-                                        ++ "h ago"
-                                    )
-                                ]
-                            ]
+                        [ renderBar bucketX counts.client ClientWebsocketDisconnect i
+                        , renderBar (bucketX + barWidth + innerBarGap) counts.discord DiscordWebsocketDisconnect i
+                        ]
                     )
+                |> List.concat
 
         baseline : Svg.Svg msg
         baseline =
@@ -1668,6 +1752,20 @@ websocketDisconnectsGraph now disconnects =
                 ]
                 (baseline :: bars)
                 |> Ui.html
+
+        legendSwatch : WebsocketDisconnectKind -> Element msg
+        legendSwatch kind =
+            Ui.row
+                [ Ui.spacing 4, Ui.width Ui.shrink ]
+                [ Ui.el
+                    [ Ui.width (Ui.px 12)
+                    , Ui.height (Ui.px 12)
+                    , Ui.background (websocketDisconnectKindUiColor kind)
+                    , Ui.rounded 2
+                    ]
+                    Ui.none
+                , Ui.text (websocketDisconnectKindLabel kind)
+                ]
     in
     Ui.column
         [ Ui.spacing 4 ]
@@ -1678,6 +1776,11 @@ websocketDisconnectsGraph now disconnects =
                     ++ ")"
                 )
             )
+        , Ui.row
+            [ Ui.Font.size 12, Ui.spacing 12 ]
+            [ legendSwatch ClientWebsocketDisconnect
+            , legendSwatch DiscordWebsocketDisconnect
+            ]
         , graphSvg
         , Ui.row
             [ Ui.Font.size 11, Ui.spacing 8 ]

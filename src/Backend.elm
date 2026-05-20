@@ -314,7 +314,7 @@ update msg model =
             ( model, Task.perform (UserDisconnectedWithTime sessionId clientId) Time.now )
 
         UserDisconnectedWithTime sessionId clientId time ->
-            disconnectClient time sessionId clientId (recordWebsocketDisconnect time model)
+            disconnectClient time sessionId clientId (recordWebsocketDisconnect LocalState.ClientWebsocketDisconnect time model)
 
         BackendGotTime sessionId clientId toBackend time ->
             let
@@ -369,7 +369,24 @@ update msg model =
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
         DiscordUserWebsocketMsg discordUserId discordMsg ->
-            DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+            let
+                ( model2, cmd ) =
+                    DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+            in
+            case discordMsg of
+                Discord.WebsocketClosed _ ->
+                    ( model2
+                    , Command.batch
+                        [ cmd
+                        , Task.perform GotTimeForDiscordWebsocketDisconnect Time.now
+                        ]
+                    )
+
+                Discord.GotWebsocketData _ ->
+                    ( model2, cmd )
+
+        GotTimeForDiscordWebsocketDisconnect time ->
+            ( recordWebsocketDisconnect LocalState.DiscordWebsocketDisconnect time model, Command.none )
 
         GotSlackChannels _ _ result ->
             case result of
@@ -1801,12 +1818,12 @@ attachmentsUploadedHelper model message results =
         message.attachments
 
 
-recordWebsocketDisconnect : Time.Posix -> BackendModel -> BackendModel
-recordWebsocketDisconnect time model =
+recordWebsocketDisconnect : LocalState.WebsocketDisconnectKind -> Time.Posix -> BackendModel -> BackendModel
+recordWebsocketDisconnect kind time model =
     let
-        appended : Array Time.Posix
+        appended : Array LocalState.WebsocketDisconnectEvent
         appended =
-            Array.push time model.websocketDisconnects
+            Array.push { time = time, kind = kind } model.websocketDisconnects
 
         excess : Int
         excess =
