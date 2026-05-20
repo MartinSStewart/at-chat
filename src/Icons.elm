@@ -2,6 +2,7 @@ module Icons exposing
     ( addApp
     , arrowLeft
     , arrowRight
+    , arrowUp
     , attachment
     , camera
     , checkmark
@@ -305,7 +306,30 @@ reply =
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
         ]
-        [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "m16.49 12 3.75-3.751m0 0-3.75-3.75m3.75 3.75H3.74V19.5" ] [] ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "m16.49 12 3.75-3.751m0 0-3.75-3.75m3.75 3.75H3.74V19.5"
+            ]
+            []
+        ]
+
+
+arrowUp : Html msg
+arrowUp =
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M8.25 6.75 12 3m0 0 3.75 3.75M12 3v18"
+            ]
+            []
+        ]
 
 
 x : Html msg
