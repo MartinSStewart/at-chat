@@ -4418,7 +4418,19 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                     |> Dom.idToString
                     |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
+                [ replyToHeaderAboveMessage
+                    isMobile
+                    (case threadRouteWithMessage of
+                        ViewThreadWithMessage _ _ ->
+                            Id.fromInt -1
+
+                        NoThreadWithMessage messageId ->
+                            messageId
+                    )
+                    maybeRepliedTo2
+                    revealedSpoilers
+                    local.localUser.customEmojis
+                    allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4554,7 +4566,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 , Ui.spacing 4
                 , threadMessageHtmlId messageId |> Dom.idToString |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
+                [ replyToHeaderAboveMessage isMobile messageId maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -5450,7 +5462,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
+            [ replyToHeaderAboveMessage isMobile messageIndex maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5551,7 +5563,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
+            [ replyToHeaderAboveMessage isMobile messageIndex maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5653,16 +5665,23 @@ messageTimestamp createdAt timezone =
 
 replyToHeaderAboveMessage :
     Bool
+    -> Id messageId
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+replyToHeaderAboveMessage isMobile messageId maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+    let
+        isDirectReply : Id messageId -> Bool
+        isDirectReply repliedToIndex =
+            Id.toInt repliedToIndex == Id.toInt messageId - 1
+    in
     case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
                 isMobile
+                (isDirectReply repliedToIndex)
                 repliedToIndex
                 (userTextMessagePreview
                     customEmojis
@@ -5678,11 +5697,12 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis
                 )
 
         Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
+            replyToHeaderAboveMessageHelper isMobile (isDirectReply repliedToIndex) repliedToIndex (userJoinedContent userId allUsers)
 
         Just ( repliedToIndex, DeletedMessage _ ) ->
             replyToHeaderAboveMessageHelper
                 isMobile
+                (isDirectReply repliedToIndex)
                 repliedToIndex
                 (Ui.el
                     [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
@@ -5690,13 +5710,13 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis
                 )
 
         Just ( repliedToIndex, CallStarted _ userId _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (callStarted userId allUsers)
+            replyToHeaderAboveMessageHelper isMobile (isDirectReply repliedToIndex) repliedToIndex (callStarted userId allUsers)
 
         Just ( repliedToIndex, CallEnded _ _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex callEnded
+            replyToHeaderAboveMessageHelper isMobile (isDirectReply repliedToIndex) repliedToIndex callEnded
 
         Just ( repliedToIndex, GoMatchStarted _ userId _ ) ->
-            replyToHeaderAboveMessageHelper isMobile repliedToIndex (goMatchStarted userId allUsers)
+            replyToHeaderAboveMessageHelper isMobile (isDirectReply repliedToIndex) repliedToIndex (goMatchStarted userId allUsers)
 
         Nothing ->
             Ui.none
@@ -5742,8 +5762,8 @@ threadMessageHtmlId messageIndex =
     "thread_message_" ++ Id.toString messageIndex |> Dom.id
 
 
-replyToHeaderAboveMessageHelper : Bool -> Id messageId -> Element MessageViewMsg -> Element MessageViewMsg
-replyToHeaderAboveMessageHelper isMobile messageId content =
+replyToHeaderAboveMessageHelper : Bool -> Bool -> Id messageId -> Element MessageViewMsg -> Element MessageViewMsg
+replyToHeaderAboveMessageHelper isMobile isDirectReplyToPrevious messageId content =
     MyUi.rowButton
         (Dom.id ("guild_replyLink_" ++ Id.toString messageId))
         MessageView_PressedReplyLink
@@ -5752,13 +5772,23 @@ replyToHeaderAboveMessageHelper isMobile messageId content =
         , Ui.Font.color MyUi.font3
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         ]
-        [ Ui.el
-            [ Ui.width (Ui.px 18)
-            , Ui.move { x = 0, y = 3, z = 0 }
+        (if isDirectReplyToPrevious then
+            [ Ui.el
+                [ Ui.width (Ui.px 18)
+                , Ui.move { x = 0, y = 3, z = 0 }
+                ]
+                (Ui.html Icons.arrowUp)
             ]
-            (Ui.html Icons.reply)
-        , content
-        ]
+
+         else
+            [ Ui.el
+                [ Ui.width (Ui.px 18)
+                , Ui.move { x = 0, y = 3, z = 0 }
+                ]
+                (Ui.html Icons.reply)
+            , content
+            ]
+        )
 
 
 userJoinedContent : userId -> SeqDict userId { a | name : PersonName } -> Element msg
