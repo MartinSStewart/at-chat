@@ -5061,7 +5061,10 @@ collectExistingPeers roomId currentUserId currentClientId model =
                     NonemptyDict.toList connections
                         |> List.filterMap
                             (\( clientId2, connection ) ->
-                                if connection.call == Just roomId && not (session.userId == currentUserId && clientId2 == currentClientId) then
+                                if
+                                    isPeerInSameCall roomId currentUserId session.userId connection.call
+                                        && not (session.userId == currentUserId && clientId2 == currentClientId)
+                                then
                                     case connection.callSfu of
                                         Just sfu ->
                                             Just
@@ -5086,6 +5089,22 @@ collectExistingPeers roomId currentUserId currentClientId model =
         )
         []
         model.connections
+
+
+{-| Given the joining user's room and the peer's call state, decide whether
+the two are in the same logical call. For DMs, each side encodes the OTHER
+user in `DmRoomId`, so equality won't work directly — we compare DM channel
+ids instead.
+-}
+isPeerInSameCall : Call.RoomId -> Id UserId -> Id UserId -> Maybe Call.RoomId -> Bool
+isPeerInSameCall myRoomId myUserId peerUserId peerCall =
+    case ( myRoomId, peerCall ) of
+        ( Call.DmRoomId myOther, Just (Call.DmRoomId peerOther) ) ->
+            DmChannel.channelIdFromUserIds myUserId myOther
+                == DmChannel.channelIdFromUserIds peerUserId peerOther
+
+        ( _, Nothing ) ->
+            False
 
 
 handlePublishTracks :
@@ -5248,11 +5267,13 @@ handleGotCloudflareSession clientId changeId time roomId result model =
 peerRoomId : Call.RoomId -> Id UserId -> Id UserId -> Call.RoomId
 peerRoomId roomId peerUserId joiningUserId =
     case roomId of
-        Call.DmRoomId _ ->
+        Call.DmRoomId joinerOther ->
             if peerUserId == joiningUserId then
-                Call.DmRoomId peerUserId
+                -- Peer is another tab of the joiner: same DM other as joiner.
+                Call.DmRoomId joinerOther
 
             else
+                -- Peer is the other DM party: from their view, the joiner is the other.
                 Call.DmRoomId joiningUserId
 
 
@@ -5272,7 +5293,10 @@ broadcastToCallParticipants roomId excludeUserId excludeClientId msgFor model =
                         NonemptyDict.toList connections
                             |> List.filterMap
                                 (\( cId, connection ) ->
-                                    if connection.call == Just roomId && not (session.userId == excludeUserId && cId == excludeClientId) then
+                                    if
+                                        isPeerInSameCall roomId excludeUserId session.userId connection.call
+                                            && not (session.userId == excludeUserId && cId == excludeClientId)
+                                    then
                                         Just
                                             (Lamdera.sendToFrontend cId
                                                 (ChangeBroadcast (ServerChange (msgFor session.userId)))
