@@ -48,6 +48,9 @@ type Log
     | FailedToLoadDiscordGuildCustomEmojis (Nonempty ( Id CustomEmojiId, Http.Error )) Int
     | FailedToGenerateScheduledBackup Http.Error
     | FailedToRegenerateServerSecret Http.Error
+    | FailedCloudflarePullOffer Http.Error
+    | FailedCloudflareSessionCreate Http.Error
+    | FailedCloudflarePushLocalTracks Http.Error
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -129,6 +132,15 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToRegenerateServerSecret _ ->
+            Nothing
+
+        FailedCloudflarePullOffer error ->
+            Nothing
+
+        FailedCloudflareSessionCreate error ->
+            Nothing
+
+        FailedCloudflarePushLocalTracks error ->
             Nothing
 
 
@@ -528,6 +540,27 @@ logContent onPressCopy customEmojis log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Regenerating server secret failed"
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedCloudflarePullOffer error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Cloudflare pull offer failed"
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedCloudflareSessionCreate error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Failed to create cloudflare session"
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        FailedCloudflarePushLocalTracks error ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Failed to push local tracks"
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 

@@ -595,14 +595,16 @@ update msg model =
                its own `Http.task` — required because Lamdera live's CORS proxy only
                wraps the first task in a chain.
             -}
-            case result of
-                Err _ ->
-                    ( model
-                    , Call.Local_Leave time
+            let
+                cmd =
+                    Call.Local_Leave time
                         |> Local_VoiceChatChange
                         |> LocalChangeResponse changeId
                         |> Lamdera.sendToFrontend clientId
-                    )
+            in
+            case result of
+                Err error ->
+                    BackendExtra.addLogWithCmd time (Log.FailedCloudflarePullOffer error) model cmd
 
                 Ok sessionId ->
                     case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
@@ -616,24 +618,26 @@ update msg model =
                             )
 
                         _ ->
-                            ( model
-                            , Call.Local_Leave time
-                                |> Local_VoiceChatChange
-                                |> LocalChangeResponse changeId
-                                |> Lamdera.sendToFrontend clientId
-                            )
+                            ( model, cmd )
 
         GotCloudflareSession clientId changeId time roomId sessionId result ->
             handleGotCloudflareSession clientId changeId time roomId sessionId result model
 
-        GotCloudflarePullOffer clientId changeId connectionId remoteSessionId trackNames result ->
-            ( model
-            , FilledInByBackend (Result.mapError (\_ -> ()) result)
-                |> Call.Local_PullTracks connectionId remoteSessionId trackNames
-                |> Local_VoiceChatChange
-                |> LocalChangeResponse changeId
-                |> Lamdera.sendToFrontend clientId
-            )
+        GotCloudflarePullOffer time clientId changeId connectionId remoteSessionId trackNames result ->
+            let
+                cmd =
+                    FilledInByBackend (Result.mapError (\_ -> ()) result)
+                        |> Call.Local_PullTracks connectionId remoteSessionId trackNames
+                        |> Local_VoiceChatChange
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
+            in
+            case result of
+                Ok _ ->
+                    ( model, cmd )
+
+                Err error ->
+                    BackendExtra.addLogWithCmd time (Log.FailedCloudflarePullOffer error) model cmd
 
         GotCloudflareRenegotiateAck _ ->
             ( model, Command.none )
@@ -4910,7 +4914,7 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
             asUser model sessionId (handlePublishTracks clientId changeId time offerSdp mids model)
 
         Call.Local_PullTracks connectionId remoteSessionId trackNames _ ->
-            asUser model sessionId (handlePullTracks sessionId clientId changeId connectionId remoteSessionId trackNames model)
+            asUser model sessionId (handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model)
 
         Call.Local_RenegotiateAnswer answerSdp ->
             asUser model sessionId (handleRenegotiateAnswer sessionId clientId answerSdp model)
@@ -5233,25 +5237,21 @@ handleGotCloudflareSession :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleGotCloudflareSession clientId changeId time roomId cfSessionId result model =
     case result of
-        Err _ ->
-            ( model
-            , Call.Local_Leave time
-                |> Local_VoiceChatChange
-                |> LocalChangeResponse changeId
-                |> Lamdera.sendToFrontend clientId
-            )
+        Err error ->
+            BackendExtra.addLogWithCmd
+                time
+                (Log.FailedCloudflarePushLocalTracks error)
+                model
+                (Call.Local_Leave time
+                    |> Local_VoiceChatChange
+                    |> LocalChangeResponse changeId
+                    |> Lamdera.sendToFrontend clientId
+                )
 
         Ok push ->
             case findClientLocation clientId model of
                 Just ( sessionId2, connection ) ->
                     let
-                        publishResult : Call.PublishResult
-                        publishResult =
-                            { answerSdp = push.answerSdp
-                            , sessionId = cfSessionId
-                            , trackNames = push.trackNames
-                            }
-
                         userId : Id UserId
                         userId =
                             case SeqDict.get sessionId2 model.sessions of
@@ -5281,31 +5281,35 @@ handleGotCloudflareSession clientId changeId time roomId cfSessionId result mode
                                         )
                                         model.connections
                             }
-
-                        broadcastJoined =
-                            broadcastToCallParticipants
-                                roomId
-                                userId
-                                clientId
-                                (\peerUserId ->
-                                    Call.Server_Joined
-                                        time
-                                        { roomId = peerRoomId roomId peerUserId userId
-                                        , otherClientId = ( userId, clientId )
-                                        }
-                                        cfSessionId
-                                        push.trackNames
-                                        |> Server_VoiceChatChange
-                                )
-                                model2
                     in
                     ( model2
                     , Command.batch
-                        [ Call.Local_PublishTracks push.answerSdp [] (FilledInByBackend publishResult)
+                        [ Call.Local_PublishTracks push.answerSdp
+                            []
+                            (FilledInByBackend
+                                { answerSdp = push.answerSdp
+                                , sessionId = cfSessionId
+                                , trackNames = push.trackNames
+                                }
+                            )
                             |> Local_VoiceChatChange
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
-                        , broadcastJoined
+                        , broadcastToCallParticipants
+                            roomId
+                            userId
+                            clientId
+                            (\peerUserId ->
+                                Call.Server_Joined
+                                    time
+                                    { roomId = peerRoomId roomId peerUserId userId
+                                    , otherClientId = ( userId, clientId )
+                                    }
+                                    cfSessionId
+                                    push.trackNames
+                                    |> Server_VoiceChatChange
+                            )
+                            model2
                         ]
                     )
 
@@ -5382,7 +5386,8 @@ findClientLocation clientId model =
 
 
 handlePullTracks :
-    SessionId
+    Time.Posix
+    -> SessionId
     -> ClientId
     -> ChangeId
     -> Call.ConnectionId
@@ -5392,7 +5397,7 @@ handlePullTracks :
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handlePullTracks sessionId clientId changeId connectionId remoteSessionId trackNames model _ _ =
+handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model _ _ =
     case
         ( model.cloudflareRealtimeApiToken
         , model.cloudflareRealtimeAppId
@@ -5408,7 +5413,7 @@ handlePullTracks sessionId clientId changeId connectionId remoteSessionId trackN
                         apiToken
                         sfu.sessionId
                         { remoteSessionId = remoteSessionId, trackNames = trackNames }
-                        |> Task.attempt (GotCloudflarePullOffer clientId changeId connectionId remoteSessionId trackNames)
+                        |> Task.attempt (GotCloudflarePullOffer time clientId changeId connectionId remoteSessionId trackNames)
                     )
 
                 Nothing ->
