@@ -58,13 +58,7 @@ routeFuzzer =
             idFuzzer
             threadRouteFuzzer
             (Fuzz.maybe tabFuzzer)
-        , Fuzz.map3
-            (\userId otherUserId matchId ->
-                PublicGoMatchRoute (DmChannel.channelIdFromUserIds userId otherUserId) matchId
-            )
-            idFuzzer
-            idFuzzer
-            idFuzzer
+        , Fuzz.map PublicGoMatchRoute secretIdFuzzer
         ]
 
 

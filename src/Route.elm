@@ -45,7 +45,7 @@ type Route
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
-    | PublicGoMatchRoute (Id GoMatchPublicId)
+    | PublicGoMatchRoute (SecretId GoMatchPublicId)
 
 
 type LinkDiscordError
@@ -347,12 +347,7 @@ decode url =
                     LinkDiscord (Err LinkDiscordExpired)
 
         [ "go-match", goMatchPublicId ] ->
-            case Id.fromString goMatchPublicId of
-                Just goMatchPublicId2 ->
-                    PublicGoMatchRoute goMatchPublicId2
-
-                Nothing ->
-                    HomePageRoute
+            PublicGoMatchRoute (SecretId.fromString goMatchPublicId)
 
         _ ->
             HomePageRoute
@@ -627,7 +622,7 @@ encode route =
                     ( [ linkDiscordPath ], [] )
 
                 PublicGoMatchRoute goMatchPublicId ->
-                    ( [ "go-match", Id.toString goMatchPublicId ], [] )
+                    ( [ "go-match", SecretId.toString goMatchPublicId ], [] )
     in
     Url.Builder.absolute path query
 

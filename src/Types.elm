@@ -344,7 +344,7 @@ type alias BackendModel =
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketDisconnects : Array Time.Posix
-    , goMatchPublicIds : OneToOne (Id GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
 
@@ -520,6 +520,7 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
+    | PressedShareGoMatch (Id UserId) (Id ChannelMessageId)
     | FileDragEnter
     | FileDragLeave
     | FileDropped (List File)
@@ -584,7 +585,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
-    | GetPublicGoMatchRequest (Id GoMatchPublicId)
+    | GetPublicGoMatchRequest (SecretId GoMatchPublicId)
 
 
 type BackendMsg
@@ -889,3 +890,4 @@ type LocalChange
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Go { otherUserId : Id UserId } Go.LocalChange
+    | Local_GoMatchShare (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GoMatchPublicId))

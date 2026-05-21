@@ -85,7 +85,6 @@ import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import Untrusted
 import Url exposing (Url)
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -235,6 +234,9 @@ pendingChangesText localChange =
 
                 Go.Action _ _ ->
                     "Made a move in Go"
+
+        Local_GoMatchShare _ _ _ ->
+            "Shared Go match"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -1772,6 +1774,9 @@ isPressMsg msg =
         PressedChannelHeaderTab _ ->
             True
 
+        PressedShareGoMatch _ _ ->
+            True
+
         FileDragEnter ->
             False
 
@@ -2697,6 +2702,9 @@ changeUpdate localMsg local =
 
                 Local_Go { otherUserId } goChange ->
                     goChangeUpdate local.localUser.session.userId otherUserId goChange local
+
+                Local_GoMatchShare _ _ _ ->
+                    local
 
         ServerChange serverChange ->
             case serverChange of

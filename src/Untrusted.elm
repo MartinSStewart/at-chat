@@ -1,11 +1,9 @@
 module Untrusted exposing
     ( Untrusted(..)
-    , dmChannelId
     , emailAddress
     , untrust
     )
 
-import DmChannel exposing (DmChannelId)
 import EmailAddress exposing (EmailAddress)
 
 
@@ -21,15 +19,6 @@ type Untrusted a
 emailAddress : Untrusted EmailAddress -> Maybe EmailAddress
 emailAddress (Untrusted a) =
     EmailAddress.toString a |> EmailAddress.fromString
-
-
-dmChannelId : Untrusted DmChannelId -> DmChannelId
-dmChannelId (Untrusted a) =
-    let
-        ( userIdA, userIdB ) =
-            DmChannel.userIdsFromChannelId a
-    in
-    DmChannel.channelIdFromUserIds userIdA userIdB
 
 
 untrust : a -> Untrusted a

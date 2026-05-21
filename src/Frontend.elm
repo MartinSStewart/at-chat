@@ -27,6 +27,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
+import Env
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Go
@@ -1039,6 +1040,17 @@ updateLoaded msg model =
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_NewInviteLink model.time guildId EmptyPlaceholder |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedShareGoMatch otherUserId matchId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_GoMatchShare otherUserId matchId EmptyPlaceholder |> Just)
                         loggedIn
                         Command.none
                 )
@@ -5786,6 +5798,10 @@ updateLoadedFromBackend msg model =
 
                                 Nothing ->
                                     Command.none
+
+                        Local_GoMatchShare _ _ (FilledInByBackend publicId) ->
+                            Ports.copyToClipboard
+                                (Env.domain ++ Route.encode (PublicGoMatchRoute publicId))
 
                         Local_NewGuild _ _ (FilledInByBackend guildId) ->
                             case SeqDict.get guildId local.guilds of
