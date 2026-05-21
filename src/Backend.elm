@@ -70,7 +70,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), PendingVoiceChatJoin, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), PendingVoiceChatJoin, PublicGoMatchData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -4817,6 +4817,51 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         |> Lamdera.sendToFrontend clientId
                     )
                 )
+
+        GetPublicGoMatchRequest untrustedChannelId matchId ->
+            let
+                channelId : DmChannelId
+                channelId =
+                    Untrusted.dmChannelId untrustedChannelId
+
+                response : Result () PublicGoMatchData
+                response =
+                    case SeqDict.get channelId model.dmChannels of
+                        Just dmChannel ->
+                            case SeqDict.get matchId dmChannel.goMatches of
+                                Just ( setup, actions ) ->
+                                    let
+                                        lookupUser : Id UserId -> User.FrontendUser
+                                        lookupUser uid =
+                                            case NonemptyDict.get uid model.users of
+                                                Just u ->
+                                                    User.backendToFrontendForUser u
+
+                                                Nothing ->
+                                                    { name = PersonName.fromStringLossy "Unknown"
+                                                    , isAdmin = False
+                                                    , createdAt = time
+                                                    , icon = Nothing
+                                                    }
+                                    in
+                                    Ok
+                                        { channelId = channelId
+                                        , matchId = matchId
+                                        , setup = setup
+                                        , actions = actions
+                                        , blackPlayer = lookupUser setup.blackPlayer
+                                        , whitePlayer = lookupUser setup.whitePlayer
+                                        }
+
+                                Nothing ->
+                                    Err ()
+
+                        Nothing ->
+                            Err ()
+            in
+            ( model
+            , GetPublicGoMatchResponse response |> Lamdera.sendToFrontend clientId
+            )
 
 
 textToDiscordRichText :

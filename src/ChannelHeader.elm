@@ -572,8 +572,14 @@ tabBodyView local loggedIn model =
                     case dmRoute.tab of
                         Just (DmChannelHeaderTab_Go maybeMatchId) ->
                             Go.view
+                                False
                                 model.windowSize
-                                local.localUser
+                                local.localUser.session.userId
+                                (SeqDict.insert
+                                    local.localUser.session.userId
+                                    (User.backendToFrontendForUser local.localUser.user)
+                                    local.localUser.otherUsers
+                                )
                                 otherUserId
                                 maybeMatchId
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
@@ -653,6 +659,9 @@ tabBodyView local loggedIn model =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ _ ->
             Nothing
 
 

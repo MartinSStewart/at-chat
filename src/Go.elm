@@ -53,7 +53,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
-import User exposing (FrontendUser, LocalUser)
+import User exposing (FrontendUser)
 
 
 type Stone
@@ -1447,14 +1447,16 @@ viewHeight windowSize =
 
 
 view :
-    Coord CssPixels
-    -> LocalUser
+    Bool
+    -> Coord CssPixels
+    -> Id UserId
+    -> SeqDict (Id UserId) FrontendUser
     -> Id UserId
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
     -> Maybe Model
     -> Element Msg
-view windowSize localUser otherUserId maybeMatchId matches model =
+view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1470,17 +1472,22 @@ view windowSize localUser otherUserId maybeMatchId matches model =
         ]
         (Ui.column
             []
-            [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
+            [ if viewOnly then
+                Ui.none
+
+              else
+                Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just ( setup, actions ) ->
-                            Ui.Lazy.lazy5
+                            Ui.Lazy.lazy6
                                 gameView
+                                viewOnly
                                 windowSize
-                                localUser
-                                setup
-                                actions
+                                viewerUserId
+                                ( SeqDict.get setup.blackPlayer userLookup, SeqDict.get setup.whitePlayer userLookup )
+                                ( setup, actions )
                                 (case model of
                                     Just (Game game) ->
                                         game
@@ -1499,7 +1506,7 @@ view windowSize localUser otherUserId maybeMatchId matches model =
                 Nothing ->
                     Ui.Lazy.lazy3
                         setupView
-                        (localUser.session.userId == otherUserId)
+                        (viewerUserId == otherUserId)
                         windowSize
                         (case model of
                             Just (Game _) ->
@@ -1855,22 +1862,22 @@ formatClock seconds =
     String.fromInt minutes ++ ":" ++ twoDigit secs
 
 
-clockView : LocalUser -> GameState -> ValidatedSetup -> Element msg
-clockView localUser state setup =
+clockView : Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
+clockView blackUser whiteUser state setup =
     Ui.row
         [ Ui.spacing 8
         , Ui.paddingXY 16 16
         , Ui.contentCenterX
         ]
         [ clockChip
-            (User.getUser setup.blackPlayer localUser)
+            blackUser
             state.blackTime
             (state.currentPlayer == Black)
             Black
             setup
             state.blackCaptures
         , clockChip
-            (User.getUser setup.whitePlayer localUser)
+            whiteUser
             state.whiteTime
             (state.currentPlayer == White)
             White
@@ -2043,8 +2050,15 @@ hasPendingTurn userId matches =
         matches
 
 
-gameView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> GameModel -> Element GameMsg
-gameView windowSize localUser setup actions model =
+gameView :
+    Bool
+    -> Coord CssPixels
+    -> Id UserId
+    -> ( Maybe FrontendUser, Maybe FrontendUser )
+    -> ( ValidatedSetup, Array ActionWithTime )
+    -> GameModel
+    -> Element GameMsg
+gameView viewOnly windowSize viewerUserId ( blackUser, whiteUser ) ( setup, actions ) model =
     let
         isMobile : Bool
         isMobile =
@@ -2078,15 +2092,15 @@ gameView windowSize localUser setup actions model =
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView localUser state setup
-            , boardView windowSize localUser.session.userId setup state model
+            [ clockView blackUser whiteUser state setup
+            , boardView viewOnly windowSize viewerUserId setup state model
             ]
         , if isMobile then
             Ui.none
 
           else
             historyView state model
-        , if isLocalUsersTurn localUser.session.userId setup state then
+        , if not viewOnly && isLocalUsersTurn viewerUserId setup state then
             controlsView state
 
           else
@@ -2221,8 +2235,8 @@ historyView state model =
             ]
 
 
-boardView : Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
-boardView windowSize currentUserId setup state model =
+boardView : Bool -> Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
+boardView viewOnly windowSize currentUserId setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -2281,7 +2295,10 @@ boardView windowSize currentUserId setup state model =
 
         clickable : Bool
         clickable =
-            if viewing then
+            if viewOnly then
+                False
+
+            else if viewing then
                 True
 
             else

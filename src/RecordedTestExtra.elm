@@ -43,6 +43,7 @@ module RecordedTestExtra exposing
     , linkSecondDiscordAccount
     , mobileWindow
     , noMissingMessages
+    , publicGoMatchViewTest
     , regeneratedServerSecretValue
     , safariIphone
     , scrollToMiddle
@@ -72,6 +73,7 @@ import ChannelDescription
 import Codec
 import Dict
 import Discord
+import DmChannel
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), RequestedBy(..))
@@ -2031,6 +2033,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
         ProfilePictureEditorToFrontend _ ->
             False
 
+        GetPublicGoMatchResponse _ ->
+            False
+
 
 allAttackerToBackendChanges : List ToBackend
 allAttackerToBackendChanges =
@@ -2051,6 +2056,9 @@ allAttackerToBackendChanges =
     , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
     , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (FileStatus.FileHash "fake-hash"))
     , AdminDataRequest Nothing
+    , GetPublicGoMatchRequest
+        (DmChannel.channelIdFromUserIds (Id.fromInt 0) (Id.fromInt 1) |> Untrusted.untrust)
+        (Id.fromInt 0)
     , -- Make sure this one is last
       LogOutRequest
     ]
@@ -2513,6 +2521,69 @@ goTurnNotificationDotTest normalConfig =
                         , admin.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+publicGoMatchViewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+publicGoMatchViewTest normalConfig =
+    startTest
+        "Non-logged-in users can view a Go match via the public URL"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            tallDesktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ user.click 1000 (Dom.id "guild_openDm_0")
+                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "go_start")
+                        , admin.click 100 (Dom.id "go_cell_4_4")
+                        , T.connectFrontend
+                            100
+                            sessionId2
+                            "/public-go/0-1/0"
+                            tallDesktopWindow
+                            (\viewer ->
+                                [ viewer.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                , viewer.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])
+                                , viewer.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                , viewer.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
+                                , viewer.checkView
+                                    100
+                                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_cell_5_5" ])
+                                ]
+                            )
+                        , T.connectFrontend
+                            100
+                            sessionIdAttacker
+                            "/public-go/0-1/99"
+                            tallDesktopWindow
+                            (\missingViewer ->
+                                [ missingViewer.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                , missingViewer.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
+                                ]
+                            )
                         ]
                     )
                 ]

@@ -45,6 +45,7 @@ type Route
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
+    | PublicGoMatchRoute DmChannelId (Id ChannelMessageId)
 
 
 type LinkDiscordError
@@ -345,6 +346,14 @@ decode url =
                 _ ->
                     LinkDiscord (Err LinkDiscordExpired)
 
+        [ "public-go", channelId, matchId ] ->
+            case ( DmChannel.channelIdFromString channelId, Id.fromString matchId ) of
+                ( Ok channelId2, Just matchId2 ) ->
+                    PublicGoMatchRoute channelId2 matchId2
+
+                _ ->
+                    HomePageRoute
+
         _ ->
             HomePageRoute
 
@@ -436,6 +445,9 @@ toChannelHeaderTab route =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ _ ->
             Nothing
 
 
@@ -613,6 +625,9 @@ encode route =
 
                 LinkDiscord _ ->
                     ( [ linkDiscordPath ], [] )
+
+                PublicGoMatchRoute channelId matchId ->
+                    ( [ "public-go", DmChannel.channelIdToString channelId, Id.toString matchId ], [] )
     in
     Url.Builder.absolute path query
 
@@ -701,6 +716,9 @@ requiresLogin route =
             True
 
         LinkDiscord _ ->
+            False
+
+        PublicGoMatchRoute _ _ ->
             False
 
 

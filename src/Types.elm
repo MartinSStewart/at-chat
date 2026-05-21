@@ -32,6 +32,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , PendingVoiceChatJoin
+    , PublicGoMatchData
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -132,6 +133,7 @@ type alias LoadingFrontend =
     , timezone : Time.Zone
     , scrollbarWidth : Int
     , userAgent : Maybe UserAgent
+    , publicGoMatch : Maybe (Result () PublicGoMatchData)
     }
 
 
@@ -162,6 +164,7 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
+    , publicGoMatch : Maybe (Result () PublicGoMatchData)
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
@@ -580,6 +583,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
+    | GetPublicGoMatchRequest (Untrusted DmChannelId) (Id ChannelMessageId)
 
 
 type BackendMsg
@@ -724,6 +728,17 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
+    | GetPublicGoMatchResponse (Result () PublicGoMatchData)
+
+
+type alias PublicGoMatchData =
+    { channelId : DmChannelId
+    , matchId : Id ChannelMessageId
+    , setup : Go.ValidatedSetup
+    , actions : Array Go.ActionWithTime
+    , blackPlayer : FrontendUser
+    , whitePlayer : FrontendUser
+    }
 
 
 type alias LoginData =

@@ -278,6 +278,7 @@ init url key =
         , pwaStatus = Ports.BrowserView
         , scrollbarWidth = 0
         , userAgent = Nothing
+        , publicGoMatch = Nothing
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -285,6 +286,12 @@ init url key =
         , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Dom.getViewport
         , Lamdera.sendToBackend
             (CheckLoginRequest (routeToInitialDataRequest route))
+        , case route of
+            PublicGoMatchRoute channelId matchId ->
+                Lamdera.sendToBackend (GetPublicGoMatchRequest (Untrusted.untrust channelId) matchId)
+
+            _ ->
+                Command.none
         , Ports.loadSounds
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
@@ -343,6 +350,7 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
+            , publicGoMatch = loading.publicGoMatch
             , toFrontendLogs = Nothing
             }
 
@@ -2621,6 +2629,9 @@ updateLoaded msg model =
                         LinkDiscord _ ->
                             ( model, Command.none )
 
+                        PublicGoMatchRoute _ _ ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
@@ -2655,6 +2666,9 @@ updateLoaded msg model =
                                     ( model, Command.none )
 
                                 LinkDiscord _ ->
+                                    ( model, Command.none )
+
+                                PublicGoMatchRoute _ _ ->
                                     ( model, Command.none )
 
                         ViewThreadWithMessage _ _ ->
@@ -4330,6 +4344,9 @@ updateLoaded msg model =
                 LinkDiscord _ ->
                     ( model, Command.none )
 
+                PublicGoMatchRoute _ _ ->
+                    ( model, Command.none )
+
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
 checkCallDisplayModeChange modelOld modelNew =
@@ -5548,6 +5565,9 @@ updateFromBackend msg model =
                 YouConnected clientId ->
                     tryInitLoadedFrontend { loading | clientId = Just clientId }
 
+                GetPublicGoMatchResponse result ->
+                    tryInitLoadedFrontend { loading | publicGoMatch = Just result }
+
                 _ ->
                     ( model, Command.none )
 
@@ -6253,6 +6273,9 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
+        GetPublicGoMatchResponse result ->
+            ( { model | publicGoMatch = Just result }, Command.none )
+
 
 view : FrontendModel -> Browser.Document FrontendMsg
 view model =
@@ -6539,8 +6562,59 @@ view model =
                                                 "Failed to link your Discord account due to some problem with the bookmarklet"
                                         )
                             )
+
+                    PublicGoMatchRoute _ _ ->
+                        publicGoMatchView loaded
         ]
     }
+
+
+publicGoMatchView : LoadedFrontend -> Html FrontendMsg
+publicGoMatchView loaded =
+    FrontendExtra.layout
+        loaded
+        [ Ui.background MyUi.background3, Ui.contentCenterX, Ui.contentCenterY ]
+        (case loaded.publicGoMatch of
+            Just (Ok data) ->
+                let
+                    userLookup : SeqDict (Id UserId) FrontendUser
+                    userLookup =
+                        SeqDict.fromList
+                            [ ( data.setup.blackPlayer, data.blackPlayer )
+                            , ( data.setup.whitePlayer, data.whitePlayer )
+                            ]
+                in
+                Ui.el
+                    [ Ui.htmlAttribute (Html.Attributes.id "public_go_container")
+                    , Ui.centerX
+                    , Ui.centerY
+                    , Ui.width Ui.shrink
+                    ]
+                    (Go.view
+                        True
+                        loaded.windowSize
+                        publicGoMatchViewerUserId
+                        userLookup
+                        publicGoMatchViewerUserId
+                        (Just data.matchId)
+                        (SeqDict.singleton data.matchId ( data.setup, data.actions ))
+                        Nothing
+                        |> Ui.map GoMsg
+                    )
+
+            Just (Err ()) ->
+                errorPage loaded "Go match not found"
+
+            Nothing ->
+                Ui.el
+                    [ Ui.centerX, Ui.centerY, Ui.htmlAttribute (Html.Attributes.id "public_go_loading") ]
+                    (Ui.text "Loading match...")
+        )
+
+
+publicGoMatchViewerUserId : Id UserId
+publicGoMatchViewerUserId =
+    Id.fromInt -1
 
 
 errorPage : LoadedFrontend -> String -> Element FrontendMsg

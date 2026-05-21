@@ -85,6 +85,7 @@ import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Prose
+import Untrusted
 import Url exposing (Url)
 import User exposing (DiscordFrontendUser, FrontendCurrentUser, FrontendUser, LastDmViewed(..), LocalUser, NotificationLevel(..))
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -505,6 +506,9 @@ canDropFiles currentUserId route =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ _ ->
             Nothing
 
 
@@ -1349,6 +1353,9 @@ routeRequest previousRoute newRoute model =
                 _ ->
                     Command.none
             )
+
+        PublicGoMatchRoute channelId matchId ->
+            ( model2, Lamdera.sendToBackend (GetPublicGoMatchRequest (Untrusted.untrust channelId) matchId) )
 
 
 updateLoggedIn :
