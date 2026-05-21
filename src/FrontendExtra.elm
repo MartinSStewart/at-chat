@@ -2684,16 +2684,12 @@ changeUpdate localMsg local =
                                             { calls
                                                 | currentRoom = Just roomId
                                                 , voiceChats =
-                                                    SeqDict.updateIfExists roomId
-                                                        (\set ->
-                                                            List.foldl
-                                                                (\peer set2 ->
-                                                                    NonemptySet.insert peer.connectionId.otherClientId set2
-                                                                )
-                                                                set
-                                                                peers3
+                                                    List.foldl
+                                                        (\peer set2 ->
+                                                            SeqDictHelper.addItem roomId peer.connectionId.otherClientId set2
                                                         )
                                                         calls.voiceChats
+                                                        peers3
                                             }
                                         , dmChannels =
                                             if SeqDict.member roomId calls.voiceChats then
