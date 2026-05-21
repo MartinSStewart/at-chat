@@ -1948,12 +1948,6 @@ clockChip userId maybeUser seconds isActive stone setup captures =
                 ( False, White ) ->
                     colorA
             )
-
-        --, if isActive then
-        --    Ui.background MyUi.background2
-        --
-        --  else
-        --    Ui.noAttr
         , Ui.background colorA
         , if isActive then
             Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 6, color = Ui.rgba 59 153 252 1 } ]

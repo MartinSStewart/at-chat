@@ -364,7 +364,7 @@ displayMode currentUserId route local =
         LinkDiscord _ ->
             thumbnailOrNoVideo
 
-        PublicGoMatchRoute _ _ ->
+        PublicGoMatchRoute _ ->
             thumbnailOrNoVideo
 
 
@@ -504,7 +504,7 @@ videoNodes currentUserId config loggedIn local =
                         LinkDiscord _ ->
                             False
 
-                        PublicGoMatchRoute _ _ ->
+                        PublicGoMatchRoute _ ->
                             False
             in
             if Just viewingRoomId2 == local.currentRoom && isTabExpanded then

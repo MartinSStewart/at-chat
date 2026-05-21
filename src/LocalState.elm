@@ -2476,7 +2476,7 @@ routeToViewing route local =
         LinkDiscord _ ->
             StopViewingChannel
 
-        PublicGoMatchRoute _ _ ->
+        PublicGoMatchRoute _ ->
             StopViewingChannel
 
 

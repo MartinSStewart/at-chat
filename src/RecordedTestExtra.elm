@@ -2056,9 +2056,7 @@ allAttackerToBackendChanges =
     , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
     , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (FileStatus.FileHash "fake-hash"))
     , AdminDataRequest Nothing
-    , GetPublicGoMatchRequest
-        (DmChannel.channelIdFromUserIds (Id.fromInt 0) (Id.fromInt 1) |> Untrusted.untrust)
-        (Id.fromInt 0)
+    , GetPublicGoMatchRequest (Id.fromInt 0)
     , -- Make sure this one is last
       LogOutRequest
     ]

@@ -508,7 +508,7 @@ canDropFiles currentUserId route =
         LinkDiscord _ ->
             Nothing
 
-        PublicGoMatchRoute _ _ ->
+        PublicGoMatchRoute _ ->
             Nothing
 
 
@@ -1354,8 +1354,8 @@ routeRequest previousRoute newRoute model =
                     Command.none
             )
 
-        PublicGoMatchRoute channelId matchId ->
-            ( model2, Lamdera.sendToBackend (GetPublicGoMatchRequest (Untrusted.untrust channelId) matchId) )
+        PublicGoMatchRoute publicGoMatchId ->
+            ( model2, Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId) )
 
 
 updateLoggedIn :

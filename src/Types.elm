@@ -74,7 +74,7 @@ import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -344,6 +344,7 @@ type alias BackendModel =
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketDisconnects : Array Time.Posix
+    , goMatchPublicIds : OneToOne (Id GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
 
@@ -583,7 +584,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
-    | GetPublicGoMatchRequest (Untrusted DmChannelId) (Id ChannelMessageId)
+    | GetPublicGoMatchRequest (Id GoMatchPublicId)
 
 
 type BackendMsg
@@ -732,9 +733,7 @@ type ToFrontend
 
 
 type alias PublicGoMatchData =
-    { channelId : DmChannelId
-    , matchId : Id ChannelMessageId
-    , setup : Go.ValidatedSetup
+    { setup : Go.ValidatedSetup
     , actions : Array Go.ActionWithTime
     , blackPlayer : FrontendUser
     , whitePlayer : FrontendUser

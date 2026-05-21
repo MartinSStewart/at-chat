@@ -234,6 +234,7 @@ init =
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
       , websocketDisconnects = Array.empty
+      , goMatchPublicIds = OneToOne.empty
       }
     , Command.none
     )
@@ -4818,50 +4819,47 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
-        GetPublicGoMatchRequest untrustedChannelId matchId ->
-            let
-                channelId : DmChannelId
-                channelId =
-                    Untrusted.dmChannelId untrustedChannelId
+        GetPublicGoMatchRequest publicGoMatchId ->
+            case OneToOne.second publicGoMatchId model.goMatchPublicIds of
+                Just ( channelId, messageId ) ->
+                    let
+                        response : Result () PublicGoMatchData
+                        response =
+                            case SeqDict.get channelId model.dmChannels of
+                                Just dmChannel ->
+                                    case SeqDict.get messageId dmChannel.goMatches of
+                                        Just ( setup, actions ) ->
+                                            let
+                                                lookupUser : Id UserId -> User.FrontendUser
+                                                lookupUser uid =
+                                                    case NonemptyDict.get uid model.users of
+                                                        Just u ->
+                                                            User.backendToFrontendForUser u
 
-                response : Result () PublicGoMatchData
-                response =
-                    case SeqDict.get channelId model.dmChannels of
-                        Just dmChannel ->
-                            case SeqDict.get matchId dmChannel.goMatches of
-                                Just ( setup, actions ) ->
-                                    let
-                                        lookupUser : Id UserId -> User.FrontendUser
-                                        lookupUser uid =
-                                            case NonemptyDict.get uid model.users of
-                                                Just u ->
-                                                    User.backendToFrontendForUser u
+                                                        Nothing ->
+                                                            { name = PersonName.fromStringLossy "<missing>"
+                                                            , isAdmin = False
+                                                            , createdAt = time
+                                                            , icon = Nothing
+                                                            }
+                                            in
+                                            { setup = setup
+                                            , actions = actions
+                                            , blackPlayer = lookupUser setup.blackPlayer
+                                            , whitePlayer = lookupUser setup.whitePlayer
+                                            }
+                                                |> Ok
 
-                                                Nothing ->
-                                                    { name = PersonName.fromStringLossy "Unknown"
-                                                    , isAdmin = False
-                                                    , createdAt = time
-                                                    , icon = Nothing
-                                                    }
-                                    in
-                                    Ok
-                                        { channelId = channelId
-                                        , matchId = matchId
-                                        , setup = setup
-                                        , actions = actions
-                                        , blackPlayer = lookupUser setup.blackPlayer
-                                        , whitePlayer = lookupUser setup.whitePlayer
-                                        }
+                                        Nothing ->
+                                            Err ()
 
                                 Nothing ->
                                     Err ()
+                    in
+                    ( model, GetPublicGoMatchResponse response |> Lamdera.sendToFrontend clientId )
 
-                        Nothing ->
-                            Err ()
-            in
-            ( model
-            , GetPublicGoMatchResponse response |> Lamdera.sendToFrontend clientId
-            )
+                Nothing ->
+                    ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
 
 
 textToDiscordRichText :

@@ -24,7 +24,7 @@ import Codec
 import Dict
 import Discord
 import DmChannel exposing (DmChannelId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GoMatchPublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
 import Pagination
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
@@ -45,7 +45,7 @@ type Route
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
-    | PublicGoMatchRoute DmChannelId (Id ChannelMessageId)
+    | PublicGoMatchRoute (Id GoMatchPublicId)
 
 
 type LinkDiscordError
@@ -346,12 +346,12 @@ decode url =
                 _ ->
                     LinkDiscord (Err LinkDiscordExpired)
 
-        [ "public-go", channelId, matchId ] ->
-            case ( DmChannel.channelIdFromString channelId, Id.fromString matchId ) of
-                ( Ok channelId2, Just matchId2 ) ->
-                    PublicGoMatchRoute channelId2 matchId2
+        [ "go-match", goMatchPublicId ] ->
+            case Id.fromString goMatchPublicId of
+                Just goMatchPublicId2 ->
+                    PublicGoMatchRoute goMatchPublicId2
 
-                _ ->
+                Nothing ->
                     HomePageRoute
 
         _ ->
@@ -447,7 +447,7 @@ toChannelHeaderTab route =
         LinkDiscord _ ->
             Nothing
 
-        PublicGoMatchRoute _ _ ->
+        PublicGoMatchRoute _ ->
             Nothing
 
 
@@ -626,8 +626,8 @@ encode route =
                 LinkDiscord _ ->
                     ( [ linkDiscordPath ], [] )
 
-                PublicGoMatchRoute channelId matchId ->
-                    ( [ "public-go", DmChannel.channelIdToString channelId, Id.toString matchId ], [] )
+                PublicGoMatchRoute goMatchPublicId ->
+                    ( [ "go-match", Id.toString goMatchPublicId ], [] )
     in
     Url.Builder.absolute path query
 
@@ -718,7 +718,7 @@ requiresLogin route =
         LinkDiscord _ ->
             False
 
-        PublicGoMatchRoute _ _ ->
+        PublicGoMatchRoute _ ->
             False
 
 

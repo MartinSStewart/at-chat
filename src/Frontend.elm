@@ -287,8 +287,8 @@ init url key =
         , Lamdera.sendToBackend
             (CheckLoginRequest (routeToInitialDataRequest route))
         , case route of
-            PublicGoMatchRoute channelId matchId ->
-                Lamdera.sendToBackend (GetPublicGoMatchRequest (Untrusted.untrust channelId) matchId)
+            PublicGoMatchRoute goMatchPublicId ->
+                Lamdera.sendToBackend (GetPublicGoMatchRequest goMatchPublicId)
 
             _ ->
                 Command.none
@@ -2629,7 +2629,7 @@ updateLoaded msg model =
                         LinkDiscord _ ->
                             ( model, Command.none )
 
-                        PublicGoMatchRoute _ _ ->
+                        PublicGoMatchRoute _ ->
                             ( model, Command.none )
 
                 MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
@@ -2668,7 +2668,7 @@ updateLoaded msg model =
                                 LinkDiscord _ ->
                                     ( model, Command.none )
 
-                                PublicGoMatchRoute _ _ ->
+                                PublicGoMatchRoute _ ->
                                     ( model, Command.none )
 
                         ViewThreadWithMessage _ _ ->
@@ -4344,7 +4344,7 @@ updateLoaded msg model =
                 LinkDiscord _ ->
                     ( model, Command.none )
 
-                PublicGoMatchRoute _ _ ->
+                PublicGoMatchRoute _ ->
                     ( model, Command.none )
 
 
@@ -6563,7 +6563,7 @@ view model =
                                         )
                             )
 
-                    PublicGoMatchRoute _ _ ->
+                    PublicGoMatchRoute _ ->
                         publicGoMatchView loaded
         ]
     }
@@ -6596,8 +6596,8 @@ publicGoMatchView loaded =
                         publicGoMatchViewerUserId
                         userLookup
                         publicGoMatchViewerUserId
-                        (Just data.matchId)
-                        (SeqDict.singleton data.matchId ( data.setup, data.actions ))
+                        (Just Id.zero)
+                        (SeqDict.singleton Id.zero ( data.setup, data.actions ))
                         Nothing
                         |> Ui.map GoMsg
                     )

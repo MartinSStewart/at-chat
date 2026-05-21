@@ -1384,5 +1384,5 @@ toBackendLog toBackend =
         AdminDataRequest _ ->
             ToBackendLog_AdminDataRequest
 
-        GetPublicGoMatchRequest _ _ ->
+        GetPublicGoMatchRequest _ ->
             ToBackendLog_GetPublicGoMatchRequest

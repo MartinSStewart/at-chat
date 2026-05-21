@@ -661,7 +661,7 @@ tabBodyView local loggedIn model =
         LinkDiscord _ ->
             Nothing
 
-        PublicGoMatchRoute _ _ ->
+        PublicGoMatchRoute _ ->
             Nothing
 
 
