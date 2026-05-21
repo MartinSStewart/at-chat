@@ -51,6 +51,7 @@ import Svg.Events
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Shadow
 import User exposing (FrontendUser, LocalUser)
 
@@ -1469,17 +1470,17 @@ view windowSize localUser otherUserId maybeMatchId matches model =
         ]
         (Ui.column
             []
-            [ matchSwitcherView isMobile maybeMatchId matches
+            [ Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just ( setup, actions ) ->
-                            gameView
+                            Ui.Lazy.lazy5
+                                gameView
                                 windowSize
-                                localUser.session.userId
                                 localUser
                                 setup
-                                (foldActions actions setup)
+                                actions
                                 (case model of
                                     Just (Game game) ->
                                         game
@@ -1496,7 +1497,8 @@ view windowSize localUser otherUserId maybeMatchId matches model =
                             Ui.text "Match not found"
 
                 Nothing ->
-                    setupView
+                    Ui.Lazy.lazy3
+                        setupView
                         (localUser.session.userId == otherUserId)
                         windowSize
                         (case model of
@@ -2041,12 +2043,16 @@ hasPendingTurn userId matches =
         matches
 
 
-gameView : Coord CssPixels -> Id UserId -> LocalUser -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
-gameView windowSize currentUserId localUser setup state model =
+gameView : Coord CssPixels -> LocalUser -> ValidatedSetup -> Array ActionWithTime -> GameModel -> Element GameMsg
+gameView windowSize localUser setup actions model =
     let
         isMobile : Bool
         isMobile =
             MyUi.isMobile { windowSize = windowSize }
+
+        state : GameState
+        state =
+            foldActions actions setup
     in
     Ui.column
         [ Ui.spacing
@@ -2073,14 +2079,14 @@ gameView windowSize currentUserId localUser setup state model =
             , Ui.rounded 4
             ]
             [ clockView localUser state setup
-            , boardView windowSize currentUserId setup state model
+            , boardView windowSize localUser.session.userId setup state model
             ]
         , if isMobile then
             Ui.none
 
           else
             historyView state model
-        , if isLocalUsersTurn currentUserId setup state then
+        , if isLocalUsersTurn localUser.session.userId setup state then
             controlsView state
 
           else
