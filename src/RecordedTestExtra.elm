@@ -539,8 +539,8 @@ sfuHandshakeTest config =
                 ------------------------------------------------------------
                 -- STEP 1: both users navigate to the DM voice-chat tab.
                 ------------------------------------------------------------
-                , admin.click 100 (Dom.id "guild_openDm_0")
-                , user.click 100 (Dom.id "guild_openDm_0")
+                , admin.click 100 (Dom.id "guild_openDm_1")
+                , user.click 100 (Dom.id "guild_openDm_1")
                 , admin.click 100 (Dom.id "guild_voiceChat")
                 , user.click 100 (Dom.id "guild_voiceChat")
 
@@ -575,15 +575,14 @@ sfuHandshakeTest config =
                 -- We fake all that with one portEvent carrying
                 -- FromJs_PublishOffer.
                 ------------------------------------------------------------
-                , admin.portEvent 100
-                    "voice_chat_from_js"
-                    (Call.encodeFromJs
-                        (Call.FromJs_PublishOffer
-                            (Cloudflare.sdpFromString "fake-admin-publish-offer-sdp")
-                            [ "0", "1" ]
-                        )
-                    )
-
+                --, admin.portEvent 100
+                --    "voice_chat_from_js"
+                --    (Call.encodeFromJs
+                --        (Call.FromJs_PublishOffer
+                --            (Cloudflare.sdpFromString "fake-admin-publish-offer-sdp")
+                --            [ "0", "1" ]
+                --        )
+                --    )
                 ------------------------------------------------------------
                 -- STEP 4: at this point Elm sends Local_PublishTracks to the
                 -- backend. Backend handlePublishTracks runs two HTTP calls
@@ -906,6 +905,65 @@ mockCloudflareSfu { currentRequest, data } =
         Nothing
 
 
+mockVoiceChatPorts : { data : T.Data frontendModel backendModel, currentRequest : T.PortToJs } -> Maybe ( String, Json.Decode.Value )
+mockVoiceChatPorts { data, currentRequest } =
+    case Codec.decodeValue Call.voiceChatToJsCodec currentRequest.value of
+        Ok ok ->
+            case ok of
+                Call.ToJs_StartCall startCallData ->
+                    ( "voice_chat_from_js"
+                    , Call.encodeFromJs
+                        (Call.FromJs_PublishOffer
+                            (Cloudflare.sdpFromString "fake-admin-publish-offer-sdp")
+                            [ "0", "1" ]
+                        )
+                    )
+                        |> Just
+
+                Call.ToJs_LeaveCall ->
+                    Nothing
+
+                Call.ToJs_PublishAnswer record ->
+                    Nothing
+
+                Call.ToJs_PeerJoined record ->
+                    Nothing
+
+                Call.ToJs_PeerLeft connectionId ->
+                    Nothing
+
+                Call.ToJs_AcceptPullOffer record ->
+                    Nothing
+
+                Call.ToJs_SetAudioInputEnabled bool ->
+                    Nothing
+
+                Call.ToJs_SetInput bool idString ->
+                    Nothing
+
+                Call.ToJs_SetVideoInputEnabled bool ->
+                    Nothing
+
+                Call.ToJs_GetMediaDevices ->
+                    Nothing
+
+                Call.ToJs_StartLocalStream startLocalStreamData ->
+                    Nothing
+
+                Call.ToJs_StopLocalStream ->
+                    Nothing
+
+                Call.ToJs_SetVolume connectionId float ->
+                    Nothing
+
+        Err error ->
+            let
+                _ =
+                    Debug.log "Failed to decode Call.toJs" (Json.Decode.errorToString error)
+            in
+            Nothing
+
+
 voiceChatTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -922,6 +980,14 @@ voiceChatTest normalConfig =
 
                             Nothing ->
                                 normalConfig.handleHttpRequest req
+                , handlePortToJs =
+                    \request ->
+                        case request.currentRequest.portName of
+                            "voice_chat_to_js" ->
+                                mockVoiceChatPorts request
+
+                            _ ->
+                                normalConfig.handlePortToJs request
             }
     in
     T.testGroup

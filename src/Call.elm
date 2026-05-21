@@ -20,7 +20,6 @@ port module Call exposing
     , StartCallData
     , StartLocalStreamData
     , ToJs(..)
-    , decodeToJs
     , displayMode
     , displayModeChangeCmd
     , encodeFromJs
@@ -39,6 +38,7 @@ port module Call exposing
     , toJs
     , videoNodes
     , view
+    , voiceChatToJsCodec
     )
 
 import Bytes exposing (Bytes)
@@ -1184,11 +1184,6 @@ deviceKindCodec =
 encodeFromJs : FromJs -> Json.Encode.Value
 encodeFromJs value =
     Codec.encodeToValue voiceChatFromJsCodec value
-
-
-decodeToJs : Json.Decode.Value -> Result Codec.Error ToJs
-decodeToJs value =
-    Codec.decodeValue voiceChatToJsCodec value
 
 
 fromJs : (Result String FromJs -> msg) -> Subscription FrontendOnly msg
