@@ -1074,6 +1074,10 @@ voiceChatToJsCodec =
 
 toJs : ToJs -> Command FrontendOnly toMsg msg
 toJs msg =
+    let
+        _ =
+            Debug.log "ToJs" msg
+    in
     Command.sendToJs
         "voice_chat_to_js"
         voice_chat_to_js
@@ -1214,6 +1218,7 @@ fromJs msg =
                         Json.Decode.errorToString error
                     )
                 |> msg
+                |> Debug.log "fromJs"
         )
 
 
