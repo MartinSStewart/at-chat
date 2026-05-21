@@ -2658,8 +2658,17 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Local_Join time roomId _ ->
+                        Call.Local_Join time roomId peers ->
                             let
+                                peers3 : List Call.ExistingPeer
+                                peers3 =
+                                    case peers of
+                                        EmptyPlaceholder ->
+                                            []
+
+                                        FilledInByBackend peers2 ->
+                                            peers2
+
                                 local2 =
                                     case local.calls.currentRoom of
                                         Just _ ->
@@ -2671,7 +2680,21 @@ changeUpdate localMsg local =
                             case roomId of
                                 DmRoomId otherUserId ->
                                     { local2
-                                        | calls = { calls | currentRoom = Just roomId }
+                                        | calls =
+                                            { calls
+                                                | currentRoom = Just roomId
+                                                , voiceChats =
+                                                    SeqDict.updateIfExists roomId
+                                                        (\set ->
+                                                            List.foldl
+                                                                (\peer set2 ->
+                                                                    NonemptySet.insert peer.connectionId.otherClientId set2
+                                                                )
+                                                                set
+                                                                peers3
+                                                        )
+                                                        calls.voiceChats
+                                            }
                                         , dmChannels =
                                             if SeqDict.member roomId calls.voiceChats then
                                                 local2.dmChannels

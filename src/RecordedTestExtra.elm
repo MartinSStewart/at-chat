@@ -508,7 +508,7 @@ sfuHandshakeTest config =
                 -- STEP 1: both users navigate to the DM voice-chat tab.
                 ------------------------------------------------------------
                 , admin.click 100 (Dom.id "guild_openDm_1")
-                , user.click 100 (Dom.id "guild_openDm_1")
+                , user.click 100 (Dom.id "guild_openDm_0")
                 , admin.click 100 (Dom.id "guild_voiceChat")
                 , user.click 100 (Dom.id "guild_voiceChat")
 
@@ -657,6 +657,7 @@ sfuHandshakeTest config =
                                         ++ String.fromInt (List.length other)
                                     )
                     )
+                , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                 ]
             )
         ]

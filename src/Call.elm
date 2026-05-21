@@ -756,7 +756,12 @@ view windowSize roomId calls model =
                         , Ui.spacing 8
                         ]
                         [ MyUi.rowButton
-                            (Dom.id "guild_startVoiceChat")
+                            (if hasJoined2 then
+                                Dom.id "guild_leaveVoiceChat"
+
+                             else
+                                Dom.id "guild_startVoiceChat"
+                            )
                             (if hasJoined2 then
                                 PressedLeaveCall
 
