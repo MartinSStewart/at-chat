@@ -849,14 +849,54 @@ mockVoiceChatPorts { data, currentRequest } =
                     Nothing
 
                 Call.ToJs_GetMediaDevices ->
-                    -- Real JS would enumerate devices and send back
-                    -- FromJs_GotUserMediaDevices. Not needed for the SFU flow.
-                    Nothing
+                    fromJsEvent
+                        (Call.FromJs_GotUserMediaDevices
+                            [ { deviceId = IdString.fromString "microphoneDeviceId"
+                              , groupId = "microphoneGroupId"
+                              , kind = Call.AudioInput
+                              , label = "Default microphone"
+                              }
+                            , { deviceId = IdString.fromString "webcameraDeviceId"
+                              , groupId = "webcameraGroupId"
+                              , kind = Call.VideoInput
+                              , label = "Default webcamera"
+                              }
+                            , { deviceId = IdString.fromString "speakersDeviceId"
+                              , groupId = "speakersGroupId"
+                              , kind = Call.AudioOutput
+                              , label = "Default speakers"
+                              }
+                            ]
+                            [ IdString.fromString "microphoneDeviceId"
+                            , IdString.fromString "webcameraDeviceId"
+                            , IdString.fromString "speakersDeviceId"
+                            ]
+                        )
 
                 Call.ToJs_StartLocalStream _ ->
-                    -- Real JS sends FromJs_GotUserMediaDevices for the device picker.
-                    -- Not needed for the SFU flow.
-                    Nothing
+                    fromJsEvent
+                        (Call.FromJs_GotUserMediaDevices
+                            [ { deviceId = IdString.fromString "microphoneDeviceId"
+                              , groupId = "microphoneGroupId"
+                              , kind = Call.AudioInput
+                              , label = "Default microphone"
+                              }
+                            , { deviceId = IdString.fromString "webcameraDeviceId"
+                              , groupId = "webcameraGroupId"
+                              , kind = Call.VideoInput
+                              , label = "Default webcamera"
+                              }
+                            , { deviceId = IdString.fromString "speakersDeviceId"
+                              , groupId = "speakersGroupId"
+                              , kind = Call.AudioOutput
+                              , label = "Default speakers"
+                              }
+                            ]
+                            [ IdString.fromString "microphoneDeviceId"
+                            , IdString.fromString "webcameraDeviceId"
+                            , IdString.fromString "speakersDeviceId"
+                            ]
+                        )
 
                 Call.ToJs_StopLocalStream ->
                     -- JS stops tracks. No response.
