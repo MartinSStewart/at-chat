@@ -5764,8 +5764,15 @@ updateLoadedFromBackend msg model =
                                 Call.Local_PublishTracks _ _ EmptyPlaceholder ->
                                     Command.none
 
-                                Call.Local_PullTracks connectionId _ _ (FilledInByBackend offerSdp) ->
-                                    Call.toJs (Call.ToJs_AcceptPullOffer { connectionId = connectionId, offerSdp = offerSdp })
+                                Call.Local_PullTracks connectionId _ _ (FilledInByBackend result) ->
+                                    case result of
+                                        Ok pullTracks ->
+                                            { connectionId = connectionId, offerSdp = pullTracks.offerSdp }
+                                                |> Call.ToJs_AcceptPullOffer
+                                                |> Call.toJs
+
+                                        Err () ->
+                                            Command.none
 
                                 Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
                                     Command.none

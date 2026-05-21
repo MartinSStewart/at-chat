@@ -2693,7 +2693,7 @@ changeUpdate localMsg local =
                                                                 )
                                                                 calls.voiceChats
                                                                 peer4
-                                                        , missingApiKeys = False
+                                                        , error = Nothing
                                                     }
                                                 , dmChannels =
                                                     if SeqDict.member roomId calls.voiceChats then
@@ -2712,7 +2712,7 @@ changeUpdate localMsg local =
                                             }
 
                                 Err () ->
-                                    { local2 | calls = { calls | missingApiKeys = True } }
+                                    { local2 | calls = { calls | error = Just Call.MissingApiKeys } }
 
                         Call.Local_Leave time ->
                             leaveCall time local
@@ -2720,7 +2720,15 @@ changeUpdate localMsg local =
                         Call.Local_PublishTracks _ _ _ ->
                             local
 
-                        Call.Local_PullTracks _ _ _ _ ->
+                        Call.Local_PullTracks _ _ _ (FilledInByBackend result) ->
+                            case result of
+                                Ok _ ->
+                                    local
+
+                                Err _ ->
+                                    { local | calls = { calls | error = Just Call.FailedToPullTracks } }
+
+                        Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
                             local
 
                         Call.Local_RenegotiateAnswer _ ->

@@ -1,5 +1,6 @@
 port module Call exposing
-    ( ChannelSidebarMode(..)
+    ( CallError(..)
+    , ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)
     , DisplayMode(..)
@@ -77,7 +78,7 @@ type LocalChange
     = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
     | Local_Leave Time.Posix
     | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
-    | Local_PullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend Cloudflare.Sdp)
+    | Local_PullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
     | Local_RenegotiateAnswer Cloudflare.Sdp
 
 
@@ -135,8 +136,13 @@ type Msg
 type alias Local =
     { currentRoom : Maybe RoomId
     , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
-    , missingApiKeys : Bool
+    , error : Maybe CallError
     }
+
+
+type CallError
+    = MissingApiKeys
+    | FailedToPullTracks
 
 
 type alias Model =
@@ -181,7 +187,7 @@ init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
-    , missingApiKeys = False
+    , error = Nothing
     }
 
 
@@ -731,17 +737,27 @@ view windowSize roomId calls model =
         , Ui.inFront
             (Ui.column
                 [ Ui.alignBottom ]
-                [ if calls.missingApiKeys then
-                    MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError "Call API keys missing. Admin needs to add them."
-                        |> Ui.el [ Ui.paddingXY 16 0 ]
+                [ case calls.error of
+                    Just callError ->
+                        MyUi.errorBox
+                            (Dom.id "voiceChat_errorBox")
+                            PressedCopyError
+                            (case callError of
+                                MissingApiKeys ->
+                                    "Call API keys missing. Admin needs to add them."
 
-                  else
-                    case model.startConnectionError of
-                        Just error ->
-                            MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
+                                FailedToPullTracks ->
+                                    "Failed to pull remote audio/video tracks"
+                            )
+                            |> Ui.el [ Ui.paddingXY 16 0 ]
 
-                        Nothing ->
-                            Ui.none
+                    Nothing ->
+                        case model.startConnectionError of
+                            Just error ->
+                                MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
+
+                            Nothing ->
+                                Ui.none
                 , (if isMobile then
                     Ui.column
 
