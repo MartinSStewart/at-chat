@@ -1870,6 +1870,7 @@ clockView blackUser whiteUser state setup =
         , Ui.contentCenterX
         ]
         [ clockChip
+            setup.blackPlayer
             blackUser
             state.blackTime
             (state.currentPlayer == Black)
@@ -1877,6 +1878,7 @@ clockView blackUser whiteUser state setup =
             setup
             state.blackCaptures
         , clockChip
+            setup.whitePlayer
             whiteUser
             state.whiteTime
             (state.currentPlayer == White)
@@ -1913,8 +1915,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Element msg
-clockChip maybeUser seconds isActive stone setup captures =
+clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Element msg
+clockChip userId maybeUser seconds isActive stone setup captures =
     let
         ( colorA, colorB ) =
             case stone of
@@ -1961,10 +1963,10 @@ clockChip maybeUser seconds isActive stone setup captures =
         ]
         [ (case maybeUser of
             Just user ->
-                User.profileImageNoRounding user.icon
+                User.profileImageNoRounding userId user.icon
 
             Nothing ->
-                User.profileImageNoRounding Nothing
+                User.profileImageNoRounding userId Nothing
           )
             |> Ui.el [ Ui.move { x = -1, y = 0, z = 0 } ]
         , Ui.row
