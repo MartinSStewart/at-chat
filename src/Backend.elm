@@ -6270,6 +6270,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 |> Task.attempt (RegeneratedServerSecret time changeId clientId)
             )
 
+        Pages.Admin.EndAllCalls ->
+            ( Pages.Admin.endAllCalls model
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
 
 updateFromFrontendAdmin :
     ClientId

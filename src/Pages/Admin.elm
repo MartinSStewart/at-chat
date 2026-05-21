@@ -17,6 +17,7 @@ module Pages.Admin exposing
     , UsersChangeError(..)
     , applyChangesToBackendUsers
     , disconnectClient
+    , endAllCalls
     , initForAdmin
     , initForUser
     , logSectionId
@@ -30,7 +31,6 @@ module Pages.Admin exposing
 import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
-import Call exposing (RoomId(..))
 import ChannelName
 import Cloudflare
 import CustomEmoji
@@ -62,7 +62,6 @@ import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
@@ -141,6 +140,7 @@ type Msg
     | PressedShowHiddenLogs Bool
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedRegenerateServerSecret
+    | PressedDeleteCall
 
 
 type ToBackend
@@ -269,6 +269,7 @@ type AdminChange
     | UnhideLog (Id ItemId)
     | DisconnectClient SessionIdHash ClientId
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
+    | EndAllCalls
 
 
 type alias EditedBackendUser =
@@ -599,6 +600,23 @@ updateAdmin changedBy change adminData local =
                                                 RegenerationFailed error
                         }
             }
+
+        EndAllCalls ->
+            { local | adminData = endAllCalls adminData |> IsAdmin }
+
+
+endAllCalls :
+    { a | connections : SeqDict sessionId (NonemptyDict ClientId ConnectionData) }
+    -> { a | connections : SeqDict sessionId (NonemptyDict ClientId ConnectionData) }
+endAllCalls adminData =
+    { adminData
+        | connections =
+            SeqDict.map
+                (\_ connection ->
+                    NonemptyDict.map (\_ connection2 -> { connection2 | call = Nothing, callSfu = Nothing }) connection
+                )
+                adminData.connections
+    }
 
 
 disconnectClient :
@@ -1126,10 +1144,16 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, NoOutMsg )
 
         PressedExportBackend ->
-            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportAll), NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }
+            , Lamdera.sendToBackend (ExportBackendRequest ExportAll)
+            , NoOutMsg
+            )
 
         PressedExportSubsetBackend ->
-            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportSubset), NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }
+            , Lamdera.sendToBackend (ExportBackendRequest ExportSubset)
+            , NoOutMsg
+            )
 
         PressedImportBackend ->
             case model.importBackendStatus of
@@ -1153,6 +1177,9 @@ update navigationKey time adminData localState msg model =
 
         PressedRegenerateServerSecret ->
             ( model, Command.none, AdminChange (RegenerateServerSecret EmptyPlaceholder) )
+
+        PressedDeleteCall ->
+            ( model, Command.none, AdminChange EndAllCalls )
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -1447,6 +1474,9 @@ pendingChangesText change =
         RegenerateServerSecret _ ->
             "Regenerate server secret"
 
+        EndAllCalls ->
+            "End all call"
+
 
 view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
 view isMobile2 version local adminData user model =
@@ -1481,7 +1511,7 @@ view isMobile2 version local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
-            , voiceChatSection local adminData user
+            , voiceChatSection adminData user
             , filesSection user adminData
             , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
@@ -1545,64 +1575,46 @@ filesSection user adminData =
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-voiceChatSection : LocalState -> AdminData -> BackendUser -> Element Msg
-voiceChatSection local adminData user =
+voiceChatSection : AdminData -> BackendUser -> Element Msg
+voiceChatSection adminData user =
     let
-        rooms : List ( RoomId, NonemptySet ( Id UserId, ClientId ) )
-        rooms =
-            SeqDict.toList local.calls.voiceChats
+        usersInCalls : Int
+        usersInCalls =
+            SeqDict.foldl
+                (\_ connection count ->
+                    NonemptyDict.foldl
+                        (\_ connection2 count2 ->
+                            case connection2.call of
+                                Just call ->
+                                    count2 + 1
+
+                                Nothing ->
+                                    count2
+                        )
+                        count
+                        connection
+                )
+                0
+                adminData.connections
     in
     section
         8
         user.expandedSections
         VoiceChatSection
-        [ if List.isEmpty rooms then
-            Ui.text "No ongoing voice chats"
-
-          else
-            Ui.column
-                [ Ui.spacing 8 ]
-                (List.map (voiceChatRoomView adminData) rooms)
+        [ Ui.text ("Clients in calls: " ++ String.fromInt usersInCalls)
+        , MyUi.rowButton
+            (Dom.id "admin_deleteCall")
+            PressedDeleteCall
+            [ Ui.padding 3
+            , Ui.background MyUi.deleteButtonBackground
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.paddingXY 16 8
+            , Ui.rounded 4
+            , Ui.width Ui.shrink
+            , Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
+            ]
+            [ Ui.text "End all calls" ]
         ]
-
-
-voiceChatRoomView : AdminData -> ( RoomId, NonemptySet ( Id UserId, ClientId ) ) -> Element msg
-voiceChatRoomView adminData ( roomId, participants ) =
-    Ui.column
-        [ Ui.spacing 2 ]
-        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text (roomIdLabel adminData roomId))
-        , Ui.column
-            [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
-            (List.map
-                (\( userId, clientId ) ->
-                    Ui.row
-                        [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
-                        [ case NonemptyDict.get userId adminData.users of
-                            Just participant ->
-                                Ui.text (PersonName.toString participant.name)
-
-                            Nothing ->
-                                Ui.text ("Unknown user " ++ Id.toString userId)
-                        , Ui.el
-                            [ Ui.alignRight, Ui.width Ui.shrink ]
-                            (Ui.text ("Client: " ++ Lamdera.clientIdToString clientId))
-                        ]
-                )
-                (NonemptySet.toList participants)
-            )
-        ]
-
-
-roomIdLabel : AdminData -> RoomId -> String
-roomIdLabel adminData roomId =
-    case roomId of
-        DmRoomId userId ->
-            case NonemptyDict.get userId adminData.users of
-                Just user ->
-                    "DM with " ++ PersonName.toString user.name
-
-                Nothing ->
-                    "DM with unknown user " ++ Id.toString userId
 
 
 stickersAndEmojisSection : LocalState -> BackendUser -> Element Msg
