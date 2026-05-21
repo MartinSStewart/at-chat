@@ -18,8 +18,10 @@ module Cloudflare exposing
     , sdpFromString
     , sdpToString
     , sessionIdCodec
+    , sessionIdFromString
     , sessionIdToString
     , trackNameCodec
+    , trackNameFromString
     , trackNameToString
     )
 
@@ -63,6 +65,11 @@ type SessionId
     = SessionId String
 
 
+sessionIdFromString : String -> SessionId
+sessionIdFromString =
+    SessionId
+
+
 sessionIdToString : SessionId -> String
 sessionIdToString (SessionId s) =
     s
@@ -75,6 +82,11 @@ sessionIdCodec =
 
 type TrackName
     = TrackName String
+
+
+trackNameFromString : String -> TrackName
+trackNameFromString =
+    TrackName
 
 
 trackNameToString : TrackName -> String
