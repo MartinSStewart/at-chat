@@ -4998,10 +4998,6 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
             case NonemptyDict.get clientId connections of
                 Just connection ->
                     let
-                        voiceChatId : Call.RoomId
-                        voiceChatId =
-                            Call.DmRoomId otherUserId
-
                         ( model2, leaveCmd ) =
                             case connection.call of
                                 Just oldVoiceChatId ->
@@ -5010,43 +5006,63 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                 Nothing ->
                                     ( model, Command.none )
 
-                        existingPeers : List Call.ExistingPeer
-                        existingPeers =
-                            collectExistingPeers voiceChatId session.userId clientId model2
-
-                        model3 : BackendModel
-                        model3 =
-                            { model2
-                                | connections =
-                                    SeqDict.update
-                                        sessionId
-                                        (Maybe.map
-                                            (NonemptyDict.insert
-                                                clientId
-                                                { connection | call = Just voiceChatId, callSfu = Nothing }
-                                            )
-                                        )
-                                        model2.connections
-                                , dmChannels =
-                                    SeqDict.insert
-                                        dmChannelId
-                                        (LocalState.createChannelMessageBackend
-                                            (CallStarted time session.userId SeqDict.empty)
-                                            dmChannel
-                                            |> Tuple.second
-                                        )
-                                        model2.dmChannels
-                            }
+                        voiceChatId : Call.RoomId
+                        voiceChatId =
+                            Call.DmRoomId otherUserId
                     in
-                    ( model3
-                    , Command.batch
-                        [ Call.Local_Join time voiceChatId (FilledInByBackend existingPeers)
-                            |> Local_VoiceChatChange
-                            |> LocalChangeResponse changeId
-                            |> Lamdera.sendToFrontend clientId
-                        , leaveCmd
-                        ]
-                    )
+                    case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
+                        ( Just _, Just _ ) ->
+                            let
+                                existingPeers : List Call.ExistingPeer
+                                existingPeers =
+                                    collectExistingPeers voiceChatId session.userId clientId model2
+
+                                model3 : BackendModel
+                                model3 =
+                                    { model2
+                                        | connections =
+                                            SeqDict.update
+                                                sessionId
+                                                (Maybe.map
+                                                    (NonemptyDict.insert
+                                                        clientId
+                                                        { connection | call = Just voiceChatId, callSfu = Nothing }
+                                                    )
+                                                )
+                                                model2.connections
+                                        , dmChannels =
+                                            SeqDict.insert
+                                                dmChannelId
+                                                (LocalState.createChannelMessageBackend
+                                                    (CallStarted time session.userId SeqDict.empty)
+                                                    dmChannel
+                                                    |> Tuple.second
+                                                )
+                                                model2.dmChannels
+                                    }
+                            in
+                            ( model3
+                            , Command.batch
+                                [ FilledInByBackend (Ok existingPeers)
+                                    |> Call.Local_Join time voiceChatId
+                                    |> Local_VoiceChatChange
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , leaveCmd
+                                ]
+                            )
+
+                        _ ->
+                            ( model2
+                            , Command.batch
+                                [ FilledInByBackend (Err ())
+                                    |> Call.Local_Join time voiceChatId
+                                    |> Local_VoiceChatChange
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , leaveCmd
+                                ]
+                            )
 
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )

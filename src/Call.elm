@@ -74,7 +74,7 @@ import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (List ExistingPeer))
+    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
     | Local_Leave Time.Posix
     | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
     | Local_PullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend Cloudflare.Sdp)
@@ -135,6 +135,7 @@ type Msg
 type alias Local =
     { currentRoom : Maybe RoomId
     , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    , missingApiKeys : Bool
     }
 
 
@@ -180,6 +181,7 @@ init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
+    , missingApiKeys = False
     }
 
 
@@ -729,12 +731,17 @@ view windowSize roomId calls model =
         , Ui.inFront
             (Ui.column
                 [ Ui.alignBottom ]
-                [ case model.startConnectionError of
-                    Just error ->
-                        MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error
+                [ if calls.missingApiKeys then
+                    MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError "Call API keys missing. Admin needs to add them."
+                        |> Ui.el [ Ui.paddingXY 16 0 ]
 
-                    Nothing ->
-                        Ui.none
+                  else
+                    case model.startConnectionError of
+                        Just error ->
+                            MyUi.errorBox (Dom.id "voiceChat_errorBox") PressedCopyError error |> Ui.el [ Ui.paddingXY 16 0 ]
+
+                        Nothing ->
+                            Ui.none
                 , (if isMobile then
                     Ui.column
 

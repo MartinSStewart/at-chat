@@ -2660,15 +2660,16 @@ changeUpdate localMsg local =
                     case voiceChatChange of
                         Call.Local_Join time roomId peers ->
                             let
-                                peers3 : List Call.ExistingPeer
+                                peers3 : Result () (List Call.ExistingPeer)
                                 peers3 =
                                     case peers of
                                         EmptyPlaceholder ->
-                                            []
+                                            Ok []
 
                                         FilledInByBackend peers2 ->
                                             peers2
 
+                                local2 : LocalState
                                 local2 =
                                     case local.calls.currentRoom of
                                         Just _ ->
@@ -2677,35 +2678,41 @@ changeUpdate localMsg local =
                                         Nothing ->
                                             local
                             in
-                            case roomId of
-                                DmRoomId otherUserId ->
-                                    { local2
-                                        | calls =
-                                            { calls
-                                                | currentRoom = Just roomId
-                                                , voiceChats =
-                                                    List.foldl
-                                                        (\peer set2 ->
-                                                            SeqDictHelper.addItem roomId peer.connectionId.otherClientId set2
-                                                        )
-                                                        calls.voiceChats
-                                                        peers3
-                                            }
-                                        , dmChannels =
-                                            if SeqDict.member roomId calls.voiceChats then
-                                                local2.dmChannels
+                            case peers3 of
+                                Ok peer4 ->
+                                    case roomId of
+                                        DmRoomId otherUserId ->
+                                            { local2
+                                                | calls =
+                                                    { calls
+                                                        | currentRoom = Just roomId
+                                                        , voiceChats =
+                                                            List.foldl
+                                                                (\peer set2 ->
+                                                                    SeqDictHelper.addItem roomId peer.connectionId.otherClientId set2
+                                                                )
+                                                                calls.voiceChats
+                                                                peer4
+                                                        , missingApiKeys = False
+                                                    }
+                                                , dmChannels =
+                                                    if SeqDict.member roomId calls.voiceChats then
+                                                        local2.dmChannels
 
-                                            else
-                                                SeqDict.update
-                                                    otherUserId
-                                                    (\maybe ->
-                                                        Maybe.withDefault DmChannel.frontendInit maybe
-                                                            |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time local2.localUser.session.userId SeqDict.empty)
-                                                            |> Just
-                                                    )
-                                                    local2.dmChannels
-                                    }
+                                                    else
+                                                        SeqDict.update
+                                                            otherUserId
+                                                            (\maybe ->
+                                                                Maybe.withDefault DmChannel.frontendInit maybe
+                                                                    |> LocalState.createChannelMessageFrontend
+                                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                                    |> Just
+                                                            )
+                                                            local2.dmChannels
+                                            }
+
+                                Err () ->
+                                    { local2 | calls = { calls | missingApiKeys = True } }
 
                         Call.Local_Leave time ->
                             leaveCall time local

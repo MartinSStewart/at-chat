@@ -5745,7 +5745,12 @@ updateLoadedFromBackend msg model =
                         Local_VoiceChatChange callChange ->
                             case callChange of
                                 Call.Local_Join _ roomId (FilledInByBackend existingPeers) ->
-                                    Call.startCallCmd roomId existingPeers loggedIn.voiceChat
+                                    case existingPeers of
+                                        Ok existingPeers2 ->
+                                            Call.startCallCmd roomId existingPeers2 loggedIn.voiceChat
+
+                                        Err () ->
+                                            Command.none
 
                                 Call.Local_Join _ _ EmptyPlaceholder ->
                                     Command.none
