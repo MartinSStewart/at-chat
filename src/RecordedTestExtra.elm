@@ -27,6 +27,7 @@ module RecordedTestExtra exposing
     , goTurnNotificationDotTest
     , handleInternalRequests
     , handleLogin
+    , handleLoginFromLoginPage
     , handlePortToJs
     , hasExactText
     , hasNotExactText
@@ -1714,6 +1715,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_NewInviteLink _ _ _ ->
                     True
 
+                Local_DeleteInviteLink _ _ ->
+                    True
+
                 Local_NewGuild _ _ _ ->
                     False
 
@@ -1854,6 +1858,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
                             True
 
                         Types.Server_NewInviteLink _ _ _ _ ->
+                            True
+
+                        Types.Server_DeleteInviteLink _ _ ->
                             True
 
                         Types.Server_MemberJoined _ _ _ _ ->
