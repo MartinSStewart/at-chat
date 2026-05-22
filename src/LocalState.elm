@@ -95,6 +95,7 @@ module LocalState exposing
     , messageReactionsHelper
     , messageReactionsNoThread
     , messageToString
+    , removeInvite
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , removeReactionEmojiFrontendHelper
@@ -1449,6 +1450,14 @@ addInvite :
     -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
 addInvite inviteId userId time guild =
     { guild | invites = SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites }
+
+
+removeInvite :
+    SecretId InviteLinkId
+    -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
+    -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
+removeInvite inviteId guild =
+    { guild | invites = SeqDict.remove inviteId guild.invites }
 
 
 addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild

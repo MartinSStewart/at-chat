@@ -2651,6 +2651,31 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_DeleteInviteLink guildId inviteLinkId ->
+                    asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.removeInvite inviteLinkId guild)
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_DeleteInviteLink guildId inviteLinkId |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
                 Local_NewGuild _ guildName _ ->
                     asUser
                         model

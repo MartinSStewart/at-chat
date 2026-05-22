@@ -418,6 +418,7 @@ type FrontendMsg
     | EditGuildFormChanged (Id GuildId) EditGuildForm
     | PressedDeleteGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
+    | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
     | PressedCreateGuild
@@ -766,6 +767,7 @@ type ServerChange
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_DeleteGuild (Id GuildId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
+    | Server_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
     | Server_YouJoinedGuildByInvite
         (Result
@@ -845,6 +847,7 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_DeleteGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+    | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji

@@ -122,6 +122,9 @@ pendingChangesText localChange =
         Local_NewInviteLink _ _ _ ->
             "Created invite link"
 
+        Local_DeleteInviteLink _ _ ->
+            "Deleted invite link"
+
         Local_NewGuild _ _ _ ->
             "Created new guild"
 
@@ -1468,6 +1471,9 @@ isPressMsg msg =
         PressedCreateInviteLink _ ->
             True
 
+        PressedDeleteInviteLink _ _ ->
+            True
+
         FrontendNoOp ->
             False
 
@@ -2112,6 +2118,15 @@ changeUpdate localMsg local =
                                         (LocalState.addInvite inviteLinkId2 local.localUser.session.userId time)
                                         local.guilds
                             }
+
+                Local_DeleteInviteLink guildId inviteLinkId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.removeInvite inviteLinkId)
+                                local.guilds
+                    }
 
                 Local_NewGuild time guildName guildIdPlaceholder ->
                     case guildIdPlaceholder of
@@ -3008,6 +3023,15 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.addInvite inviteLinkId userId time)
+                                local.guilds
+                    }
+
+                Server_DeleteInviteLink guildId inviteLinkId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.removeInvite inviteLinkId)
                                 local.guilds
                     }
 

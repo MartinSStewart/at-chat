@@ -1036,6 +1036,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDeleteInviteLink guildId inviteLinkId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_DeleteInviteLink guildId inviteLinkId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
         FrontendNoOp ->
             ( model, Command.none )
 
