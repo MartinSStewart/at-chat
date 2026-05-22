@@ -235,8 +235,8 @@ pendingChangesText localChange =
                 Go.Action _ _ ->
                     "Made a move in Go"
 
-        Local_GoMatchShare _ _ _ ->
-            "Shared Go match"
+                Go.CreatePublicLink id toBeFilledInByBackend ->
+                    "Shared Go match"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -2703,9 +2703,6 @@ changeUpdate localMsg local =
                 Local_Go { otherUserId } goChange ->
                     goChangeUpdate local.localUser.session.userId otherUserId goChange local
 
-                Local_GoMatchShare _ _ _ ->
-                    local
-
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage createdBy createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles stickers ->
@@ -3833,6 +3830,9 @@ goChangeUpdate changeBy otherUserId goChange local =
                                         (\( setup, actions ) -> ( setup, Array.push actionWithTime actions ))
                                         dmChannel.goMatches
                             }
+
+                        Go.CreatePublicLink matchId data ->
+                            { dmChannel | goMatches = Debug.todo "" }
                     )
                         |> Just
                 )

@@ -571,35 +571,20 @@ tabBodyView local loggedIn model =
                 Just otherUserId ->
                     case dmRoute.tab of
                         Just (DmChannelHeaderTab_Go maybeMatchId) ->
-                            Ui.column
-                                []
-                                [ Go.view
-                                    False
-                                    model.windowSize
+                            Go.view
+                                False
+                                model.windowSize
+                                local.localUser.session.userId
+                                (SeqDict.insert
                                     local.localUser.session.userId
-                                    (SeqDict.insert
-                                        local.localUser.session.userId
-                                        (User.backendToFrontendForUser local.localUser.user)
-                                        local.localUser.otherUsers
-                                    )
-                                    otherUserId
-                                    maybeMatchId
-                                    (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
-                                    (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
-                                    |> Ui.map GoMsg
-                                , case maybeMatchId of
-                                    Just matchId ->
-                                        Ui.el
-                                            [ Ui.paddingXY 16 8, Ui.background MyUi.tabBackground ]
-                                            (MyUi.simpleButton
-                                                (Dom.id "go_share")
-                                                (PressedShareGoMatch otherUserId matchId)
-                                                (Ui.text "Share")
-                                            )
-
-                                    Nothing ->
-                                        Ui.none
-                                ]
+                                    (User.backendToFrontendForUser local.localUser.user)
+                                    local.localUser.otherUsers
+                                )
+                                otherUserId
+                                maybeMatchId
+                                (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
+                                (SeqDict.get ( otherUserId, maybeMatchId ) loggedIn.currentDmGoMatch)
+                                |> Ui.map GoMsg
                                 |> Just
 
                         Just DmChannelHeaderTab_VoiceChat ->

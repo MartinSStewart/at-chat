@@ -39,9 +39,10 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (ChannelMessageId, GoMatchPublicId, Id, UserId)
 import MyUi
 import Ports
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
@@ -54,6 +55,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import User exposing (FrontendUser)
+import UserSession exposing (ToBeFilledInByBackend(..))
 
 
 type Stone
@@ -418,6 +420,8 @@ type Msg
     | SetupMsg SetupMsg
     | SelectedMatch (Maybe (Id ChannelMessageId))
     | PressedReset
+    | PressedShareGoMatch (Id ChannelMessageId)
+    | PressedCopyLink String
 
 
 {-| Opaque
@@ -463,6 +467,7 @@ type alias ActionWithTime =
 type LocalChange
     = StartMatch Time.Posix ValidatedSetup
     | Action (Id ChannelMessageId) ActionWithTime
+    | CreatePublicLink (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GoMatchPublicId))
 
 
 type OutMsg
@@ -1089,6 +1094,9 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                     in
                     ( Just model2, cmd, localChangeToOut maybeChange )
 
+        PressedShareGoMatch matchId ->
+            ( model, Command.none, OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) )
+
 
 localChangeToOut : Maybe LocalChange -> OutMsg
 localChangeToOut maybeChange =
@@ -1476,7 +1484,7 @@ view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matche
                 Ui.none
 
               else
-                Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
+                Ui.Lazy.lazy4 matchSwitcherView isMobile otherUserId maybeMatchId matches
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
@@ -1525,10 +1533,11 @@ view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matche
 
 matchSwitcherView :
     Bool
+    -> Id UserId
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
     -> Element Msg
-matchSwitcherView isMobile maybeMatchId matches =
+matchSwitcherView isMobile otherUserId maybeMatchId matches =
     if SeqDict.isEmpty matches then
         Ui.none
 
@@ -1622,6 +1631,18 @@ matchSwitcherView isMobile maybeMatchId matches =
                     )
                 )
             , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
+            , case maybeMatchId of
+                Just matchId ->
+                    Ui.el
+                        [ Ui.paddingXY 16 8, Ui.background MyUi.tabBackground ]
+                        (MyUi.simpleButton
+                            (Dom.id "go_share")
+                            (PressedShareGoMatch matchId)
+                            (Ui.text "Share")
+                        )
+
+                Nothing ->
+                    Ui.none
             ]
 
 

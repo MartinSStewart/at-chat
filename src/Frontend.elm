@@ -5799,10 +5799,6 @@ updateLoadedFromBackend msg model =
                                 Nothing ->
                                     Command.none
 
-                        Local_GoMatchShare _ _ (FilledInByBackend publicId) ->
-                            Ports.copyToClipboard
-                                (Env.domain ++ Route.encode (PublicGoMatchRoute publicId))
-
                         Local_NewGuild _ _ (FilledInByBackend guildId) ->
                             case SeqDict.get guildId local.guilds of
                                 Just guild ->

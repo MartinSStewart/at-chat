@@ -890,4 +890,3 @@ type LocalChange
     | Local_AddCustomEmojisToUser (NonemptySet (Id CustomEmojiId))
     | Local_VoiceChatChange Call.LocalChange
     | Local_Go { otherUserId : Id UserId } Go.LocalChange
-    | Local_GoMatchShare (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SecretId GoMatchPublicId))

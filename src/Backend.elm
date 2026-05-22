@@ -4697,34 +4697,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
-                        )
 
-                Local_GoMatchShare otherUserId matchId _ ->
-                    asDmUser
-                        model
-                        sessionId
-                        { otherUserId = otherUserId }
-                        (\_ _ _ dmChannelId dmChannel ->
-                            case SeqDict.get matchId dmChannel.goMatches of
-                                Just _ ->
-                                    let
-                                        ( model3, publicId ) =
-                                            SecretId.getUniqueId time model
-                                    in
-                                    ( { model3
-                                        | goMatchPublicIds =
-                                            OneToOne.insert
-                                                publicId
-                                                ( dmChannelId, matchId )
-                                                model3.goMatchPublicIds
-                                      }
-                                    , Local_GoMatchShare otherUserId matchId (FilledInByBackend publicId)
-                                        |> LocalChangeResponse changeId
-                                        |> Lamdera.sendToFrontend clientId
-                                    )
+                                Go.CreatePublicLink matchId _ ->
+                                    case SeqDict.get matchId dmChannel.goMatches of
+                                        Just _ ->
+                                            let
+                                                ( model3, publicId ) =
+                                                    SecretId.getUniqueId time model
+                                            in
+                                            ( { model3
+                                                | goMatchPublicIds =
+                                                    OneToOne.insert
+                                                        publicId
+                                                        ( dmChannelId, matchId )
+                                                        model3.goMatchPublicIds
+                                              }
+                                            , Go.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                |> Local_Go otherUserId
+                                                |> LocalChangeResponse changeId
+                                                |> Lamdera.sendToFrontend clientId
+                                            )
 
-                                Nothing ->
-                                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+                                        Nothing ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
         TwoFactorToBackend toBackend2 ->

@@ -1357,9 +1357,6 @@ toBackendLog toBackend =
                 Local_Go _ _ ->
                     ToBackendLog_Local_Go
 
-                Local_GoMatchShare _ _ _ ->
-                    ToBackendLog_Local_GoMatchShare
-
         TwoFactorToBackend _ ->
             ToBackendLog_TwoFactorToBackend
 
