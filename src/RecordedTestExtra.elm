@@ -2226,6 +2226,7 @@ allAttackerLocalChanges =
     , Local_Go
         { otherUserId = Broadcast.adminUserId }
         (Go.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
+    , Local_DeleteInviteLink legitGuildId (SecretId.fromString "123")
     ]
 
 
