@@ -55,7 +55,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -232,6 +232,7 @@ type alias InitAdminData =
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketDisconnects : Array Time.Posix
+    , websocketCloseEvents : Array ( Time.Posix, LocalState.WebsocketClosedEvent )
     }
 
 
@@ -1464,6 +1465,7 @@ view isMobile2 version time local adminData user model =
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , websocketDisconnectsSection time user adminData
+            , websocketCloseEventsSection time user adminData
             , voiceChatSection local adminData user
             , filesSection user adminData
             , stickersAndEmojisSection local user
@@ -1674,6 +1676,260 @@ websocketDisconnectsGraph now disconnects =
         [ Ui.el [ Ui.Font.size 12 ]
             (Ui.text
                 ("Disconnects per hour over the last 24 hours (peak: "
+                    ++ String.fromInt maxCount
+                    ++ ")"
+                )
+            )
+        , graphSvg
+        , Ui.row
+            [ Ui.Font.size 11, Ui.spacing 8 ]
+            [ Ui.text "24h ago"
+            , Ui.el [ Ui.alignRight, Ui.width Ui.shrink ] (Ui.text "now")
+            ]
+        ]
+
+
+websocketCloseEventsSection : Time.Posix -> BackendUser -> AdminData -> Element Msg
+websocketCloseEventsSection time user adminData =
+    let
+        allEvents : List ( Time.Posix, LocalState.WebsocketClosedEvent )
+        allEvents =
+            Array.toList adminData.websocketCloseEvents
+
+        eventTypes : List ( String, String, Array Time.Posix )
+        eventTypes =
+            [ ( "Replaced handle"
+              , "#e0625e"
+              , List.filterMap
+                    (\( t, ev ) ->
+                        case ev of
+                            LocalState.WebsocketClosed_ReplacedHandleForUser _ ->
+                                Just t
+
+                            _ ->
+                                Nothing
+                    )
+                    allEvents
+                    |> Array.fromList
+              )
+            , ( "Close and reopen"
+              , "#5e9be0"
+              , List.filterMap
+                    (\( t, ev ) ->
+                        case ev of
+                            LocalState.WebsocketClosed_CloseAndReopenForUser _ ->
+                                Just t
+
+                            _ ->
+                                Nothing
+                    )
+                    allEvents
+                    |> Array.fromList
+              )
+            , ( "Listen detected close"
+              , "#5ee07d"
+              , List.filterMap
+                    (\( t, ev ) ->
+                        case ev of
+                            LocalState.WebsocketClosed_ListenDetectedCloseForUser _ ->
+                                Just t
+
+                            _ ->
+                                Nothing
+                    )
+                    allEvents
+                    |> Array.fromList
+              )
+            ]
+    in
+    section
+        8
+        user.expandedSections
+        WebsocketCloseEventsSection
+        [ if Array.isEmpty adminData.websocketCloseEvents then
+            Ui.text "No websocket close events recorded"
+
+          else
+            Ui.column
+                [ Ui.spacing 12 ]
+                (Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketCloseEvents))
+                    :: List.map
+                        (\( label, color, times ) ->
+                            Ui.column
+                                [ Ui.spacing 4 ]
+                                [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ]
+                                    (Ui.text (label ++ " (" ++ String.fromInt (Array.length times) ++ ")"))
+                                , websocketCloseEventLineGraph time color times
+                                ]
+                        )
+                        eventTypes
+                )
+        ]
+
+
+websocketCloseEventLineGraph : Time.Posix -> String -> Array Time.Posix -> Element msg
+websocketCloseEventLineGraph now color eventTimes =
+    let
+        bucketCount : Int
+        bucketCount =
+            24
+
+        bucketDurationMs : Int
+        bucketDurationMs =
+            60 * 60 * 1000
+
+        windowMs : Int
+        windowMs =
+            bucketCount * bucketDurationMs
+
+        nowMs : Int
+        nowMs =
+            Time.posixToMillis now
+
+        windowStartMs : Int
+        windowStartMs =
+            nowMs - windowMs
+
+        emptyBuckets : Array Int
+        emptyBuckets =
+            Array.repeat bucketCount 0
+
+        buckets : Array Int
+        buckets =
+            Array.foldl
+                (\eventTime acc ->
+                    let
+                        ms : Int
+                        ms =
+                            Time.posixToMillis eventTime
+                    in
+                    if ms < windowStartMs || ms > nowMs then
+                        acc
+
+                    else
+                        let
+                            index : Int
+                            index =
+                                (ms - windowStartMs) // bucketDurationMs |> min (bucketCount - 1)
+                        in
+                        Array.set index ((Array.get index acc |> Maybe.withDefault 0) + 1) acc
+                )
+                emptyBuckets
+                eventTimes
+
+        maxCount : Int
+        maxCount =
+            Array.foldl max 0 buckets
+
+        chartWidth : Int
+        chartWidth =
+            600
+
+        chartHeight : Int
+        chartHeight =
+            100
+
+        scaleDenominator : Int
+        scaleDenominator =
+            max 1 maxCount
+
+        pointStepX : Float
+        pointStepX =
+            if bucketCount <= 1 then
+                0
+
+            else
+                toFloat chartWidth / toFloat (bucketCount - 1)
+
+        pointAt : Int -> Int -> ( Float, Float )
+        pointAt i count =
+            let
+                x : Float
+                x =
+                    toFloat i * pointStepX
+
+                y : Float
+                y =
+                    toFloat chartHeight - (toFloat count / toFloat scaleDenominator * toFloat chartHeight)
+            in
+            ( x, y )
+
+        points : List ( Float, Float )
+        points =
+            Array.toList buckets |> List.indexedMap pointAt
+
+        pointsAttr : String
+        pointsAttr =
+            points
+                |> List.map (\( x, y ) -> String.fromFloat x ++ "," ++ String.fromFloat y)
+                |> String.join " "
+
+        polyline : Svg.Svg msg
+        polyline =
+            Svg.polyline
+                [ Svg.Attributes.fill "none"
+                , Svg.Attributes.stroke color
+                , Svg.Attributes.strokeWidth "2"
+                , Svg.Attributes.points pointsAttr
+                ]
+                []
+
+        dots : List (Svg.Svg msg)
+        dots =
+            points
+                |> List.indexedMap
+                    (\i ( x, y ) ->
+                        let
+                            count : Int
+                            count =
+                                Array.get i buckets |> Maybe.withDefault 0
+                        in
+                        Svg.circle
+                            [ Svg.Attributes.cx (String.fromFloat x)
+                            , Svg.Attributes.cy (String.fromFloat y)
+                            , Svg.Attributes.r "2.5"
+                            , Svg.Attributes.fill color
+                            ]
+                            [ Svg.title []
+                                [ Svg.text
+                                    (String.fromInt count
+                                        ++ " events, "
+                                        ++ String.fromInt (bucketCount - 1 - i)
+                                        ++ "h ago"
+                                    )
+                                ]
+                            ]
+                    )
+
+        baseline : Svg.Svg msg
+        baseline =
+            Svg.line
+                [ Svg.Attributes.x1 "0"
+                , Svg.Attributes.y1 (String.fromInt chartHeight)
+                , Svg.Attributes.x2 (String.fromInt chartWidth)
+                , Svg.Attributes.y2 (String.fromInt chartHeight)
+                , Svg.Attributes.stroke "#888"
+                , Svg.Attributes.strokeWidth "1"
+                ]
+                []
+
+        graphSvg : Element msg
+        graphSvg =
+            Svg.svg
+                [ Svg.Attributes.viewBox ("0 0 " ++ String.fromInt chartWidth ++ " " ++ String.fromInt chartHeight)
+                , Svg.Attributes.width (String.fromInt chartWidth)
+                , Svg.Attributes.height (String.fromInt chartHeight)
+                , Html.Attributes.style "max-width" "100%"
+                , Html.Attributes.style "height" "auto"
+                ]
+                (baseline :: polyline :: dots)
+                |> Ui.html
+    in
+    Ui.column
+        [ Ui.spacing 4 ]
+        [ Ui.el [ Ui.Font.size 12 ]
+            (Ui.text
+                ("Events per hour over the last 24 hours (peak: "
                     ++ String.fromInt maxCount
                     ++ ")"
                 )

@@ -29,6 +29,7 @@ module LocalState exposing
     , LogWithTime
     , PrivateVapidKey(..)
     , ServerSecretStatus(..)
+    , WebsocketClosedEvent(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -511,7 +512,14 @@ type alias AdminData =
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
     , websocketDisconnects : Array Time.Posix
+    , websocketCloseEvents : Array ( Time.Posix, WebsocketClosedEvent )
     }
+
+
+type WebsocketClosedEvent
+    = WebsocketClosed_ReplacedHandleForUser (Discord.Id Discord.UserId)
+    | WebsocketClosed_CloseAndReopenForUser (Discord.Id Discord.UserId)
+    | WebsocketClosed_ListenDetectedCloseForUser (Discord.Id Discord.UserId)
 
 
 type alias ConnectionData =

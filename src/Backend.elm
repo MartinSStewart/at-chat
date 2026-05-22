@@ -43,7 +43,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -234,6 +234,7 @@ init =
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
       , websocketDisconnects = Array.empty
+      , websocketCloseEvents = Array.empty
       , goMatchPublicIds = OneToOne.empty
       }
     , Command.none
@@ -250,19 +251,18 @@ subscriptions model =
                 case data of
                     FullData data2 ->
                         Discord.subscription
-                            (\connection onData onClose ->
+                            (\connection onData _ ->
                                 Websocket.listen connection
-                                    onData
+                                    (\str -> DiscordUserWebsocketMsg discordUserId (onData str))
                                     (\data3 ->
                                         let
                                             _ =
                                                 Debug.log "Websocket unexpected close" ()
                                         in
-                                        onClose data3.reason
+                                        WebsocketListenClosedForUserMsg discordUserId data3
                                     )
                             )
                             data2.connection
-                            |> Maybe.map (Subscription.map (DiscordUserWebsocketMsg discordUserId))
 
                     BasicData _ ->
                         Nothing
@@ -826,8 +826,13 @@ update msg model =
                       }
                     , case data.connection.websocketHandle of
                         Just connection2 ->
-                            DiscordSync.websocketClose "WebsocketClosedByBackendForUser" connection2
-                                |> Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId False)
+                            Command.batch
+                                [ DiscordSync.websocketClose "WebsocketClosedByBackendForUser" connection2
+                                    |> Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId False)
+                                , Task.perform
+                                    (RecordWebsocketCloseEvent (WebsocketClosed_ReplacedHandleForUser discordUserId))
+                                    Time.now
+                                ]
 
                         Nothing ->
                             Command.none
@@ -859,6 +864,23 @@ update msg model =
                             Debug.log "WebsocketSentDataForUser" ( discordUserId, "ConnectionClosed" )
                     in
                     ( model, Command.none )
+
+        RecordWebsocketCloseEvent event time ->
+            ( recordWebsocketCloseEvent time event model, Command.none )
+
+        WebsocketListenClosedForUserMsg discordUserId data3 ->
+            let
+                ( model2, cmd ) =
+                    DiscordSync.discordUserWebsocketMsg discordUserId (Discord.WebsocketClosed data3.reason) model
+            in
+            ( model2
+            , Command.batch
+                [ cmd
+                , Task.perform
+                    (RecordWebsocketCloseEvent (WebsocketClosed_ListenDetectedCloseForUser discordUserId))
+                    Time.now
+                ]
+            )
 
         DiscordMessageCreate_AttachmentsUploaded message results ->
             let
@@ -1825,6 +1847,32 @@ recordWebsocketDisconnect time model =
 
 maxWebsocketDisconnects : Int
 maxWebsocketDisconnects =
+    10000
+
+
+recordWebsocketCloseEvent : Time.Posix -> WebsocketClosedEvent -> BackendModel -> BackendModel
+recordWebsocketCloseEvent time event model =
+    let
+        appended : Array ( Time.Posix, WebsocketClosedEvent )
+        appended =
+            Array.push ( time, event ) model.websocketCloseEvents
+
+        excess : Int
+        excess =
+            Array.length appended - maxWebsocketCloseEvents
+    in
+    { model
+        | websocketCloseEvents =
+            if excess > 0 then
+                Array.slice excess (Array.length appended) appended
+
+            else
+                appended
+    }
+
+
+maxWebsocketCloseEvents : Int
+maxWebsocketCloseEvents =
     10000
 
 

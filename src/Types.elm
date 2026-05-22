@@ -78,7 +78,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, 
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent(..))
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -352,6 +352,7 @@ type alias BackendModel =
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketDisconnects : Array Time.Posix
+    , websocketCloseEvents : Array ( Time.Posix, WebsocketClosedEvent )
     , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
@@ -656,6 +657,8 @@ type BackendMsg
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool
     | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
+    | RecordWebsocketCloseEvent WebsocketClosedEvent Time.Posix
+    | WebsocketListenClosedForUserMsg (Discord.Id Discord.UserId) { code : Websocket.CloseEventCode, reason : String }
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordGuildChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))

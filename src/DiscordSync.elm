@@ -45,7 +45,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
@@ -1385,6 +1385,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_CloseAndReopenHandle connection ->
                             ( model2
                             , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (websocketClose "UserOutMsg_CloseAndReopenHandle" connection)
+                                :: Task.perform
+                                    (RecordWebsocketCloseEvent (WebsocketClosed_CloseAndReopenForUser discordUserId))
+                                    Time.now
                                 :: cmds
                             )
 

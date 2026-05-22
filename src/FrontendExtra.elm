@@ -4080,6 +4080,7 @@ initAdminData adminData =
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , websocketDisconnects = adminData.websocketDisconnects
+    , websocketCloseEvents = adminData.websocketCloseEvents
     }
 
 

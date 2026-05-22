@@ -470,6 +470,7 @@ type AdminUiSection
     | StickersAndEmojisSection
     | VoiceChatSection
     | WebsocketDisconnectsSection
+    | WebsocketCloseEventsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -519,6 +520,9 @@ sectionToString section2 =
 
         WebsocketDisconnectsSection ->
             "Websocket disconnects"
+
+        WebsocketCloseEventsSection ->
+            "Websocket close events"
 
 
 {-| User containing only publicly visible data
