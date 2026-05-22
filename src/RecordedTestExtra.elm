@@ -1827,9 +1827,6 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_Go _ _ ->
                     True
 
-                Local_GoMatchShare _ _ _ ->
-                    True
-
         ChangeBroadcast localMsg ->
             case localMsg of
                 Types.LocalChange _ _ ->
@@ -2219,7 +2216,9 @@ allAttackerLocalChanges =
             , whitePlayer = Broadcast.adminUserId
             }
         )
-    , Local_GoMatchShare Broadcast.adminUserId (Id.fromInt 0) EmptyPlaceholder
+    , Local_Go
+        { otherUserId = Broadcast.adminUserId }
+        (Go.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
     ]
 
 
@@ -2564,9 +2563,17 @@ publicGoMatchViewTest normalConfig =
                         , admin.click 100 (Dom.id "guild_openGoMatch")
                         , admin.click 100 (Dom.id "go_start")
                         , admin.click 100 (Dom.id "go_cell_4_4")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "go_share" ])
                         , admin.click 100 (Dom.id "go_share")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.id "go_shareLink" ])
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_share" ])
+                        , admin.click 100 (Dom.id "go_copyShareLink")
                         , T.andThen
-                            500
+                            100
                             (\data ->
                                 let
                                     copyRequests =

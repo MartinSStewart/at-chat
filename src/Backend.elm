@@ -4626,7 +4626,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     | goMatches =
                                                         SeqDict.insert
                                                             messageId
-                                                            ( setup, Array.empty )
+                                                            { setup = setup, actions = Array.empty, publicLink = Nothing }
                                                             dmChannel2.goMatches
                                                 }
                                                 model.dmChannels
@@ -4648,16 +4648,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Go.Action matchId actionWithTime ->
                                     case SeqDict.get matchId dmChannel.goMatches of
-                                        Just ( goSetup, actions ) ->
+                                        Just match ->
                                             let
                                                 isCurrentPlayer : Bool
                                                 isCurrentPlayer =
-                                                    case Go.currentPlayersTurn actions of
+                                                    case Go.currentPlayersTurn match.actions of
                                                         Go.Black ->
-                                                            goSetup.blackPlayer == session.userId
+                                                            match.setup.blackPlayer == session.userId
 
                                                         Go.White ->
-                                                            goSetup.whitePlayer == session.userId
+                                                            match.setup.whitePlayer == session.userId
 
                                                 localMsg2 : Go.LocalChange
                                                 localMsg2 =
@@ -4672,7 +4672,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 | goMatches =
                                                                     SeqDict.insert
                                                                         matchId
-                                                                        ( goSetup, Array.push actionWithTime actions )
+                                                                        { match | actions = Array.push actionWithTime match.actions }
                                                                         dmChannel.goMatches
                                                             }
                                                             model.dmChannels
@@ -4700,23 +4700,57 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Go.CreatePublicLink matchId _ ->
                                     case SeqDict.get matchId dmChannel.goMatches of
-                                        Just _ ->
-                                            let
-                                                ( model3, publicId ) =
-                                                    SecretId.getUniqueId time model
-                                            in
-                                            ( { model3
-                                                | goMatchPublicIds =
-                                                    OneToOne.insert
-                                                        publicId
-                                                        ( dmChannelId, matchId )
-                                                        model3.goMatchPublicIds
-                                              }
-                                            , Go.CreatePublicLink matchId (FilledInByBackend publicId)
-                                                |> Local_Go otherUserId
-                                                |> LocalChangeResponse changeId
-                                                |> Lamdera.sendToFrontend clientId
-                                            )
+                                        Just match ->
+                                            case match.publicLink of
+                                                Just publicId ->
+                                                    ( model
+                                                    , Go.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                        |> Local_Go otherUserId
+                                                        |> LocalChangeResponse changeId
+                                                        |> Lamdera.sendToFrontend clientId
+                                                    )
+
+                                                Nothing ->
+                                                    let
+                                                        ( model3, publicId ) =
+                                                            SecretId.getUniqueId time model
+
+                                                        localMsg2 : Go.LocalChange
+                                                        localMsg2 =
+                                                            Go.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                    in
+                                                    ( { model3
+                                                        | goMatchPublicIds =
+                                                            OneToOne.insert
+                                                                publicId
+                                                                ( dmChannelId, matchId )
+                                                                model3.goMatchPublicIds
+                                                        , dmChannels =
+                                                            SeqDict.insert
+                                                                dmChannelId
+                                                                { dmChannel
+                                                                    | goMatches =
+                                                                        SeqDict.insert
+                                                                            matchId
+                                                                            { match | publicLink = Just publicId }
+                                                                            dmChannel.goMatches
+                                                                }
+                                                                model3.dmChannels
+                                                      }
+                                                    , Command.batch
+                                                        [ Local_Go otherUserId localMsg2
+                                                            |> LocalChangeResponse changeId
+                                                            |> Lamdera.sendToFrontend clientId
+                                                        , Broadcast.toDmChannelExcludingOne
+                                                            clientId
+                                                            session.userId
+                                                            otherUserId.otherUserId
+                                                            (\otherUserId2 ->
+                                                                Server_Go session.userId { otherUserId = otherUserId2 } localMsg2
+                                                            )
+                                                            model3
+                                                        ]
+                                                    )
 
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
@@ -4851,7 +4885,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->
                                     case SeqDict.get messageId dmChannel.goMatches of
-                                        Just ( setup, actions ) ->
+                                        Just match ->
                                             let
                                                 lookupUser : Id UserId -> User.FrontendUser
                                                 lookupUser uid =
@@ -4866,10 +4900,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , icon = Nothing
                                                             }
                                             in
-                                            { setup = setup
-                                            , actions = actions
-                                            , blackPlayer = lookupUser setup.blackPlayer
-                                            , whitePlayer = lookupUser setup.whitePlayer
+                                            { setup = match.setup
+                                            , actions = match.actions
+                                            , blackPlayer = lookupUser match.setup.blackPlayer
+                                            , whitePlayer = lookupUser match.setup.whitePlayer
                                             }
                                                 |> Ok
 

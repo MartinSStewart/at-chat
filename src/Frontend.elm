@@ -27,7 +27,6 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (EmojiOrCustomEmoji(..), EmojiOrSticker(..))
-import Env
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import FrontendExtra
 import Go
@@ -1040,17 +1039,6 @@ updateLoaded msg model =
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_NewInviteLink model.time guildId EmptyPlaceholder |> Just)
-                        loggedIn
-                        Command.none
-                )
-                model
-
-        PressedShareGoMatch otherUserId matchId ->
-            FrontendExtra.updateLoggedIn
-                (\loggedIn ->
-                    FrontendExtra.handleLocalChange
-                        model.time
-                        (Local_GoMatchShare otherUserId matchId EmptyPlaceholder |> Just)
                         loggedIn
                         Command.none
                 )
@@ -6203,6 +6191,9 @@ updateLoadedFromBackend msg model =
                                                     Ports.playSound "pop"
                                             )
 
+                                        Go.CreatePublicLink _ _ ->
+                                            ( loggedIn2, Command.none )
+
                                 _ ->
                                     ( loggedIn2, Command.none )
 
@@ -6609,7 +6600,7 @@ publicGoMatchView loaded =
                         userLookup
                         publicGoMatchViewerUserId
                         (Just Id.zero)
-                        (SeqDict.singleton Id.zero ( data.setup, data.actions ))
+                        (SeqDict.singleton Id.zero { setup = data.setup, actions = data.actions, publicLink = Nothing })
                         Nothing
                         |> Ui.map GoMsg
                     )

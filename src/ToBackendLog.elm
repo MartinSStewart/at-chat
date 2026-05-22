@@ -64,7 +64,6 @@ type ToBackendLog
     | ToBackendLog_Local_AddCustomEmojisToUser
     | ToBackendLog_Local_VoiceChatChange
     | ToBackendLog_Local_Go
-    | ToBackendLog_Local_GoMatchShare
 
 
 toBackendLogToString : ToBackendLog -> String
@@ -234,6 +233,3 @@ toBackendLogToString log =
 
         ToBackendLog_Local_Go ->
             "Local_Go"
-
-        ToBackendLog_Local_GoMatchShare ->
-            "Local_GoMatchShare"

@@ -235,7 +235,7 @@ pendingChangesText localChange =
                 Go.Action _ _ ->
                     "Made a move in Go"
 
-                Go.CreatePublicLink id toBeFilledInByBackend ->
+                Go.CreatePublicLink _ _ ->
                     "Shared Go match"
 
 
@@ -1772,9 +1772,6 @@ isPressMsg msg =
             Call.isPressMsg voiceChatMsg
 
         PressedChannelHeaderTab _ ->
-            True
-
-        PressedShareGoMatch _ _ ->
             True
 
         FileDragEnter ->
@@ -3819,7 +3816,11 @@ goChangeUpdate changeBy otherUserId goChange local =
                                     DmChannel.latestMessageId dmChannel2
                             in
                             { dmChannel2
-                                | goMatches = SeqDict.insert matchId ( setup, Array.empty ) dmChannel2.goMatches
+                                | goMatches =
+                                    SeqDict.insert
+                                        matchId
+                                        { setup = setup, actions = Array.empty, publicLink = Nothing }
+                                        dmChannel2.goMatches
                             }
 
                         Go.Action matchId actionWithTime ->
@@ -3827,12 +3828,23 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 | goMatches =
                                     SeqDict.updateIfExists
                                         matchId
-                                        (\( setup, actions ) -> ( setup, Array.push actionWithTime actions ))
+                                        (\match -> { match | actions = Array.push actionWithTime match.actions })
                                         dmChannel.goMatches
                             }
 
                         Go.CreatePublicLink matchId data ->
-                            { dmChannel | goMatches = Debug.todo "" }
+                            case data of
+                                FilledInByBackend publicId ->
+                                    { dmChannel
+                                        | goMatches =
+                                            SeqDict.updateIfExists
+                                                matchId
+                                                (\match -> { match | publicLink = Just publicId })
+                                                dmChannel.goMatches
+                                    }
+
+                                EmptyPlaceholder ->
+                                    dmChannel
                     )
                         |> Just
                 )

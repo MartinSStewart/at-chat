@@ -8,7 +8,6 @@ module ChannelHeader exposing
     , thread
     )
 
-import Array exposing (Array)
 import Call exposing (RoomId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
@@ -404,7 +403,7 @@ goGameButton :
     Bool
     -> Maybe DmChannelHeaderTab
     -> Id UserId
-    -> SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) Go.MatchData
     -> Element FrontendMsg
 goGameButton isMobile currentTab userId goMatches =
     let

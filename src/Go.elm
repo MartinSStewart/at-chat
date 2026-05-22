@@ -8,6 +8,7 @@ module Go exposing
     , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
+    , MatchData
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -35,6 +36,7 @@ import Dict exposing (Dict)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
+import Env
 import Html
 import Html.Attributes
 import Html.Events
@@ -422,6 +424,7 @@ type Msg
     | PressedReset
     | PressedShareGoMatch (Id ChannelMessageId)
     | PressedCopyLink String
+    | NoOpMsg
 
 
 {-| Opaque
@@ -462,6 +465,13 @@ type Action
 
 type alias ActionWithTime =
     { time : Time.Posix, change : Action }
+
+
+type alias MatchData =
+    { setup : ValidatedSetup
+    , actions : Array ActionWithTime
+    , publicLink : Maybe (SecretId GoMatchPublicId)
+    }
 
 
 type LocalChange
@@ -1022,7 +1032,7 @@ update :
     -> Id UserId
     -> Msg
     -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> ( Maybe Model, Command FrontendOnly toMsg Msg, OutMsg )
 update time currentUserId otherUserId msg maybeMatchId matches model =
@@ -1037,14 +1047,14 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
             case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
-                        Just ( setup, actions ) ->
+                        Just match ->
                             let
                                 ( game2, cmd, maybeChange ) =
                                     updateGame
                                         currentUserId
                                         gameMsg
-                                        setup
-                                        (foldActions actions setup)
+                                        match.setup
+                                        (foldActions match.actions match.setup)
                                         (case model of
                                             Just (Game game) ->
                                                 game
@@ -1097,6 +1107,12 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
         PressedShareGoMatch matchId ->
             ( model, Command.none, OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) )
 
+        PressedCopyLink text ->
+            ( model, Ports.copyToClipboard text, NoOutMsg )
+
+        NoOpMsg ->
+            ( model, Command.none, NoOutMsg )
+
 
 localChangeToOut : Maybe LocalChange -> OutMsg
 localChangeToOut maybeChange =
@@ -1111,17 +1127,17 @@ localChangeToOut maybeChange =
 pressedKey :
     String
     -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Maybe Model
 pressedKey key maybeMatchId matches model =
     case maybeMatchId of
         Just matchId ->
             case ( model, SeqDict.get matchId matches ) of
-                ( Just model2, Just ( setup, actions ) ) ->
+                ( Just model2, Just match ) ->
                     case key of
                         "ArrowLeft" ->
-                            stepBack (foldActions actions setup) model2 |> Just
+                            stepBack (foldActions match.actions match.setup) model2 |> Just
 
                         "ArrowRight" ->
                             stepForward model2 |> Just
@@ -1461,7 +1477,7 @@ view :
     -> SeqDict (Id UserId) FrontendUser
     -> Id UserId
     -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
 view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matches model =
@@ -1484,18 +1500,18 @@ view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matche
                 Ui.none
 
               else
-                Ui.Lazy.lazy4 matchSwitcherView isMobile otherUserId maybeMatchId matches
+                Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
-                        Just ( setup, actions ) ->
+                        Just match ->
                             Ui.Lazy.lazy6
                                 gameView
                                 viewOnly
                                 windowSize
                                 viewerUserId
-                                ( SeqDict.get setup.blackPlayer userLookup, SeqDict.get setup.whitePlayer userLookup )
-                                ( setup, actions )
+                                ( SeqDict.get match.setup.blackPlayer userLookup, SeqDict.get match.setup.whitePlayer userLookup )
+                                ( match.setup, match.actions )
                                 (case model of
                                     Just (Game game) ->
                                         game
@@ -1533,11 +1549,10 @@ view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matche
 
 matchSwitcherView :
     Bool
-    -> Id UserId
     -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) MatchData
     -> Element Msg
-matchSwitcherView isMobile otherUserId maybeMatchId matches =
+matchSwitcherView isMobile maybeMatchId matches =
     if SeqDict.isEmpty matches then
         Ui.none
 
@@ -1633,17 +1648,63 @@ matchSwitcherView isMobile otherUserId maybeMatchId matches =
             , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
             , case maybeMatchId of
                 Just matchId ->
-                    Ui.el
-                        [ Ui.paddingXY 16 8, Ui.background MyUi.tabBackground ]
-                        (MyUi.simpleButton
-                            (Dom.id "go_share")
-                            (PressedShareGoMatch matchId)
-                            (Ui.text "Share")
-                        )
+                    case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
+                        Just publicLink ->
+                            shareLinkView publicLink
+
+                        Nothing ->
+                            MyUi.simpleButton
+                                (Dom.id "go_share")
+                                (PressedShareGoMatch matchId)
+                                (Ui.text "Share")
 
                 Nothing ->
                     Ui.none
             ]
+
+
+shareLinkView : SecretId GoMatchPublicId -> Element Msg
+shareLinkView publicLink =
+    let
+        url : String
+        url =
+            publicGoMatchUrl publicLink
+    in
+    Ui.row
+        [ Ui.width Ui.shrink ]
+        [ Ui.Input.text
+            [ Ui.roundedWith { topLeft = 4, bottomLeft = 4, topRight = 0, bottomRight = 0 }
+            , Ui.border 1
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.paddingXY 4 4
+            , Ui.background MyUi.inputBackground
+            , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "go_shareLink"))
+            ]
+            { text = url
+            , onChange = \_ -> NoOpMsg
+            , placeholder = Nothing
+            , label = Ui.Input.labelHidden "Public match link"
+            }
+        , MyUi.elButton
+            (Dom.id "go_copyShareLink")
+            (PressedCopyLink url)
+            [ Ui.Font.color MyUi.font2
+            , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
+            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.paddingXY 6 0
+            , Ui.width Ui.shrink
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.Font.size 14
+            ]
+            (Ui.el [ Ui.width (Ui.px 18) ] (Ui.html Icons.copyIcon))
+        ]
+
+
+publicGoMatchUrl : SecretId GoMatchPublicId -> String
+publicGoMatchUrl publicLink =
+    Env.domain ++ "/go-match/" ++ SecretId.toString publicLink
 
 
 setupView : Bool -> Coord CssPixels -> SetupModel -> Element SetupMsg
@@ -2042,22 +2103,22 @@ isLocalUsersTurn currentUserId setup state =
 
 hasPendingTurn :
     Id UserId
-    -> SeqDict (Id ChannelMessageId) ( ValidatedSetup, Array ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) MatchData
     -> SeqSet (Id ChannelMessageId)
 hasPendingTurn userId matches =
     SeqDict.foldl
-        (\matchId ( setup, actions ) set ->
+        (\matchId match set ->
             let
                 state : GameState
                 state =
-                    foldActions actions setup
+                    foldActions match.actions match.setup
             in
             case state.phase of
                 Scored _ ->
                     set
 
                 _ ->
-                    if isLocalUsersTurn userId setup state then
+                    if isLocalUsersTurn userId match.setup state then
                         SeqSet.insert matchId set
 
                     else

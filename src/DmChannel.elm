@@ -40,7 +40,10 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
-    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , goMatches :
+        SeqDict
+            (Id ChannelMessageId)
+            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : Maybe (SecretId GoMatchPublicId) }
     }
 
 
@@ -68,7 +71,7 @@ type alias FrontendDmChannel =
     , goMatches :
         SeqDict
             (Id ChannelMessageId)
-            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : SecretId GoMatchPublicId }
+            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : Maybe (SecretId GoMatchPublicId) }
     }
 
 

@@ -520,7 +520,6 @@ type FrontendMsg
     | GotVoiceChatSignalFromJs (Result String FromJs)
     | VoiceChatMsg Call.Msg
     | PressedChannelHeaderTab DmChannelHeaderTab
-    | PressedShareGoMatch (Id UserId) (Id ChannelMessageId)
     | FileDragEnter
     | FileDragLeave
     | FileDropped (List File)
