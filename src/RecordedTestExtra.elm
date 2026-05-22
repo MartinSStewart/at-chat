@@ -2567,11 +2567,8 @@ publicGoMatchViewTest normalConfig =
                         , admin.click 100 (Dom.id "go_share")
                         , admin.checkView
                             100
-                            (Test.Html.Query.has [ Test.Html.Selector.id "go_shareLink" ])
-                        , admin.checkView
-                            100
                             (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_share" ])
-                        , admin.click 100 (Dom.id "go_copyShareLink")
+                        , admin.click 100 (Dom.id "go_shareLink_copy")
                         , T.andThen
                             100
                             (\data ->
