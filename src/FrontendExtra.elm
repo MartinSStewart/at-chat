@@ -78,7 +78,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
+import Types exposing (FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1357,7 +1357,9 @@ routeRequest previousRoute newRoute model =
             )
 
         PublicGoMatchRoute publicGoMatchId ->
-            ( model2, Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId) )
+            ( { model2 | publicGoMatch = PublicGoMatch_Loading }
+            , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
+            )
 
 
 updateLoggedIn :

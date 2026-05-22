@@ -252,7 +252,13 @@ init url key =
         , pwaStatus = Ports.BrowserView
         , scrollbarWidth = 0
         , userAgent = Nothing
-        , publicGoMatch = PublicGoMatch_NotLoaded
+        , publicGoMatch =
+            case route of
+                PublicGoMatchRoute goMatchPublicId ->
+                    PublicGoMatch_Loading
+
+                _ ->
+                    PublicGoMatch_NotLoaded
         }
     , Command.batch
         [ Task.perform GotTime Time.now
