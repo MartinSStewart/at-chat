@@ -43,6 +43,7 @@ module RecordedTestExtra exposing
     , linkSecondDiscordAccount
     , mobileWindow
     , noMissingMessages
+    , publicGoMatchViewTest
     , regeneratedServerSecretValue
     , safariIphone
     , scrollToMiddle
@@ -2031,6 +2032,9 @@ attackerShouldNotGetThisToFrontend toFrontend =
         ProfilePictureEditorToFrontend _ ->
             False
 
+        GetPublicGoMatchResponse _ ->
+            False
+
 
 allAttackerToBackendChanges : List ToBackend
 allAttackerToBackendChanges =
@@ -2051,6 +2055,7 @@ allAttackerToBackendChanges =
     , ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest (FileStatus.FileHash "fake-hash"))
     , ProfilePictureEditorToBackend (ImageEditor.ChangeGuildIconRequest (Id.fromInt 0) (FileStatus.FileHash "fake-hash"))
     , AdminDataRequest Nothing
+    , GetPublicGoMatchRequest (SecretId.fromString "attacker-public-id")
     , -- Make sure this one is last
       LogOutRequest
     ]
@@ -2211,6 +2216,9 @@ allAttackerLocalChanges =
             , whitePlayer = Broadcast.adminUserId
             }
         )
+    , Local_Go
+        { otherUserId = Broadcast.adminUserId }
+        (Go.CreatePublicLink (Id.fromInt 0) EmptyPlaceholder)
     ]
 
 
@@ -2513,6 +2521,100 @@ goTurnNotificationDotTest normalConfig =
                         , admin.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.id "guild_goMatchTurnDot" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+
+
+publicGoMatchViewTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+publicGoMatchViewTest normalConfig =
+    startTest
+        "A player shares a Go match link so a non-logged-in spectator can view it"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            tallDesktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ T.connectFrontend
+                            100
+                            sessionIdAttacker
+                            "/go-match/does-not-exist"
+                            tallDesktopWindow
+                            (\missingViewer ->
+                                [ missingViewer.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                , missingViewer.checkView
+                                    100
+                                    (Test.Html.Query.has [ Test.Html.Selector.text "Go match not found" ])
+                                ]
+                            )
+                        , user.click 1000 (Dom.id "guild_openDm_0")
+                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , admin.click 100 (Dom.id "guild_openGoMatch")
+                        , admin.click 100 (Dom.id "go_start")
+                        , admin.click 100 (Dom.id "go_cell_4_4")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "go_share" ])
+                        , admin.click 100 (Dom.id "go_share")
+                        , admin.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_share" ])
+                        , admin.click 100 (Dom.id "go_shareLink_copy")
+                        , T.andThen
+                            100
+                            (\data ->
+                                let
+                                    copyRequests =
+                                        List.filter
+                                            (\portRequest -> portRequest.portName == "copy_to_clipboard_to_js")
+                                            data.portRequests
+                                in
+                                case copyRequests |> List.head of
+                                    Just portRequest ->
+                                        case Json.Decode.decodeValue Json.Decode.string portRequest.value of
+                                            Ok shareUrl ->
+                                                if String.startsWith Env.domain shareUrl then
+                                                    [ T.connectFrontend
+                                                        100
+                                                        sessionId2
+                                                        (String.dropLeft (String.length Env.domain) shareUrl)
+                                                        tallDesktopWindow
+                                                        (\viewer ->
+                                                            [ viewer.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                                            , viewer.checkView
+                                                                100
+                                                                (Test.Html.Query.has [ Test.Html.Selector.id "public_go_container" ])
+                                                            , viewer.checkView
+                                                                100
+                                                                (Test.Html.Query.has [ Test.Html.Selector.text "to move" ])
+                                                            , viewer.checkView
+                                                                100
+                                                                (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_pass" ])
+                                                            , viewer.checkView
+                                                                100
+                                                                (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_cell_5_5" ])
+                                                            ]
+                                                        )
+                                                    ]
+
+                                                else
+                                                    [ admin.checkModel 100 (\_ -> Err ("Share URL didn't start with domain: " ++ shareUrl)) ]
+
+                                            Err _ ->
+                                                [ admin.checkModel 100 (\_ -> Err "Failed to decode share URL port value") ]
+
+                                    Nothing ->
+                                        [ admin.checkModel 100 (\_ -> Err "Expected a copy_to_clipboard_to_js port request after pressing share") ]
+                            )
                         ]
                     )
                 ]

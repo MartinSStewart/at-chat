@@ -234,6 +234,7 @@ init =
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
       , websocketDisconnects = Array.empty
+      , goMatchPublicIds = OneToOne.empty
       }
     , Command.none
     )
@@ -4696,6 +4697,52 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+                                Go.CreatePublicLink matchId _ ->
+                                    case SeqDict.get matchId dmChannel.goMatches of
+                                        Just _ ->
+                                            case OneToOne.first ( dmChannelId, matchId ) model.goMatchPublicIds of
+                                                Just publicId ->
+                                                    ( model
+                                                    , Go.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                        |> Local_Go otherUserId
+                                                        |> LocalChangeResponse changeId
+                                                        |> Lamdera.sendToFrontend clientId
+                                                    )
+
+                                                Nothing ->
+                                                    let
+                                                        ( model3, publicId ) =
+                                                            SecretId.getShortUniqueId time model
+
+                                                        localMsg2 : Go.LocalChange
+                                                        localMsg2 =
+                                                            Go.CreatePublicLink matchId (FilledInByBackend publicId)
+                                                    in
+                                                    ( { model3
+                                                        | goMatchPublicIds =
+                                                            OneToOne.insert
+                                                                publicId
+                                                                ( dmChannelId, matchId )
+                                                                model3.goMatchPublicIds
+                                                      }
+                                                    , Command.batch
+                                                        [ Local_Go otherUserId localMsg2
+                                                            |> LocalChangeResponse changeId
+                                                            |> Lamdera.sendToFrontend clientId
+                                                        , Broadcast.toDmChannelExcludingOne
+                                                            clientId
+                                                            session.userId
+                                                            otherUserId.otherUserId
+                                                            (\otherUserId2 ->
+                                                                Server_Go session.userId { otherUserId = otherUserId2 } localMsg2
+                                                            )
+                                                            model3
+                                                        ]
+                                                    )
+
+                                        Nothing ->
+                                            ( model, BackendExtra.invalidChangeResponse changeId clientId )
                         )
 
         TwoFactorToBackend toBackend2 ->
@@ -4817,6 +4864,48 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         |> Lamdera.sendToFrontend clientId
                     )
                 )
+
+        GetPublicGoMatchRequest publicGoMatchId ->
+            case OneToOne.second publicGoMatchId model.goMatchPublicIds of
+                Just ( channelId, messageId ) ->
+                    let
+                        response : Result () Go.PublicGoMatchData
+                        response =
+                            case SeqDict.get channelId model.dmChannels of
+                                Just dmChannel ->
+                                    case SeqDict.get messageId dmChannel.goMatches of
+                                        Just ( setup, actions ) ->
+                                            let
+                                                lookupUser : Id UserId -> User.FrontendUser
+                                                lookupUser uid =
+                                                    case NonemptyDict.get uid model.users of
+                                                        Just u ->
+                                                            User.backendToFrontendForUser u
+
+                                                        Nothing ->
+                                                            { name = PersonName.fromStringLossy "<missing>"
+                                                            , isAdmin = False
+                                                            , createdAt = time
+                                                            , icon = Nothing
+                                                            }
+                                            in
+                                            { setup = setup
+                                            , actions = actions
+                                            , blackPlayer = lookupUser setup.blackPlayer
+                                            , whitePlayer = lookupUser setup.whitePlayer
+                                            }
+                                                |> Ok
+
+                                        Nothing ->
+                                            Err ()
+
+                                Nothing ->
+                                    Err ()
+                    in
+                    ( model, GetPublicGoMatchResponse response |> Lamdera.sendToFrontend clientId )
+
+                Nothing ->
+                    ( model, GetPublicGoMatchResponse (Err ()) |> Lamdera.sendToFrontend clientId )
 
 
 textToDiscordRichText :

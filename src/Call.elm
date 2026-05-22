@@ -364,6 +364,9 @@ displayMode currentUserId route local =
         LinkDiscord _ ->
             thumbnailOrNoVideo
 
+        PublicGoMatchRoute _ ->
+            thumbnailOrNoVideo
+
 
 localVideoNodeId : String
 localVideoNodeId =
@@ -499,6 +502,9 @@ videoNodes currentUserId config loggedIn local =
                             False
 
                         LinkDiscord _ ->
+                            False
+
+                        PublicGoMatchRoute _ ->
                             False
             in
             if Just viewingRoomId2 == local.currentRoom && isTabExpanded then

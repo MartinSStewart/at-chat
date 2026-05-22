@@ -24,7 +24,7 @@ import Codec
 import Dict
 import Discord
 import DmChannel exposing (DmChannelId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GoMatchPublicId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
 import Pagination
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
@@ -45,6 +45,7 @@ type Route
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
     | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
+    | PublicGoMatchRoute (SecretId GoMatchPublicId)
 
 
 type LinkDiscordError
@@ -345,6 +346,9 @@ decode url =
                 _ ->
                     LinkDiscord (Err LinkDiscordExpired)
 
+        [ "go-match", goMatchPublicId ] ->
+            PublicGoMatchRoute (SecretId.fromString goMatchPublicId)
+
         _ ->
             HomePageRoute
 
@@ -436,6 +440,9 @@ toChannelHeaderTab route =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ ->
             Nothing
 
 
@@ -613,6 +620,9 @@ encode route =
 
                 LinkDiscord _ ->
                     ( [ linkDiscordPath ], [] )
+
+                PublicGoMatchRoute goMatchPublicId ->
+                    ( [ "go-match", SecretId.toString goMatchPublicId ], [] )
     in
     Url.Builder.absolute path query
 
@@ -701,6 +711,9 @@ requiresLogin route =
             True
 
         LinkDiscord _ ->
+            False
+
+        PublicGoMatchRoute _ ->
             False
 
 

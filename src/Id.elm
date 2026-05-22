@@ -5,6 +5,7 @@ module Id exposing
     , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
     , DiscordGuildOrDmId_DmData
+    , GoMatchPublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
     , Id(..)
@@ -25,6 +26,7 @@ module Id exposing
     , threadRouteWithoutMessage
     , toInt
     , toString
+    , zero
     )
 
 import Discord
@@ -130,8 +132,17 @@ type CustomEmojiId
     = CustomEmojiId Never
 
 
+type GoMatchPublicId
+    = GoMatchPublicId Never
+
+
 type Id a
     = Id Int
+
+
+zero : Id a
+zero =
+    Id 0
 
 
 nextId : SeqDict (Id a) b -> Id a

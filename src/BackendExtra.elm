@@ -549,6 +549,8 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                                     _ ->
                                         Nothing
                                 )
+                                dmChannelId
+                                model.goMatchPublicIds
                                 dmChannel
                             )
                             dict
@@ -1383,3 +1385,6 @@ toBackendLog toBackend =
 
         AdminDataRequest _ ->
             ToBackendLog_AdminDataRequest
+
+        GetPublicGoMatchRequest _ ->
+            ToBackendLog_GetPublicGoMatchRequest

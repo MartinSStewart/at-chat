@@ -1,5 +1,6 @@
 module MyUi exposing
-    ( alertColor
+    ( LastCopy
+    , alertColor
     , background1
     , background2
     , background3
@@ -17,6 +18,7 @@ module MyUi exposing
     , colorWithAlpha
     , column
     , container
+    , copyBox
     , css
     , datestamp
     , datestampDate
@@ -141,6 +143,57 @@ errorBox htmlId onPress error =
             , Ui.spacing 4
             ]
             (Ui.html Icons.copy)
+        ]
+
+
+type alias LastCopy =
+    { copiedAt : Time.Posix, copiedText : String }
+
+
+copyBox : HtmlId -> (String -> msg) -> msg -> { a | lastCopied : Maybe LastCopy } -> String -> Element msg
+copyBox htmlId pressedCopyText noOp loaded text =
+    Ui.row
+        []
+        [ Ui.Input.text
+            [ Ui.clipWithEllipsis
+            , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+            , Ui.htmlAttribute (Html.Attributes.readonly True)
+            , Ui.background background1
+            , Ui.border 1
+            , Ui.borderColor inputBorder
+            , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+            , Ui.height Ui.fill
+            ]
+            { onChange = \_ -> noOp
+            , text = text
+            , placeholder = Nothing
+            , label = Ui.Input.labelHidden (Dom.idToString htmlId ++ "_textInput")
+            }
+        , elButton
+            (Dom.id (Dom.idToString htmlId ++ "_copy"))
+            (pressedCopyText text)
+            [ Ui.width Ui.shrink
+            , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+            , Ui.borderColor inputBorder
+            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+            , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+            , Ui.spacing 4
+            , Ui.background buttonBackground
+            , Ui.Font.size 14
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            ]
+            (case loaded.lastCopied of
+                Just copied ->
+                    if copied.copiedText == text then
+                        Ui.text "Copied!"
+
+                    else
+                        Ui.html Icons.copy
+
+                Nothing ->
+                    Ui.html Icons.copy
+            )
         ]
 
 

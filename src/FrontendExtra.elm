@@ -235,6 +235,9 @@ pendingChangesText localChange =
                 Go.Action _ _ ->
                     "Made a move in Go"
 
+                Go.CreatePublicLink _ _ ->
+                    "Shared Go match"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -505,6 +508,9 @@ canDropFiles currentUserId route =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ ->
             Nothing
 
 
@@ -1350,6 +1356,9 @@ routeRequest previousRoute newRoute model =
                     Command.none
             )
 
+        PublicGoMatchRoute publicGoMatchId ->
+            ( model2, Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId) )
+
 
 updateLoggedIn :
     (LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg ))
@@ -1773,6 +1782,17 @@ isPressMsg msg =
 
         FileDropped _ ->
             False
+
+        GoSpectatorMsg spectatorMsg ->
+            case spectatorMsg of
+                Go.PressedArrowLeft ->
+                    True
+
+                Go.PressedArrowRight ->
+                    True
+
+                Go.ChangedViewingMove int ->
+                    False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -3807,7 +3827,11 @@ goChangeUpdate changeBy otherUserId goChange local =
                                     DmChannel.latestMessageId dmChannel2
                             in
                             { dmChannel2
-                                | goMatches = SeqDict.insert matchId ( setup, Array.empty ) dmChannel2.goMatches
+                                | goMatches =
+                                    SeqDict.insert
+                                        matchId
+                                        { setup = setup, actions = Array.empty, publicLink = Nothing }
+                                        dmChannel2.goMatches
                             }
 
                         Go.Action matchId actionWithTime ->
@@ -3815,9 +3839,23 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 | goMatches =
                                     SeqDict.updateIfExists
                                         matchId
-                                        (\( setup, actions ) -> ( setup, Array.push actionWithTime actions ))
+                                        (\match -> { match | actions = Array.push actionWithTime match.actions })
                                         dmChannel.goMatches
                             }
+
+                        Go.CreatePublicLink matchId data ->
+                            case data of
+                                FilledInByBackend publicId ->
+                                    { dmChannel
+                                        | goMatches =
+                                            SeqDict.updateIfExists
+                                                matchId
+                                                (\match -> { match | publicLink = Just publicId })
+                                                dmChannel.goMatches
+                                    }
+
+                                EmptyPlaceholder ->
+                                    dmChannel
                     )
                         |> Just
                 )

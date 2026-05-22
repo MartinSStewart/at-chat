@@ -25,10 +25,11 @@ module DmChannel exposing
 import Array exposing (Array)
 import Discord
 import Go
-import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelMessageId, GoMatchPublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import UserSession exposing (ToBeFilledInByBackend(..))
@@ -64,7 +65,10 @@ type alias FrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
-    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    , goMatches :
+        SeqDict
+            (Id ChannelMessageId)
+            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : Maybe (SecretId GoMatchPublicId) }
     }
 
 
@@ -93,8 +97,13 @@ frontendInit =
     }
 
 
-toFrontend : Maybe ThreadRoute -> DmChannel -> FrontendDmChannel
-toFrontend threadRoute dmChannel =
+toFrontend :
+    Maybe ThreadRoute
+    -> DmChannelId
+    -> OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    -> DmChannel
+    -> FrontendDmChannel
+toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     let
         preloadMessages =
             Just NoThread == threadRoute
@@ -106,7 +115,15 @@ toFrontend threadRoute dmChannel =
         SeqDict.map
             (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
-    , goMatches = dmChannel.goMatches
+    , goMatches =
+        SeqDict.map
+            (\matchId ( setup, actions ) ->
+                { setup = setup
+                , actions = actions
+                , publicLink = OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds
+                }
+            )
+            dmChannel.goMatches
     }
 
 

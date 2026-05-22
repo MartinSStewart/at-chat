@@ -8,7 +8,6 @@ module ChannelHeader exposing
     , thread
     )
 
-import Array exposing (Array)
 import Call exposing (RoomId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
@@ -404,7 +403,7 @@ goGameButton :
     Bool
     -> Maybe DmChannelHeaderTab
     -> Id UserId
-    -> SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) Go.MatchData
     -> Element FrontendMsg
 goGameButton isMobile currentTab userId goMatches =
     let
@@ -573,7 +572,13 @@ tabBodyView local loggedIn model =
                         Just (DmChannelHeaderTab_Go maybeMatchId) ->
                             Go.view
                                 model.windowSize
-                                local.localUser
+                                model.lastCopied
+                                local.localUser.session.userId
+                                (SeqDict.insert
+                                    local.localUser.session.userId
+                                    (User.backendToFrontendForUser local.localUser.user)
+                                    local.localUser.otherUsers
+                                )
                                 otherUserId
                                 maybeMatchId
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)
@@ -653,6 +658,9 @@ tabBodyView local loggedIn model =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ ->
             Nothing
 
 

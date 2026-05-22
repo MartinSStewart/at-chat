@@ -719,8 +719,8 @@ discordProfileImage _ maybeFileHash =
                 Ui.none
 
 
-profileImageNoRounding : Maybe FileHash -> Element msg
-profileImageNoRounding maybeFileHash =
+profileImageNoRounding : Id UserId -> Maybe FileHash -> Element msg
+profileImageNoRounding userId maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
             Ui.image
@@ -733,12 +733,7 @@ profileImageNoRounding maybeFileHash =
                 }
 
         Nothing ->
-            Ui.el
-                [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                ]
-                Ui.none
+            GuildIcon.defaultUser False profileImageSize 0 userId
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg
