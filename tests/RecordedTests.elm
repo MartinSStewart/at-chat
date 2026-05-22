@@ -1849,6 +1849,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                                     Nothing ->
                                                                         Err "Guild missing"
                                                             )
+                                                        , RecordedTestExtra.hasText thirdUser [ "Guild not found" ]
                                                         ]
                                                     )
                                                 ]

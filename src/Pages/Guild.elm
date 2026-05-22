@@ -1699,16 +1699,9 @@ guildSettingsForm model loggedIn local guildId guild =
                                 [ Ui.spacing 16 ]
                                 [ Ui.el [ Ui.widthMax 300 ] (copyableText (Env.domain ++ url) model)
                                 , if isOwner then
-                                    MyUi.elButton
+                                    MyUi.deleteButton
                                         (Dom.id ("guild_deleteInviteLink_" ++ SecretId.toString inviteId))
                                         (PressedDeleteInviteLink guildId inviteId)
-                                        [ Ui.width (Ui.px 32)
-                                        , Ui.height (Ui.px 32)
-                                        , Ui.contentCenterX
-                                        , Ui.contentCenterY
-                                        , Ui.Font.color MyUi.font2
-                                        ]
-                                        (Ui.el [ Ui.width (Ui.px 20) ] (Ui.html Icons.delete))
 
                                   else
                                     Ui.none
