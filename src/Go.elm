@@ -1935,14 +1935,6 @@ clockView blackUser whiteUser state setup =
 
                 Scored _ ->
                     False
-
-        ( maybeBlackScore, maybeWhiteScore ) =
-            case state.phase of
-                Scored s ->
-                    ( Just s.blackScore, Just s.whiteScore )
-
-                _ ->
-                    ( Nothing, Nothing )
     in
     Ui.row
         [ Ui.spacing 8
@@ -1956,8 +1948,7 @@ clockView blackUser whiteUser state setup =
             (gameActive && state.currentPlayer == Black)
             Black
             setup
-            state.blackCaptures
-            maybeBlackScore
+            (currentScore setup state Black)
         , clockChip
             setup.whitePlayer
             whiteUser
@@ -1965,9 +1956,28 @@ clockView blackUser whiteUser state setup =
             (gameActive && state.currentPlayer == White)
             White
             setup
-            state.whiteCaptures
-            maybeWhiteScore
+            (currentScore setup state White)
         ]
+
+
+currentScore : ValidatedSetup -> GameState -> Stone -> Float
+currentScore setup state stone =
+    case state.phase of
+        Scored s ->
+            case stone of
+                Black ->
+                    s.blackScore
+
+                White ->
+                    s.whiteScore
+
+        _ ->
+            case stone of
+                Black ->
+                    toFloat state.blackCaptures
+
+                White ->
+                    toFloat state.whiteCaptures + komiHalfPointsToFloat setup.komiHalfPoints
 
 
 currentPlayersTurn : Array ActionWithTime -> Stone
@@ -1997,8 +2007,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Maybe Float -> Element msg
-clockChip userId maybeUser seconds isActive stone setup captures maybeFinalScore =
+clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
+clockChip userId maybeUser seconds isActive stone setup score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2080,17 +2090,7 @@ clockChip userId maybeUser seconds isActive stone setup captures maybeFinalScore
                     , Ui.rounded 99
                     ]
                     Ui.none
-                , case maybeFinalScore of
-                    Just finalScore ->
-                        formatScore finalScore |> Ui.text
-
-                    Nothing ->
-                        case stone of
-                            White ->
-                                addPointsToHalfPoints captures setup.komiHalfPoints |> komiHalfPointsToString |> Ui.text
-
-                            Black ->
-                                String.fromInt captures |> Ui.text
+                , formatScore score |> Ui.text
                 ]
             ]
         ]
