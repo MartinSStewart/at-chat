@@ -54,6 +54,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import StringExtra
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
@@ -205,22 +206,6 @@ komiHalfPointsFromString input =
 
             Nothing ->
                 Err "Enter a number"
-
-
-addPointsToHalfPoints : Int -> KomiHalfPoints -> KomiHalfPoints
-addPointsToHalfPoints points (KomiHalfPoints a) =
-    points * 2 + a |> KomiHalfPoints
-
-
-komiHalfPointsToString : KomiHalfPoints -> String
-komiHalfPointsToString (KomiHalfPoints a) =
-    String.fromInt (a // 2)
-        ++ (if modBy 2 a == 0 then
-                ""
-
-            else
-                ".5"
-           )
 
 
 komiHalfPointsToFloat : KomiHalfPoints -> Float
@@ -1948,7 +1933,7 @@ clockView blackUser whiteUser state setup =
             (gameActive && state.currentPlayer == Black)
             Black
             setup
-            state.blackCaptures
+            (currentScore setup state Black)
         , clockChip
             setup.whitePlayer
             whiteUser
@@ -1956,8 +1941,28 @@ clockView blackUser whiteUser state setup =
             (gameActive && state.currentPlayer == White)
             White
             setup
-            state.whiteCaptures
+            (currentScore setup state White)
         ]
+
+
+currentScore : ValidatedSetup -> GameState -> Stone -> Float
+currentScore setup state stone =
+    case state.phase of
+        Scored s ->
+            case stone of
+                Black ->
+                    s.blackScore
+
+                White ->
+                    s.whiteScore
+
+        _ ->
+            case stone of
+                Black ->
+                    toFloat state.blackCaptures
+
+                White ->
+                    toFloat state.whiteCaptures + komiHalfPointsToFloat setup.komiHalfPoints
 
 
 currentPlayersTurn : Array ActionWithTime -> Stone
@@ -1987,8 +1992,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Element msg
-clockChip userId maybeUser seconds isActive stone setup captures =
+clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
+clockChip userId maybeUser seconds isActive stone setup score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2070,12 +2075,7 @@ clockChip userId maybeUser seconds isActive stone setup captures =
                     , Ui.rounded 99
                     ]
                     Ui.none
-                , case stone of
-                    White ->
-                        addPointsToHalfPoints captures setup.komiHalfPoints |> komiHalfPointsToString |> Ui.text
-
-                    Black ->
-                        String.fromInt captures |> Ui.text
+                , StringExtra.removeTrailing0s 1 score |> Ui.text
                 ]
             ]
         ]
@@ -2275,23 +2275,14 @@ statusView state =
 
                 Scored s ->
                     "Final score - Black: "
-                        ++ formatScore s.blackScore
+                        ++ StringExtra.removeTrailing0s 1 s.blackScore
                         ++ ", White: "
-                        ++ formatScore s.whiteScore
+                        ++ StringExtra.removeTrailing0s 1 s.whiteScore
                         ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
         [ Ui.spacing 4, Ui.paddingXY 16 0 ]
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText) ]
-
-
-formatScore : Float -> String
-formatScore score =
-    if score == toFloat (floor score) then
-        String.fromInt (floor score)
-
-    else
-        String.fromFloat score
 
 
 winnerSuffix : Float -> Float -> String
