@@ -1494,7 +1494,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matches model =
+view windowSize lastCopied currentUserId allUsers otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1518,9 +1518,9 @@ view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matc
                             Ui.Lazy.lazy5
                                 gameView
                                 windowSize
-                                viewerUserId
-                                ( SeqDict.get match.setup.blackPlayer userLookup, SeqDict.get match.setup.whitePlayer userLookup )
-                                ( match.setup, match.actions )
+                                currentUserId
+                                allUsers
+                                match
                                 (case model of
                                     Just (Game game) ->
                                         game
@@ -1539,7 +1539,7 @@ view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matc
                 Nothing ->
                     Ui.Lazy.lazy3
                         setupView
-                        (viewerUserId == otherUserId)
+                        (currentUserId == otherUserId)
                         windowSize
                         (case model of
                             Just (Game _) ->
@@ -1652,10 +1652,10 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
             , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
             , case maybeMatchId of
                 Just matchId ->
-                    case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
-                        Just publicLink ->
-                            Ui.row
-                                [ Ui.spacing 4, Ui.alignRight ]
+                    Ui.row
+                        [ Ui.spacing 4, Ui.alignRight ]
+                        (case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
+                            Just publicLink ->
                                 [ Ui.text "Share"
                                 , MyUi.copyBox
                                     (Dom.id "go_shareLink")
@@ -1665,11 +1665,13 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                     (publicGoMatchUrl publicLink)
                                 ]
 
-                        Nothing ->
-                            MyUi.simpleButton
-                                (Dom.id "go_share")
-                                (PressedShareGoMatch matchId)
-                                (Ui.text "Share")
+                            Nothing ->
+                                [ MyUi.simpleButton
+                                    (Dom.id "go_share")
+                                    (PressedShareGoMatch matchId)
+                                    (Ui.text "Share")
+                                ]
+                        )
 
                 Nothing ->
                     Ui.none
@@ -2167,11 +2169,11 @@ spectatorView windowSize data model =
 gameView :
     Coord CssPixels
     -> Id UserId
-    -> ( Maybe FrontendUser, Maybe FrontendUser )
-    -> ( ValidatedSetup, Array ActionWithTime )
+    -> SeqDict (Id UserId) FrontendUser
+    -> MatchData
     -> GameModel
     -> Element GameMsg
-gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) model =
+gameView windowSize currentUserId allUsers data model =
     let
         isMobile : Bool
         isMobile =
@@ -2179,7 +2181,7 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
 
         state : GameState
         state =
-            foldActions actions setup
+            foldActions data.actions data.setup
 
         clickable : Bool
         clickable =
@@ -2189,7 +2191,7 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
             else
                 case state.phase of
                     Playing _ ->
-                        isLocalUsersTurn currentUserId setup state
+                        isLocalUsersTurn currentUserId data.setup state
 
                     Marking ->
                         True
@@ -2221,16 +2223,20 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView blackUser whiteUser state setup
+            [ clockView
+                (SeqDict.get data.setup.blackPlayer allUsers)
+                (SeqDict.get data.setup.whitePlayer allUsers)
+                state
+                data.setup
             , boardView
                 windowSize
                 (if clickable then
-                    clickTargets (boardSizeToInt setup.width) (boardSizeToInt setup.height)
+                    clickTargets (boardSizeToInt data.setup.width) (boardSizeToInt data.setup.height)
 
                  else
                     []
                 )
-                setup
+                data.setup
                 state
                 model
             ]
@@ -2239,7 +2245,7 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
 
           else
             historyView state model |> Ui.map SpectatorMsg
-        , if isLocalUsersTurn currentUserId setup state then
+        , if isLocalUsersTurn currentUserId data.setup state then
             controlsView state
 
           else
