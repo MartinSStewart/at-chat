@@ -1935,6 +1935,14 @@ clockView blackUser whiteUser state setup =
 
                 Scored _ ->
                     False
+
+        ( maybeBlackScore, maybeWhiteScore ) =
+            case state.phase of
+                Scored s ->
+                    ( Just s.blackScore, Just s.whiteScore )
+
+                _ ->
+                    ( Nothing, Nothing )
     in
     Ui.row
         [ Ui.spacing 8
@@ -1949,6 +1957,7 @@ clockView blackUser whiteUser state setup =
             Black
             setup
             state.blackCaptures
+            maybeBlackScore
         , clockChip
             setup.whitePlayer
             whiteUser
@@ -1957,6 +1966,7 @@ clockView blackUser whiteUser state setup =
             White
             setup
             state.whiteCaptures
+            maybeWhiteScore
         ]
 
 
@@ -1987,8 +1997,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Element msg
-clockChip userId maybeUser seconds isActive stone setup captures =
+clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Maybe Float -> Element msg
+clockChip userId maybeUser seconds isActive stone setup captures maybeFinalScore =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2070,12 +2080,17 @@ clockChip userId maybeUser seconds isActive stone setup captures =
                     , Ui.rounded 99
                     ]
                     Ui.none
-                , case stone of
-                    White ->
-                        addPointsToHalfPoints captures setup.komiHalfPoints |> komiHalfPointsToString |> Ui.text
+                , case maybeFinalScore of
+                    Just finalScore ->
+                        formatScore finalScore |> Ui.text
 
-                    Black ->
-                        String.fromInt captures |> Ui.text
+                    Nothing ->
+                        case stone of
+                            White ->
+                                addPointsToHalfPoints captures setup.komiHalfPoints |> komiHalfPointsToString |> Ui.text
+
+                            Black ->
+                                String.fromInt captures |> Ui.text
                 ]
             ]
         ]
