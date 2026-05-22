@@ -233,7 +233,6 @@ init =
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
-      , websocketDisconnects = Array.empty
       , websocketCloseEvents = Array.empty
       , goMatchPublicIds = OneToOne.empty
       }
@@ -251,18 +250,19 @@ subscriptions model =
                 case data of
                     FullData data2 ->
                         Discord.subscription
-                            (\connection onData _ ->
+                            (\connection onData onClose ->
                                 Websocket.listen connection
-                                    (\str -> DiscordUserWebsocketMsg discordUserId (onData str))
+                                    onData
                                     (\data3 ->
                                         let
                                             _ =
                                                 Debug.log "Websocket unexpected close" ()
                                         in
-                                        WebsocketListenClosedForUserMsg discordUserId data3
+                                        onClose data3.reason
                                     )
                             )
                             data2.connection
+                            |> Maybe.map (Subscription.map (DiscordUserWebsocketMsg discordUserId))
 
                     BasicData _ ->
                         Nothing
@@ -315,7 +315,7 @@ update msg model =
             ( model, Task.perform (UserDisconnectedWithTime sessionId clientId) Time.now )
 
         UserDisconnectedWithTime sessionId clientId time ->
-            disconnectClient time sessionId clientId (recordWebsocketDisconnect time model)
+            disconnectClient time sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
             let
@@ -370,7 +370,24 @@ update msg model =
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
         DiscordUserWebsocketMsg discordUserId discordMsg ->
-            DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+            let
+                ( model2, cmd ) =
+                    DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+            in
+            ( model2
+            , Command.batch
+                [ cmd
+                , case discordMsg of
+                    Discord.GotWebsocketData _ ->
+                        Command.none
+
+                    Discord.WebsocketClosed text ->
+                        Task.perform (GotTimeForWebsocketListenClose discordUserId text) Time.now
+                ]
+            )
+
+        GotTimeForWebsocketListenClose userId text time ->
+            ( recordWebsocketCloseEvent (WebsocketClosed_ListenCloseEvent userId text time) model, Command.none )
 
         GotSlackChannels _ _ result ->
             case result of
@@ -826,13 +843,8 @@ update msg model =
                       }
                     , case data.connection.websocketHandle of
                         Just connection2 ->
-                            Command.batch
-                                [ DiscordSync.websocketClose "WebsocketClosedByBackendForUser" connection2
-                                    |> Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId False)
-                                , Task.perform
-                                    (RecordWebsocketCloseEvent (WebsocketClosed_ReplacedHandleForUser discordUserId))
-                                    Time.now
-                                ]
+                            DiscordSync.websocketClose (WebsocketClosed_ClosedByBackendForUser discordUserId) connection2
+                                |> Task.perform (WebsocketClosedByBackendForUser discordUserId False)
 
                         Nothing ->
                             Command.none
@@ -841,8 +853,8 @@ update msg model =
                 _ ->
                     ( model, Command.none )
 
-        WebsocketClosedByBackendForUser discordUserId reopen ->
-            ( model
+        WebsocketClosedByBackendForUser discordUserId reopen websocketEvent ->
+            ( recordWebsocketCloseEvent websocketEvent model
             , if reopen then
                 DiscordSync.websocketCreateHandle
                     "WebsocketClosedByBackendForUser"
@@ -864,23 +876,6 @@ update msg model =
                             Debug.log "WebsocketSentDataForUser" ( discordUserId, "ConnectionClosed" )
                     in
                     ( model, Command.none )
-
-        RecordWebsocketCloseEvent event time ->
-            ( recordWebsocketCloseEvent time event model, Command.none )
-
-        WebsocketListenClosedForUserMsg discordUserId data3 ->
-            let
-                ( model2, cmd ) =
-                    DiscordSync.discordUserWebsocketMsg discordUserId (Discord.WebsocketClosed data3.reason) model
-            in
-            ( model2
-            , Command.batch
-                [ cmd
-                , Task.perform
-                    (RecordWebsocketCloseEvent (WebsocketClosed_ListenDetectedCloseForUser discordUserId))
-                    Time.now
-                ]
-            )
 
         DiscordMessageCreate_AttachmentsUploaded message results ->
             let
@@ -1824,38 +1819,12 @@ attachmentsUploadedHelper model message results =
         message.attachments
 
 
-recordWebsocketDisconnect : Time.Posix -> BackendModel -> BackendModel
-recordWebsocketDisconnect time model =
+recordWebsocketCloseEvent : WebsocketClosedEvent -> BackendModel -> BackendModel
+recordWebsocketCloseEvent event model =
     let
-        appended : Array Time.Posix
+        appended : Array WebsocketClosedEvent
         appended =
-            Array.push time model.websocketDisconnects
-
-        excess : Int
-        excess =
-            Array.length appended - maxWebsocketDisconnects
-    in
-    { model
-        | websocketDisconnects =
-            if excess > 0 then
-                Array.slice excess (Array.length appended) appended
-
-            else
-                appended
-    }
-
-
-maxWebsocketDisconnects : Int
-maxWebsocketDisconnects =
-    10000
-
-
-recordWebsocketCloseEvent : Time.Posix -> WebsocketClosedEvent -> BackendModel -> BackendModel
-recordWebsocketCloseEvent time event model =
-    let
-        appended : Array ( Time.Posix, WebsocketClosedEvent )
-        appended =
-            Array.push ( time, event ) model.websocketCloseEvents
+            Array.push event model.websocketCloseEvents
 
         excess : Int
         excess =
@@ -4498,8 +4467,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , case maybeConnection of
                                                 Just connection ->
                                                     Task.perform
-                                                        (\() -> WebsocketClosedByBackendForUser discordUserId False)
-                                                        (DiscordSync.websocketClose "Local_UnlinkDiscordUser" connection)
+                                                        (WebsocketClosedByBackendForUser discordUserId False)
+                                                        (DiscordSync.websocketClose
+                                                            (WebsocketClosed_UnlinkDiscordUser discordUserId)
+                                                            connection
+                                                        )
 
                                                 Nothing ->
                                                     Command.none

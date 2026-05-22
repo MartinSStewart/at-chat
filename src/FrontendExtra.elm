@@ -4079,7 +4079,6 @@ initAdminData adminData =
     , toBackendLogs = adminData.toBackendLogs
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
-    , websocketDisconnects = adminData.websocketDisconnects
     , websocketCloseEvents = adminData.websocketCloseEvents
     }
 

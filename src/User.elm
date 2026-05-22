@@ -469,7 +469,6 @@ type AdminUiSection
     | ToBackendLogsSection
     | StickersAndEmojisSection
     | VoiceChatSection
-    | WebsocketDisconnectsSection
     | WebsocketCloseEventsSection
 
 
@@ -517,9 +516,6 @@ sectionToString section2 =
 
         VoiceChatSection ->
             "Voice chat"
-
-        WebsocketDisconnectsSection ->
-            "Websocket disconnects"
 
         WebsocketCloseEventsSection ->
             "Websocket close events"

@@ -897,7 +897,6 @@ adminData model lastLogPageViewed =
                             Nothing ->
                                 ""
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
-    , websocketDisconnects = model.websocketDisconnects
     , websocketCloseEvents = model.websocketCloseEvents
     }
 

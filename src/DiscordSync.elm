@@ -1357,18 +1357,9 @@ websocketCreateHandle debugName msg url =
     Websocket.createHandle msg url
 
 
-websocketClose : String -> Websocket.Connection -> Task restriction x ()
+websocketClose : (Time.Posix -> WebsocketClosedEvent) -> Websocket.Connection -> Task BackendOnly x WebsocketClosedEvent
 websocketClose debugName connection =
-    Task.map
-        (\() ->
-            let
-                _ =
-                    Debug.log ("websocketClose " ++ debugName) connection
-            in
-            ()
-        )
-        (Task.succeed ())
-        |> Task.andThen (\() -> Websocket.close connection)
+    Websocket.close connection |> Task.andThen (\() -> Time.now |> Task.map debugName)
 
 
 discordUserWebsocketMsg : Discord.Id Discord.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -1384,10 +1375,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                     case outMsg of
                         Discord.UserOutMsg_CloseAndReopenHandle connection ->
                             ( model2
-                            , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (websocketClose "UserOutMsg_CloseAndReopenHandle" connection)
-                                :: Task.perform
-                                    (RecordWebsocketCloseEvent (WebsocketClosed_CloseAndReopenForUser discordUserId))
-                                    Time.now
+                            , Task.perform
+                                (WebsocketClosedByBackendForUser discordUserId True)
+                                (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds
                             )
 

@@ -511,15 +511,15 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
-    , websocketDisconnects : Array Time.Posix
-    , websocketCloseEvents : Array ( Time.Posix, WebsocketClosedEvent )
+    , websocketCloseEvents : Array WebsocketClosedEvent
     }
 
 
 type WebsocketClosedEvent
-    = WebsocketClosed_ReplacedHandleForUser (Discord.Id Discord.UserId)
-    | WebsocketClosed_CloseAndReopenForUser (Discord.Id Discord.UserId)
-    | WebsocketClosed_ListenDetectedCloseForUser (Discord.Id Discord.UserId)
+    = WebsocketClosed_CloseAndReopenForUser (Discord.Id Discord.UserId) Time.Posix
+    | WebsocketClosed_UnlinkDiscordUser (Discord.Id Discord.UserId) Time.Posix
+    | WebsocketClosed_ClosedByBackendForUser (Discord.Id Discord.UserId) Time.Posix
+    | WebsocketClosed_ListenCloseEvent (Discord.Id Discord.UserId) String Time.Posix
 
 
 type alias ConnectionData =
