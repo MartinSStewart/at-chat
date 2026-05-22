@@ -70,7 +70,7 @@ import TextEditor
 import Thread exposing (DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), PendingVoiceChatJoin, PublicGoMatchData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), PendingVoiceChatJoin, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
@@ -4713,7 +4713,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 Nothing ->
                                                     let
                                                         ( model3, publicId ) =
-                                                            SecretId.getUniqueId time model
+                                                            SecretId.getShortUniqueId time model
 
                                                         localMsg2 : Go.LocalChange
                                                         localMsg2 =
@@ -4869,7 +4869,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             case OneToOne.second publicGoMatchId model.goMatchPublicIds of
                 Just ( channelId, messageId ) ->
                     let
-                        response : Result () PublicGoMatchData
+                        response : Result () Go.PublicGoMatchData
                         response =
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->

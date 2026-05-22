@@ -70,33 +70,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types
-    exposing
-        ( AdminStatusLoginData(..)
-        , Drag(..)
-        , EmojiSelector(..)
-        , FrontendModel(..)
-        , FrontendMsg(..)
-        , GuildChannelNameHover(..)
-        , InitialLoadRequest(..)
-        , LoadStatus(..)
-        , LoadedFrontend
-        , LoadingFrontend
-        , LocalChange(..)
-        , LocalMsg(..)
-        , LoggedIn2
-        , LoginData
-        , LoginResult(..)
-        , LoginStatus(..)
-        , MessageHover(..)
-        , MessageHoverMobileMode(..)
-        , RevealedSpoilers
-        , ScrollPosition(..)
-        , ServerChange(..)
-        , ToBackend(..)
-        , ToFrontend(..)
-        , UserOptionsModel
-        )
+import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -278,7 +252,7 @@ init url key =
         , pwaStatus = Ports.BrowserView
         , scrollbarWidth = 0
         , userAgent = Nothing
-        , publicGoMatch = Nothing
+        , publicGoMatch = PublicGoMatch_NotLoaded
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -2006,19 +1980,24 @@ updateLoaded msg model =
 
                                 ( model2, routeCmd ) =
                                     case outMsg of
-                                        Go.OutLocalChange (Go.StartMatch _ _) ->
-                                            FrontendExtra.routePush
-                                                { model | loginStatus = LoggedIn loggedIn2 }
-                                                (DmRoute
-                                                    { dmRoute
-                                                        | tab =
-                                                            DmChannel.latestMessageId dmChannel
-                                                                |> Id.increment
-                                                                |> Just
-                                                                |> DmChannelHeaderTab_Go
-                                                                |> Just
-                                                    }
-                                                )
+                                        Go.OutLocalChange localChange ->
+                                            case localChange of
+                                                Go.StartMatch _ _ ->
+                                                    FrontendExtra.routePush
+                                                        { model | loginStatus = LoggedIn loggedIn2 }
+                                                        (DmRoute
+                                                            { dmRoute
+                                                                | tab =
+                                                                    DmChannel.latestMessageId dmChannel
+                                                                        |> Id.increment
+                                                                        |> Just
+                                                                        |> DmChannelHeaderTab_Go
+                                                                        |> Just
+                                                            }
+                                                        )
+
+                                                _ ->
+                                                    ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
 
                                         Go.OutSelectMatch newMatchId ->
                                             FrontendExtra.routePush
@@ -2029,8 +2008,11 @@ updateLoaded msg model =
                                                     }
                                                 )
 
-                                        _ ->
+                                        Go.NoOutMsg ->
                                             ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+
+                                        Go.CopyText text ->
+                                            copyText text { model | loginStatus = LoggedIn loggedIn2 }
                             in
                             ( model2, Command.batch [ routeCmd, cmd2 ] )
 
@@ -4169,9 +4151,7 @@ updateLoaded msg model =
                         model
 
                 Call.PressedCopyError text ->
-                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
-                    , Ports.copyToClipboard text
-                    )
+                    copyText text model
 
                 Call.ChangedVolume connectionId volume ->
                     FrontendExtra.updateLoggedIn
@@ -4346,6 +4326,33 @@ updateLoaded msg model =
 
                 PublicGoMatchRoute _ ->
                     ( model, Command.none )
+
+        GoSpectatorMsg spectatorMsg ->
+            case model.publicGoMatch of
+                PublicGoMatch_Loaded data gameModel ->
+                    ( { model
+                        | publicGoMatch =
+                            Go.updateSpectator spectatorMsg (Go.foldActions data.actions data.setup) gameModel
+                                |> PublicGoMatch_Loaded data
+                      }
+                    , Command.none
+                    )
+
+                PublicGoMatch_NotLoaded ->
+                    ( model, Command.none )
+
+                PublicGoMatch_Loading ->
+                    ( model, Command.none )
+
+                PublicGoMatch_Missing ->
+                    ( model, Command.none )
+
+
+copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
+copyText text model =
+    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+    , Ports.copyToClipboard text
+    )
 
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
@@ -5566,7 +5573,16 @@ updateFromBackend msg model =
                     tryInitLoadedFrontend { loading | clientId = Just clientId }
 
                 GetPublicGoMatchResponse result ->
-                    tryInitLoadedFrontend { loading | publicGoMatch = Just result }
+                    tryInitLoadedFrontend
+                        { loading
+                            | publicGoMatch =
+                                case result of
+                                    Ok ok ->
+                                        PublicGoMatch_Loaded ok Go.initGame
+
+                                    Err () ->
+                                        PublicGoMatch_Missing
+                        }
 
                 _ ->
                     ( model, Command.none )
@@ -6277,7 +6293,17 @@ updateLoadedFromBackend msg model =
                 model
 
         GetPublicGoMatchResponse result ->
-            ( { model | publicGoMatch = Just result }, Command.none )
+            ( { model
+                | publicGoMatch =
+                    case result of
+                        Ok data ->
+                            PublicGoMatch_Loaded data Go.initGame
+
+                        Err () ->
+                            PublicGoMatch_Missing
+              }
+            , Command.none
+            )
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -6567,57 +6593,32 @@ view model =
                             )
 
                     PublicGoMatchRoute _ ->
-                        publicGoMatchView loaded
+                        FrontendExtra.layout
+                            loaded
+                            [ Ui.background MyUi.background3, Ui.contentCenterX, Ui.contentCenterY ]
+                            (case loaded.publicGoMatch of
+                                PublicGoMatch_Loaded data gameModel ->
+                                    Ui.el
+                                        [ Ui.htmlAttribute (Html.Attributes.id "public_go_container")
+                                        , Ui.centerX
+                                        , Ui.centerY
+                                        , Ui.width Ui.shrink
+                                        ]
+                                        (Go.spectatorView loaded.windowSize data gameModel |> Ui.map GoSpectatorMsg)
+
+                                PublicGoMatch_Missing ->
+                                    errorPage loaded "Go match not found"
+
+                                PublicGoMatch_Loading ->
+                                    Ui.el
+                                        [ Ui.centerX, Ui.centerY, Ui.htmlAttribute (Html.Attributes.id "public_go_loading") ]
+                                        (Ui.text "Loading match...")
+
+                                PublicGoMatch_NotLoaded ->
+                                    errorPage loaded "Something went wrong when loading Go match"
+                            )
         ]
     }
-
-
-publicGoMatchView : LoadedFrontend -> Html FrontendMsg
-publicGoMatchView loaded =
-    FrontendExtra.layout
-        loaded
-        [ Ui.background MyUi.background3, Ui.contentCenterX, Ui.contentCenterY ]
-        (case loaded.publicGoMatch of
-            Just (Ok data) ->
-                let
-                    userLookup : SeqDict (Id UserId) FrontendUser
-                    userLookup =
-                        SeqDict.fromList
-                            [ ( data.setup.blackPlayer, data.blackPlayer )
-                            , ( data.setup.whitePlayer, data.whitePlayer )
-                            ]
-                in
-                Ui.el
-                    [ Ui.htmlAttribute (Html.Attributes.id "public_go_container")
-                    , Ui.centerX
-                    , Ui.centerY
-                    , Ui.width Ui.shrink
-                    ]
-                    (Go.view
-                        True
-                        loaded.windowSize
-                        publicGoMatchViewerUserId
-                        userLookup
-                        publicGoMatchViewerUserId
-                        (Just Id.zero)
-                        (SeqDict.singleton Id.zero { setup = data.setup, actions = data.actions, publicLink = Nothing })
-                        Nothing
-                        |> Ui.map GoMsg
-                    )
-
-            Just (Err ()) ->
-                errorPage loaded "Go match not found"
-
-            Nothing ->
-                Ui.el
-                    [ Ui.centerX, Ui.centerY, Ui.htmlAttribute (Html.Attributes.id "public_go_loading") ]
-                    (Ui.text "Loading match...")
-        )
-
-
-publicGoMatchViewerUserId : Id UserId
-publicGoMatchViewerUserId =
-    Id.fromInt -1
 
 
 errorPage : LoadedFrontend -> String -> Element FrontendMsg

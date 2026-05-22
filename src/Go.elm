@@ -13,19 +13,25 @@ module Go exposing
     , Msg(..)
     , OutMsg(..)
     , Phase
+    , PublicGoMatchData
     , SetupModel
     , SetupMsg(..)
     , SizeSelection(..)
     , Snapshot
+    , SpectatorMsg(..)
     , Stone(..)
     , TimeControl
     , ValidatedSetup
     , boardSize9
     , currentPlayersTurn
     , deadStones
+    , foldActions
     , hasPendingTurn
+    , initGame
     , pressedKey
+    , spectatorView
     , update
+    , updateSpectator
     , view
     )
 
@@ -37,7 +43,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
 import Env
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
@@ -58,6 +64,14 @@ import Ui.Lazy
 import Ui.Shadow
 import User exposing (FrontendUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
+
+
+type alias PublicGoMatchData =
+    { setup : ValidatedSetup
+    , actions : Array ActionWithTime
+    , blackPlayer : FrontendUser
+    , whitePlayer : FrontendUser
+    }
 
 
 type Stone
@@ -449,7 +463,11 @@ type GameMsg
     | PressedDoneMarking
     | PressedAgree
     | PressedDisagree
-    | PressedArrowLeft
+    | SpectatorMsg SpectatorMsg
+
+
+type SpectatorMsg
+    = PressedArrowLeft
     | PressedArrowRight
     | ChangedViewingMove Int
 
@@ -484,6 +502,7 @@ type OutMsg
     = NoOutMsg
     | OutLocalChange LocalChange
     | OutSelectMatch (Maybe (Id ChannelMessageId))
+    | CopyText String
 
 
 otherStone : Stone -> Stone
@@ -1108,7 +1127,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
             ( model, Command.none, OutLocalChange (CreatePublicLink matchId EmptyPlaceholder) )
 
         PressedCopyLink text ->
-            ( model, Ports.copyToClipboard text, NoOutMsg )
+            ( model, Command.none, CopyText text )
 
         NoOpMsg ->
             ( model, Command.none, NoOutMsg )
@@ -1134,16 +1153,16 @@ pressedKey key maybeMatchId matches model =
     case maybeMatchId of
         Just matchId ->
             case ( model, SeqDict.get matchId matches ) of
-                ( Just model2, Just match ) ->
+                ( Just (Game model2), Just match ) ->
                     case key of
                         "ArrowLeft" ->
-                            stepBack (foldActions match.actions match.setup) model2 |> Just
+                            stepBack (foldActions match.actions match.setup) model2 |> Game |> Just
 
                         "ArrowRight" ->
-                            stepForward model2 |> Just
+                            stepForward model2 |> Game |> Just
 
                         _ ->
-                            Just model2
+                            model
 
                 _ ->
                     model
@@ -1152,32 +1171,20 @@ pressedKey key maybeMatchId matches model =
             model
 
 
-stepBack : GameState -> Model -> Model
+stepBack : GameState -> GameModel -> GameModel
 stepBack state model =
-    case model of
-        Setup _ ->
-            model
-
-        Game game ->
-            Game
-                { game
-                    | viewingMovesBack = min (List.length state.history) (game.viewingMovesBack + 1)
-                    , lastError = Nothing
-                }
+    { model
+        | viewingMovesBack = min (List.length state.history) (model.viewingMovesBack + 1)
+        , lastError = Nothing
+    }
 
 
-stepForward : Model -> Model
+stepForward : GameModel -> GameModel
 stepForward model =
-    case model of
-        Setup _ ->
-            model
-
-        Game game ->
-            Game
-                { game
-                    | viewingMovesBack = max 0 (game.viewingMovesBack - 1)
-                    , lastError = Nothing
-                }
+    { model
+        | viewingMovesBack = max 0 (model.viewingMovesBack - 1)
+        , lastError = Nothing
+    }
 
 
 validateSetup : Id UserId -> Id UserId -> SetupModel -> Result String ValidatedSetup
@@ -1435,6 +1442,13 @@ updateGame currentUserId msg setup state model =
                 _ ->
                     ( Game model, Command.none, Nothing )
 
+        SpectatorMsg spectatorMsg ->
+            ( Game (updateSpectator spectatorMsg state model), Command.none, Nothing )
+
+
+updateSpectator : SpectatorMsg -> GameState -> GameModel -> GameModel
+updateSpectator msg state model =
+    case msg of
         ChangedViewingMove moveNumber ->
             let
                 total : Int
@@ -1445,14 +1459,14 @@ updateGame currentUserId msg setup state model =
                 clamped =
                     clamp 0 total moveNumber
             in
-            ( Game { model | viewingMovesBack = total - clamped, lastError = Nothing }, Command.none, Nothing )
+            { model | viewingMovesBack = total - clamped, lastError = Nothing }
 
         --( Game (tickClock now model), Command.none, Nothing )
         PressedArrowLeft ->
-            ( stepBack state (Game model), Command.none, Nothing )
+            stepBack state model
 
         PressedArrowRight ->
-            ( stepForward (Game model), Command.none, Nothing )
+            stepForward model
 
 
 cellPx : Int
@@ -1471,8 +1485,8 @@ viewHeight windowSize =
 
 
 view :
-    Bool
-    -> Coord CssPixels
+    Coord CssPixels
+    -> Maybe MyUi.LastCopy
     -> Id UserId
     -> SeqDict (Id UserId) FrontendUser
     -> Id UserId
@@ -1480,7 +1494,7 @@ view :
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matches model =
+view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1496,18 +1510,13 @@ view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matche
         ]
         (Ui.column
             []
-            [ if viewOnly then
-                Ui.none
-
-              else
-                Ui.Lazy.lazy3 matchSwitcherView isMobile maybeMatchId matches
+            [ Ui.Lazy.lazy4 matchSwitcherView isMobile lastCopied maybeMatchId matches
             , case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just match ->
-                            Ui.Lazy.lazy6
+                            Ui.Lazy.lazy5
                                 gameView
-                                viewOnly
                                 windowSize
                                 viewerUserId
                                 ( SeqDict.get match.setup.blackPlayer userLookup, SeqDict.get match.setup.whitePlayer userLookup )
@@ -1547,12 +1556,8 @@ view viewOnly windowSize viewerUserId userLookup otherUserId maybeMatchId matche
         )
 
 
-matchSwitcherView :
-    Bool
-    -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) MatchData
-    -> Element Msg
-matchSwitcherView isMobile maybeMatchId matches =
+matchSwitcherView : Bool -> Maybe MyUi.LastCopy -> Maybe (Id ChannelMessageId) -> SeqDict (Id ChannelMessageId) MatchData -> Element Msg
+matchSwitcherView isMobile lastCopied maybeMatchId matches =
     if SeqDict.isEmpty matches then
         Ui.none
 
@@ -1593,7 +1598,6 @@ matchSwitcherView isMobile maybeMatchId matches =
                  else
                     12
                 )
-            , Ui.width Ui.shrink
             , Ui.height Ui.fill
             ]
             [ Ui.el [ Ui.Font.weight 600, Ui.width Ui.shrink ] (Ui.text "View match")
@@ -1650,7 +1654,16 @@ matchSwitcherView isMobile maybeMatchId matches =
                 Just matchId ->
                     case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
                         Just publicLink ->
-                            shareLinkView publicLink
+                            Ui.row
+                                [ Ui.spacing 4, Ui.alignRight ]
+                                [ Ui.text "Share"
+                                , MyUi.copyBox
+                                    (Dom.id "go_shareLink")
+                                    PressedCopyLink
+                                    NoOpMsg
+                                    { lastCopied = lastCopied }
+                                    (publicGoMatchUrl publicLink)
+                                ]
 
                         Nothing ->
                             MyUi.simpleButton
@@ -1661,45 +1674,6 @@ matchSwitcherView isMobile maybeMatchId matches =
                 Nothing ->
                     Ui.none
             ]
-
-
-shareLinkView : SecretId GoMatchPublicId -> Element Msg
-shareLinkView publicLink =
-    let
-        url : String
-        url =
-            publicGoMatchUrl publicLink
-    in
-    Ui.row
-        [ Ui.width Ui.shrink ]
-        [ Ui.Input.text
-            [ Ui.roundedWith { topLeft = 4, bottomLeft = 4, topRight = 0, bottomRight = 0 }
-            , Ui.border 1
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.paddingXY 4 4
-            , Ui.background MyUi.inputBackground
-            , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "go_shareLink"))
-            ]
-            { text = url
-            , onChange = \_ -> NoOpMsg
-            , placeholder = Nothing
-            , label = Ui.Input.labelHidden "Public match link"
-            }
-        , MyUi.elButton
-            (Dom.id "go_copyShareLink")
-            (PressedCopyLink url)
-            [ Ui.Font.color MyUi.font2
-            , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
-            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-            , Ui.borderColor MyUi.inputBorder
-            , Ui.paddingXY 6 0
-            , Ui.width Ui.shrink
-            , Ui.height Ui.fill
-            , Ui.contentCenterY
-            , Ui.Font.size 14
-            ]
-            (Ui.el [ Ui.width (Ui.px 18) ] (Ui.html Icons.copyIcon))
-        ]
 
 
 publicGoMatchUrl : SecretId GoMatchPublicId -> String
@@ -1946,6 +1920,22 @@ formatClock seconds =
 
 clockView : Maybe FrontendUser -> Maybe FrontendUser -> GameState -> ValidatedSetup -> Element msg
 clockView blackUser whiteUser state setup =
+    let
+        gameActive : Bool
+        gameActive =
+            case state.phase of
+                Playing record ->
+                    True
+
+                Marking ->
+                    True
+
+                Confirming ->
+                    True
+
+                Scored record ->
+                    False
+    in
     Ui.row
         [ Ui.spacing 8
         , Ui.paddingXY 16 16
@@ -1955,7 +1945,7 @@ clockView blackUser whiteUser state setup =
             setup.blackPlayer
             blackUser
             state.blackTime
-            (state.currentPlayer == Black)
+            (gameActive && state.currentPlayer == Black)
             Black
             setup
             state.blackCaptures
@@ -1963,7 +1953,7 @@ clockView blackUser whiteUser state setup =
             setup.whitePlayer
             whiteUser
             state.whiteTime
-            (state.currentPlayer == White)
+            (gameActive && state.currentPlayer == White)
             White
             setup
             state.whiteCaptures
@@ -2128,15 +2118,60 @@ hasPendingTurn userId matches =
         matches
 
 
+spectatorView : Coord CssPixels -> PublicGoMatchData -> GameModel -> Element SpectatorMsg
+spectatorView windowSize data model =
+    let
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+
+        state : GameState
+        state =
+            foldActions data.actions data.setup
+    in
+    Ui.column
+        [ Ui.spacing
+            (if isMobile then
+                8
+
+             else
+                16
+            )
+        , Ui.paddingXY
+            0
+            (if isMobile then
+                8
+
+             else
+                16
+            )
+        , Ui.background MyUi.background1
+        ]
+        [ statusView state
+        , Ui.column
+            [ Ui.width Ui.shrink
+            , Ui.background boardColor
+            , Ui.rounded 4
+            ]
+            [ clockView (Just data.blackPlayer) (Just data.whitePlayer) state data.setup
+            , boardView windowSize [] data.setup state model
+            ]
+        , if isMobile then
+            Ui.none
+
+          else
+            historyView state model
+        ]
+
+
 gameView :
-    Bool
-    -> Coord CssPixels
+    Coord CssPixels
     -> Id UserId
     -> ( Maybe FrontendUser, Maybe FrontendUser )
     -> ( ValidatedSetup, Array ActionWithTime )
     -> GameModel
     -> Element GameMsg
-gameView viewOnly windowSize viewerUserId ( blackUser, whiteUser ) ( setup, actions ) model =
+gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) model =
     let
         isMobile : Bool
         isMobile =
@@ -2145,6 +2180,22 @@ gameView viewOnly windowSize viewerUserId ( blackUser, whiteUser ) ( setup, acti
         state : GameState
         state =
             foldActions actions setup
+
+        clickable : Bool
+        clickable =
+            if isViewingPast model then
+                True
+
+            else
+                case state.phase of
+                    Playing _ ->
+                        isLocalUsersTurn currentUserId setup state
+
+                    Marking ->
+                        True
+
+                    _ ->
+                        False
     in
     Ui.column
         [ Ui.spacing
@@ -2171,14 +2222,24 @@ gameView viewOnly windowSize viewerUserId ( blackUser, whiteUser ) ( setup, acti
             , Ui.rounded 4
             ]
             [ clockView blackUser whiteUser state setup
-            , boardView viewOnly windowSize viewerUserId setup state model
+            , boardView
+                windowSize
+                (if clickable then
+                    clickTargets (boardSizeToInt setup.width) (boardSizeToInt setup.height)
+
+                 else
+                    []
+                )
+                setup
+                state
+                model
             ]
         , if isMobile then
             Ui.none
 
           else
-            historyView state model
-        , if not viewOnly && isLocalUsersTurn viewerUserId setup state then
+            historyView state model |> Ui.map SpectatorMsg
+        , if isLocalUsersTurn currentUserId setup state then
             controlsView state
 
           else
@@ -2278,7 +2339,7 @@ controlsView state =
         phaseButtons
 
 
-historyView : GameState -> GameModel -> Element GameMsg
+historyView : GameState -> GameModel -> Element SpectatorMsg
 historyView state model =
     let
         total : Int
@@ -2313,8 +2374,8 @@ historyView state model =
             ]
 
 
-boardView : Bool -> Coord CssPixels -> Id UserId -> ValidatedSetup -> GameState -> GameModel -> Element GameMsg
-boardView viewOnly windowSize currentUserId setup state model =
+boardView : Coord CssPixels -> List (Html msg) -> ValidatedSetup -> GameState -> GameModel -> Element msg
+boardView windowSize overlay setup state model =
     let
         isMobile : Bool
         isMobile =
@@ -2371,25 +2432,6 @@ boardView viewOnly windowSize currentUserId setup state model =
         snapshot =
             viewingSnapshot state model
 
-        clickable : Bool
-        clickable =
-            if viewOnly then
-                False
-
-            else if viewing then
-                True
-
-            else
-                case state.phase of
-                    Playing _ ->
-                        isLocalUsersTurn currentUserId setup state
-
-                    Marking ->
-                        True
-
-                    _ ->
-                        False
-
         marks : Dict ( Int, Int ) Stone
         marks =
             if viewing then
@@ -2418,12 +2460,7 @@ boardView viewOnly windowSize currentUserId setup state model =
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ lastMoveMarker viewing state
-            ++ (if clickable then
-                    clickTargets width height
-
-                else
-                    []
-               )
+            ++ overlay
         )
         |> Ui.html
         |> Ui.el

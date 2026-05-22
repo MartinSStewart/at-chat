@@ -1783,6 +1783,17 @@ isPressMsg msg =
         FileDropped _ ->
             False
 
+        GoSpectatorMsg spectatorMsg ->
+            case spectatorMsg of
+                Go.PressedArrowLeft ->
+                    True
+
+                Go.PressedArrowRight ->
+                    True
+
+                Go.ChangedViewingMove int ->
+                    False
+
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =

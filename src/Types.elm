@@ -32,7 +32,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , PendingVoiceChatJoin
-    , PublicGoMatchData
+    , PublicGoMatch(..)
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -86,6 +86,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -133,7 +134,7 @@ type alias LoadingFrontend =
     , timezone : Time.Zone
     , scrollbarWidth : Int
     , userAgent : Maybe UserAgent
-    , publicGoMatch : Maybe (Result () PublicGoMatchData)
+    , publicGoMatch : PublicGoMatch
     }
 
 
@@ -153,7 +154,7 @@ type alias LoadedFrontend =
     , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
-    , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
+    , lastCopied : Maybe MyUi.LastCopy
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , drag : Drag
@@ -164,10 +165,17 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
-    , publicGoMatch : Maybe (Result () PublicGoMatchData)
+    , publicGoMatch : PublicGoMatch
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
+
+
+type PublicGoMatch
+    = PublicGoMatch_NotLoaded
+    | PublicGoMatch_Loading
+    | PublicGoMatch_Loaded Go.PublicGoMatchData Go.GameModel
+    | PublicGoMatch_Missing
 
 
 type Drag
@@ -466,6 +474,7 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | GoMsg Go.Msg
+    | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
@@ -729,15 +738,7 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
-    | GetPublicGoMatchResponse (Result () PublicGoMatchData)
-
-
-type alias PublicGoMatchData =
-    { setup : Go.ValidatedSetup
-    , actions : Array Go.ActionWithTime
-    , blackPlayer : FrontendUser
-    , whitePlayer : FrontendUser
-    }
+    | GetPublicGoMatchResponse (Result () Go.PublicGoMatchData)
 
 
 type alias LoginData =
