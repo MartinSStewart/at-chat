@@ -1921,6 +1921,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         ]
     , RecordedTestExtra.goMatchTest normalConfig
     , RecordedTestExtra.goTurnNotificationDotTest normalConfig
+    , RecordedTestExtra.publicGoMatchViewTest normalConfig
     ]
 
 

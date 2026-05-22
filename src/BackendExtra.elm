@@ -549,6 +549,8 @@ getLoginData sessionId clientId session user requestMessagesFor model =
                                     _ ->
                                         Nothing
                                 )
+                                dmChannelId
+                                model.goMatchPublicIds
                                 dmChannel
                             )
                             dict
@@ -896,6 +898,7 @@ adminData model lastLogPageViewed =
                             Nothing ->
                                 ""
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
+    , websocketDisconnects = model.websocketDisconnects
     }
 
 
@@ -1383,3 +1386,6 @@ toBackendLog toBackend =
 
         AdminDataRequest _ ->
             ToBackendLog_AdminDataRequest
+
+        GetPublicGoMatchRequest _ ->
+            ToBackendLog_GetPublicGoMatchRequest

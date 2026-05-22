@@ -58,6 +58,7 @@ routeFuzzer =
             idFuzzer
             threadRouteFuzzer
             (Fuzz.maybe tabFuzzer)
+        , Fuzz.map PublicGoMatchRoute secretIdFuzzer
         ]
 
 

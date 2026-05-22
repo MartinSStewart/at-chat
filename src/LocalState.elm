@@ -511,6 +511,7 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
+    , websocketDisconnects : Array Time.Posix
     }
 
 
@@ -2478,6 +2479,9 @@ routeToViewing route local =
             StopViewingChannel
 
         LinkDiscord _ ->
+            StopViewingChannel
+
+        PublicGoMatchRoute _ ->
             StopViewingChannel
 
 

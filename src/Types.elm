@@ -31,6 +31,7 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
+    , PublicGoMatch(..)
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -72,7 +73,7 @@ import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -84,6 +85,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -131,6 +133,7 @@ type alias LoadingFrontend =
     , timezone : Time.Zone
     , scrollbarWidth : Int
     , userAgent : Maybe UserAgent
+    , publicGoMatch : PublicGoMatch
     }
 
 
@@ -150,7 +153,7 @@ type alias LoadedFrontend =
     , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
-    , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
+    , lastCopied : Maybe MyUi.LastCopy
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , drag : Drag
@@ -161,9 +164,17 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
+    , publicGoMatch : PublicGoMatch
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
+
+
+type PublicGoMatch
+    = PublicGoMatch_NotLoaded
+    | PublicGoMatch_Loading
+    | PublicGoMatch_Loaded Go.PublicGoMatchData Go.GameModel
+    | PublicGoMatch_Missing
 
 
 type Drag
@@ -340,6 +351,8 @@ type alias BackendModel =
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , websocketDisconnects : Array Time.Posix
+    , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
 
@@ -449,6 +462,7 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | GoMsg Go.Msg
+    | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
@@ -567,6 +581,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
+    | GetPublicGoMatchRequest (SecretId GoMatchPublicId)
 
 
 type BackendMsg
@@ -714,6 +729,7 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
+    | GetPublicGoMatchResponse (Result () Go.PublicGoMatchData)
 
 
 type alias LoginData =

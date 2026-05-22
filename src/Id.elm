@@ -5,6 +5,7 @@ module Id exposing
     , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
     , DiscordGuildOrDmId_DmData
+    , GoMatchPublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
     , Id(..)
@@ -128,6 +129,10 @@ type StickerId
 
 type CustomEmojiId
     = CustomEmojiId Never
+
+
+type GoMatchPublicId
+    = GoMatchPublicId Never
 
 
 type Id a
