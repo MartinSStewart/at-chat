@@ -1162,7 +1162,7 @@ pressedKey key maybeMatchId matches model =
                             stepForward model2 |> Game |> Just
 
                         _ ->
-                            model
+                            Game model2 |> Just
 
                 _ ->
                     model
@@ -1924,7 +1924,7 @@ clockView blackUser whiteUser state setup =
         gameActive : Bool
         gameActive =
             case state.phase of
-                Playing record ->
+                Playing _ ->
                     True
 
                 Marking ->
@@ -1933,7 +1933,7 @@ clockView blackUser whiteUser state setup =
                 Confirming ->
                     True
 
-                Scored record ->
+                Scored _ ->
                     False
     in
     Ui.row

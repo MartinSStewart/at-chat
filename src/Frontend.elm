@@ -254,7 +254,7 @@ init url key =
         , userAgent = Nothing
         , publicGoMatch =
             case route of
-                PublicGoMatchRoute goMatchPublicId ->
+                PublicGoMatchRoute _ ->
                     PublicGoMatch_Loading
 
                 _ ->

@@ -26,7 +26,6 @@ module Id exposing
     , threadRouteWithoutMessage
     , toInt
     , toString
-    , zero
     )
 
 import Discord
@@ -138,11 +137,6 @@ type GoMatchPublicId
 
 type Id a
     = Id Int
-
-
-zero : Id a
-zero =
-    Id 0
 
 
 nextId : SeqDict (Id a) b -> Id a

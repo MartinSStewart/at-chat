@@ -1793,7 +1793,7 @@ isPressMsg msg =
                 Go.PressedArrowRight ->
                     True
 
-                Go.ChangedViewingMove int ->
+                Go.ChangedViewingMove _ ->
                     False
 
 

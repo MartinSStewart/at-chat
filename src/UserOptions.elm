@@ -6,7 +6,6 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress
 import Env
-import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
