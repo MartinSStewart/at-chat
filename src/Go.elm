@@ -62,7 +62,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
-import User exposing (FrontendUser)
+import User exposing (FrontendUser, LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
 
@@ -1487,14 +1487,13 @@ viewHeight windowSize =
 view :
     Coord CssPixels
     -> Maybe MyUi.LastCopy
-    -> Id UserId
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Id UserId
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view windowSize lastCopied currentUserId allUsers otherUserId maybeMatchId matches model =
+view windowSize lastCopied localUser otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1515,11 +1514,10 @@ view windowSize lastCopied currentUserId allUsers otherUserId maybeMatchId match
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just match ->
-                            Ui.Lazy.lazy5
+                            Ui.Lazy.lazy4
                                 gameView
                                 windowSize
-                                currentUserId
-                                allUsers
+                                localUser
                                 match
                                 (case model of
                                     Just (Game game) ->
@@ -1539,7 +1537,7 @@ view windowSize lastCopied currentUserId allUsers otherUserId maybeMatchId match
                 Nothing ->
                     Ui.Lazy.lazy3
                         setupView
-                        (currentUserId == otherUserId)
+                        (localUser.session.userId == otherUserId)
                         windowSize
                         (case model of
                             Just (Game _) ->
@@ -2168,12 +2166,11 @@ spectatorView windowSize data model =
 
 gameView :
     Coord CssPixels
-    -> Id UserId
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> MatchData
     -> GameModel
     -> Element GameMsg
-gameView windowSize currentUserId allUsers data model =
+gameView windowSize localUser data model =
     let
         isMobile : Bool
         isMobile =
@@ -2191,7 +2188,7 @@ gameView windowSize currentUserId allUsers data model =
             else
                 case state.phase of
                     Playing _ ->
-                        isLocalUsersTurn currentUserId data.setup state
+                        isLocalUsersTurn localUser.session.userId data.setup state
 
                     Marking ->
                         True
@@ -2224,8 +2221,8 @@ gameView windowSize currentUserId allUsers data model =
             , Ui.rounded 4
             ]
             [ clockView
-                (SeqDict.get data.setup.blackPlayer allUsers)
-                (SeqDict.get data.setup.whitePlayer allUsers)
+                (User.getUser data.setup.blackPlayer localUser)
+                (User.getUser data.setup.whitePlayer localUser)
                 state
                 data.setup
             , boardView
@@ -2245,7 +2242,7 @@ gameView windowSize currentUserId allUsers data model =
 
           else
             historyView state model |> Ui.map SpectatorMsg
-        , if isLocalUsersTurn currentUserId data.setup state then
+        , if isLocalUsersTurn localUser.session.userId data.setup state then
             controlsView state
 
           else
