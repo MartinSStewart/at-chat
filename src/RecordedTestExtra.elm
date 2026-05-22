@@ -27,6 +27,7 @@ module RecordedTestExtra exposing
     , goTurnNotificationDotTest
     , handleInternalRequests
     , handleLogin
+    , handleLoginFromLoginPage
     , handlePortToJs
     , hasExactText
     , hasNotExactText

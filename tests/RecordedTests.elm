@@ -24,6 +24,7 @@ import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
 import LoginForm
+import MembersAndOwner
 import NonemptyDict
 import Pages.Home
 import PersonName
@@ -1729,6 +1730,137 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.click 100 (Dom.id "guild_deleteChannel")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
                 , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "to-delete" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Owner deletes an invite link and a later user cannot join through it"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            "/"
+            RecordedTestExtra.desktopWindow
+            (\admin ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 0
+
+                    secondUserId : Id UserId
+                    secondUserId =
+                        Id.fromInt 1
+
+                    thirdUserId : Id UserId
+                    thirdUserId =
+                        Id.fromInt 2
+                in
+                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_createInviteLink")
+                , admin.click 100 (Dom.id "guild_copyText")
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            List.filter
+                                (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
+                                data.portRequests
+                        of
+                            [ portRequest ] ->
+                                case Json.Decode.decodeValue Json.Decode.string portRequest.value of
+                                    Ok copyText ->
+                                        let
+                                            urlPath : String
+                                            urlPath =
+                                                String.dropLeft (String.length Env.domain) copyText
+
+                                            inviteIdStr : String
+                                            inviteIdStr =
+                                                String.split "/" urlPath
+                                                    |> List.reverse
+                                                    |> List.head
+                                                    |> Maybe.withDefault ""
+                                        in
+                                        [ T.connectFrontend
+                                            100
+                                            RecordedTestExtra.sessionId1
+                                            urlPath
+                                            RecordedTestExtra.desktopWindow
+                                            (\secondUser ->
+                                                [ secondUser.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                                , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.userEmail secondUser
+                                                , secondUser.input 100 (Dom.id "loginForm_name") "Sven"
+                                                , secondUser.click 100 (Dom.id "loginForm_submit")
+                                                , T.checkBackend
+                                                    100
+                                                    (\backend ->
+                                                        case SeqDict.get guildId backend.guilds of
+                                                            Just guild ->
+                                                                case MembersAndOwner.isMember secondUserId guild.membersAndOwner of
+                                                                    MembersAndOwner.IsMember ->
+                                                                        Ok ()
+
+                                                                    _ ->
+                                                                        Err "Second user should have joined the guild via the invite"
+
+                                                            Nothing ->
+                                                                Err "Guild missing"
+                                                    )
+                                                , admin.click 100 (Dom.id ("guild_deleteInviteLink_" ++ inviteIdStr))
+                                                , T.checkBackend
+                                                    100
+                                                    (\backend ->
+                                                        case SeqDict.get guildId backend.guilds of
+                                                            Just guild ->
+                                                                if SeqDict.isEmpty guild.invites then
+                                                                    Ok ()
+
+                                                                else
+                                                                    Err "Invite link should have been removed after the owner clicked delete"
+
+                                                            Nothing ->
+                                                                Err "Guild missing"
+                                                    )
+                                                , T.connectFrontend
+                                                    100
+                                                    RecordedTestExtra.sessionId2
+                                                    urlPath
+                                                    RecordedTestExtra.desktopWindow
+                                                    (\thirdUser ->
+                                                        [ thirdUser.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                                        , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail thirdUser
+                                                        , thirdUser.input 100 (Dom.id "loginForm_name") "Joe"
+                                                        , thirdUser.click 100 (Dom.id "loginForm_submit")
+                                                        , T.checkBackend
+                                                            100
+                                                            (\backend ->
+                                                                case SeqDict.get guildId backend.guilds of
+                                                                    Just guild ->
+                                                                        case MembersAndOwner.isMember thirdUserId guild.membersAndOwner of
+                                                                            MembersAndOwner.IsNotMember ->
+                                                                                Ok ()
+
+                                                                            _ ->
+                                                                                Err "Third user should not have joined the guild through the deleted invite"
+
+                                                                    Nothing ->
+                                                                        Err "Guild missing"
+                                                            )
+                                                        ]
+                                                    )
+                                                ]
+                                            )
+                                        ]
+
+                                    Err _ ->
+                                        [ admin.checkModel 100 (\_ -> Err "Didn't decode clipboard port value") ]
+
+                            _ ->
+                                [ admin.checkModel 100 (\_ -> Err "Didn't copy invite link to clipboard") ]
+                    )
                 ]
             )
         ]
