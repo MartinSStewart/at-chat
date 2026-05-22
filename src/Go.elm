@@ -54,6 +54,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import StringExtra
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
@@ -205,22 +206,6 @@ komiHalfPointsFromString input =
 
             Nothing ->
                 Err "Enter a number"
-
-
-addPointsToHalfPoints : Int -> KomiHalfPoints -> KomiHalfPoints
-addPointsToHalfPoints points (KomiHalfPoints a) =
-    points * 2 + a |> KomiHalfPoints
-
-
-komiHalfPointsToString : KomiHalfPoints -> String
-komiHalfPointsToString (KomiHalfPoints a) =
-    String.fromInt (a // 2)
-        ++ (if modBy 2 a == 0 then
-                ""
-
-            else
-                ".5"
-           )
 
 
 komiHalfPointsToFloat : KomiHalfPoints -> Float
@@ -2090,7 +2075,7 @@ clockChip userId maybeUser seconds isActive stone setup score =
                     , Ui.rounded 99
                     ]
                     Ui.none
-                , formatScore score |> Ui.text
+                , StringExtra.removeTrailing0s 1 score |> Ui.text
                 ]
             ]
         ]
@@ -2290,23 +2275,14 @@ statusView state =
 
                 Scored s ->
                     "Final score - Black: "
-                        ++ formatScore s.blackScore
+                        ++ StringExtra.removeTrailing0s 1 s.blackScore
                         ++ ", White: "
-                        ++ formatScore s.whiteScore
+                        ++ StringExtra.removeTrailing0s 1 s.whiteScore
                         ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
         [ Ui.spacing 4, Ui.paddingXY 16 0 ]
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText) ]
-
-
-formatScore : Float -> String
-formatScore score =
-    if score == toFloat (floor score) then
-        String.fromInt (floor score)
-
-    else
-        String.fromFloat score
 
 
 winnerSuffix : Float -> Float -> String
