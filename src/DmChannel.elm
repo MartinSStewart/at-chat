@@ -40,10 +40,7 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) BackendThread
-    , goMatches :
-        SeqDict
-            (Id ChannelMessageId)
-            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : Maybe (SecretId GoMatchPublicId) }
+    , goMatches : SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
     }
 
 
@@ -100,8 +97,13 @@ frontendInit =
     }
 
 
-toFrontend : Maybe ThreadRoute -> DmChannel -> FrontendDmChannel
-toFrontend threadRoute dmChannel =
+toFrontend :
+    Maybe ThreadRoute
+    -> DmChannelId
+    -> OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
+    -> DmChannel
+    -> FrontendDmChannel
+toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     let
         preloadMessages =
             Just NoThread == threadRoute
@@ -113,7 +115,15 @@ toFrontend threadRoute dmChannel =
         SeqDict.map
             (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
-    , goMatches = dmChannel.goMatches
+    , goMatches =
+        SeqDict.map
+            (\matchId ( setup, actions ) ->
+                { setup = setup
+                , actions = actions
+                , publicLink = OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds
+                }
+            )
+            dmChannel.goMatches
     }
 
 
