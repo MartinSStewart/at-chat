@@ -142,6 +142,7 @@ type Msg
     | PressedShowHiddenLogs Bool
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedRegenerateServerSecret
+    | PressedWebsocketCloseEventsPage Int
 
 
 type ToBackend
@@ -182,6 +183,7 @@ type alias Model =
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
+    , websocketCloseEventsPage : Int
     }
 
 
@@ -308,6 +310,7 @@ initForUser =
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , websocketCloseEventsPage = 0
     }
 
 
@@ -332,6 +335,7 @@ initForAdmin { highlightLog } =
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , websocketCloseEventsPage = 0
     }
 
 
@@ -1140,6 +1144,9 @@ update navigationKey time adminData localState msg model =
         PressedRegenerateServerSecret ->
             ( model, Command.none, AdminChange (RegenerateServerSecret EmptyPlaceholder) )
 
+        PressedWebsocketCloseEventsPage page ->
+            ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -1464,7 +1471,7 @@ view isMobile2 version time local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
-            , websocketCloseEventsSection time user adminData
+            , websocketCloseEventsSection time local.localUser.timezone user adminData model
             , voiceChatSection local adminData user
             , filesSection user adminData
             , stickersAndEmojisSection local user
@@ -1536,8 +1543,8 @@ websocketCloseEventToString event =
             ( ( "ListenCloseEvent", "#bb5ee0" ), time )
 
 
-websocketCloseEventsSection : Time.Posix -> BackendUser -> AdminData -> Element Msg
-websocketCloseEventsSection currentTime user adminData =
+websocketCloseEventsSection : Time.Posix -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+websocketCloseEventsSection currentTime timezone user adminData model =
     let
         allEvents : SeqDict ( String, String ) (Nonempty Time.Posix)
         allEvents =
@@ -1574,7 +1581,112 @@ websocketCloseEventsSection currentTime user adminData =
                                 ]
                         )
                         (SeqDict.toList allEvents)
+                    ++ [ websocketCloseEventsList timezone model adminData.websocketCloseEvents ]
                 )
+        ]
+
+
+websocketCloseEventsPageSize : Int
+websocketCloseEventsPageSize =
+    20
+
+
+websocketCloseEventsList : Time.Zone -> Model -> Array WebsocketClosedEvent -> Element Msg
+websocketCloseEventsList timezone model events =
+    let
+        total : Int
+        total =
+            Array.length events
+
+        pageCount : Int
+        pageCount =
+            ((websocketCloseEventsPageSize - 1) + total) // websocketCloseEventsPageSize
+
+        currentPage : Int
+        currentPage =
+            model.websocketCloseEventsPage |> clamp 0 (max 0 (pageCount - 1))
+
+        startIndex : Int
+        startIndex =
+            max 0 (total - (currentPage + 1) * websocketCloseEventsPageSize)
+
+        endIndex : Int
+        endIndex =
+            total - currentPage * websocketCloseEventsPageSize
+
+        pageItems : List ( Int, WebsocketClosedEvent )
+        pageItems =
+            Array.slice startIndex endIndex events
+                |> Array.toIndexedList
+                |> List.map (\( i, e ) -> ( startIndex + i, e ))
+                |> List.reverse
+    in
+    Ui.column
+        [ Ui.spacing 6 ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "All events")
+        , Ui.column
+            [ Ui.spacing 2, Ui.Font.size 13 ]
+            (List.map (websocketCloseEventListItem timezone) pageItems)
+        , if pageCount <= 1 then
+            Ui.none
+
+          else
+            Ui.row
+                [ Ui.spacing 8, Ui.Font.size 12 ]
+                [ if currentPage + 1 >= pageCount then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton
+                        (Dom.id "admin_websocketCloseEventsPrev")
+                        (PressedWebsocketCloseEventsPage (currentPage + 1))
+                        (Ui.text "← Older")
+                        |> Ui.el [ Ui.width Ui.shrink ]
+                , Ui.el
+                    [ Ui.width Ui.shrink, Ui.centerY ]
+                    (Ui.text ("Page " ++ String.fromInt (currentPage + 1) ++ " of " ++ String.fromInt pageCount))
+                , if currentPage <= 0 then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton
+                        (Dom.id "admin_websocketCloseEventsNext")
+                        (PressedWebsocketCloseEventsPage (currentPage - 1))
+                        (Ui.text "Newer →")
+                        |> Ui.el [ Ui.width Ui.shrink ]
+                ]
+        ]
+
+
+websocketCloseEventListItem : Time.Zone -> ( Int, WebsocketClosedEvent ) -> Element msg
+websocketCloseEventListItem timezone ( index, event ) =
+    let
+        ( ( label, _ ), time ) =
+            websocketCloseEventToString event
+
+        details : String
+        details =
+            case event of
+                WebsocketClosed_CloseAndReopenForUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_UnlinkDiscordUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_ClosedByBackendForUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_ListenCloseEvent userId reason _ ->
+                    "user " ++ Discord.idToString userId ++ ", reason: " ++ reason
+    in
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.el [ Ui.width Ui.shrink ]
+            (Ui.text ("#" ++ String.fromInt (index + 1)))
+        , Ui.el [ Ui.width Ui.shrink ]
+            (Ui.text (MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone))
+        , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text label)
+        , Ui.text details
         ]
 
 
