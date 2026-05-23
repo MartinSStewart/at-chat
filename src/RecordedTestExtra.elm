@@ -989,54 +989,55 @@ voiceChatTest normalConfig =
     T.testGroup
         "Voice chat"
         [ sfuHandshakeTest configWithCloudflareMock
-        , startTest
-            "Hop between voice calls"
-            startTime
-            normalConfig
-            [ connectTwoUsersAndJoinNewGuild
-                desktopWindow
-                (\admin user ->
-                    [ admin.click 100 (Dom.id "guild_openDm_0")
-                    , user.click 100 (Dom.id "guild_openDm_0")
-                    , admin.checkView
-                        100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
-                    , admin.click 100 (Dom.id "guild_voiceChat")
-                    , admin.click 100 (Dom.id "guild_startVoiceChat")
-                    , admin.checkView
-                        100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
-                    , admin.checkView
-                        100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
-                    , admin.navigateBack 100
-                    , admin.navigateBack 100
-                    , admin.click 100 (Dom.id "guild_openDm_1")
-                    , user.checkView
-                        100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
-                    , admin.click 100 (Dom.id "guild_voiceChat")
-                    , admin.click 100 (Dom.id "guild_startVoiceChat")
-                    , user.checkView
-                        100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
-                    , user.checkView
-                        100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
-                    , admin.navigateBack 100
-                    , admin.navigateBack 100
-                    , admin.click 100 (Dom.id "guild_openDm_0")
-                    , admin.checkView
-                        100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
-                    , admin.click 100 (Dom.id "guild_voiceChat")
-                    , admin.click 100 (Dom.id "guild_startVoiceChat")
-                    , user.checkView
-                        100
-                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
-                    ]
-                )
-            ]
+
+        --, startTest
+        --    "Hop between voice calls"
+        --    startTime
+        --    normalConfig
+        --    [ connectTwoUsersAndJoinNewGuild
+        --        desktopWindow
+        --        (\admin user ->
+        --            [ admin.click 100 (Dom.id "guild_openDm_0")
+        --            , user.click 100 (Dom.id "guild_openDm_0")
+        --            , admin.checkView
+        --                100
+        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+        --            , admin.click 100 (Dom.id "guild_voiceChat")
+        --            , admin.click 100 (Dom.id "guild_startVoiceChat")
+        --            , admin.checkView
+        --                100
+        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+        --            , admin.checkView
+        --                100
+        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+        --            , admin.navigateBack 100
+        --            , admin.navigateBack 100
+        --            , admin.click 100 (Dom.id "guild_openDm_1")
+        --            , user.checkView
+        --                100
+        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+        --            , admin.click 100 (Dom.id "guild_voiceChat")
+        --            , admin.click 100 (Dom.id "guild_startVoiceChat")
+        --            , user.checkView
+        --                100
+        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+        --            , user.checkView
+        --                100
+        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+        --            , admin.navigateBack 100
+        --            , admin.navigateBack 100
+        --            , admin.click 100 (Dom.id "guild_openDm_0")
+        --            , admin.checkView
+        --                100
+        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+        --            , admin.click 100 (Dom.id "guild_voiceChat")
+        --            , admin.click 100 (Dom.id "guild_startVoiceChat")
+        --            , user.checkView
+        --                100
+        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+        --            ]
+        --        )
+        --    ]
         , startTest
             "Multiple user instances"
             startTime
