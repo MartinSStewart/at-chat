@@ -129,7 +129,7 @@ type ResponseId
 
 type PendingResponse
     = Pending AiModelName
-    | GotResponse AiModelName String
+    | GotResponse AiModelName String (Maybe Float)
     | GotError AiModelName Http.Error
 
 
@@ -343,14 +343,14 @@ pendingResponseCodec =
                 Pending arg0 ->
                     pendingEncoder arg0
 
-                GotResponse argA argB ->
-                    gotResponseEncoder argA argB
+                GotResponse argA argB argC ->
+                    gotResponseEncoder argA argB argC
 
                 GotError argA argB ->
                     gotErrorEncoder argA argB
         )
         |> Serialize.variant1 Pending aiModelCodec
-        |> Serialize.variant2 GotResponse aiModelCodec Serialize.string
+        |> Serialize.variant3 GotResponse aiModelCodec Serialize.string (Serialize.maybe Serialize.float)
         |> Serialize.variant2 GotError aiModelCodec errorCodec
         |> Serialize.finishCustomType
 
@@ -624,7 +624,7 @@ update msg model =
 
         PressedKeep responseId ->
             case SeqDict.get responseId model.pendingResponses of
-                Just (GotResponse _ text) ->
+                Just (GotResponse _ text _) ->
                     saveToLocalStorage
                         { model
                             | pendingResponses = SeqDict.empty
@@ -774,8 +774,8 @@ update msg model =
                         SeqDict.updateIfExists responseId
                             (\response ->
                                 case response of
-                                    GotResponse modelId _ ->
-                                        GotResponse modelId text
+                                    GotResponse modelId _ cost ->
+                                        GotResponse modelId text cost
 
                                     Pending _ ->
                                         response
@@ -846,11 +846,29 @@ pendingResponseModelId response =
         Pending modelId ->
             modelId
 
-        GotResponse modelId _ ->
+        GotResponse modelId _ _ ->
             modelId
 
         GotError modelId _ ->
             modelId
+
+
+pendingResponseCost : PendingResponse -> Maybe Float
+pendingResponseCost response =
+    case response of
+        GotResponse _ _ cost ->
+            cost
+
+        Pending _ ->
+            Nothing
+
+        GotError _ _ ->
+            Nothing
+
+
+formatCost : Float -> String
+formatCost cost =
+    "$" ++ String.fromFloat (toFloat (round (cost * 1000000)) / 1000000)
 
 
 prefixWrapper : String -> String
@@ -899,7 +917,7 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        String.replace "\\\"" "\"" aiMessage2 |> GotResponse modelId
+                                        GotResponse modelId (String.replace "\\\"" "\"" aiMessage2) aiMessage.cost
 
                                     Err error ->
                                         GotError modelId error
@@ -1083,7 +1101,7 @@ responseView windowWidth responseCount responseId response =
             |> Ui.px
             |> Ui.width
         , [ case response of
-                GotResponse _ _ ->
+                GotResponse _ _ _ ->
                     responseButton (PressedKeep responseId) MyUi.background2 Icons.checkmark "Keep"
 
                 Pending _ ->
@@ -1125,7 +1143,7 @@ responseView windowWidth responseCount responseId response =
                         ]
                         (Ui.text "Loading...")
 
-                GotResponse _ response2 ->
+                GotResponse _ response2 _ ->
                     Ui.el
                         [ Ui.scrollable
                         , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
@@ -1184,7 +1202,17 @@ responseView windowWidth responseCount responseId response =
                 , Ui.borderColor MyUi.inputBorder
                 , Ui.roundedWith { topLeft = 0, topRight = 0, bottomRight = 4, bottomLeft = 4 }
                 ]
-                (Ui.text (aiModelNameToString modelId))
+                (Ui.text
+                    (aiModelNameToString modelId
+                        ++ (case pendingResponseCost response of
+                                Just cost ->
+                                    " · " ++ formatCost cost
+
+                                Nothing ->
+                                    ""
+                           )
+                    )
+                )
             ]
         )
 
@@ -1526,19 +1554,26 @@ encodeMessage message =
 type alias AiResponse =
     { images : List String
     , content : String
+    , cost : Maybe Float
     }
 
 
-decodeAiMessage : Decoder AiResponse
+type alias AiMessageContent =
+    { images : List String
+    , content : String
+    }
+
+
+decodeAiMessage : Decoder AiMessageContent
 decodeAiMessage =
     Json.Decode.oneOf
         [ Json.Decode.field "message"
             (Json.Decode.map2
-                AiResponse
+                AiMessageContent
                 (Json.Decode.Extra.optionalField "images" (Json.Decode.list decodeImage) |> Json.Decode.map (Maybe.withDefault []))
                 (Json.Decode.field "content" Json.Decode.string)
             )
-        , Json.Decode.field "text" Json.Decode.string |> Json.Decode.map (AiResponse [])
+        , Json.Decode.field "text" Json.Decode.string |> Json.Decode.map (AiMessageContent [])
         ]
 
 
@@ -1596,6 +1631,7 @@ openRouterRequest openRouterKey aiModel message =
                 , ( "reasoning"
                   , Json.Encode.object [ ( "effort", Json.Encode.string "high" ), ( "enabled", Json.Encode.bool True ) ]
                   )
+                , ( "usage", Json.Encode.object [ ( "include", Json.Encode.bool True ) ] )
                 ]
                 |> Http.jsonBody
         , resolver =
@@ -1617,12 +1653,18 @@ openRouterRequest openRouterKey aiModel message =
                         GoodStatus_ _ body ->
                             case
                                 Json.Decode.decodeString
-                                    (Json.Decode.field
-                                        "choices"
-                                        (Json.Decode.index
-                                            0
-                                            decodeAiMessage
+                                    (Json.Decode.map2
+                                        (\content cost ->
+                                            { images = content.images, content = content.content, cost = cost }
                                         )
+                                        (Json.Decode.field
+                                            "choices"
+                                            (Json.Decode.index
+                                                0
+                                                decodeAiMessage
+                                            )
+                                        )
+                                        (Json.Decode.maybe (Json.Decode.at [ "usage", "cost" ] Json.Decode.float))
                                     )
                                     body
                             of
