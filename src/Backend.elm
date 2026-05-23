@@ -5074,6 +5074,9 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
         Call.Local_PublishTracks offerSdp mids _ ->
             asUser model sessionId (handlePublishTracks clientId changeId time offerSdp mids model)
 
+        Call.Local_PublishConnected ->
+            asUser model sessionId (handlePublishConnected time clientId changeId model)
+
         Call.Local_PullTracks connectionId remoteSessionId trackNames _ ->
             asUser model sessionId (handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model)
 
@@ -5287,15 +5290,22 @@ collectExistingPeers roomId currentUserId currentClientId model =
                                         && not (session.userId == currentUserId && clientId2 == currentClientId)
                                 then
                                     case connection.callSfu of
+                                        -- Only list peers whose RTCPeerConnection has
+                                        -- connected to Cloudflare; their tracks aren't
+                                        -- pullable before that.
                                         Just sfu ->
-                                            Just
-                                                { connectionId =
-                                                    { roomId = roomId
-                                                    , otherClientId = ( session.userId, clientId2 )
+                                            if sfu.connected then
+                                                Just
+                                                    { connectionId =
+                                                        { roomId = roomId
+                                                        , otherClientId = ( session.userId, clientId2 )
+                                                        }
+                                                    , sessionId = sfu.sessionId
+                                                    , trackNames = sfu.trackNames
                                                     }
-                                                , sessionId = sfu.sessionId
-                                                , trackNames = sfu.trackNames
-                                                }
+
+                                            else
+                                                Nothing
 
                                         Nothing ->
                                             Nothing
@@ -5396,7 +5406,7 @@ handleGotCloudflareSession :
     -> Result Http.Error Cloudflare.PushTracksResult
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleGotCloudflareSession clientId changeId time roomId cfSessionId result model =
+handleGotCloudflareSession clientId changeId time _ cfSessionId result model =
     case result of
         Err error ->
             BackendExtra.addLogWithCmd
@@ -5413,15 +5423,6 @@ handleGotCloudflareSession clientId changeId time roomId cfSessionId result mode
             case findClientLocation clientId model of
                 Just ( sessionId2, connection ) ->
                     let
-                        userId : Id UserId
-                        userId =
-                            case SeqDict.get sessionId2 model.sessions of
-                                Just s ->
-                                    s.userId
-
-                                Nothing ->
-                                    Id.fromInt 0
-
                         model2 : BackendModel
                         model2 =
                             { model
@@ -5436,6 +5437,14 @@ handleGotCloudflareSession clientId changeId time roomId cfSessionId result mode
                                                         Just
                                                             { sessionId = cfSessionId
                                                             , trackNames = push.trackNames
+
+                                                            -- Not connected to Cloudflare yet. We must NOT
+                                                            -- advertise these tracks for pulling until the
+                                                            -- publisher's RTCPeerConnection actually connects
+                                                            -- and starts sending packets, otherwise pulls fail
+                                                            -- with not_found_track_error. The publisher signals
+                                                            -- readiness via Local_PublishConnected.
+                                                            , connected = False
                                                             }
                                                 }
                                             )
@@ -5444,38 +5453,145 @@ handleGotCloudflareSession clientId changeId time roomId cfSessionId result mode
                             }
                     in
                     ( model2
-                    , Command.batch
-                        [ Call.Local_PublishTracks push.answerSdp
-                            []
-                            (FilledInByBackend
-                                { answerSdp = push.answerSdp
-                                , sessionId = cfSessionId
-                                , trackNames = push.trackNames
-                                }
-                            )
-                            |> Local_VoiceChatChange
-                            |> LocalChangeResponse changeId
-                            |> Lamdera.sendToFrontend clientId
-                        , broadcastToCallParticipants
-                            roomId
-                            userId
-                            clientId
-                            (\peerUserId ->
-                                Call.Server_Joined
-                                    time
-                                    { roomId = peerRoomId roomId peerUserId userId
-                                    , otherClientId = ( userId, clientId )
-                                    }
-                                    cfSessionId
-                                    push.trackNames
-                                    |> Server_VoiceChatChange
-                            )
-                            model2
-                        ]
+                    , Call.Local_PublishTracks push.answerSdp
+                        []
+                        (FilledInByBackend
+                            { answerSdp = push.answerSdp
+                            , sessionId = cfSessionId
+                            , trackNames = push.trackNames
+                            }
+                        )
+                        |> Local_VoiceChatChange
+                        |> LocalChangeResponse changeId
+                        |> Lamdera.sendToFrontend clientId
                     )
 
                 Nothing ->
                     ( model, Command.none )
+
+
+{-| The publisher's RTCPeerConnection has connected to Cloudflare and is now
+sending media. Only now is it safe for other participants to pull this peer's
+tracks (and for this peer to pull others). We mark the connection ready and
+exchange Server\_Joined messages in both directions with every other already-
+connected peer in the same call.
+-}
+handlePublishConnected :
+    Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> BackendModel
+    -> UserSession
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handlePublishConnected time clientId changeId model session _ =
+    case findClientLocation clientId model of
+        Just ( sessionId2, connection ) ->
+            case ( connection.call, connection.callSfu ) of
+                ( Just roomId, Just sfu ) ->
+                    let
+                        userId : Id UserId
+                        userId =
+                            session.userId
+
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | connections =
+                                    SeqDict.update
+                                        sessionId2
+                                        (Maybe.map
+                                            (NonemptyDict.insert
+                                                clientId
+                                                { connection | callSfu = Just { sfu | connected = True } }
+                                            )
+                                        )
+                                        model.connections
+                            }
+
+                        -- Every other connected peer already in this call.
+                        peers : List { peerUserId : Id UserId, peerClientId : ClientId, sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName }
+                        peers =
+                            SeqDict.toList model2.connections
+                                |> List.concatMap
+                                    (\( sid, conns ) ->
+                                        case SeqDict.get sid model2.sessions of
+                                            Just s ->
+                                                NonemptyDict.toList conns
+                                                    |> List.filterMap
+                                                        (\( cId, c ) ->
+                                                            if
+                                                                not (s.userId == userId && cId == clientId)
+                                                                    && isPeerInSameCall roomId userId s.userId c.call
+                                                            then
+                                                                case c.callSfu of
+                                                                    Just peerSfu ->
+                                                                        if peerSfu.connected then
+                                                                            Just
+                                                                                { peerUserId = s.userId
+                                                                                , peerClientId = cId
+                                                                                , sessionId = peerSfu.sessionId
+                                                                                , trackNames = peerSfu.trackNames
+                                                                                }
+
+                                                                        else
+                                                                            Nothing
+
+                                                                    Nothing ->
+                                                                        Nothing
+
+                                                            else
+                                                                Nothing
+                                                        )
+
+                                            Nothing ->
+                                                []
+                                    )
+
+                        cmds : List (Command BackendOnly ToFrontend BackendMsg)
+                        cmds =
+                            List.concatMap
+                                (\peer ->
+                                    [ -- Tell the peer to pull this newly-connected publisher.
+                                      Call.Server_Joined
+                                        time
+                                        { roomId = peerRoomId roomId peer.peerUserId userId
+                                        , otherClientId = ( userId, clientId )
+                                        }
+                                        sfu.sessionId
+                                        sfu.trackNames
+                                        |> Server_VoiceChatChange
+                                        |> ServerChange
+                                        |> ChangeBroadcast
+                                        |> Lamdera.sendToFrontend peer.peerClientId
+                                    , -- Tell this publisher to pull the (already connected) peer.
+                                      Call.Server_Joined
+                                        time
+                                        { roomId = roomId
+                                        , otherClientId = ( peer.peerUserId, peer.peerClientId )
+                                        }
+                                        peer.sessionId
+                                        peer.trackNames
+                                        |> Server_VoiceChatChange
+                                        |> ServerChange
+                                        |> ChangeBroadcast
+                                        |> Lamdera.sendToFrontend clientId
+                                    ]
+                                )
+                                peers
+                    in
+                    ( model2
+                    , Command.batch
+                        (Lamdera.sendToFrontend clientId (LocalChangeResponse changeId (Local_VoiceChatChange Call.Local_PublishConnected))
+                            :: cmds
+                        )
+                    )
+
+                _ ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
+        Nothing ->
+            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 peerRoomId : Call.RoomId -> Id UserId -> Id UserId -> Call.RoomId

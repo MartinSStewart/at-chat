@@ -3901,6 +3901,13 @@ updateLoaded msg model =
                                         loggedIn
                                         Command.none
 
+                                Call.FromJs_PublishConnected ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Call.Local_PublishConnected |> Local_VoiceChatChange |> Just)
+                                        loggedIn
+                                        Command.none
+
                                 Call.FromJs_PullAnswer _ sdp ->
                                     FrontendExtra.handleLocalChange
                                         model.time
@@ -5815,6 +5822,9 @@ updateLoadedFromBackend msg model =
                                     Call.toJs (Call.ToJs_PublishAnswer { answerSdp = publishResult.answerSdp })
 
                                 Call.Local_PublishTracks _ _ EmptyPlaceholder ->
+                                    Command.none
+
+                                Call.Local_PublishConnected ->
                                     Command.none
 
                                 Call.Local_PullTracks connectionId _ _ (FilledInByBackend result) ->

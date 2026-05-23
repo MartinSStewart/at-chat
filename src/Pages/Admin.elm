@@ -1188,6 +1188,7 @@ update navigationKey time adminData localState msg model =
 
         PressedDeleteCall ->
             ( model, Command.none, AdminChange EndAllCalls )
+
         PressedWebsocketCloseEventsPage page ->
             ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
 

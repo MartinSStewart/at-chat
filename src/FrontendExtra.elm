@@ -230,6 +230,9 @@ pendingChangesText localChange =
                 Call.Local_PublishTracks _ _ _ ->
                     "Publish tracks"
 
+                Call.Local_PublishConnected ->
+                    "Publish connected"
+
                 Call.Local_PullTracks _ _ _ _ ->
                     "Pull tracks"
 
@@ -2755,6 +2758,9 @@ changeUpdate localMsg local =
                             leaveCall time local
 
                         Call.Local_PublishTracks _ _ _ ->
+                            local
+
+                        Call.Local_PublishConnected ->
                             local
 
                         Call.Local_PullTracks _ _ _ (FilledInByBackend result) ->

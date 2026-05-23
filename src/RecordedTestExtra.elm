@@ -75,7 +75,6 @@ import Cloudflare
 import Codec
 import Dict
 import Discord
-import DmChannel
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), RequestedBy(..))
@@ -855,21 +854,13 @@ mockVoiceChatPorts { data, currentRequest } =
                     Nothing
 
                 Call.ToJs_PublishAnswer _ ->
-                    -- JS sets the SDP answer as the remote description, then drains
-                    -- pendingExistingPeers (peers carried over from StartCallData)
-                    -- by sending one FromJs_RequestPullTracks per peer. We look at
-                    -- the backend to find an already-published peer in the same
-                    -- call; for 1:1 there's at most one.
-                    findExistingPeerForPublisher currentRequest.clientId data
-                        |> Maybe.andThen
-                            (\peer ->
-                                fromJsEvent
-                                    (Call.FromJs_RequestPullTracks
-                                        peer.connectionId
-                                        peer.sessionId
-                                        peer.trackNames
-                                    )
-                            )
+                    -- JS sets the SDP answer as the remote description and waits
+                    -- for the PeerConnection to actually connect to Cloudflare.
+                    -- Once connected it tells the backend (FromJs_PublishConnected),
+                    -- which then drives the bidirectional track pulls via
+                    -- Server_Joined → ToJs_PeerJoined. We simulate "connected"
+                    -- firing immediately.
+                    fromJsEvent Call.FromJs_PublishConnected
 
                 Call.ToJs_PeerJoined { connectionId, sessionId, trackNames } ->
                     -- A peer joined while we're in the call. JS reacts by asking
@@ -971,100 +962,6 @@ mockVoiceChatPorts { data, currentRequest } =
 fromJsEvent : Call.FromJs -> Maybe ( String, Json.Decode.Value )
 fromJsEvent value =
     Just ( "voice_chat_from_js", Call.encodeFromJs value )
-
-
-{-| Look at the backend state to find a peer that is already in the
-publisher's call AND has already published their own tracks (callSfu set).
-Returns the first match — fine for 1:1 calls where there is at most one
-other peer.
--}
-findExistingPeerForPublisher :
-    Lamdera.ClientId
-    -> T.Data FrontendModel BackendModel
-    -> Maybe Call.ExistingPeer
-findExistingPeerForPublisher publisherClientId data =
-    let
-        publisherInfo : Maybe ( Id UserId, Call.RoomId )
-        publisherInfo =
-            SeqDict.foldl
-                (\sessionId conns acc ->
-                    case acc of
-                        Just _ ->
-                            acc
-
-                        Nothing ->
-                            case NonemptyDict.get publisherClientId conns of
-                                Just conn ->
-                                    SeqDict.get sessionId data.backend.sessions
-                                        |> Maybe.andThen
-                                            (\s -> Maybe.map (\room -> ( s.userId, room )) conn.call)
-
-                                Nothing ->
-                                    Nothing
-                )
-                Nothing
-                data.backend.connections
-    in
-    case publisherInfo of
-        Nothing ->
-            Nothing
-
-        Just ( publisherUserId, publisherRoom ) ->
-            SeqDict.foldl
-                (\sessionId conns acc ->
-                    case acc of
-                        Just _ ->
-                            acc
-
-                        Nothing ->
-                            case SeqDict.get sessionId data.backend.sessions of
-                                Just session ->
-                                    NonemptyDict.toList conns
-                                        |> List.filterMap
-                                            (\( clientId, c ) ->
-                                                let
-                                                    isSelf =
-                                                        session.userId == publisherUserId && clientId == publisherClientId
-                                                in
-                                                if not isSelf && inSameDmCall publisherUserId publisherRoom session.userId c.call then
-                                                    Maybe.map
-                                                        (\sfu ->
-                                                            { connectionId =
-                                                                { roomId = publisherRoom
-                                                                , otherClientId = ( session.userId, clientId )
-                                                                }
-                                                            , sessionId = sfu.sessionId
-                                                            , trackNames = sfu.trackNames
-                                                            }
-                                                        )
-                                                        c.callSfu
-
-                                                else
-                                                    Nothing
-                                            )
-                                        |> List.head
-
-                                Nothing ->
-                                    Nothing
-                )
-                Nothing
-                data.backend.connections
-
-
-{-| Mirror of `Backend.isPeerInSameCall`, scoped to DM rooms (the only
-kind that exists today). Compares the canonical DM channel id derived
-from each side's (myUserId, theirUserId) pair so the asymmetric
-`DmRoomId other` encoding doesn't trip us up.
--}
-inSameDmCall : Id UserId -> Call.RoomId -> Id UserId -> Maybe Call.RoomId -> Bool
-inSameDmCall myUserId myRoom peerUserId peerCall =
-    case ( myRoom, peerCall ) of
-        ( Call.DmRoomId myOther, Just (Call.DmRoomId peerOther) ) ->
-            DmChannel.channelIdFromUserIds myUserId myOther
-                == DmChannel.channelIdFromUserIds peerUserId peerOther
-
-        ( _, Nothing ) ->
-            False
 
 
 voiceChatTest :

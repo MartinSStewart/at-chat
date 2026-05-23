@@ -527,7 +527,7 @@ type WebsocketClosedEvent
 type alias ConnectionData =
     { lastRequest : LastRequest
     , call : Maybe Call.RoomId
-    , callSfu : Maybe { sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName }
+    , callSfu : Maybe { sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName, connected : Bool }
     }
 
 

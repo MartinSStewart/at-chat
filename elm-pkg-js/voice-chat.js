@@ -67,13 +67,16 @@ exports.init = async function init(app) {
             pendingExistingPeers: args.existingPeers || [],
             peerSubs: new Map(),
             waitingForPublishAnswer: true,
+            publishConnectedSent: false,
         };
 
         pc.oniceconnectionstatechange = function () {
             console.log("SFU iceConnectionState:", pc.iceConnectionState);
+            maybeSignalPublishConnected();
         };
         pc.onconnectionstatechange = function () {
             console.log("SFU connectionState:", pc.connectionState);
+            maybeSignalPublishConnected();
         };
 
         pc.ontrack = function (event) {
@@ -110,17 +113,29 @@ exports.init = async function init(app) {
         try {
             await sfu.pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
             sfu.waitingForPublishAnswer = false;
-
-            // Now drain pending pulls for existing peers.
-            for (const peer of sfu.pendingExistingPeers) {
-                app.ports.voice_chat_from_js.send({
-                    tag: "request-pull-tracks",
-                    args: [peer.connectionId, peer.sessionId, peer.trackNames],
-                });
-            }
-            sfu.pendingExistingPeers = [];
+            // We do NOT pull peers here. Cloudflare rejects pulls until the
+            // publisher's PC is connected and sending packets, so we wait for
+            // the connection to come up (maybeSignalPublishConnected) and let
+            // the backend drive pulls in both directions via Server_Joined.
+            maybeSignalPublishConnected();
         } catch (e) {
             console.error("SFU setRemoteDescription(publish answer) failed", e);
+        }
+    }
+
+    // Notify Elm once, when our publishing PeerConnection has actually
+    // connected to Cloudflare. Only then are our tracks pullable by others
+    // (and only then is it safe for us to pull others). The backend gates
+    // all track-pull signalling on this.
+    function maybeSignalPublishConnected() {
+        if (!sfu || sfu.publishConnectedSent || sfu.waitingForPublishAnswer) return;
+        const connected =
+            sfu.pc.connectionState === "connected" ||
+            sfu.pc.iceConnectionState === "connected" ||
+            sfu.pc.iceConnectionState === "completed";
+        if (connected) {
+            sfu.publishConnectedSent = true;
+            app.ports.voice_chat_from_js.send({ tag: "publish-connected", args: [] });
         }
     }
 

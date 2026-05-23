@@ -78,6 +78,7 @@ type LocalChange
     = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
     | Local_Leave Time.Posix
     | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
+    | Local_PublishConnected
     | Local_PullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
     | Local_RenegotiateAnswer Cloudflare.Sdp
 
@@ -1125,6 +1126,7 @@ type MediaDeviceId
 
 type FromJs
     = FromJs_PublishOffer Cloudflare.Sdp (List String)
+    | FromJs_PublishConnected
     | FromJs_PullAnswer ConnectionId Cloudflare.Sdp
     | FromJs_RequestPullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName)
     | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
@@ -1157,10 +1159,13 @@ localOrConnectionCodec =
 voiceChatFromJsCodec : Codec FromJs
 voiceChatFromJsCodec =
     Codec.custom
-        (\ePublishOffer ePullAnswer eRequestPull cEncoder dEncoder eEncoder fEncoder value ->
+        (\ePublishOffer ePublishConnected ePullAnswer eRequestPull cEncoder dEncoder eEncoder fEncoder value ->
             case value of
                 FromJs_PublishOffer sdp mids ->
                     ePublishOffer sdp mids
+
+                FromJs_PublishConnected ->
+                    ePublishConnected
 
                 FromJs_PullAnswer connId sdp ->
                     ePullAnswer connId sdp
@@ -1181,6 +1186,7 @@ voiceChatFromJsCodec =
                     fEncoder string
         )
         |> Codec.variant2 "publish-offer" FromJs_PublishOffer Cloudflare.sdpCodec (Codec.list Codec.string)
+        |> Codec.variant0 "publish-connected" FromJs_PublishConnected
         |> Codec.variant2 "pull-answer" FromJs_PullAnswer connectionIdCodec Cloudflare.sdpCodec
         |> Codec.variant3 "request-pull-tracks" FromJs_RequestPullTracks connectionIdCodec Cloudflare.sessionIdCodec (Codec.list Cloudflare.trackNameCodec)
         |> Codec.variant2 "got-media-devices" FromJs_GotUserMediaDevices (Codec.list mediaDevicesCodec) (Codec.list IdString.codec)
