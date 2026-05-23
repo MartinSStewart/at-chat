@@ -917,7 +917,7 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        GotResponse modelId (String.replace "\\\"" "\"" aiMessage2) aiMessage.cost
+                                        GotResponse modelId (String.replace "\\\"" "\"" aiMessage2) aiMessage2.cost
 
                                     Err error ->
                                         GotError modelId error
