@@ -222,6 +222,7 @@ init =
       , discordAttachments = SeqDict.empty
       , loadingDiscordChannels = SeqDict.empty
       , signupsEnabled = True
+      , discordLinkingEnabled = True
       , exportState = Nothing
       , scheduledExportState = Nothing
       , lastScheduledExportTime = Nothing
@@ -4900,11 +4901,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model
                 sessionId
                 (\session _ ->
-                    ( model
-                    , Discord.getCurrentUserPayload (Discord.userToken data)
-                        |> DiscordSync.http model.serverSecret
-                        |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId data)
-                    )
+                    if model.discordLinkingEnabled then
+                        ( model
+                        , Discord.getCurrentUserPayload (Discord.userToken data)
+                            |> DiscordSync.http model.serverSecret
+                            |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId data)
+                        )
+
+                    else
+                        ( model
+                        , Lamdera.sendToFrontend
+                            clientId
+                            (LinkDiscordResponse (Err (Discord.UnexpectedError "Discord account linking is disabled")))
+                        )
                 )
 
         ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest fileHash) ->
@@ -6181,6 +6190,18 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             let
                 model2 =
                     { model | signupsEnabled = isEnabled }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.SetDiscordLinkingEnabled isEnabled ->
+            let
+                model2 =
+                    { model | discordLinkingEnabled = isEnabled }
             in
             ( model2
             , Command.batch

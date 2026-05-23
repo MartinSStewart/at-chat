@@ -339,6 +339,7 @@ type alias BackendModel =
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel (List Discord.Message))
     , signupsEnabled : Bool
+    , discordLinkingEnabled : Bool
     , exportState : Maybe ExportState
     , scheduledExportState : Maybe ExportStateProgress
     , lastScheduledExportTime : Maybe Time.Posix

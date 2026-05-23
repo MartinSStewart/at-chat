@@ -41,6 +41,7 @@ module RecordedTestExtra exposing
     , isOp2
     , joeEmail
     , linkDiscordAndLogin
+    , linkDiscordUrl
     , linkSecondDiscordAccount
     , mobileWindow
     , noMissingMessages
@@ -1464,6 +1465,11 @@ discordUserAuth =
                 ]
             )
     }
+
+
+linkDiscordUrl : String
+linkDiscordUrl =
+    "/link-discord/?data=" ++ Codec.encodeToString 0 User.linkDiscordDataCodec discordUserAuth
 
 
 linkDiscordAndLogin :

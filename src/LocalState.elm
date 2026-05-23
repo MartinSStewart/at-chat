@@ -507,6 +507,7 @@ type alias AdminData =
     , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
+    , discordLinkingEnabled : Bool
     , logs : Pagination LogWithTime
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId ConnectionData)
     , filesCount : Int

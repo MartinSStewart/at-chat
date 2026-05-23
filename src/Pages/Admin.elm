@@ -116,6 +116,7 @@ type Msg
     | UserTableMsg Table.Msg
     | ToggledEmailNotifications Bool
     | ToggledSignupsEnabled Bool
+    | ToggledDiscordLinkingEnabled Bool
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -237,6 +238,7 @@ type alias InitAdminData =
     , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
+    , discordLinkingEnabled : Bool
     , logs : Pagination LogWithTime
     , connections : SeqDict SessionIdHash (NonemptyDict ClientId ConnectionData)
     , filesCount : Int
@@ -259,6 +261,7 @@ type AdminChange
     | LogPageChanged (Id PageId) (ToBeFilledInByBackend (Array LogWithTime))
     | SetEmailNotificationsEnabled Bool
     | SetSignupsEnabled Bool
+    | SetDiscordLinkingEnabled Bool
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
@@ -415,6 +418,9 @@ updateAdmin changedBy change adminData local =
 
         SetSignupsEnabled isEnabled ->
             { local | adminData = IsAdmin { adminData | signupsEnabled = isEnabled } }
+
+        SetDiscordLinkingEnabled isEnabled ->
+            { local | adminData = IsAdmin { adminData | discordLinkingEnabled = isEnabled } }
 
         SetPrivateVapidKey privateVapidKey ->
             { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }
@@ -1032,6 +1038,9 @@ update navigationKey time adminData localState msg model =
         ToggledSignupsEnabled isChecked ->
             ( model, Command.none, AdminChange (SetSignupsEnabled isChecked) )
 
+        ToggledDiscordLinkingEnabled isChecked ->
+            ( model, Command.none, AdminChange (SetDiscordLinkingEnabled isChecked) )
+
         ToggleIsAdmin userTableId isAdmin ->
             updateUserTable
                 (\userTableState ->
@@ -1471,6 +1480,13 @@ pendingChangesText change =
 
             else
                 "Disabled sign ups"
+
+        SetDiscordLinkingEnabled isEnabled ->
+            if isEnabled then
+                "Enabled Discord account linking"
+
+            else
+                "Disabled Discord account linking"
 
         SetPrivateVapidKey _ ->
             "Set private vapid key"
@@ -2588,6 +2604,13 @@ userSection user adminData model =
                 (Dom.id "signupsEnabledId")
                 []
                 (Ui.text "New sign ups enabled")
+
+        discordLinkingEnabledLabel : { element : Element msg, id : Ui.Input.Label }
+        discordLinkingEnabledLabel =
+            MyUi.label
+                (Dom.id "discordLinkingEnabledId")
+                []
+                (Ui.text "Discord account linking enabled")
     in
     section
         8
@@ -2614,6 +2637,17 @@ userSection user adminData model =
                 , label = signupsEnabledLabel.id
                 }
             , signupsEnabledLabel.element
+            ]
+        , Ui.row
+            [ Ui.spacing 4 ]
+            [ Ui.Input.checkbox
+                []
+                { onChange = ToggledDiscordLinkingEnabled
+                , checked = adminData.discordLinkingEnabled
+                , icon = Nothing
+                , label = discordLinkingEnabledLabel.id
+                }
+            , discordLinkingEnabledLabel.element
             ]
         , Ui.Lazy.lazy3 userTableView model.userTable adminData.users adminData.twoFactorAuthentication
         , Ui.row

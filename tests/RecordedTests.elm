@@ -264,6 +264,75 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.startTest
+        "Admin can disable Discord account linking"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            "/"
+            RecordedTestExtra.desktopWindow
+            (\admin ->
+                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_Users")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.text "Discord account linking enabled" ])
+                , T.checkState
+                    100
+                    (\data ->
+                        if data.backend.discordLinkingEnabled then
+                            Ok ()
+
+                        else
+                            Err "Discord account linking should be enabled by default"
+                    )
+                , admin.click 100 (Dom.id "discordLinkingEnabledId")
+                , T.checkState
+                    100
+                    (\data ->
+                        if data.backend.discordLinkingEnabled then
+                            Err "Discord account linking should have been disabled after toggling the checkbox"
+
+                        else
+                            Ok ()
+                    )
+                ]
+            )
+
+        -- With linking disabled, a user that logs in through the link page has
+        -- their LinkDiscordRequest rejected by the backend.
+        , T.connectFrontend
+            100
+            (Lamdera.sessionIdFromString "JoeSession")
+            RecordedTestExtra.linkDiscordUrl
+            RecordedTestExtra.desktopWindow
+            (\user ->
+                [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail user
+                , user.input 100 (Dom.id "loginForm_name") "Joe"
+                , user.click 100 (Dom.id "loginForm_submit")
+
+                -- The backend rejects the LinkDiscordRequest, so the frontend
+                -- lands back on the link-discord error page instead of linking.
+                , user.checkView
+                    1000
+                    (Test.Html.Query.has [ Test.Html.Selector.text "This Discord link has expired" ])
+                , T.checkState
+                    100
+                    (\data ->
+                        if SeqDict.isEmpty data.backend.discordUsers then
+                            Ok ()
+
+                        else
+                            Err "No Discord account should be linked while linking is disabled"
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Regenerate server secret button hits rust-server and applies response"
         RecordedTestExtra.startTime
         normalConfig

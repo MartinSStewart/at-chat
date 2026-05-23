@@ -762,6 +762,7 @@ adminData model lastLogPageViewed =
     { users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , signupsEnabled = model.signupsEnabled
+    , discordLinkingEnabled = model.discordLinkingEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret

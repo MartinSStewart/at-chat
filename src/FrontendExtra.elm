@@ -4131,6 +4131,7 @@ initAdminData adminData =
     , deletedGuilds = adminData.deletedGuilds
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
+    , discordLinkingEnabled = adminData.discordLinkingEnabled
     , logs = adminData.logs
     , connections = adminData.connections
     , filesCount = adminData.filesCount
