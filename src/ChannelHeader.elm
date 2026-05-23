@@ -573,12 +573,7 @@ tabBodyView local loggedIn model =
                             Go.view
                                 model.windowSize
                                 model.lastCopied
-                                local.localUser.session.userId
-                                (SeqDict.insert
-                                    local.localUser.session.userId
-                                    (User.backendToFrontendForUser local.localUser.user)
-                                    local.localUser.otherUsers
-                                )
+                                local.localUser
                                 otherUserId
                                 maybeMatchId
                                 (SeqDict.get otherUserId local.dmChannels |> Maybe.withDefault DmChannel.frontendInit |> .goMatches)

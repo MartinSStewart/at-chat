@@ -54,6 +54,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import StringExtra
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
@@ -62,7 +63,7 @@ import Ui.Font
 import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
-import User exposing (FrontendUser)
+import User exposing (FrontendUser, LocalUser)
 import UserSession exposing (ToBeFilledInByBackend(..))
 
 
@@ -205,22 +206,6 @@ komiHalfPointsFromString input =
 
             Nothing ->
                 Err "Enter a number"
-
-
-addPointsToHalfPoints : Int -> KomiHalfPoints -> KomiHalfPoints
-addPointsToHalfPoints points (KomiHalfPoints a) =
-    points * 2 + a |> KomiHalfPoints
-
-
-komiHalfPointsToString : KomiHalfPoints -> String
-komiHalfPointsToString (KomiHalfPoints a) =
-    String.fromInt (a // 2)
-        ++ (if modBy 2 a == 0 then
-                ""
-
-            else
-                ".5"
-           )
 
 
 komiHalfPointsToFloat : KomiHalfPoints -> Float
@@ -1487,14 +1472,13 @@ viewHeight windowSize =
 view :
     Coord CssPixels
     -> Maybe MyUi.LastCopy
-    -> Id UserId
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Id UserId
     -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) MatchData
     -> Maybe Model
     -> Element Msg
-view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matches model =
+view windowSize lastCopied localUser otherUserId maybeMatchId matches model =
     let
         isMobile : Bool
         isMobile =
@@ -1515,12 +1499,11 @@ view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matc
                 Just matchId ->
                     case SeqDict.get matchId matches of
                         Just match ->
-                            Ui.Lazy.lazy5
+                            Ui.Lazy.lazy4
                                 gameView
                                 windowSize
-                                viewerUserId
-                                ( SeqDict.get match.setup.blackPlayer userLookup, SeqDict.get match.setup.whitePlayer userLookup )
-                                ( match.setup, match.actions )
+                                localUser
+                                match
                                 (case model of
                                     Just (Game game) ->
                                         game
@@ -1539,7 +1522,7 @@ view windowSize lastCopied viewerUserId userLookup otherUserId maybeMatchId matc
                 Nothing ->
                     Ui.Lazy.lazy3
                         setupView
-                        (viewerUserId == otherUserId)
+                        (localUser.session.userId == otherUserId)
                         windowSize
                         (case model of
                             Just (Game _) ->
@@ -1652,10 +1635,10 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
             , MyUi.simpleButton (Dom.id "go_reset") PressedReset (Ui.text "New game")
             , case maybeMatchId of
                 Just matchId ->
-                    case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
-                        Just publicLink ->
-                            Ui.row
-                                [ Ui.spacing 4, Ui.alignRight ]
+                    Ui.row
+                        [ Ui.spacing 4, Ui.alignRight ]
+                        (case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
+                            Just publicLink ->
                                 [ Ui.text "Share"
                                 , MyUi.copyBox
                                     (Dom.id "go_shareLink")
@@ -1665,11 +1648,13 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                                     (publicGoMatchUrl publicLink)
                                 ]
 
-                        Nothing ->
-                            MyUi.simpleButton
-                                (Dom.id "go_share")
-                                (PressedShareGoMatch matchId)
-                                (Ui.text "Share")
+                            Nothing ->
+                                [ MyUi.simpleButton
+                                    (Dom.id "go_share")
+                                    (PressedShareGoMatch matchId)
+                                    (Ui.text "Share")
+                                ]
+                        )
 
                 Nothing ->
                     Ui.none
@@ -1948,7 +1933,7 @@ clockView blackUser whiteUser state setup =
             (gameActive && state.currentPlayer == Black)
             Black
             setup
-            state.blackCaptures
+            (currentScore setup state Black)
         , clockChip
             setup.whitePlayer
             whiteUser
@@ -1956,8 +1941,28 @@ clockView blackUser whiteUser state setup =
             (gameActive && state.currentPlayer == White)
             White
             setup
-            state.whiteCaptures
+            (currentScore setup state White)
         ]
+
+
+currentScore : ValidatedSetup -> GameState -> Stone -> Float
+currentScore setup state stone =
+    case state.phase of
+        Scored s ->
+            case stone of
+                Black ->
+                    s.blackScore
+
+                White ->
+                    s.whiteScore
+
+        _ ->
+            case stone of
+                Black ->
+                    toFloat state.blackCaptures
+
+                White ->
+                    toFloat state.whiteCaptures + komiHalfPointsToFloat setup.komiHalfPoints
 
 
 currentPlayersTurn : Array ActionWithTime -> Stone
@@ -1987,8 +1992,8 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Int -> Element msg
-clockChip userId maybeUser seconds isActive stone setup captures =
+clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
+clockChip userId maybeUser seconds isActive stone setup score =
     let
         ( colorA, colorB ) =
             case stone of
@@ -2070,12 +2075,7 @@ clockChip userId maybeUser seconds isActive stone setup captures =
                     , Ui.rounded 99
                     ]
                     Ui.none
-                , case stone of
-                    White ->
-                        addPointsToHalfPoints captures setup.komiHalfPoints |> komiHalfPointsToString |> Ui.text
-
-                    Black ->
-                        String.fromInt captures |> Ui.text
+                , StringExtra.removeTrailing0s 1 score |> Ui.text
                 ]
             ]
         ]
@@ -2166,12 +2166,11 @@ spectatorView windowSize data model =
 
 gameView :
     Coord CssPixels
-    -> Id UserId
-    -> ( Maybe FrontendUser, Maybe FrontendUser )
-    -> ( ValidatedSetup, Array ActionWithTime )
+    -> LocalUser
+    -> MatchData
     -> GameModel
     -> Element GameMsg
-gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) model =
+gameView windowSize localUser data model =
     let
         isMobile : Bool
         isMobile =
@@ -2179,7 +2178,7 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
 
         state : GameState
         state =
-            foldActions actions setup
+            foldActions data.actions data.setup
 
         clickable : Bool
         clickable =
@@ -2189,7 +2188,7 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
             else
                 case state.phase of
                     Playing _ ->
-                        isLocalUsersTurn currentUserId setup state
+                        isLocalUsersTurn localUser.session.userId data.setup state
 
                     Marking ->
                         True
@@ -2221,16 +2220,20 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
             , Ui.background boardColor
             , Ui.rounded 4
             ]
-            [ clockView blackUser whiteUser state setup
+            [ clockView
+                (User.getUser data.setup.blackPlayer localUser)
+                (User.getUser data.setup.whitePlayer localUser)
+                state
+                data.setup
             , boardView
                 windowSize
                 (if clickable then
-                    clickTargets (boardSizeToInt setup.width) (boardSizeToInt setup.height)
+                    clickTargets (boardSizeToInt data.setup.width) (boardSizeToInt data.setup.height)
 
                  else
                     []
                 )
-                setup
+                data.setup
                 state
                 model
             ]
@@ -2239,7 +2242,7 @@ gameView windowSize currentUserId ( blackUser, whiteUser ) ( setup, actions ) mo
 
           else
             historyView state model |> Ui.map SpectatorMsg
-        , if isLocalUsersTurn currentUserId setup state then
+        , if isLocalUsersTurn localUser.session.userId data.setup state then
             controlsView state
 
           else
@@ -2272,23 +2275,14 @@ statusView state =
 
                 Scored s ->
                     "Final score - Black: "
-                        ++ formatScore s.blackScore
+                        ++ StringExtra.removeTrailing0s 1 s.blackScore
                         ++ ", White: "
-                        ++ formatScore s.whiteScore
+                        ++ StringExtra.removeTrailing0s 1 s.whiteScore
                         ++ winnerSuffix s.blackScore s.whiteScore
     in
     Ui.column
         [ Ui.spacing 4, Ui.paddingXY 16 0 ]
         [ Ui.el [ Ui.Font.weight 600 ] (Ui.text turnText) ]
-
-
-formatScore : Float -> String
-formatScore score =
-    if score == toFloat (floor score) then
-        String.fromInt (floor score)
-
-    else
-        String.fromFloat score
 
 
 winnerSuffix : Float -> Float -> String

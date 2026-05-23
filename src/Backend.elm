@@ -43,7 +43,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..), WebsocketClosedEvent(..))
 import Log
 import LoginForm
 import MembersAndOwner exposing (IsMember(..))
@@ -234,7 +234,7 @@ init =
       , postmarkApiKey = Postmark.apiKey ""
       , serverSecret = SecretId.fromString Env.secretKey
       , serverSecretRegeneratedAt = Nothing
-      , websocketDisconnects = Array.empty
+      , websocketCloseEvents = Array.empty
       , goMatchPublicIds = OneToOne.empty
       }
     , Command.none
@@ -316,7 +316,7 @@ update msg model =
             ( model, Task.perform (UserDisconnectedWithTime sessionId clientId) Time.now )
 
         UserDisconnectedWithTime sessionId clientId time ->
-            disconnectClient time sessionId clientId (recordWebsocketDisconnect time model)
+            disconnectClient time sessionId clientId model
 
         BackendGotTime sessionId clientId toBackend time ->
             let
@@ -371,7 +371,24 @@ update msg model =
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
         DiscordUserWebsocketMsg discordUserId discordMsg ->
-            DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+            let
+                ( model2, cmd ) =
+                    DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+            in
+            ( model2
+            , Command.batch
+                [ cmd
+                , case discordMsg of
+                    Discord.GotWebsocketData _ ->
+                        Command.none
+
+                    Discord.WebsocketClosed text ->
+                        Task.perform (GotTimeForWebsocketListenClose discordUserId text) Time.now
+                ]
+            )
+
+        GotTimeForWebsocketListenClose userId text time ->
+            ( recordWebsocketCloseEvent (WebsocketClosed_ListenCloseEvent userId text time) model, Command.none )
 
         GotSlackChannels _ _ result ->
             case result of
@@ -877,8 +894,8 @@ update msg model =
                       }
                     , case data.connection.websocketHandle of
                         Just connection2 ->
-                            DiscordSync.websocketClose "WebsocketClosedByBackendForUser" connection2
-                                |> Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId False)
+                            DiscordSync.websocketClose (WebsocketClosed_ClosedByBackendForUser discordUserId) connection2
+                                |> Task.perform (WebsocketClosedByBackendForUser discordUserId False)
 
                         Nothing ->
                             Command.none
@@ -887,8 +904,8 @@ update msg model =
                 _ ->
                     ( model, Command.none )
 
-        WebsocketClosedByBackendForUser discordUserId reopen ->
-            ( model
+        WebsocketClosedByBackendForUser discordUserId reopen websocketEvent ->
+            ( recordWebsocketCloseEvent websocketEvent model
             , if reopen then
                 DiscordSync.websocketCreateHandle
                     "WebsocketClosedByBackendForUser"
@@ -1853,19 +1870,19 @@ attachmentsUploadedHelper model message results =
         message.attachments
 
 
-recordWebsocketDisconnect : Time.Posix -> BackendModel -> BackendModel
-recordWebsocketDisconnect time model =
+recordWebsocketCloseEvent : WebsocketClosedEvent -> BackendModel -> BackendModel
+recordWebsocketCloseEvent event model =
     let
-        appended : Array Time.Posix
+        appended : Array WebsocketClosedEvent
         appended =
-            Array.push time model.websocketDisconnects
+            Array.push event model.websocketCloseEvents
 
         excess : Int
         excess =
-            Array.length appended - maxWebsocketDisconnects
+            Array.length appended - maxWebsocketCloseEvents
     in
     { model
-        | websocketDisconnects =
+        | websocketCloseEvents =
             if excess > 0 then
                 Array.slice excess (Array.length appended) appended
 
@@ -1874,8 +1891,8 @@ recordWebsocketDisconnect time model =
     }
 
 
-maxWebsocketDisconnects : Int
-maxWebsocketDisconnects =
+maxWebsocketCloseEvents : Int
+maxWebsocketCloseEvents =
     10000
 
 
@@ -2699,6 +2716,31 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     guildId
                                     (Server_NewInviteLink time userId guildId id |> ServerChange)
                                     model3
+                                ]
+                            )
+                        )
+
+                Local_DeleteInviteLink guildId inviteLinkId ->
+                    asGuildOwner
+                        model
+                        sessionId
+                        guildId
+                        (\_ _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.removeInvite inviteLinkId guild)
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toGuildExcludingOne
+                                    clientId
+                                    guildId
+                                    (Server_DeleteInviteLink guildId inviteLinkId |> ServerChange)
+                                    model
                                 ]
                             )
                         )
@@ -4476,8 +4518,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , case maybeConnection of
                                                 Just connection ->
                                                     Task.perform
-                                                        (\() -> WebsocketClosedByBackendForUser discordUserId False)
-                                                        (DiscordSync.websocketClose "Local_UnlinkDiscordUser" connection)
+                                                        (WebsocketClosedByBackendForUser discordUserId False)
+                                                        (DiscordSync.websocketClose
+                                                            (WebsocketClosed_UnlinkDiscordUser discordUserId)
+                                                            connection
+                                                        )
 
                                                 Nothing ->
                                                     Command.none

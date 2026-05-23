@@ -898,7 +898,7 @@ adminData model lastLogPageViewed =
                             Nothing ->
                                 ""
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
-    , websocketDisconnects = model.websocketDisconnects
+    , websocketCloseEvents = model.websocketCloseEvents
     }
 
 
@@ -1269,6 +1269,9 @@ toBackendLog toBackend =
 
                 Local_NewInviteLink _ _ _ ->
                     ToBackendLog_Local_NewInviteLink
+
+                Local_DeleteInviteLink _ _ ->
+                    ToBackendLog_Local_DeleteInviteLink
 
                 Local_NewGuild _ _ _ ->
                     ToBackendLog_Local_NewGuild

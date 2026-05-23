@@ -34,6 +34,7 @@ type ToBackendLog
     | ToBackendLog_Local_DeleteChannel
     | ToBackendLog_Local_DeleteGuild
     | ToBackendLog_Local_NewInviteLink
+    | ToBackendLog_Local_DeleteInviteLink
     | ToBackendLog_Local_NewGuild
     | ToBackendLog_Local_MemberTyping
     | ToBackendLog_Local_AddReactionEmoji
@@ -143,6 +144,9 @@ toBackendLogToString log =
 
         ToBackendLog_Local_NewInviteLink ->
             "Local_NewInviteLink"
+
+        ToBackendLog_Local_DeleteInviteLink ->
+            "Local_DeleteInviteLink"
 
         ToBackendLog_Local_NewGuild ->
             "Local_NewGuild"

@@ -61,6 +61,7 @@ import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import SecretId
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (AnimationMode(..))
@@ -1697,6 +1698,13 @@ guildSettingsForm model loggedIn local guildId guild =
                             Ui.row
                                 [ Ui.spacing 16 ]
                                 [ Ui.el [ Ui.widthMax 300 ] (copyableText (Env.domain ++ url) model)
+                                , if isOwner then
+                                    MyUi.deleteButton
+                                        (Dom.id ("guild_deleteInviteLink_" ++ SecretId.toString inviteId))
+                                        (PressedDeleteInviteLink guildId inviteId)
+
+                                  else
+                                    Ui.none
                                 , if Duration.from data.createdAt model.time |> Quantity.lessThan (Duration.minutes 5) then
                                     Ui.text "Created just now!"
 

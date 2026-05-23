@@ -77,7 +77,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, 
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -351,7 +351,7 @@ type alias BackendModel =
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
-    , websocketDisconnects : Array Time.Posix
+    , websocketCloseEvents : Array WebsocketClosedEvent
     , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
@@ -418,6 +418,7 @@ type FrontendMsg
     | EditGuildFormChanged (Id GuildId) EditGuildForm
     | PressedDeleteGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
+    | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
     | PressedCreateGuild
@@ -644,7 +645,7 @@ type BackendMsg
             )
         )
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
-    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool
+    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool WebsocketClosedEvent
     | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
@@ -680,6 +681,7 @@ type BackendMsg
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
+    | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) String Time.Posix
 
 
 type MessageFromGuildOrDm
@@ -772,6 +774,7 @@ type ServerChange
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_DeleteGuild (Id GuildId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
+    | Server_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
     | Server_YouJoinedGuildByInvite
         (Result
@@ -851,6 +854,7 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_DeleteGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+    | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji

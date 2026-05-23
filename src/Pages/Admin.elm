@@ -55,8 +55,8 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import List.Nonempty exposing (Nonempty)
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -69,6 +69,7 @@ import Postmark
 import Quantity
 import Route
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
@@ -143,6 +144,7 @@ type Msg
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedRegenerateServerSecret
     | PressedDeleteCall
+    | PressedWebsocketCloseEventsPage Int
 
 
 type ToBackend
@@ -184,6 +186,7 @@ type alias Model =
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
+    , websocketCloseEventsPage : Int
     }
 
 
@@ -235,7 +238,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
-    , websocketDisconnects : Array Time.Posix
+    , websocketCloseEvents : Array WebsocketClosedEvent
     }
 
 
@@ -314,6 +317,7 @@ initForUser =
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , websocketCloseEventsPage = 0
     }
 
 
@@ -339,6 +343,7 @@ initForAdmin { highlightLog } =
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , websocketCloseEventsPage = 0
     }
 
 
@@ -1183,6 +1188,8 @@ update navigationKey time adminData localState msg model =
 
         PressedDeleteCall ->
             ( model, Command.none, AdminChange EndAllCalls )
+        PressedWebsocketCloseEventsPage page ->
+            ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -1514,7 +1521,7 @@ view isMobile2 version time local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
-            , websocketDisconnectsSection time user adminData
+            , websocketCloseEventsSection time local.localUser.timezone user adminData model
             , voiceChatSection adminData user
             , filesSection user adminData
             , stickersAndEmojisSection local user
@@ -1570,26 +1577,171 @@ connectionsSection timezone user adminData =
         ]
 
 
-websocketDisconnectsSection : Time.Posix -> BackendUser -> AdminData -> Element Msg
-websocketDisconnectsSection time user adminData =
+websocketCloseEventToString : WebsocketClosedEvent -> ( ( String, String ), Time.Posix )
+websocketCloseEventToString event =
+    case event of
+        WebsocketClosed_CloseAndReopenForUser _ time ->
+            ( ( "CloseAndReopenForUser", "#e0625e" ), time )
+
+        WebsocketClosed_UnlinkDiscordUser _ time ->
+            ( ( "UnlinkDiscordUser", "#5e9be0" ), time )
+
+        WebsocketClosed_ClosedByBackendForUser _ time ->
+            ( ( "ClosedByBackendForUser", "#5ee07d" ), time )
+
+        WebsocketClosed_ListenCloseEvent _ _ time ->
+            ( ( "ListenCloseEvent", "#bb5ee0" ), time )
+
+
+websocketCloseEventsSection : Time.Posix -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+websocketCloseEventsSection currentTime timezone user adminData model =
+    let
+        allEvents : SeqDict ( String, String ) (Nonempty Time.Posix)
+        allEvents =
+            Array.foldl
+                (\event dict ->
+                    let
+                        ( name, time ) =
+                            websocketCloseEventToString event
+                    in
+                    SeqDictHelper.addList name time dict
+                )
+                SeqDict.empty
+                adminData.websocketCloseEvents
+    in
     section
         8
         user.expandedSections
-        WebsocketDisconnectsSection
-        [ if Array.isEmpty adminData.websocketDisconnects then
-            Ui.text "No websocket disconnects recorded"
+        WebsocketCloseEventsSection
+        [ if Array.isEmpty adminData.websocketCloseEvents then
+            Ui.text "No websocket close events recorded"
 
           else
             Ui.column
-                [ Ui.spacing 8 ]
-                [ Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketDisconnects))
-                , websocketDisconnectsGraph time adminData.websocketDisconnects
+                [ Ui.spacing 12 ]
+                (Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketCloseEvents))
+                    :: List.map
+                        (\( ( label, color ), times ) ->
+                            Ui.column
+                                [ Ui.spacing 4 ]
+                                [ Ui.el
+                                    [ Ui.Font.bold, Ui.Font.size 14 ]
+                                    (Ui.text (label ++ " (" ++ String.fromInt (List.Nonempty.length times) ++ ")"))
+                                , websocketCloseEventLineGraph currentTime color times
+                                ]
+                        )
+                        (SeqDict.toList allEvents)
+                    ++ [ websocketCloseEventsList timezone model adminData.websocketCloseEvents ]
+                )
+        ]
+
+
+websocketCloseEventsPageSize : Int
+websocketCloseEventsPageSize =
+    20
+
+
+websocketCloseEventsList : Time.Zone -> Model -> Array WebsocketClosedEvent -> Element Msg
+websocketCloseEventsList timezone model events =
+    let
+        total : Int
+        total =
+            Array.length events
+
+        pageCount : Int
+        pageCount =
+            ((websocketCloseEventsPageSize - 1) + total) // websocketCloseEventsPageSize
+
+        currentPage : Int
+        currentPage =
+            model.websocketCloseEventsPage |> clamp 0 (max 0 (pageCount - 1))
+
+        startIndex : Int
+        startIndex =
+            max 0 (total - (currentPage + 1) * websocketCloseEventsPageSize)
+
+        endIndex : Int
+        endIndex =
+            total - currentPage * websocketCloseEventsPageSize
+
+        pageItems : List ( Int, WebsocketClosedEvent )
+        pageItems =
+            Array.slice startIndex endIndex events
+                |> Array.toIndexedList
+                |> List.map (\( i, e ) -> ( startIndex + i, e ))
+                |> List.reverse
+    in
+    Ui.column
+        [ Ui.spacing 6 ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "All events")
+        , Ui.column
+            [ Ui.spacing 2, Ui.Font.size 13 ]
+            (List.map (websocketCloseEventListItem timezone) pageItems)
+        , if pageCount <= 1 then
+            Ui.none
+
+          else
+            Ui.row
+                [ Ui.spacing 8, Ui.Font.size 12 ]
+                [ if currentPage + 1 >= pageCount then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton
+                        (Dom.id "admin_websocketCloseEventsPrev")
+                        (PressedWebsocketCloseEventsPage (currentPage + 1))
+                        (Ui.text "← Older")
+                        |> Ui.el [ Ui.width Ui.shrink ]
+                , Ui.el
+                    [ Ui.width Ui.shrink, Ui.centerY ]
+                    (Ui.text ("Page " ++ String.fromInt (currentPage + 1) ++ " of " ++ String.fromInt pageCount))
+                , if currentPage <= 0 then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton
+                        (Dom.id "admin_websocketCloseEventsNext")
+                        (PressedWebsocketCloseEventsPage (currentPage - 1))
+                        (Ui.text "Newer →")
+                        |> Ui.el [ Ui.width Ui.shrink ]
                 ]
         ]
 
 
-websocketDisconnectsGraph : Time.Posix -> Array Time.Posix -> Element msg
-websocketDisconnectsGraph now disconnects =
+websocketCloseEventListItem : Time.Zone -> ( Int, WebsocketClosedEvent ) -> Element msg
+websocketCloseEventListItem timezone ( index, event ) =
+    let
+        ( ( label, _ ), time ) =
+            websocketCloseEventToString event
+
+        details : String
+        details =
+            case event of
+                WebsocketClosed_CloseAndReopenForUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_UnlinkDiscordUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_ClosedByBackendForUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_ListenCloseEvent userId reason _ ->
+                    "user " ++ Discord.idToString userId ++ ", reason: " ++ reason
+    in
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.el [ Ui.width Ui.shrink ]
+            (Ui.text ("#" ++ String.fromInt (index + 1)))
+        , Ui.el [ Ui.width Ui.shrink ]
+            (Ui.text (MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone))
+        , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text label)
+        , Ui.text details
+        ]
+
+
+websocketCloseEventLineGraph : Time.Posix -> String -> Nonempty Time.Posix -> Element msg
+websocketCloseEventLineGraph now color eventTimes =
     let
         bucketCount : Int
         bucketCount =
@@ -1617,12 +1769,12 @@ websocketDisconnectsGraph now disconnects =
 
         buckets : Array Int
         buckets =
-            Array.foldl
-                (\disconnectTime acc ->
+            List.Nonempty.foldl
+                (\eventTime acc ->
                     let
                         ms : Int
                         ms =
-                            Time.posixToMillis disconnectTime
+                            Time.posixToMillis eventTime
                     in
                     if ms < windowStartMs || ms > nowMs then
                         acc
@@ -1636,7 +1788,7 @@ websocketDisconnectsGraph now disconnects =
                         Array.set index ((Array.get index acc |> Maybe.withDefault 0) + 1) acc
                 )
                 emptyBuckets
-                disconnects
+                eventTimes
 
         maxCount : Int
         maxCount =
@@ -1648,48 +1800,74 @@ websocketDisconnectsGraph now disconnects =
 
         chartHeight : Int
         chartHeight =
-            120
-
-        barWidth : Float
-        barWidth =
-            toFloat chartWidth / toFloat bucketCount
-
-        barGap : Float
-        barGap =
-            2
+            100
 
         scaleDenominator : Int
         scaleDenominator =
             max 1 maxCount
 
-        bars : List (Svg.Svg msg)
-        bars =
-            Array.toList buckets
-                |> List.indexedMap
-                    (\i count ->
-                        let
-                            heightPx : Float
-                            heightPx =
-                                toFloat count / toFloat scaleDenominator * toFloat chartHeight
+        pointStepX : Float
+        pointStepX =
+            if bucketCount <= 1 then
+                0
 
-                            x : Float
-                            x =
-                                toFloat i * barWidth
+            else
+                toFloat chartWidth / toFloat (bucketCount - 1)
+
+        pointAt : Int -> Int -> ( Float, Float )
+        pointAt i count =
+            let
+                x : Float
+                x =
+                    toFloat i * pointStepX
+
+                y : Float
+                y =
+                    toFloat chartHeight - (toFloat count / toFloat scaleDenominator * toFloat chartHeight)
+            in
+            ( x, y )
+
+        points : List ( Float, Float )
+        points =
+            Array.toList buckets |> List.indexedMap pointAt
+
+        pointsAttr : String
+        pointsAttr =
+            points
+                |> List.map (\( x, y ) -> String.fromFloat x ++ "," ++ String.fromFloat y)
+                |> String.join " "
+
+        polyline : Svg.Svg msg
+        polyline =
+            Svg.polyline
+                [ Svg.Attributes.fill "none"
+                , Svg.Attributes.stroke color
+                , Svg.Attributes.strokeWidth "2"
+                , Svg.Attributes.points pointsAttr
+                ]
+                []
+
+        dots : List (Svg.Svg msg)
+        dots =
+            points
+                |> List.indexedMap
+                    (\i ( x, y ) ->
+                        let
+                            count : Int
+                            count =
+                                Array.get i buckets |> Maybe.withDefault 0
                         in
-                        Svg.rect
-                            [ Svg.Attributes.x (String.fromFloat (x + barGap / 2))
-                            , Svg.Attributes.y (String.fromFloat (toFloat chartHeight - heightPx))
-                            , Svg.Attributes.width (String.fromFloat (barWidth - barGap))
-                            , Svg.Attributes.height (String.fromFloat heightPx)
-                            , Svg.Attributes.fill "#e0625e"
+                        Svg.circle
+                            [ Svg.Attributes.cx (String.fromFloat x)
+                            , Svg.Attributes.cy (String.fromFloat y)
+                            , Svg.Attributes.r "2.5"
+                            , Svg.Attributes.fill color
                             ]
                             [ Svg.title []
                                 [ Svg.text
                                     (String.fromInt count
-                                        ++ " disconnects, "
-                                        ++ String.fromInt (bucketCount - i)
-                                        ++ "h–"
-                                        ++ String.fromInt (bucketCount - i - 1)
+                                        ++ " events, "
+                                        ++ String.fromInt (bucketCount - 1 - i)
                                         ++ "h ago"
                                     )
                                 ]
@@ -1717,14 +1895,14 @@ websocketDisconnectsGraph now disconnects =
                 , Html.Attributes.style "max-width" "100%"
                 , Html.Attributes.style "height" "auto"
                 ]
-                (baseline :: bars)
+                (baseline :: polyline :: dots)
                 |> Ui.html
     in
     Ui.column
-        [ Ui.spacing 4 ]
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ]
             (Ui.text
-                ("Disconnects per hour over the last 24 hours (peak: "
+                ("Events per hour over the last 24 hours (peak: "
                     ++ String.fromInt maxCount
                     ++ ")"
                 )
