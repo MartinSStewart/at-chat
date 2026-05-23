@@ -227,8 +227,17 @@ pendingChangesText localChange =
                 Call.Local_Leave _ ->
                     "Left voice chat"
 
-                Call.Local_Signal _ _ ->
-                    "Voice chat state change"
+                Call.Local_PublishTracks _ _ _ ->
+                    "Publish tracks"
+
+                Call.Local_PublishConnected ->
+                    "Publish connected"
+
+                Call.Local_PullTracks _ _ _ _ ->
+                    "Pull tracks"
+
+                Call.Local_RenegotiateAnswer _ _ ->
+                    "Renegotiate"
 
         Local_Go _ change ->
             case change of
@@ -2689,8 +2698,18 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Local_Join time roomId _ ->
+                        Call.Local_Join time roomId peers ->
                             let
+                                peers3 : Result () (List Call.ExistingPeer)
+                                peers3 =
+                                    case peers of
+                                        EmptyPlaceholder ->
+                                            Ok []
+
+                                        FilledInByBackend peers2 ->
+                                            peers2
+
+                                local2 : LocalState
                                 local2 =
                                     case local.calls.currentRoom of
                                         Just _ ->
@@ -2699,30 +2718,71 @@ changeUpdate localMsg local =
                                         Nothing ->
                                             local
                             in
-                            case roomId of
-                                DmRoomId otherUserId ->
-                                    { local2
-                                        | calls = { calls | currentRoom = Just roomId }
-                                        , dmChannels =
-                                            if SeqDict.member roomId calls.voiceChats then
-                                                local2.dmChannels
+                            case peers3 of
+                                Ok peer4 ->
+                                    case roomId of
+                                        DmRoomId otherUserId ->
+                                            { local2
+                                                | calls =
+                                                    { calls
+                                                        | currentRoom = Just roomId
+                                                        , voiceChats =
+                                                            List.foldl
+                                                                (\peer5 set2 ->
+                                                                    SeqDictHelper.addItem roomId peer5.connectionId.otherClientId set2
+                                                                )
+                                                                calls.voiceChats
+                                                                peer4
+                                                        , error = Nothing
+                                                    }
+                                                , dmChannels =
+                                                    if SeqDict.member roomId calls.voiceChats then
+                                                        local2.dmChannels
 
-                                            else
-                                                SeqDict.update
-                                                    otherUserId
-                                                    (\maybe ->
-                                                        Maybe.withDefault DmChannel.frontendInit maybe
-                                                            |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time local2.localUser.session.userId SeqDict.empty)
-                                                            |> Just
-                                                    )
-                                                    local2.dmChannels
-                                    }
+                                                    else
+                                                        SeqDict.update
+                                                            otherUserId
+                                                            (\maybe ->
+                                                                Maybe.withDefault DmChannel.frontendInit maybe
+                                                                    |> LocalState.createChannelMessageFrontend
+                                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                                    |> Just
+                                                            )
+                                                            local2.dmChannels
+                                            }
+
+                                Err () ->
+                                    { local2 | calls = { calls | error = Just Call.MissingApiKeys } }
 
                         Call.Local_Leave time ->
                             leaveCall time local
 
-                        Call.Local_Signal _ _ ->
+                        Call.Local_PublishTracks _ _ _ ->
+                            local
+
+                        Call.Local_PublishConnected ->
+                            local
+
+                        Call.Local_PullTracks _ _ _ (FilledInByBackend result) ->
+                            case result of
+                                Ok _ ->
+                                    local
+
+                                Err _ ->
+                                    { local | calls = { calls | error = Just Call.FailedToPullTracks } }
+
+                        Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
+                            local
+
+                        Call.Local_RenegotiateAnswer _ (FilledInByBackend result) ->
+                            case result of
+                                Ok () ->
+                                    local
+
+                                Err () ->
+                                    { local | calls = { calls | error = Just Call.FailedToRenegotiate } }
+
+                        Call.Local_RenegotiateAnswer _ EmptyPlaceholder ->
                             local
 
                 Local_Go { otherUserId } goChange ->
@@ -3789,7 +3849,7 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Server_Joined time { roomId, otherClientId } _ ->
+                        Call.Server_Joined time { roomId, otherClientId } _ _ ->
                             { local
                                 | calls =
                                     { calls | voiceChats = SeqDictHelper.addItem roomId otherClientId calls.voiceChats }
@@ -3814,9 +3874,6 @@ changeUpdate localMsg local =
 
                         Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
-
-                        Call.Server_SignalReceived _ _ ->
-                            local
 
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
@@ -4064,7 +4121,8 @@ initAdminData adminData =
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
-    , cloudflareTurnApiToken = adminData.cloudflareTurnApiToken
+    , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
+    , cloudflareRealtimeAppId = adminData.cloudflareRealtimeAppId
     , postmarkKey = adminData.postmarkApiKey
     , discordDmChannels = adminData.discordDmChannels
     , discordUsers = adminData.discordUsers
