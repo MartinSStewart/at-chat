@@ -58,6 +58,7 @@ import StringExtra
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
+import Svg.Keyed
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
@@ -2453,13 +2454,14 @@ boardView windowSize overlay setup state model =
         , Svg.Attributes.preserveAspectRatio "xMidYMid meet"
         , Svg.Attributes.style "display:block;overflow:visible"
         ]
-        (gridLines width height
+        (captureKeyframesStyle
+            :: gridLines width height
             ++ starPointShapes width height
             ++ territoryShapes marks
             ++ stoneShapes deadSet snapshot.board
             ++ lastMoveMarker viewing state
             ++ overlay
-            ++ captureAnimationShapes scale widthPx capturedStones
+            ++ [ captureAnimationGroup scale widthPx (List.length state.history) capturedStones ]
         )
         |> Ui.html
         |> Ui.el
@@ -2603,88 +2605,88 @@ lastMoveCaptures viewing state =
             []
 
 
+{-| The animation is driven by CSS keyframes rather than SMIL: SMIL's default
+`begin="0s"` is relative to the SVG document timeline, so for a long-lived board
+it would resolve in the past and snap straight to the end. A CSS animation
+instead starts when the element is inserted, which is exactly when a capture
+happens. The per-stone travel vector is passed in as CSS custom properties.
+-}
+captureKeyframesStyle : Svg msg
+captureKeyframesStyle =
+    Svg.node "style"
+        []
+        [ Svg.text "@keyframes goCaptureFly{0%{transform:translate(0px,0px);opacity:1}55%{opacity:1}100%{transform:translate(var(--go-dx,0px),var(--go-dy,0px));opacity:0}}" ]
+
+
 {-| Captured stones fly off the board toward the capturing player's score
 counter on their clockChip (Black's chip is on the left, White's on the right,
-both sitting just above the board) and fade out as they arrive.
+both sitting just above the board) and fade out as they arrive. The nodes are
+keyed by the move number so each capture mounts fresh nodes (re-triggering the
+CSS animation) while unrelated re-renders reuse them and stay put.
 -}
-captureAnimationShapes : Float -> Int -> List ( ( Int, Int ), Stone ) -> List (Svg msg)
-captureAnimationShapes scale widthPx captured =
+captureAnimationGroup : Float -> Int -> Int -> List ( ( Int, Int ), Stone ) -> Svg msg
+captureAnimationGroup scale widthPx generation captured =
+    Svg.Keyed.node "g"
+        []
+        (List.map (captureGhost scale widthPx generation) captured)
+
+
+captureGhost : Float -> Int -> Int -> ( ( Int, Int ), Stone ) -> ( String, Svg msg )
+captureGhost scale widthPx generation ( ( x, y ), stone ) =
     let
-        duration : String
-        duration =
-            "0.7s"
+        originX : Float
+        originX =
+            toFloat (x * cellPx + cellPx // 2)
+
+        originY : Float
+        originY =
+            toFloat (y * cellPx + cellPx // 2)
+
+        targetX : Float
+        targetX =
+            case stone of
+                White ->
+                    toFloat widthPx / 2 - 20 / scale
+
+                Black ->
+                    toFloat widthPx / 2 + 158 / scale
+
+        targetY : Float
+        targetY =
+            -38 / scale
+
+        color : String
+        color =
+            case stone of
+                Black ->
+                    "black"
+
+                White ->
+                    "white"
+
+        key : String
+        key =
+            String.fromInt generation ++ "_" ++ String.fromInt x ++ "_" ++ String.fromInt y
     in
-    List.map
-        (\( ( x, y ), stone ) ->
-            let
-                originX : Float
-                originX =
-                    toFloat (x * cellPx + cellPx // 2)
-
-                originY : Float
-                originY =
-                    toFloat (y * cellPx + cellPx // 2)
-
-                targetX : Float
-                targetX =
-                    case stone of
-                        White ->
-                            toFloat widthPx / 2 - 20 / scale
-
-                        Black ->
-                            toFloat widthPx / 2 + 158 / scale
-
-                targetY : Float
-                targetY =
-                    -38 / scale
-
-                color : String
-                color =
-                    case stone of
-                        Black ->
-                            "black"
-
-                        White ->
-                            "white"
-
-                translateTo : String
-                translateTo =
-                    String.fromFloat (targetX - originX) ++ " " ++ String.fromFloat (targetY - originY)
-            in
-            Svg.circle
-                [ Svg.Attributes.cx (String.fromFloat originX)
-                , Svg.Attributes.cy (String.fromFloat originY)
-                , Svg.Attributes.r (String.fromInt (cellPx // 2 - 2))
-                , Svg.Attributes.fill color
-                , Svg.Attributes.stroke "black"
-                , Svg.Attributes.strokeWidth "1"
-                , Svg.Attributes.pointerEvents "none"
-                ]
-                [ Svg.animateTransform
-                    [ Svg.Attributes.attributeName "transform"
-                    , Svg.Attributes.type_ "translate"
-                    , Svg.Attributes.from "0 0"
-                    , Svg.Attributes.to translateTo
-                    , Svg.Attributes.dur duration
-                    , Svg.Attributes.repeatCount "1"
-                    , Svg.Attributes.fill "freeze"
-                    , Svg.Attributes.calcMode "spline"
-                    , Svg.Attributes.keyTimes "0;1"
-                    , Svg.Attributes.keySplines "0.3 0 0.2 1"
-                    ]
-                    []
-                , Svg.animate
-                    [ Svg.Attributes.attributeName "opacity"
-                    , Svg.Attributes.values "1;1;0"
-                    , Svg.Attributes.keyTimes "0;0.65;1"
-                    , Svg.Attributes.dur duration
-                    , Svg.Attributes.repeatCount "1"
-                    , Svg.Attributes.fill "freeze"
-                    ]
-                    []
-                ]
-        )
-        captured
+    ( key
+    , Svg.circle
+        [ Svg.Attributes.cx (String.fromFloat originX)
+        , Svg.Attributes.cy (String.fromFloat originY)
+        , Svg.Attributes.r (String.fromInt (cellPx // 2 - 2))
+        , Svg.Attributes.fill color
+        , Svg.Attributes.stroke "black"
+        , Svg.Attributes.strokeWidth "1"
+        , Svg.Attributes.pointerEvents "none"
+        , Svg.Attributes.style
+            ("--go-dx:"
+                ++ String.fromFloat (targetX - originX)
+                ++ "px;--go-dy:"
+                ++ String.fromFloat (targetY - originY)
+                ++ "px;animation:goCaptureFly 0.7s ease-in-out forwards"
+            )
+        ]
+        []
+    )
 
 
 starPointShapes : Int -> Int -> List (Svg msg)
