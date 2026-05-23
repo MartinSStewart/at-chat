@@ -2417,7 +2417,8 @@ allAttackerLocalChanges =
     , Local_AddCustomEmojisToUser (NonemptySet.fromNonemptyList (Nonempty (Id.fromInt 0) []))
     , Local_VoiceChatChange (Call.Local_Join startTime (Call.DmRoomId normalUserId) EmptyPlaceholder)
     , Local_VoiceChatChange (Call.Local_Leave startTime)
-    , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString ""))
+    , Local_VoiceChatChange (Call.Local_RenegotiateAnswer (Cloudflare.sdpFromString "") EmptyPlaceholder)
+    , Local_VoiceChatChange Call.Local_PublishConnected
     , Local_Go
         { otherUserId = Broadcast.adminUserId }
         (Go.StartMatch

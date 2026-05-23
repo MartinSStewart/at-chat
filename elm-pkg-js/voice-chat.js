@@ -19,15 +19,17 @@ exports.init = async function init(app) {
     //   pendingPullsByTrack: Map<trackName, connectionIdKey>  // for matching incoming tracks
     //   waitingForPublishAnswer: bool
 
+    // The ConnectionId codec (Call.connectionIdCodec) encodes both fields as
+    // strings: roomId = "<dmOtherUserId>" and otherClientId =
+    // "<peerUserId> <peerClientId>". (They are NOT arrays.)
     function connectionKey(connectionId) {
-        // ConnectionId codec produces { roomId, otherClientId: [userId, clientId] }
-        const [userId, clientId] = connectionId.otherClientId;
-        return userId + "|" + clientId;
+        return connectionId.roomId + "|" + connectionId.otherClientId;
     }
 
+    // Must match Call.connectionIdToString, which the <video> element's id is
+    // built from: "<dmOtherUserId> <peerUserId> <peerClientId>".
     function peerVideoNodeId(connectionId) {
-        const [userId, clientId] = connectionId.otherClientId;
-        return userId + " " + clientId;
+        return connectionId.roomId + " " + connectionId.otherClientId;
     }
 
     async function startCall(args) {
@@ -66,6 +68,12 @@ exports.init = async function init(app) {
             videoMid: null,
             pendingExistingPeers: args.existingPeers || [],
             peerSubs: new Map(),
+            // Maps a transceiver mid -> peer connectionKey. Populated when we
+            // apply a pull offer: the new recvonly transceivers in that offer
+            // belong to the peer we're pulling. ontrack then routes each track
+            // to the right peer by its transceiver mid (the "first unattached"
+            // heuristic mis-routes once there's more than one remote track).
+            midToPeer: new Map(),
             waitingForPublishAnswer: true,
             publishConnectedSent: false,
         };
@@ -80,8 +88,9 @@ exports.init = async function init(app) {
         };
 
         pc.ontrack = function (event) {
-            console.log("SFU ontrack", event.track.kind, event.track.id, event.transceiver && event.transceiver.mid);
-            attachTrackToPeer(event);
+            const mid = event.transceiver ? event.transceiver.mid : null;
+            console.log("SFU ontrack", event.track.kind, event.track.id, mid);
+            attachTrackToPeer(event, mid != null ? sfu.midToPeer.get(mid) : undefined);
         };
 
         pc.onicecandidateerror = function (event) {
@@ -156,14 +165,24 @@ exports.init = async function init(app) {
         if (!sfu.peerSubs.has(key)) {
             sfu.peerSubs.set(key, {
                 connectionId: args.connectionId,
-                trackNames: [],
                 videoNode: document.getElementById(peerVideoNodeId(args.connectionId)),
                 stream: new MediaStream(),
             });
         }
 
         try {
+            // The pull offer adds new recvonly transceivers for this peer's
+            // tracks. Snapshot the mids before/after so we can record which
+            // mids belong to this peer; ontrack uses that to route each track.
+            const midsBefore = new Set(
+                sfu.pc.getTransceivers().map((t) => t.mid).filter((m) => m != null)
+            );
             await sfu.pc.setRemoteDescription({ type: "offer", sdp: args.offerSdp });
+            for (const t of sfu.pc.getTransceivers()) {
+                if (t.mid != null && !midsBefore.has(t.mid)) {
+                    sfu.midToPeer.set(t.mid, key);
+                }
+            }
             const answer = await sfu.pc.createAnswer();
             await sfu.pc.setLocalDescription(answer);
             app.ports.voice_chat_from_js.send({
@@ -175,52 +194,36 @@ exports.init = async function init(app) {
         }
     }
 
-    function attachTrackToPeer(event) {
-        // The new transceiver carries one peer's audio or video. We rely on
-        // ontrack's event.streams or event.track to attach to *some* peer.
-        // Cloudflare returns one transceiver per pulled track. We don't get
-        // peer identity directly from ontrack; the simplest approach is to
-        // attach the first not-yet-attached track of each kind to the most
-        // recently subscribed peer that's missing that kind. This is
-        // imperfect for >1 simultaneous subscribes but works for typical
-        // 1:1 calls.
+    function attachTrackToPeer(event, key) {
+        // Route the incoming track to the peer that owns the transceiver it
+        // arrived on (recorded in applyPullOffer). Without this the audio and
+        // video of different peers get mixed onto the wrong video elements.
         if (!sfu) return;
 
-        // Find a peer subscription that doesn't yet have this track kind.
-        let target = null;
-        for (const sub of sfu.peerSubs.values()) {
-            const has =
-                event.track.kind === "audio"
-                    ? sub.stream.getAudioTracks().length > 0
-                    : sub.stream.getVideoTracks().length > 0;
-            if (!has) {
-                target = sub;
-                break;
-            }
+        const sub = key ? sfu.peerSubs.get(key) : undefined;
+        if (!sub) {
+            console.warn("SFU ontrack: no peer for transceiver", event.transceiver && event.transceiver.mid);
+            return;
         }
-        if (!target) return;
 
-        target.stream.addTrack(event.track);
-        if (target.videoNode) {
-            target.videoNode.srcObject = target.stream;
-            const playPromise = target.videoNode.play();
+        sub.stream.addTrack(event.track);
+        // The Elm-rendered <video> may not have existed when we subscribed;
+        // re-resolve it here (and keep the stream so it binds once it appears).
+        if (!sub.videoNode || !sub.videoNode.isConnected) {
+            sub.videoNode = document.getElementById(peerVideoNodeId(sub.connectionId));
+        }
+        if (sub.videoNode) {
+            sub.videoNode.srcObject = sub.stream;
+            const playPromise = sub.videoNode.play();
             if (playPromise && typeof playPromise.catch === "function") {
                 playPromise.catch(function (err) {
                     console.error("SFU peer video play() rejected", err);
                 });
             }
         }
-        if (event.track.kind === "audio") {
-            const key = connectionKeyFromSub(target);
-            if (key && !audioStreams.has(key)) {
-                handleAudioStream(target.stream, key);
-            }
+        if (event.track.kind === "audio" && !audioStreams.has(key)) {
+            handleAudioStream(sub.stream, key);
         }
-    }
-
-    function connectionKeyFromSub(sub) {
-        if (!sub || !sub.connectionId) return null;
-        return connectionKey(sub.connectionId);
     }
 
     function peerLeft(connectionId) {
@@ -234,6 +237,10 @@ exports.init = async function init(app) {
             sub.stream.getTracks().forEach((t) => t.stop());
             sfu.peerSubs.delete(key);
             removeAudioStream(key);
+        }
+        // Drop any mid->peer mappings for this peer.
+        for (const [mid, peerKey] of [...sfu.midToPeer.entries()]) {
+            if (peerKey === key) sfu.midToPeer.delete(mid);
         }
     }
 
