@@ -2441,13 +2441,17 @@ boardView windowSize overlay setup state model =
 
             else
                 deadStonePositions setup state
+
+        capturedStones : List ( ( Int, Int ), Stone )
+        capturedStones =
+            lastMoveCaptures viewing state
     in
     Svg.svg
         [ Svg.Attributes.width (String.fromInt displayWidth)
         , Svg.Attributes.height (String.fromInt displayHeight)
         , Svg.Attributes.viewBox ("0 0 " ++ String.fromInt widthPx ++ " " ++ String.fromInt heightPx)
         , Svg.Attributes.preserveAspectRatio "xMidYMid meet"
-        , Svg.Attributes.style "display:block"
+        , Svg.Attributes.style "display:block;overflow:visible"
         ]
         (gridLines width height
             ++ starPointShapes width height
@@ -2455,6 +2459,7 @@ boardView windowSize overlay setup state model =
             ++ stoneShapes deadSet snapshot.board
             ++ lastMoveMarker viewing state
             ++ overlay
+            ++ captureAnimationShapes scale widthPx capturedStones
         )
         |> Ui.html
         |> Ui.el
@@ -2572,6 +2577,114 @@ lastMoveMarker viewingPast state =
 
         _ ->
             []
+
+
+{-| Stones removed by the most recently placed stone. These are no longer on
+the board, so we re-create them as ghosts purely for the leaving-the-board
+animation. Only fires right after a capturing placement (lastMove is reset to
+Nothing on a pass), and never while reviewing history.
+-}
+lastMoveCaptures : Bool -> GameState -> List ( ( Int, Int ), Stone )
+lastMoveCaptures viewing state =
+    case ( viewing, state.phase, ( state.lastMove, List.head state.history ) ) of
+        ( False, Playing _, ( Just _, Just previous ) ) ->
+            Dict.foldl
+                (\pos stone acc ->
+                    if Dict.member pos state.board then
+                        acc
+
+                    else
+                        ( pos, stone ) :: acc
+                )
+                []
+                previous.board
+
+        _ ->
+            []
+
+
+{-| Captured stones fly off the board toward the capturing player's score
+counter on their clockChip (Black's chip is on the left, White's on the right,
+both sitting just above the board) and fade out as they arrive.
+-}
+captureAnimationShapes : Float -> Int -> List ( ( Int, Int ), Stone ) -> List (Svg msg)
+captureAnimationShapes scale widthPx captured =
+    let
+        duration : String
+        duration =
+            "0.7s"
+    in
+    List.map
+        (\( ( x, y ), stone ) ->
+            let
+                originX : Float
+                originX =
+                    toFloat (x * cellPx + cellPx // 2)
+
+                originY : Float
+                originY =
+                    toFloat (y * cellPx + cellPx // 2)
+
+                targetX : Float
+                targetX =
+                    case stone of
+                        White ->
+                            toFloat widthPx / 2 - 20 / scale
+
+                        Black ->
+                            toFloat widthPx / 2 + 158 / scale
+
+                targetY : Float
+                targetY =
+                    -38 / scale
+
+                color : String
+                color =
+                    case stone of
+                        Black ->
+                            "black"
+
+                        White ->
+                            "white"
+
+                translateTo : String
+                translateTo =
+                    String.fromFloat (targetX - originX) ++ " " ++ String.fromFloat (targetY - originY)
+            in
+            Svg.circle
+                [ Svg.Attributes.cx (String.fromFloat originX)
+                , Svg.Attributes.cy (String.fromFloat originY)
+                , Svg.Attributes.r (String.fromInt (cellPx // 2 - 2))
+                , Svg.Attributes.fill color
+                , Svg.Attributes.stroke "black"
+                , Svg.Attributes.strokeWidth "1"
+                , Svg.Attributes.pointerEvents "none"
+                ]
+                [ Svg.animateTransform
+                    [ Svg.Attributes.attributeName "transform"
+                    , Svg.Attributes.type_ "translate"
+                    , Svg.Attributes.from "0 0"
+                    , Svg.Attributes.to translateTo
+                    , Svg.Attributes.dur duration
+                    , Svg.Attributes.repeatCount "1"
+                    , Svg.Attributes.fill "freeze"
+                    , Svg.Attributes.calcMode "spline"
+                    , Svg.Attributes.keyTimes "0;1"
+                    , Svg.Attributes.keySplines "0.3 0 0.2 1"
+                    ]
+                    []
+                , Svg.animate
+                    [ Svg.Attributes.attributeName "opacity"
+                    , Svg.Attributes.values "1;1;0"
+                    , Svg.Attributes.keyTimes "0;0.65;1"
+                    , Svg.Attributes.dur duration
+                    , Svg.Attributes.repeatCount "1"
+                    , Svg.Attributes.fill "freeze"
+                    ]
+                    []
+                ]
+        )
+        captured
 
 
 starPointShapes : Int -> Int -> List (Svg msg)
