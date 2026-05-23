@@ -1849,7 +1849,7 @@ websocketCloseEventLineGraph now color eventTimes =
                 |> Ui.html
     in
     Ui.column
-        [ Ui.spacing 4 ]
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
         [ Ui.el [ Ui.Font.size 12 ]
             (Ui.text
                 ("Events per hour over the last 24 hours (peak: "
