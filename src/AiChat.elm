@@ -1657,13 +1657,7 @@ openRouterRequest openRouterKey aiModel message =
                                         (\content cost ->
                                             { images = content.images, content = content.content, cost = cost }
                                         )
-                                        (Json.Decode.field
-                                            "choices"
-                                            (Json.Decode.index
-                                                0
-                                                decodeAiMessage
-                                            )
-                                        )
+                                        (Json.Decode.field "choices" (Json.Decode.index 0 decodeAiMessage))
                                         (Json.Decode.maybe (Json.Decode.at [ "usage", "cost" ] Json.Decode.float))
                                     )
                                     body
