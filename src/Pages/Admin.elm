@@ -62,6 +62,7 @@ import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import OneOrGreater exposing (OneOrGreater)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
@@ -145,6 +146,8 @@ type Msg
     | PressedRegenerateServerSecret
     | PressedDeleteCall
     | PressedWebsocketCloseEventsPage Int
+    | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
+    | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
 
 
 type ToBackend
@@ -187,6 +190,7 @@ type alias Model =
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
     , websocketCloseEventsPage : Int
+    , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
     }
 
 
@@ -318,6 +322,7 @@ initForUser =
     , showHiddenLogs = False
     , exportProgress = Nothing
     , websocketCloseEventsPage = 0
+    , realtimeSessionData = SeqDict.empty
     }
 
 
@@ -344,6 +349,7 @@ initForAdmin { highlightLog } =
     , showHiddenLogs = False
     , exportProgress = Nothing
     , websocketCloseEventsPage = 0
+    , realtimeSessionData = SeqDict.empty
     }
 
 
@@ -1192,6 +1198,49 @@ update navigationKey time adminData localState msg model =
         PressedWebsocketCloseEventsPage page ->
             ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
 
+        PressedLoadRealtimeSessionData realtimeSessionId ->
+            case ( SeqDict.get realtimeSessionId model.realtimeSessionData, adminData.cloudflareRealtimeApiToken, adminData.cloudflareRealtimeAppId ) of
+                ( Just LoadingRealtimeSessionInfo, _, _ ) ->
+                    ( model, Command.none, NoOutMsg )
+
+                ( _, Just apiToken, Just appId ) ->
+                    ( { model | realtimeSessionData = SeqDict.insert realtimeSessionId LoadingRealtimeSessionInfo model.realtimeSessionData }
+                    , Cloudflare.sessionInfo appId apiToken realtimeSessionId |> Task.attempt (GotRealtimeSessionInfo realtimeSessionId)
+                    , NoOutMsg
+                    )
+
+                ( _, _, _ ) ->
+                    ( model, Command.none, NoOutMsg )
+
+        GotRealtimeSessionInfo realtimeSessionId result ->
+            case result of
+                Ok ok ->
+                    ( { model
+                        | realtimeSessionData =
+                            SeqDict.insert realtimeSessionId (LoadedRealtimeSessionInfo ok) model.realtimeSessionData
+                      }
+                    , Command.none
+                    , NoOutMsg
+                    )
+
+                Err error ->
+                    ( { model
+                        | realtimeSessionData =
+                            SeqDict.insert
+                                realtimeSessionId
+                                (FailedToLoadRealtimeSessionInfo error)
+                                model.realtimeSessionData
+                      }
+                    , Command.none
+                    , NoOutMsg
+                    )
+
+
+type RealtimeSessionInfoStatus
+    = LoadingRealtimeSessionInfo
+    | LoadedRealtimeSessionInfo Cloudflare.SessionStateResponse
+    | FailedToLoadRealtimeSessionInfo Http.Error
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -1523,7 +1572,7 @@ view isMobile2 version time local adminData user model =
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
             , websocketCloseEventsSection time local.localUser.timezone user adminData model
-            , voiceChatSection adminData user
+            , voiceChatSection adminData model user
             , filesSection user adminData
             , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
@@ -1926,18 +1975,18 @@ filesSection user adminData =
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-voiceChatSection : AdminData -> BackendUser -> Element Msg
-voiceChatSection adminData user =
+voiceChatSection : AdminData -> Model -> BackendUser -> Element Msg
+voiceChatSection adminData model user =
     let
-        usersInCalls : Int
+        usersInCalls : SeqDict Cloudflare.RealtimeSessionId OneOrGreater
         usersInCalls =
             SeqDict.foldl
                 (\_ connection count ->
                     NonemptyDict.foldl
                         (\_ connection2 count2 ->
-                            case connection2.call of
+                            case connection2.callSfu of
                                 Just call ->
-                                    count2 + 1
+                                    SeqDictHelper.increment call.sessionId count2
 
                                 Nothing ->
                                     count2
@@ -1945,14 +1994,93 @@ voiceChatSection adminData user =
                         count
                         connection
                 )
-                0
+                SeqDict.empty
                 adminData.connections
     in
     section
         8
         user.expandedSections
         VoiceChatSection
-        [ Ui.text ("Clients in calls: " ++ String.fromInt usersInCalls)
+        [ Ui.column
+            [ Ui.spacing 8 ]
+            (List.map
+                (\( realtimeSessionId, count ) ->
+                    let
+                        shortId : Cloudflare.RealtimeSessionId -> String
+                        shortId id =
+                            let
+                                id2 : String
+                                id2 =
+                                    Cloudflare.sessionIdToString id
+                            in
+                            String.left 4 id2 ++ "..." ++ String.right 4 id2
+                    in
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ Ui.row
+                            [ Ui.spacing 4 ]
+                            [ Ui.text (shortId realtimeSessionId ++ ": " ++ OneOrGreater.toString count)
+                            , Ui.el
+                                [ Ui.alignRight ]
+                                (MyUi.secondaryButton
+                                    (Dom.id "admin_loadRealtimeSessionData")
+                                    (PressedLoadRealtimeSessionData realtimeSessionId)
+                                    "Load data"
+                                )
+                            ]
+                        , case SeqDict.get realtimeSessionId model.realtimeSessionData of
+                            Just LoadingRealtimeSessionInfo ->
+                                Ui.text "Loading..."
+
+                            Just (LoadedRealtimeSessionInfo info) ->
+                                Ui.column
+                                    [ Ui.spacing 4 ]
+                                    (List.map
+                                        (\track ->
+                                            "Track name: "
+                                                ++ track.trackName
+                                                ++ ", mid: "
+                                                ++ track.mid
+                                                ++ ", location: "
+                                                ++ (case track.location of
+                                                        Cloudflare.Location_Local ->
+                                                            "local"
+
+                                                        Cloudflare.Location_Remote ->
+                                                            "remote"
+                                                   )
+                                                ++ ", status: "
+                                                ++ (case track.status of
+                                                        Cloudflare.TrackActive ->
+                                                            "active"
+
+                                                        Cloudflare.TrackInactive ->
+                                                            "inactive"
+
+                                                        Cloudflare.TrackWaiting ->
+                                                            "waiting"
+                                                   )
+                                                ++ (case track.sessionId of
+                                                        Just sessionId ->
+                                                            ", owner: " ++ shortId sessionId
+
+                                                        Nothing ->
+                                                            ""
+                                                   )
+                                                |> Ui.text
+                                        )
+                                        info.tracks
+                                    )
+
+                            Just (FailedToLoadRealtimeSessionInfo error) ->
+                                Ui.text (Log.httpErrorToString error)
+
+                            Nothing ->
+                                Ui.none
+                        ]
+                )
+                (SeqDict.toList usersInCalls)
+            )
         , MyUi.rowButton
             (Dom.id "admin_deleteCall")
             PressedDeleteCall

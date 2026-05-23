@@ -658,8 +658,13 @@ update msg model =
                 Err error ->
                     BackendExtra.addLogWithCmd time (Log.FailedCloudflarePullOffer error) model cmd
 
-        GotCloudflareRenegotiateAck _ ->
-            ( model, Command.none )
+        GotCloudflareRenegotiateAck clientId changeId sdp result ->
+            ( model
+            , Call.Local_RenegotiateAnswer sdp (FilledInByBackend (Result.mapError (\_ -> ()) result))
+                |> Local_VoiceChatChange
+                |> LocalChangeResponse changeId
+                |> Lamdera.sendToFrontend clientId
+            )
 
         LinkDiscordUserStep1 linkedAt clientId userId auth result ->
             case result of
@@ -5080,8 +5085,8 @@ handleVoiceChatChange time changeId clientId sessionId voiceMsg model =
         Call.Local_PullTracks connectionId remoteSessionId trackNames _ ->
             asUser model sessionId (handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model)
 
-        Call.Local_RenegotiateAnswer answerSdp ->
-            asUser model sessionId (handleRenegotiateAnswer sessionId clientId answerSdp model)
+        Call.Local_RenegotiateAnswer answerSdp _ ->
+            asUser model sessionId (handleRenegotiateAnswer sessionId clientId changeId answerSdp model)
 
 
 leaveVoice :
@@ -5402,7 +5407,7 @@ handleGotCloudflareSession :
     -> ChangeId
     -> Time.Posix
     -> Call.RoomId
-    -> Cloudflare.SessionId
+    -> Cloudflare.RealtimeSessionId
     -> Result Http.Error Cloudflare.PushTracksResult
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -5510,7 +5515,7 @@ handlePublishConnected time clientId changeId model session _ =
                             }
 
                         -- Every other connected peer already in this call.
-                        peers : List { peerUserId : Id UserId, peerClientId : ClientId, sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName }
+                        peers : List { peerUserId : Id UserId, peerClientId : ClientId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
                         peers =
                             SeqDict.toList model2.connections
                                 |> List.concatMap
@@ -5668,7 +5673,7 @@ handlePullTracks :
     -> ClientId
     -> ChangeId
     -> Call.ConnectionId
-    -> Cloudflare.SessionId
+    -> Cloudflare.RealtimeSessionId
     -> List Cloudflare.TrackName
     -> BackendModel
     -> UserSession
@@ -5703,12 +5708,13 @@ handlePullTracks time sessionId clientId changeId connectionId remoteSessionId t
 handleRenegotiateAnswer :
     SessionId
     -> ClientId
+    -> ChangeId
     -> Cloudflare.Sdp
     -> BackendModel
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleRenegotiateAnswer sessionId clientId answerSdp model _ _ =
+handleRenegotiateAnswer sessionId clientId changeId answerSdp model _ _ =
     case
         ( model.cloudflareRealtimeApiToken
         , model.cloudflareRealtimeAppId
@@ -5720,14 +5726,14 @@ handleRenegotiateAnswer sessionId clientId answerSdp model _ _ =
                 Just sfu ->
                     ( model
                     , Cloudflare.renegotiate appId apiToken sfu.sessionId { answerSdp = answerSdp }
-                        |> Task.attempt GotCloudflareRenegotiateAck
+                        |> Task.attempt (GotCloudflareRenegotiateAck clientId changeId answerSdp)
                     )
 
                 Nothing ->
-                    ( model, Command.none )
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
         _ ->
-            ( model, Command.none )
+            ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
 
 voiceChatRoomHasOtherMembers : DmChannelId -> ClientId -> BackendModel -> Bool

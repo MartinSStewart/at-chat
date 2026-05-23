@@ -79,25 +79,25 @@ type LocalChange
     | Local_Leave Time.Posix
     | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
     | Local_PublishConnected
-    | Local_PullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
-    | Local_RenegotiateAnswer Cloudflare.Sdp
+    | Local_PullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (ToBeFilledInByBackend (Result () Cloudflare.PullTracksResult))
+    | Local_RenegotiateAnswer Cloudflare.Sdp (ToBeFilledInByBackend (Result () ()))
 
 
 type ServerChange
-    = Server_Joined Time.Posix ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName)
+    = Server_Joined Time.Posix ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
     | Server_Left Time.Posix ConnectionId
 
 
 type alias ExistingPeer =
     { connectionId : ConnectionId
-    , sessionId : Cloudflare.SessionId
+    , sessionId : Cloudflare.RealtimeSessionId
     , trackNames : List Cloudflare.TrackName
     }
 
 
 type alias PublishResult =
     { answerSdp : Cloudflare.Sdp
-    , sessionId : Cloudflare.SessionId
+    , sessionId : Cloudflare.RealtimeSessionId
     , trackNames : List Cloudflare.TrackName
     }
 
@@ -144,6 +144,7 @@ type alias Local =
 type CallError
     = MissingApiKeys
     | FailedToPullTracks
+    | FailedToRenegotiate
 
 
 type alias Model =
@@ -754,7 +755,10 @@ view windowSize roomId calls model =
                                     "Call API keys missing. Admin needs to add them."
 
                                 FailedToPullTracks ->
-                                    "Failed to pull remote audio/video tracks"
+                                    "Failed to pull remote audio/video tracks."
+
+                                FailedToRenegotiate ->
+                                    "Failed to renegotiate connection."
                             )
                             |> Ui.el [ Ui.paddingXY 16 0 ]
 
@@ -935,7 +939,7 @@ type ToJs
     = ToJs_StartCall StartCallData
     | ToJs_LeaveCall
     | ToJs_PublishAnswer { answerSdp : Cloudflare.Sdp }
-    | ToJs_PeerJoined { connectionId : ConnectionId, sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName }
+    | ToJs_PeerJoined { connectionId : ConnectionId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
     | ToJs_PeerLeft ConnectionId
     | ToJs_AcceptPullOffer { connectionId : ConnectionId, offerSdp : Cloudflare.Sdp }
     | ToJs_SetAudioInputEnabled Bool
@@ -1005,7 +1009,7 @@ publishAnswerArgsCodec =
         |> Codec.buildObject
 
 
-peerJoinedArgsCodec : Codec { connectionId : ConnectionId, sessionId : Cloudflare.SessionId, trackNames : List Cloudflare.TrackName }
+peerJoinedArgsCodec : Codec { connectionId : ConnectionId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
 peerJoinedArgsCodec =
     Codec.object (\c s t -> { connectionId = c, sessionId = s, trackNames = t })
         |> Codec.field "connectionId" .connectionId connectionIdCodec
@@ -1128,7 +1132,7 @@ type FromJs
     = FromJs_PublishOffer Cloudflare.Sdp (List String)
     | FromJs_PublishConnected
     | FromJs_PullAnswer ConnectionId Cloudflare.Sdp
-    | FromJs_RequestPullTracks ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName)
+    | FromJs_RequestPullTracks ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
     | FromJs_GotUserMediaDevices (List MediaDevice) (List (IdString MediaDeviceId))
     | FromJs_GotUserMediaDevicesError String
     | FromJs_SpeakingChanged LocalOrConnection Bool

@@ -3911,7 +3911,7 @@ updateLoaded msg model =
                                 Call.FromJs_PullAnswer _ sdp ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (Call.Local_RenegotiateAnswer sdp |> Local_VoiceChatChange |> Just)
+                                        (Call.Local_RenegotiateAnswer sdp EmptyPlaceholder |> Local_VoiceChatChange |> Just)
                                         loggedIn
                                         Command.none
 
@@ -5840,7 +5840,7 @@ updateLoadedFromBackend msg model =
                                 Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
                                     Command.none
 
-                                Call.Local_RenegotiateAnswer _ ->
+                                Call.Local_RenegotiateAnswer _ _ ->
                                     Command.none
 
                         Local_TextEditor TextEditor.Local_Undo ->

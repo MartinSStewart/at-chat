@@ -236,7 +236,7 @@ pendingChangesText localChange =
                 Call.Local_PullTracks _ _ _ _ ->
                     "Pull tracks"
 
-                Call.Local_RenegotiateAnswer _ ->
+                Call.Local_RenegotiateAnswer _ _ ->
                     "Renegotiate"
 
         Local_Go _ change ->
@@ -2774,7 +2774,15 @@ changeUpdate localMsg local =
                         Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
                             local
 
-                        Call.Local_RenegotiateAnswer _ ->
+                        Call.Local_RenegotiateAnswer _ (FilledInByBackend result) ->
+                            case result of
+                                Ok () ->
+                                    local
+
+                                Err () ->
+                                    { local | calls = { calls | error = Just Call.FailedToRenegotiate } }
+
+                        Call.Local_RenegotiateAnswer _ EmptyPlaceholder ->
                             local
 
                 Local_Go { otherUserId } goChange ->

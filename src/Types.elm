@@ -620,10 +620,10 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotCloudflareSessionCreated ClientId ChangeId Time.Posix Call.RoomId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.SessionId)
-    | GotCloudflareSession ClientId ChangeId Time.Posix Call.RoomId Cloudflare.SessionId (Result Http.Error Cloudflare.PushTracksResult)
-    | GotCloudflarePullOffer Time.Posix ClientId ChangeId Call.ConnectionId Cloudflare.SessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
-    | GotCloudflareRenegotiateAck (Result Http.Error ())
+    | GotCloudflareSessionCreated ClientId ChangeId Time.Posix Call.RoomId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
+    | GotCloudflareSession ClientId ChangeId Time.Posix Call.RoomId Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.PushTracksResult)
+    | GotCloudflarePullOffer Time.Posix ClientId ChangeId Call.ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
+    | GotCloudflareRenegotiateAck ClientId ChangeId Cloudflare.Sdp (Result Http.Error ())
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
