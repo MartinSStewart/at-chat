@@ -172,14 +172,27 @@ exports.init = async function init(app) {
 
         try {
             // The pull offer adds new recvonly transceivers for this peer's
-            // tracks. Snapshot the mids before/after so we can record which
-            // mids belong to this peer; ontrack uses that to route each track.
+            // tracks. We must record which mids belong to this peer BEFORE
+            // applying the offer, because ontrack fires *during*
+            // setRemoteDescription — if we waited until after, the mapping
+            // wouldn't exist yet and tracks would be dropped ("no peer for
+            // transceiver"). The mids are listed as `a=mid:<x>` in the SDP;
+            // the ones we don't already know about are this peer's.
             const midsBefore = new Set(
                 sfu.pc.getTransceivers().map((t) => t.mid).filter((m) => m != null)
             );
+            const offerMids = (args.offerSdp.match(/a=mid:[^\r\n]+/g) || []).map((line) =>
+                line.slice("a=mid:".length).trim()
+            );
+            for (const mid of offerMids) {
+                if (!midsBefore.has(mid)) {
+                    sfu.midToPeer.set(mid, key);
+                }
+            }
             await sfu.pc.setRemoteDescription({ type: "offer", sdp: args.offerSdp });
+            // Backstop: also tag any newly-created transceivers we missed.
             for (const t of sfu.pc.getTransceivers()) {
-                if (t.mid != null && !midsBefore.has(t.mid)) {
+                if (t.mid != null && !midsBefore.has(t.mid) && !sfu.midToPeer.has(t.mid)) {
                     sfu.midToPeer.set(t.mid, key);
                 }
             }
