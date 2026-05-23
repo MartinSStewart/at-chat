@@ -904,7 +904,8 @@ updateFromBackend msg model =
                                 (case result of
                                     Ok aiMessage ->
                                         let
-                                            aiMessage2 =
+                                            text : String
+                                            text =
                                                 case String.split (prefixWrapper botPrefix) aiMessage.content of
                                                     aiMessage3 :: _ ->
                                                         case String.split (prefixWrapper userPrefix) aiMessage3 of
@@ -917,7 +918,7 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        GotResponse modelId (String.replace "\\\"" "\"" aiMessage2) aiMessage2.cost
+                                        GotResponse modelId (String.replace "\\\"" "\"" text) aiMessage.cost
 
                                     Err error ->
                                         GotError modelId error
