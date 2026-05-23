@@ -8,6 +8,7 @@ module Cloudflare exposing
     , Sdp
     , SessionStateResponse
     , TrackName
+    , TrackObject
     , TrackStatus(..)
     , appId
     , appIdToString
@@ -19,14 +20,10 @@ module Cloudflare exposing
     , renegotiate
     , sdpCodec
     , sdpFromString
-    , sdpToString
     , sessionIdCodec
-    , sessionIdFromString
     , sessionIdToString
     , sessionInfo
     , trackNameCodec
-    , trackNameFromString
-    , trackNameToString
     )
 
 import Codec exposing (Codec)
@@ -86,11 +83,6 @@ sessionIdCodec =
 
 type TrackName
     = TrackName String
-
-
-trackNameFromString : String -> TrackName
-trackNameFromString =
-    TrackName
 
 
 trackNameToString : TrackName -> String

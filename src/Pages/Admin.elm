@@ -9,6 +9,7 @@ module Pages.Admin exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , RealtimeSessionInfoStatus
     , ToBackend(..)
     , ToFrontend(..)
     , UserColumn(..)
@@ -1209,7 +1210,7 @@ update navigationKey time adminData localState msg model =
                     , NoOutMsg
                     )
 
-                ( _, _, _ ) ->
+                _ ->
                     ( model, Command.none, NoOutMsg )
 
         GotRealtimeSessionInfo realtimeSessionId result ->
@@ -2084,8 +2085,7 @@ voiceChatSection adminData model user =
         , MyUi.rowButton
             (Dom.id "admin_deleteCall")
             PressedDeleteCall
-            [ Ui.padding 3
-            , Ui.background MyUi.deleteButtonBackground
+            [ Ui.background MyUi.deleteButtonBackground
             , Ui.Font.color MyUi.deleteButtonFont
             , Ui.paddingXY 16 8
             , Ui.rounded 4

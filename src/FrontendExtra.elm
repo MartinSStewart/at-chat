@@ -2728,8 +2728,8 @@ changeUpdate localMsg local =
                                                         | currentRoom = Just roomId
                                                         , voiceChats =
                                                             List.foldl
-                                                                (\peer set2 ->
-                                                                    SeqDictHelper.addItem roomId peer.connectionId.otherClientId set2
+                                                                (\peer5 set2 ->
+                                                                    SeqDictHelper.addItem roomId peer5.connectionId.otherClientId set2
                                                                 )
                                                                 calls.voiceChats
                                                                 peer4

@@ -727,10 +727,6 @@ mockCloudflareSfu { currentRequest, data } =
         _ =
             Debug.log "currentRequest" currentRequest
 
-        isCloudflareSfu : Bool
-        isCloudflareSfu =
-            String.startsWith "https://rtc.live.cloudflare.com/v1/apps/" currentRequest.url
-
         ok : Int -> String -> Maybe HttpResponse
         ok statusCode body =
             StringHttpResponse
@@ -780,7 +776,7 @@ mockCloudflareSfu { currentRequest, data } =
         -- https://rtc.live.cloudflare.com/v1/apps/test-app-id/sessions/sfu-session-1/tracks/new
     in
     case String.split "/" currentRequest.url of
-        "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: appId :: rest ->
+        "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
             case rest of
                 [ "sessions", "new" ] ->
                     ok 201
@@ -804,7 +800,7 @@ mockCloudflareSfu { currentRequest, data } =
                             ++ "\",\"type\":\"offer\"},\"requiresImmediateRenegotiation\":true}"
                             |> ok 200
 
-                [ "sessions", realtimeSessionId, "renegotiate" ] ->
+                [ "sessions", _, "renegotiate" ] ->
                     ok 200 ""
 
                 _ ->
@@ -835,8 +831,8 @@ state:
 mockVoiceChatPorts :
     { data : T.Data FrontendModel BackendModel, currentRequest : T.PortToJs }
     -> Maybe ( String, Json.Decode.Value )
-mockVoiceChatPorts { data, currentRequest } =
-    case Codec.decodeValue Call.voiceChatToJsCodec currentRequest.value of
+mockVoiceChatPorts request =
+    case Codec.decodeValue Call.voiceChatToJsCodec request.currentRequest.value of
         Ok ok ->
             case ok of
                 Call.ToJs_StartCall _ ->

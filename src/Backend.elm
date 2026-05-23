@@ -623,7 +623,7 @@ update msg model =
             in
             case result of
                 Err error ->
-                    BackendExtra.addLogWithCmd time (Log.FailedCloudflarePullOffer error) model cmd
+                    BackendExtra.addLogWithCmd time (Log.FailedCloudflareSessionCreate error) model cmd
 
                 Ok sessionId ->
                     case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
@@ -5220,7 +5220,7 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                         voiceChatId =
                             Call.DmRoomId otherUserId
                     in
-                    case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
+                    case ( model2.cloudflareRealtimeApiToken, model2.cloudflareRealtimeAppId ) of
                         ( Just _, Just _ ) ->
                             let
                                 existingPeers : List Call.ExistingPeer
@@ -5353,16 +5353,13 @@ handlePublishTracks :
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handlePublishTracks clientId changeId time offerSdp transceiverMids model session _ =
+handlePublishTracks clientId changeId time offerSdp transceiverMids model _ _ =
     case ( model.cloudflareRealtimeApiToken, model.cloudflareRealtimeAppId ) of
         ( Just apiToken, Just cloudflareAppId ) ->
             let
                 currentRoomId : Maybe Call.RoomId
                 currentRoomId =
                     findCallForClient clientId model
-
-                _ =
-                    session
             in
             case currentRoomId of
                 Just roomId ->
@@ -5610,41 +5607,6 @@ peerRoomId roomId peerUserId joiningUserId =
             else
                 -- Peer is the other DM party: from their view, the joiner is the other.
                 Call.DmRoomId joiningUserId
-
-
-broadcastToCallParticipants :
-    Call.RoomId
-    -> Id UserId
-    -> ClientId
-    -> (Id UserId -> ServerChange)
-    -> BackendModel
-    -> Command BackendOnly ToFrontend BackendMsg
-broadcastToCallParticipants roomId excludeUserId excludeClientId msgFor model =
-    SeqDict.toList model.connections
-        |> List.concatMap
-            (\( sessionId2, connections ) ->
-                case SeqDict.get sessionId2 model.sessions of
-                    Just session ->
-                        NonemptyDict.toList connections
-                            |> List.filterMap
-                                (\( cId, connection ) ->
-                                    if
-                                        isPeerInSameCall roomId excludeUserId session.userId connection.call
-                                            && not (session.userId == excludeUserId && cId == excludeClientId)
-                                    then
-                                        Just
-                                            (Lamdera.sendToFrontend cId
-                                                (ChangeBroadcast (ServerChange (msgFor session.userId)))
-                                            )
-
-                                    else
-                                        Nothing
-                                )
-
-                    Nothing ->
-                        []
-            )
-        |> Command.batch
 
 
 findClientLocation : ClientId -> BackendModel -> Maybe ( SessionId, LocalState.ConnectionData )

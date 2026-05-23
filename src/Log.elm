@@ -134,13 +134,13 @@ shouldNotifyAdmin log =
         FailedToRegenerateServerSecret _ ->
             Nothing
 
-        FailedCloudflarePullOffer error ->
+        FailedCloudflarePullOffer _ ->
             Nothing
 
-        FailedCloudflareSessionCreate error ->
+        FailedCloudflareSessionCreate _ ->
             Nothing
 
-        FailedCloudflarePushLocalTracks error ->
+        FailedCloudflarePushLocalTracks _ ->
             Nothing
 
 

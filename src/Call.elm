@@ -24,14 +24,12 @@ port module Call exposing
     , displayMode
     , displayModeChangeCmd
     , encodeFromJs
-    , existingPeerCodec
     , fromJs
     , gotUserMediaDevices
     , init
     , initModel
     , isPressMsg
     , leaveVoiceChatCmds
-    , publishResultCodec
     , serverChangeCmd
     , sidebarOffsetAttr
     , startCallCmd
@@ -106,15 +104,6 @@ existingPeerCodec : Codec ExistingPeer
 existingPeerCodec =
     Codec.object ExistingPeer
         |> Codec.field "connectionId" .connectionId connectionIdCodec
-        |> Codec.field "sessionId" .sessionId Cloudflare.sessionIdCodec
-        |> Codec.field "trackNames" .trackNames (Codec.list Cloudflare.trackNameCodec)
-        |> Codec.buildObject
-
-
-publishResultCodec : Codec PublishResult
-publishResultCodec =
-    Codec.object PublishResult
-        |> Codec.field "answerSdp" .answerSdp Cloudflare.sdpCodec
         |> Codec.field "sessionId" .sessionId Cloudflare.sessionIdCodec
         |> Codec.field "trackNames" .trackNames (Codec.list Cloudflare.trackNameCodec)
         |> Codec.buildObject
