@@ -482,187 +482,226 @@ sfuHandshakeTest config =
           -- long chain of explicit portEvent calls this test used to need.
           connectTwoUsersAndJoinNewGuild desktopWindow
             (\admin user ->
-                [ ------------------------------------------------------------
-                  -- PREREQUISITE: admin configures Cloudflare keys in the
-                  -- admin panel. In production this is a one-time setup.
-                  ------------------------------------------------------------
-                  admin.click 100 (Dom.id "guild_showUserOptions")
-                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-                , -- Expand the "API keys" admin section so its Editable inputs render.
-                  admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-                , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeAppId_label") "test-app-id"
-                , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeAppId_acceptEdit")
-                , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_label") "test-api-token"
-                , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_acceptEdit")
-                , -- Go back to the guild page (admin → back → guild route).
-                  admin.navigateBack 100
-                , T.checkBackend 100
-                    (\m ->
-                        case ( m.cloudflareRealtimeAppId, m.cloudflareRealtimeApiToken ) of
-                            ( Just _, Just _ ) ->
-                                Ok ()
+                [ T.collapsableGroup
+                    "Voice chat"
+                    [ T.collapsableGroup
+                        "Setup"
+                        [ ------------------------------------------------------------
+                          -- PREREQUISITE: admin configures Cloudflare keys in the
+                          -- admin panel. In production this is a one-time setup.
+                          ------------------------------------------------------------
+                          admin.click 100 (Dom.id "guild_showUserOptions")
+                        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                        , -- Expand the "API keys" admin section so its Editable inputs render.
+                          admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
+                        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeAppId_label") "test-app-id"
+                        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeAppId_acceptEdit")
+                        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_label") "test-api-token"
+                        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_acceptEdit")
+                        , -- Go back to the guild page (admin → back → guild route).
+                          admin.navigateBack 100
+                        , T.checkBackend 100
+                            (\m ->
+                                case ( m.cloudflareRealtimeAppId, m.cloudflareRealtimeApiToken ) of
+                                    ( Just _, Just _ ) ->
+                                        Ok ()
 
-                            _ ->
-                                Err "Cloudflare keys did not land on the backend"
-                    )
+                                    _ ->
+                                        Err "Cloudflare keys did not land on the backend"
+                            )
 
-                ------------------------------------------------------------
-                -- STEP 1: both users navigate to the DM voice-chat tab.
-                ------------------------------------------------------------
-                , admin.click 100 (Dom.id "guild_openDm_1")
-                , user.click 100 (Dom.id "guild_openDm_0")
-                , admin.click 100 (Dom.id "guild_voiceChat")
-                , user.click 100 (Dom.id "guild_voiceChat")
+                        ------------------------------------------------------------
+                        -- STEP 1: both users navigate to the DM voice-chat tab.
+                        ------------------------------------------------------------
+                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , user.click 100 (Dom.id "guild_openDm_0")
+                        ]
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , user.click 100 (Dom.id "guild_voiceChat")
 
-                ------------------------------------------------------------
-                -- STEP 2: admin clicks "Join Call".
-                --
-                -- UI:        button#guild_startVoiceChat onClick
-                --            -> VoiceChatMsg (PressedJoinCall (DmRoomId bobUserId))
-                -- Frontend:  handleLocalChange dispatches
-                --            Local_VoiceChatChange
-                --              (Local_Join time roomId EmptyPlaceholder)
-                --            → sent to backend as LocalModelChangeRequest.
-                -- Backend:   joinDmVoiceChat — marks admin in call, computes
-                --            existingPeers (empty: bob hasn't joined), and
-                --            sends back Local_Join (FilledInByBackend []).
-                -- Frontend:  on receiving the filled-in response, dispatches
-                --            ToJs_StartCall via voice_chat_to_js with the
-                --            roomId and (empty) existingPeers list.
-                ------------------------------------------------------------
-                , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    ------------------------------------------------------------
+                    -- STEP 2: admin clicks "Join Call".
+                    --
+                    -- UI:        button#guild_startVoiceChat onClick
+                    --            -> VoiceChatMsg (PressedJoinCall (DmRoomId bobUserId))
+                    -- Frontend:  handleLocalChange dispatches
+                    --            Local_VoiceChatChange
+                    --              (Local_Join time roomId EmptyPlaceholder)
+                    --            → sent to backend as LocalModelChangeRequest.
+                    -- Backend:   joinDmVoiceChat — marks admin in call, computes
+                    --            existingPeers (empty: bob hasn't joined), and
+                    --            sends back Local_Join (FilledInByBackend []).
+                    -- Frontend:  on receiving the filled-in response, dispatches
+                    --            ToJs_StartCall via voice_chat_to_js with the
+                    --            roomId and (empty) existingPeers list.
+                    ------------------------------------------------------------
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
 
-                ------------------------------------------------------------
-                -- STEPS 3-4: chained automatically by mockVoiceChatPorts.
-                --
-                -- ToJs_StartCall fires → mock replies with FromJs_PublishOffer
-                --   (simulating: getUserMedia + addTransceiver(audio,video)
-                --    + createOffer + setLocalDescription).
-                -- Elm sends Local_PublishTracks → backend runs in TWO
-                -- backend updates (split because Lamdera live's dev CORS
-                -- proxy doesn't wrap chained Task.andThen calls):
-                --   1. POST /sessions/new  → handleGotCloudflareSessionCreated
-                --   2. POST /sessions/{sid}/tracks/new (location:local)
-                --      → handleGotCloudflareSession
-                -- handleGotCloudflareSession sets admin.callSfu and tries
-                -- to broadcast Server_Joined — but nobody else is in this
-                -- call yet, so the broadcast is a no-op.
-                -- Frontend dispatches ToJs_PublishAnswer → mock has no
-                -- existing peer to pull from yet → returns Nothing.
-                ------------------------------------------------------------
-                , T.checkBackend 200
-                    (\m ->
-                        case
-                            SeqDict.toList m.connections
-                                |> List.concatMap
-                                    (\( _, conns ) ->
-                                        NonemptyDict.toList conns
-                                            |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                    )
-                        of
-                            [ _ ] ->
-                                Ok ()
+                    ------------------------------------------------------------
+                    -- STEPS 3-4: chained automatically by mockVoiceChatPorts.
+                    --
+                    -- ToJs_StartCall fires → mock replies with FromJs_PublishOffer
+                    --   (simulating: getUserMedia + addTransceiver(audio,video)
+                    --    + createOffer + setLocalDescription).
+                    -- Elm sends Local_PublishTracks → backend runs in TWO
+                    -- backend updates (split because Lamdera live's dev CORS
+                    -- proxy doesn't wrap chained Task.andThen calls):
+                    --   1. POST /sessions/new  → handleGotCloudflareSessionCreated
+                    --   2. POST /sessions/{sid}/tracks/new (location:local)
+                    --      → handleGotCloudflareSession
+                    -- handleGotCloudflareSession sets admin.callSfu and tries
+                    -- to broadcast Server_Joined — but nobody else is in this
+                    -- call yet, so the broadcast is a no-op.
+                    -- Frontend dispatches ToJs_PublishAnswer → mock has no
+                    -- existing peer to pull from yet → returns Nothing.
+                    ------------------------------------------------------------
+                    , T.checkBackend 200
+                        (\m ->
+                            case
+                                SeqDict.toList m.connections
+                                    |> List.concatMap
+                                        (\( _, conns ) ->
+                                            NonemptyDict.toList conns
+                                                |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
+                                        )
+                            of
+                                [ _ ] ->
+                                    Ok ()
 
-                            other ->
-                                Err
-                                    ("Expected exactly one connection with callSfu after admin publishes, got "
-                                        ++ String.fromInt (List.length other)
-                                    )
-                    )
+                                other ->
+                                    Err
+                                        ("Expected exactly one connection with callSfu after admin publishes, got "
+                                            ++ String.fromInt (List.length other)
+                                        )
+                        )
 
-                ------------------------------------------------------------
-                -- STEP 5: bob (Stevie) clicks "Join Call".
-                --
-                -- Same Local_Join cycle as admin, except this time
-                -- collectExistingPeers finds admin (admin.callSfu is Just)
-                -- and returns it. So bob's filled-in response is:
-                --
-                --   FilledInByBackend
-                --     [ { connectionId = adminAsSeenByBob
-                --       , sessionId = sfu-session-0
-                --       , trackNames = ["0", "1"]
-                --       } ]
-                --
-                -- Frontend dispatches ToJs_StartCall to bob's JS with the
-                -- existingPeers list populated. JS will publish its own
-                -- tracks AND iterate the list to pull each existing peer.
-                ------------------------------------------------------------
-                , user.click 100 (Dom.id "guild_startVoiceChat")
+                    ------------------------------------------------------------
+                    -- STEP 5: bob (Stevie) clicks "Join Call".
+                    --
+                    -- Same Local_Join cycle as admin, except this time
+                    -- collectExistingPeers finds admin (admin.callSfu is Just)
+                    -- and returns it. So bob's filled-in response is:
+                    --
+                    --   FilledInByBackend
+                    --     [ { connectionId = adminAsSeenByBob
+                    --       , sessionId = sfu-session-0
+                    --       , trackNames = ["0", "1"]
+                    --       } ]
+                    --
+                    -- Frontend dispatches ToJs_StartCall to bob's JS with the
+                    -- existingPeers list populated. JS will publish its own
+                    -- tracks AND iterate the list to pull each existing peer.
+                    ------------------------------------------------------------
+                    , user.click 100 (Dom.id "guild_startVoiceChat")
 
-                ------------------------------------------------------------
-                -- STEPS 6-9: chained automatically by mockVoiceChatPorts.
-                --
-                -- Bob's ToJs_StartCall → mock replies FromJs_PublishOffer.
-                -- Bob's publish runs through Cloudflare (createSession +
-                -- pushLocalTracks). This time broadcastToCallParticipants
-                -- finds admin — same DM, isPeerInSameCall returns True —
-                -- so it broadcasts Server_Joined to admin's frontend.
-                --
-                -- Two pull flows fire in parallel:
-                --
-                -- Admin side: Server_Joined → admin.serverChangeCmd sends
-                --   ToJs_PeerJoined → mock replies FromJs_RequestPullTracks
-                --   → Local_PullTracks → backend POSTs Cloudflare
-                --   /sessions/{adminSid}/tracks/new (location:remote) →
-                --   returns pull offer SDP → ToJs_AcceptPullOffer → mock
-                --   replies FromJs_PullAnswer → Local_RenegotiateAnswer →
-                --   backend PUTs Cloudflare /sessions/{adminSid}/renegotiate.
-                --
-                -- Bob side: ToJs_PublishAnswer fires after bob's publish.
-                --   This time the mock finds admin in the backend (admin's
-                --   callSfu is set) and replies FromJs_RequestPullTracks
-                --   for admin. The rest mirrors admin's flow above.
-                ------------------------------------------------------------
-                , T.checkBackend 200
-                    (\m ->
-                        case
-                            SeqDict.toList m.connections
-                                |> List.concatMap
-                                    (\( _, conns ) ->
-                                        NonemptyDict.toList conns
-                                            |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                    )
-                        of
-                            [ _, _ ] ->
-                                Ok ()
+                    ------------------------------------------------------------
+                    -- STEPS 6-9: chained automatically by mockVoiceChatPorts.
+                    --
+                    -- Bob's ToJs_StartCall → mock replies FromJs_PublishOffer.
+                    -- Bob's publish runs through Cloudflare (createSession +
+                    -- pushLocalTracks). This time broadcastToCallParticipants
+                    -- finds admin — same DM, isPeerInSameCall returns True —
+                    -- so it broadcasts Server_Joined to admin's frontend.
+                    --
+                    -- Two pull flows fire in parallel:
+                    --
+                    -- Admin side: Server_Joined → admin.serverChangeCmd sends
+                    --   ToJs_PeerJoined → mock replies FromJs_RequestPullTracks
+                    --   → Local_PullTracks → backend POSTs Cloudflare
+                    --   /sessions/{adminSid}/tracks/new (location:remote) →
+                    --   returns pull offer SDP → ToJs_AcceptPullOffer → mock
+                    --   replies FromJs_PullAnswer → Local_RenegotiateAnswer →
+                    --   backend PUTs Cloudflare /sessions/{adminSid}/renegotiate.
+                    --
+                    -- Bob side: ToJs_PublishAnswer fires after bob's publish.
+                    --   This time the mock finds admin in the backend (admin's
+                    --   callSfu is set) and replies FromJs_RequestPullTracks
+                    --   for admin. The rest mirrors admin's flow above.
+                    ------------------------------------------------------------
+                    , T.checkBackend 200
+                        (\m ->
+                            case
+                                SeqDict.toList m.connections
+                                    |> List.concatMap
+                                        (\( _, conns ) ->
+                                            NonemptyDict.toList conns
+                                                |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
+                                        )
+                            of
+                                [ _, _ ] ->
+                                    Ok ()
 
-                            other ->
-                                Err
-                                    ("Expected two connections with callSfu after bob publishes, got "
-                                        ++ String.fromInt (List.length other)
-                                    )
-                    )
+                                other ->
+                                    Err
+                                        ("Expected two connections with callSfu after bob publishes, got "
+                                            ++ String.fromInt (List.length other)
+                                        )
+                        )
+                    , T.checkState
+                        100
+                        (\data ->
+                            let
+                                _ =
+                                    Debug.log "port requests"
+                                        (List.filterMap
+                                            (\request ->
+                                                if request.portName == "voice_chat_to_js" then
+                                                    Codec.decodeValue Call.voiceChatToJsCodec request.value |> Just
 
-                ------------------------------------------------------------
-                -- FINAL ASSERTION
-                --
-                -- Both connections still have callSfu set. (All the pull
-                -- renegotiations from steps 6-9 above ran through the mock
-                -- automatically; nothing here clears callSfu.)
-                ------------------------------------------------------------
-                , T.checkBackend 500
-                    (\m ->
-                        case
-                            SeqDict.toList m.connections
-                                |> List.concatMap
-                                    (\( _, conns ) ->
-                                        NonemptyDict.toList conns
-                                            |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                    )
-                        of
-                            [ _, _ ] ->
-                                Ok ()
+                                                else
+                                                    Nothing
+                                            )
+                                            data.portRequests
+                                        )
+                            in
+                            Ok ()
+                        )
 
-                            other ->
-                                Err
-                                    ("Expected two connections with callSfu at end, got "
-                                        ++ String.fromInt (List.length other)
-                                    )
-                    )
-                , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                    ------------------------------------------------------------
+                    -- FINAL ASSERTION
+                    --
+                    -- Both connections still have callSfu set. (All the pull
+                    -- renegotiations from steps 6-9 above ran through the mock
+                    -- automatically; nothing here clears callSfu.)
+                    ------------------------------------------------------------
+                    , T.checkBackend 500
+                        (\m ->
+                            case
+                                SeqDict.toList m.connections
+                                    |> List.concatMap
+                                        (\( _, conns ) ->
+                                            NonemptyDict.toList conns
+                                                |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
+                                        )
+                            of
+                                [ _, _ ] ->
+                                    Ok ()
+
+                                other ->
+                                    Err
+                                        ("Expected two connections with callSfu at end, got "
+                                            ++ String.fromInt (List.length other)
+                                        )
+                        )
+                    , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                    ]
                 ]
             )
         ]
+
+
+
+--abc =
+--    [ Ok (ToJs_AcceptPullOffer { connectionId = { otherClientId = ( Id 0, ClientId "clientId 1" ), roomId = DmRoomId (Id 0) }, offerSdp = Sdp "fake-pull-offer-sdp" })
+--    , Ok (ToJs_AcceptPullOffer { connectionId = { otherClientId = ( Id 1, ClientId "clientId 2" ), roomId = DmRoomId (Id 1) }, offerSdp = Sdp "fake-pull-offer-sdp" })
+--    , Ok (ToJs_PublishAnswer { answerSdp = Sdp "fake-publish-answer-sdp" })
+--    , Ok (ToJs_PeerJoined { connectionId = { otherClientId = ( Id 1, ClientId "clientId 2" ), roomId = DmRoomId (Id 1) }, sessionId = SessionId "sfu-session-1", trackNames = [ TrackName "0", TrackName "1" ] })
+--    , Ok (ToJs_StartCall { audioInput = Just (IdString "microphoneDeviceId"), audioInputEnabled = True, existingPeers = [ { connectionId = { otherClientId = ( Id 0, ClientId "clientId 1" ), roomId = DmRoomId (Id 0) }, sessionId = SessionId "sfu-session-0", trackNames = [ TrackName "0", TrackName "1" ] } ], roomId = DmRoomId (Id 0), videoInput = Just (IdString "webcameraDeviceId"), videoInputEnabled = True })
+--    , Ok (ToJs_PublishAnswer { answerSdp = Sdp "fake-publish-answer-sdp" })
+--    , Ok (ToJs_StartCall { audioInput = Just (IdString "microphoneDeviceId"), audioInputEnabled = True, existingPeers = [], roomId = DmRoomId (Id 1), videoInput = Just (IdString "webcameraDeviceId"), videoInputEnabled = True })
+--    , Ok (ToJs_StartLocalStream { audioInput = Nothing, audioInputEnabled = True, videoInput = Nothing, videoInputEnabled = True })
+--    , Ok (ToJs_StartLocalStream { audioInput = Nothing, audioInputEnabled = True, videoInput = Nothing, videoInputEnabled = True })
+--    ]
 
 
 {-| Mock Cloudflare Realtime SFU API. Used as a fall-through in the SFU
@@ -686,6 +725,9 @@ mockCloudflareSfu :
     -> Maybe HttpResponse
 mockCloudflareSfu { currentRequest, data } =
     let
+        _ =
+            Debug.log "currentRequest" currentRequest
+
         isCloudflareSfu : Bool
         isCloudflareSfu =
             String.startsWith "https://rtc.live.cloudflare.com/v1/apps/" currentRequest.url
@@ -735,33 +777,42 @@ mockCloudflareSfu { currentRequest, data } =
                             Err _ ->
                                 False
                    )
+
+        -- https://rtc.live.cloudflare.com/v1/apps/test-app-id/sessions/sfu-session-1/tracks/new
     in
-    if not isCloudflareSfu then
-        Nothing
+    case String.split "/" currentRequest.url of
+        "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: appId :: rest ->
+            case rest of
+                [ "sessions", "new" ] ->
+                    ok 201
+                        ("{\"sessionId\":\"sfu-session-"
+                            ++ String.fromInt sessionsWithCallSfu
+                            ++ "\"}"
+                        )
 
-    else if String.endsWith "/sessions/new" currentRequest.url then
-        ok 201
-            ("{\"sessionId\":\"sfu-session-"
-                ++ String.fromInt sessionsWithCallSfu
-                ++ "\"}"
-            )
+                [ "sessions", realtimeSessionId, "tracks", "new" ] ->
+                    if hasSessionDescription then
+                        -- publish: client sent us an offer; we return an answer + assigned trackNames
+                        "{\"sessionDescription\":{\"sdp\":\"answer-sdp-from-"
+                            ++ realtimeSessionId
+                            ++ "\",\"type\":\"answer\"},\"tracks\":[{\"trackName\":\"0\"},{\"trackName\":\"1\"}]}"
+                            |> ok 200
 
-    else if String.endsWith "/tracks/new" currentRequest.url then
-        if hasSessionDescription then
-            -- publish: client sent us an offer; we return an answer + assigned trackNames
-            ok 200
-                "{\"sessionDescription\":{\"sdp\":\"fake-publish-answer-sdp\",\"type\":\"answer\"},\"tracks\":[{\"trackName\":\"0\"},{\"trackName\":\"1\"}]}"
+                    else
+                        -- pull: client asked for someone else's tracks; we return an offer the client must answer
+                        "{\"sessionDescription\":{\"sdp\":\"pull-offer-sdp-from-"
+                            ++ realtimeSessionId
+                            ++ "\",\"type\":\"offer\"},\"requiresImmediateRenegotiation\":true}"
+                            |> ok 200
 
-        else
-            -- pull: client asked for someone else's tracks; we return an offer the client must answer
-            ok 200
-                "{\"sessionDescription\":{\"sdp\":\"fake-pull-offer-sdp\",\"type\":\"offer\"},\"requiresImmediateRenegotiation\":true}"
+                [ "sessions", realtimeSessionId, "renegotiate" ] ->
+                    ok 200 ""
 
-    else if String.endsWith "/renegotiate" currentRequest.url then
-        ok 200 ""
+                _ ->
+                    Nothing
 
-    else
-        Nothing
+        _ ->
+            Nothing
 
 
 {-| Stand in for the JS half of `elm-pkg-js/voice-chat.js`. Each time the
