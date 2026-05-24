@@ -18,6 +18,17 @@ overlap a b =
     a.radius + b.radius - distance a b
 
 
+{-| Whether a circle lies fully inside the bounding box (with a tiny tolerance
+for floating point error).
+-}
+insideBounds : Circle -> Bool
+insideBounds c =
+    (c.x - c.radius >= Physics.bounds.min - 1.0e-6)
+        && (c.x + c.radius <= Physics.bounds.max + 1.0e-6)
+        && (c.y - c.radius >= Physics.bounds.min - 1.0e-6)
+        && (c.y + c.radius <= Physics.bounds.max + 1.0e-6)
+
+
 tests : Test
 tests =
     Test.describe "Physics.simulate"
@@ -25,22 +36,22 @@ tests =
             \_ ->
                 Physics.simulate 100 (Duration.seconds 1) []
                     |> Expect.equal []
-        , Test.test "a lone circle does not move" <|
+        , Test.test "a lone circle at rest does not move" <|
             \_ ->
                 let
                     circle : Circle
                     circle =
-                        { x = 3, y = -2, radius = 1 }
+                        { x = 3, y = -2, vx = 0, vy = 0, radius = 1 }
                 in
                 Physics.simulate 100 (Duration.seconds 1) [ circle ]
                     |> Expect.equal [ circle ]
-        , Test.test "circles that don't touch are left alone" <|
+        , Test.test "circles at rest that don't touch are left alone" <|
             \_ ->
                 let
                     world : List Circle
                     world =
-                        [ { x = 0, y = 0, radius = 1 }
-                        , { x = 10, y = 0, radius = 1 }
+                        [ { x = 0, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 5, y = 0, vx = 0, vy = 0, radius = 1 }
                         ]
                 in
                 Physics.simulate 100 (Duration.seconds 1) world
@@ -50,19 +61,67 @@ tests =
                 let
                     world : List Circle
                     world =
-                        [ { x = -0.5, y = 0, radius = 1 }
-                        , { x = 0.5, y = 0, radius = 1 }
+                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 1 }
                         ]
                 in
                 Physics.simulate 0 (Duration.seconds 1) world
                     |> Expect.equal world
+        , Test.test "a moving circle travels in its direction of motion" <|
+            \_ ->
+                let
+                    circle : Circle
+                    circle =
+                        { x = 0, y = 0, vx = 5, vy = 0, radius = 1 }
+                in
+                case Physics.simulate 100 (Duration.seconds 1) [ circle ] of
+                    [ moved ] ->
+                        Expect.all
+                            [ \_ -> moved.x |> Expect.greaterThan 0.5
+                            , \_ -> moved.y |> Expect.within (Expect.Absolute 1.0e-9) 0
+                            , \_ -> insideBounds moved |> Expect.equal True
+                            ]
+                            ()
+
+                    _ ->
+                        Expect.fail "expected exactly one circle back"
+        , Test.test "a circle bounces off the wall and stays inside the box" <|
+            \_ ->
+                let
+                    circle : Circle
+                    circle =
+                        { x = 8, y = 0, vx = 5, vy = 0, radius = 1 }
+                in
+                case Physics.simulate 200 (Duration.seconds 2) [ circle ] of
+                    [ bounced ] ->
+                        Expect.all
+                            [ \_ -> insideBounds bounced |> Expect.equal True
+                            , \_ -> bounced.vx |> Expect.lessThan 0
+                            ]
+                            ()
+
+                    _ ->
+                        Expect.fail "expected exactly one circle back"
+        , Test.test "circles never escape the bounding box" <|
+            \_ ->
+                let
+                    world : List Circle
+                    world =
+                        [ { x = 9, y = 9, vx = 8, vy = 8, radius = 1 }
+                        , { x = -9, y = 9, vx = -8, vy = 8, radius = 1 }
+                        , { x = 0, y = -9, vx = 0, vy = -8, radius = 2 }
+                        ]
+                in
+                Physics.simulate 400 (Duration.seconds 4) world
+                    |> List.all insideBounds
+                    |> Expect.equal True
         , Test.test "two overlapping circles are pushed apart" <|
             \_ ->
                 let
                     world : List Circle
                     world =
-                        [ { x = -0.5, y = 0, radius = 1 }
-                        , { x = 0.5, y = 0, radius = 1 }
+                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 1 }
                         ]
                 in
                 case Physics.simulate 480 (Duration.seconds 4) world of
@@ -77,8 +136,8 @@ tests =
                 let
                     world : List Circle
                     world =
-                        [ { x = -0.5, y = 0, radius = 1 }
-                        , { x = 0.5, y = 0, radius = 2 }
+                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 2 }
                         ]
                 in
                 Physics.simulate 480 (Duration.seconds 4) world
@@ -89,8 +148,8 @@ tests =
                 let
                     world : List Circle
                     world =
-                        [ { x = -0.5, y = 0, radius = 1 }
-                        , { x = 0.5, y = 0, radius = 1 }
+                        [ { x = -0.5, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 0.5, y = 0, vx = 0, vy = 0, radius = 1 }
                         ]
                 in
                 case Physics.simulate 480 (Duration.seconds 4) world of
@@ -108,9 +167,9 @@ tests =
                 let
                     world : List Circle
                     world =
-                        [ { x = 0, y = 0, radius = 1 }
-                        , { x = 1, y = 0, radius = 1 }
-                        , { x = 2, y = 0, radius = 1 }
+                        [ { x = 0, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 1, y = 0, vx = 0, vy = 0, radius = 1 }
+                        , { x = 2, y = 0, vx = 0, vy = 0, radius = 1 }
                         ]
                 in
                 case Physics.simulate 600 (Duration.seconds 5) world of

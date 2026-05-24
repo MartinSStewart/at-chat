@@ -1,15 +1,14 @@
-module Physics exposing (Circle, simulate)
+module Physics exposing (Circle, bounds, simulate)
 
 {-| A small, purpose built rigid body physics simulation for the game Booby
 Trap.
 
-Bodies are 2D circles. They start at rest and the only thing that moves them is
-contact: when two circles overlap they push each other apart. Velocity is
-internal to the simulation (it always starts at zero), so the observable effect
-of running the simulation is that an initially overlapping pile of circles
-settles into a configuration where nothing overlaps.
+Bodies are 2D circles with a position, a velocity and a radius. Each step they
+move according to their velocity, bounce off the walls of a fixed bounding box,
+and push apart any circles they overlap. Velocity is gently damped so the world
+settles instead of jittering forever.
 
-@docs Circle, simulate
+@docs Circle, bounds, simulate
 
 -}
 
@@ -17,10 +16,18 @@ import Array exposing (Array)
 import Duration exposing (Duration)
 
 
-{-| A 2D circle: a center (`x`, `y`) and a `radius`.
+{-| A 2D circle: a center (`x`, `y`), a velocity (`vx`, `vy`) and a `radius`.
 -}
 type alias Circle =
-    { x : Float, y : Float, radius : Float }
+    { x : Float, y : Float, vx : Float, vy : Float, radius : Float }
+
+
+{-| The simulation happens inside a fixed square box centered on the origin.
+Circles bounce off the walls and are always kept fully inside it.
+-}
+bounds : { min : Float, max : Float }
+bounds =
+    { min = -10, max = 10 }
 
 
 {-| Internal simulation state. Mass is proportional to area (radius squared) so
@@ -47,7 +54,7 @@ stiffness =
 
 
 {-| Velocity damping, in units of "per second". Drains kinetic energy so the
-pile settles instead of bouncing forever.
+world settles instead of bouncing forever.
 -}
 dampingRate : Float
 dampingRate =
@@ -61,7 +68,7 @@ dampingRate =
   - `duration` is how much simulated time should pass in total.
   - the circles are the bodies to simulate.
 
-Returns the circles in the same order, moved to where they end up.
+Returns the circles in the same order, with updated positions and velocities.
 
 -}
 simulate : Int -> Duration -> List Circle -> List Circle
@@ -91,8 +98,8 @@ toBody : Circle -> Body
 toBody circle =
     { x = circle.x
     , y = circle.y
-    , vx = 0
-    , vy = 0
+    , vx = circle.vx
+    , vy = circle.vy
     , radius = circle.radius
     , mass = max circle.radius 1.0e-6 ^ 2
     }
@@ -100,12 +107,18 @@ toBody circle =
 
 toCircle : Body -> Circle
 toCircle body =
-    { x = body.x, y = body.y, radius = body.radius }
+    { x = body.x
+    , y = body.y
+    , vx = body.vx
+    , vy = body.vy
+    , radius = body.radius
+    }
 
 
 {-| Advance the whole system by one time step using semi-implicit Euler:
 compute contact forces from the current positions, integrate velocities (with
-damping), then integrate positions from the new velocities.
+damping), integrate positions from the new velocities, then bounce anything that
+has run into a wall.
 -}
 step : Float -> Array Body -> Array Body
 step dt bodies =
@@ -136,8 +149,37 @@ step dt bodies =
                 , x = body.x + vx * dt
                 , y = body.y + vy * dt
             }
+                |> resolveWalls
         )
         bodies
+
+
+{-| Keep a body fully inside the bounding box. If it has crossed a wall, place
+it back against the wall and reflect the velocity component so it points back
+into the box.
+-}
+resolveWalls : Body -> Body
+resolveWalls body =
+    let
+        ( x, vx ) =
+            bounce body.x body.vx body.radius
+
+        ( y, vy ) =
+            bounce body.y body.vy body.radius
+    in
+    { body | x = x, y = y, vx = vx, vy = vy }
+
+
+bounce : Float -> Float -> Float -> ( Float, Float )
+bounce pos vel radius =
+    if pos - radius < bounds.min then
+        ( bounds.min + radius, abs vel )
+
+    else if pos + radius > bounds.max then
+        ( bounds.max - radius, negate (abs vel) )
+
+    else
+        ( pos, vel )
 
 
 {-| For every body, sum the repulsion from every other body it overlaps. Forces
