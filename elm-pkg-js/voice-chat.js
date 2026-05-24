@@ -57,15 +57,7 @@ exports.init = async function init(app) {
         // Always create both transceivers (sendonly) so the SFU answer
         // includes m-lines for both, even if the user has no camera.
         const audioTransceiver = pc.addTransceiver(audioTrack || "audio", { direction: "sendonly" });
-        // Cap outbound video bitrate. Without a cap the encoder ramps up to
-        // fill whatever bandwidth it can, which can saturate a constrained
-        // uplink (especially over a VPN, where the tunnel adds overhead) and
-        // starve the Lamdera websocket until it drops. ~600 kbps is plenty for
-        // the small call tiles and leaves headroom for the TCP signalling.
-        const videoTransceiver = pc.addTransceiver(videoTrack || "video", {
-            direction: "sendonly",
-            sendEncodings: [{ maxBitrate: 600000 }],
-        });
+        const videoTransceiver = pc.addTransceiver(videoTrack || "video", { direction: "sendonly" });
 
         sfu = {
             pc,
