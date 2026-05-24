@@ -36,6 +36,7 @@ async function runWebTransportTest() {
 
     const transport = new WebTransport(webTransportUrl, {
       serverCertificateHashes: [{ algorithm: "sha-256", value: certHash }],
+      requireUnreliable: true
     });
 
     await transport.ready;
