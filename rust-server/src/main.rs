@@ -28,14 +28,46 @@ use std::time::SystemTime;
 use subtle::ConstantTimeEq;
 use std::sync::Arc;
 use std::sync::Mutex;
+use wtransport::Endpoint;
+use wtransport::Identity;
+use wtransport::ServerConfig;
+use wtransport::endpoint::IncomingSession;
+use wtransport::tls::Sha256DigestFmt;
 #[tokio::main]
 async fn main() {
     // secret.txt should match Env.secretKey
     match fs::read_to_string(SERVER_SECRET_PATH.to_string()) {
         Ok(secret_key) => {
+            // Self-signed cert for the WebTransport (HTTP/3 over QUIC) listener. Its
+            // SHA-256 hash is handed to the browser via `serverCertificateHashes` so a
+            // self-signed cert is accepted without installing it (valid for ~14 days).
+            let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"]).unwrap();
+            let webtransport_cert_hash = identity.certificate_chain().as_slice()[0]
+                .hash()
+                .fmt(Sha256DigestFmt::DottedHex);
+
             let state = Arc::new(Mutex::new(AppState {
                 secret_key: secret_key.trim().as_bytes().to_vec(),
+                webtransport_cert_hash,
             }));
+
+            let wt_config = ServerConfig::builder()
+                .with_bind_address(std::net::SocketAddr::from(([0, 0, 0, 0], 3001)))
+                .with_identity(identity)
+                .build();
+
+            tokio::spawn(async move {
+                match Endpoint::server(wt_config) {
+                    Ok(endpoint) => {
+                        println!("WebTransport server listening on UDP port 3001");
+                        loop {
+                            let incoming_session = endpoint.accept().await;
+                            tokio::spawn(handle_webtransport_session(incoming_session));
+                        }
+                    }
+                    Err(error) => println!("WebTransport server didn't start: {error}"),
+                }
+            });
 
             let app = Router::new()
                 .route(
@@ -71,6 +103,10 @@ async fn main() {
                     get(discord_sticker_endpoint).options(options_endpoint),
                 )
                 .route("/file/internal/vapid", get(vapid_endpoint))
+                .route(
+                    "/webtransport-cert-hash",
+                    get(webtransport_cert_hash_endpoint),
+                )
                 .route("/file/{content_type}/{filename}", get(get_file_endpoint))
                 .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
@@ -101,6 +137,43 @@ const SERVER_SECRET_PATH: &str = "./var/lib/atchat/secret.txt";
 #[derive(Clone)]
 struct AppState {
     secret_key: Vec<u8>,
+    webtransport_cert_hash: String,
+}
+
+async fn webtransport_cert_hash_endpoint(
+    State(state): State<Arc<Mutex<AppState>>>,
+) -> Response<String> {
+    let hash = state.lock().unwrap().webtransport_cert_hash.clone();
+    response_with_headers(StatusCode::OK, hash)
+}
+
+async fn handle_webtransport_session(incoming_session: IncomingSession) {
+    let session_request = match incoming_session.await {
+        Ok(request) => request,
+        Err(error) => {
+            println!("WebTransport session error: {error}");
+            return;
+        }
+    };
+
+    let connection = match session_request.accept().await {
+        Ok(connection) => connection,
+        Err(error) => {
+            println!("WebTransport accept error: {error}");
+            return;
+        }
+    };
+
+    // Echo each bidirectional stream back as `<received text> world!`.
+    while let Ok((mut send_stream, mut recv_stream)) = connection.accept_bi().await {
+        let mut buffer = vec![0u8; 1024];
+        if let Ok(Some(bytes_read)) = recv_stream.read(&mut buffer).await {
+            let text = String::from_utf8_lossy(&buffer[..bytes_read]);
+            let reply = format!("{text} world!");
+            let _ = send_stream.write_all(reply.as_bytes()).await;
+            let _ = send_stream.finish().await;
+        }
+    }
 }
 
 async fn require_internal_secret(

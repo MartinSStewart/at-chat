@@ -24,6 +24,7 @@ tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
 vapid = "0.6.0"
 web-push = "0.11.0"
 webpage = { version = "2.0.1", features = ["serde"] }
+wtransport = "0.7.1"
 
 
 
