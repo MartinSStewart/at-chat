@@ -1657,7 +1657,7 @@ websocketCloseEventToString event =
         WebsocketClosed_ClosedByBackendForUser _ time ->
             ( ( "ClosedByBackendForUser", "#5ee07d" ), time )
 
-        WebsocketClosed_ListenCloseEvent _ _ time ->
+        WebsocketClosed_ListenCloseEvent _ _ _ time ->
             ( ( "ListenCloseEvent", "#bb5ee0" ), time )
 
 
@@ -1801,54 +1801,54 @@ websocketCloseEventListItem timezone ( index, event ) =
                         ++ (case code of
                                 NormalClosure ->
                                     "1000 Normal Closure"
-                                        ++ ", reason: "
-                                        ++ reason
 
+                                GoingAway ->
+                                    "1001 GoingAway"
 
-                            GoingAway ->
+                                ProtocolError ->
+                                    "1002 ProtocolError"
 
+                                UnsupportedData ->
+                                    "1003 UnsupportedData"
 
-                            ProtocolError ->
+                                NoStatusReceived ->
+                                    "1004 NoStatusReceived"
 
+                                AbnormalClosure ->
+                                    "1005 AbnormalClosure"
 
-                            UnsupportedData ->
+                                InvalidFramePayloadData ->
+                                    "1006 InvalidFramePayloadData"
 
+                                PolicyViolation ->
+                                    "1007 PolicyViolation"
 
-                            NoStatusReceived ->
+                                MessageTooBig ->
+                                    "1008 MessageTooBig"
 
+                                MissingExtension ->
+                                    "1009 MissingExtension"
 
-                            AbnormalClosure ->
+                                InternalError ->
+                                    "1010 InternalError"
 
+                                ServiceRestart ->
+                                    "1011 ServiceRestart"
 
-                            InvalidFramePayloadData ->
+                                TryAgainLater ->
+                                    "1012 TryAgainLater"
 
+                                BadGateway ->
+                                    "1013 BadGateway"
 
-                            PolicyViolation ->
+                                TlsHandshake ->
+                                    "1014 TlsHandshake"
 
-
-                            MessageTooBig ->
-
-
-                            MissingExtension ->
-
-
-                            InternalError ->
-
-
-                            ServiceRestart ->
-
-
-                            TryAgainLater ->
-
-
-                            BadGateway ->
-
-
-                            TlsHandshake ->
-
-
-                            UnknownCode int ->
-                                                           )
+                                UnknownCode int ->
+                                    String.fromInt int ++ " Unknown code"
+                           )
+                        ++ ", reason: "
+                        ++ reason
     in
     Ui.row
         [ Ui.spacing 8 ]
