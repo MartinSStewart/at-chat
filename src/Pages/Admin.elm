@@ -139,7 +139,7 @@ type Msg
     | TypedInReadOnlyTextInput
     | PressedExportBackend
     | PressedExportSubsetBackend
-    | ToggledExportSubsetChannel (Discord.Id Discord.PrivateChannelId)
+    | ToggledExportSubsetChannel (Discord.Id Discord.PrivateChannelId) Bool
     | PressedConfirmExportSubset
     | PressedCancelExportSubset
     | PressedImportBackend
@@ -1181,24 +1181,18 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedExportSubsetBackend ->
-            ( { model
-                | exportSubsetSelection =
-                    SeqDict.keys adminData.discordDmChannels |> SeqSet.fromList |> Just
-              }
-            , Command.none
-            , NoOutMsg
-            )
+            ( { model | exportSubsetSelection = Just SeqSet.empty }, Command.none, NoOutMsg )
 
-        ToggledExportSubsetChannel channelId ->
+        ToggledExportSubsetChannel channelId isChecked ->
             ( { model
                 | exportSubsetSelection =
                     Maybe.map
                         (\selected ->
-                            if SeqSet.member channelId selected then
-                                SeqSet.remove channelId selected
+                            if isChecked then
+                                SeqSet.insert channelId selected
 
                             else
-                                SeqSet.insert channelId selected
+                                SeqSet.remove channelId selected
                         )
                         model.exportSubsetSelection
               }
@@ -2548,36 +2542,38 @@ exportSubsetSelector adminData selected =
                 (List.map
                     (\( channelId, channel ) ->
                         let
-                            isSelected : Bool
-                            isSelected =
-                                SeqSet.member channelId selected
+                            label : { element : Element msg, id : Ui.Input.Label }
+                            label =
+                                Ui.Input.label
+                                    ("admin_exportSubsetToggle_" ++ Discord.idToString channelId)
+                                    [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                    (Ui.text (Discord.idToString channelId))
                         in
                         Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ MyUi.simpleButton
-                                (Dom.id ("admin_exportSubsetToggle_" ++ Discord.idToString channelId))
-                                (ToggledExportSubsetChannel channelId)
-                                (Ui.text
-                                    (if isSelected then
-                                        "Included"
+                            [ Ui.Font.size 14 ]
+                            [ Ui.Input.checkbox
+                                [ Ui.Font.size 14 ]
+                                { onChange = ToggledExportSubsetChannel channelId
+                                , icon = Nothing
+                                , checked = SeqSet.member channelId selected
+                                , label = label.id
+                                }
+                            , label.element
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ NonemptyDict.toList channel.members
+                                    |> List.map
+                                        (\( discordUserId, _ ) ->
+                                            case SeqDict.get discordUserId adminData.discordUsers of
+                                                Just discordUser ->
+                                                    discordUserLabel discordUserId discordUser
 
-                                     else
-                                        "Excluded"
-                                    )
-                                )
-                            , Ui.text (Discord.idToString channelId)
-                            , NonemptyDict.toList channel.members
-                                |> List.map
-                                    (\( discordUserId, _ ) ->
-                                        case SeqDict.get discordUserId adminData.discordUsers of
-                                            Just discordUser ->
-                                                discordUserLabel discordUserId discordUser
-
-                                            Nothing ->
-                                                Ui.text (Discord.idToString discordUserId)
-                                    )
-                                |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
-                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                                Nothing ->
+                                                    Ui.text (Discord.idToString discordUserId)
+                                        )
+                                    |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                ]
                             ]
                     )
                     (SeqDict.toList adminData.discordDmChannels)
