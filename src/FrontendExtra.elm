@@ -4167,10 +4167,22 @@ unlinkDiscordUser userId local =
         localUser =
             local.localUser
     in
-    { local
-        | localUser =
-            { localUser | linkedDiscordUsers = SeqDict.remove userId localUser.linkedDiscordUsers }
-    }
+    case SeqDict.get userId localUser.linkedDiscordUsers of
+        Just discordUser ->
+            { local
+                | localUser =
+                    { localUser
+                        | linkedDiscordUsers = SeqDict.remove userId localUser.linkedDiscordUsers
+                        , otherDiscordUsers =
+                            SeqDict.insert
+                                userId
+                                (User.discordCurrentUserToFrontend discordUser)
+                                localUser.otherDiscordUsers
+                    }
+            }
+
+        Nothing ->
+            local
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> ThreadRoute -> LocalState -> LocalState
