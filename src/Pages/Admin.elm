@@ -9,7 +9,7 @@ module Pages.Admin exposing
     , Model
     , Msg(..)
     , OutMsg(..)
-    , RealtimeSessionInfoStatus
+    , RealtimeSessionInfoStatus(..)
     , ToBackend(..)
     , ToFrontend(..)
     , UserColumn(..)
@@ -1247,6 +1247,8 @@ update navigationKey time adminData localState msg model =
                     )
 
 
+{-| OpaqueVariants
+-}
 type RealtimeSessionInfoStatus
     = LoadingRealtimeSessionInfo
     | LoadedRealtimeSessionInfo Cloudflare.SessionStateResponse

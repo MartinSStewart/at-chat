@@ -1,13 +1,13 @@
 module Cloudflare exposing
-    ( AppId
+    ( AppId(..)
     , Location(..)
     , PullTracksResult
     , PushTracksResult
-    , RealtimeApiToken
-    , RealtimeSessionId
-    , Sdp
+    , RealtimeApiToken(..)
+    , RealtimeSessionId(..)
+    , Sdp(..)
     , SessionStateResponse
-    , TrackName
+    , TrackName(..)
     , TrackObject
     , TrackStatus(..)
     , appId
@@ -34,10 +34,14 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 
 
+{-| OpaqueVariants
+-}
 type AppId
     = AppId String
 
 
+{-| OpaqueVariants
+-}
 type RealtimeApiToken
     = RealtimeApiToken String
 
@@ -62,6 +66,8 @@ realtimeApiTokenToString (RealtimeApiToken a) =
     a
 
 
+{-| OpaqueVariants
+-}
 type RealtimeSessionId
     = SessionId String
 
@@ -81,6 +87,8 @@ sessionIdCodec =
     Codec.map SessionId sessionIdToString Codec.string
 
 
+{-| OpaqueVariants
+-}
 type TrackName
     = TrackName String
 
@@ -95,6 +103,8 @@ trackNameCodec =
     Codec.map TrackName trackNameToString Codec.string
 
 
+{-| OpaqueVariants
+-}
 type Sdp
     = Sdp String
 
