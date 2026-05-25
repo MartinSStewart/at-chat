@@ -139,6 +139,9 @@ type Msg
     | TypedInReadOnlyTextInput
     | PressedExportBackend
     | PressedExportSubsetBackend
+    | ToggledExportSubsetChannel (Discord.Id Discord.PrivateChannelId)
+    | PressedConfirmExportSubset
+    | PressedCancelExportSubset
     | PressedImportBackend
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
@@ -159,7 +162,7 @@ type ToBackend
 
 
 type ExportSubset
-    = ExportSubset
+    = ExportSubset (SeqSet (Discord.Id Discord.PrivateChannelId))
     | ExportAll
 
 
@@ -192,6 +195,7 @@ type alias Model =
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
+    , exportSubsetSelection : Maybe (SeqSet (Discord.Id Discord.PrivateChannelId))
     , websocketCloseEventsPage : Int
     , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
     }
@@ -326,6 +330,7 @@ initForUser =
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , realtimeSessionData = SeqDict.empty
     }
@@ -353,6 +358,7 @@ initForAdmin { highlightLog } =
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , realtimeSessionData = SeqDict.empty
     }
@@ -1175,10 +1181,44 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedExportSubsetBackend ->
-            ( { model | exportProgress = Just ExportStarting }
-            , Lamdera.sendToBackend (ExportBackendRequest ExportSubset)
+            ( { model
+                | exportSubsetSelection =
+                    SeqDict.keys adminData.discordDmChannels |> SeqSet.fromList |> Just
+              }
+            , Command.none
             , NoOutMsg
             )
+
+        ToggledExportSubsetChannel channelId ->
+            ( { model
+                | exportSubsetSelection =
+                    Maybe.map
+                        (\selected ->
+                            if SeqSet.member channelId selected then
+                                SeqSet.remove channelId selected
+
+                            else
+                                SeqSet.insert channelId selected
+                        )
+                        model.exportSubsetSelection
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
+        PressedConfirmExportSubset ->
+            case model.exportSubsetSelection of
+                Just selected ->
+                    ( { model | exportProgress = Just ExportStarting, exportSubsetSelection = Nothing }
+                    , Lamdera.sendToBackend (ExportBackendRequest (ExportSubset selected))
+                    , NoOutMsg
+                    )
+
+                Nothing ->
+                    ( model, Command.none, NoOutMsg )
+
+        PressedCancelExportSubset ->
+            ( { model | exportSubsetSelection = Nothing }, Command.none, NoOutMsg )
 
         PressedImportBackend ->
             case model.importBackendStatus of
@@ -1406,7 +1446,7 @@ updateFromBackend toFrontend model =
                             ExportAll ->
                                 "backend-export.bin"
 
-                            ExportSubset ->
+                            ExportSubset _ ->
                                 "backend-export-subset.bin"
                         )
                         "application/octet-stream"
@@ -1596,7 +1636,7 @@ view isMobile2 version time local adminData user model =
             , filesSection user adminData
             , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
-            , exportSection user model
+            , exportSection user adminData model
             ]
         )
 
@@ -2438,8 +2478,8 @@ exportProgressText progress =
             "Assembling export..."
 
 
-exportSection : BackendUser -> Model -> Element Msg
-exportSection user model =
+exportSection : BackendUser -> AdminData -> Model -> Element Msg
+exportSection user adminData model =
     section
         8
         user.expandedSections
@@ -2461,6 +2501,12 @@ exportSection user model =
                 Just progress ->
                     exportProgressText progress |> Ui.text
             ]
+        , case model.exportSubsetSelection of
+            Just selected ->
+                exportSubsetSelector adminData selected
+
+            Nothing ->
+                Ui.none
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton
@@ -2479,6 +2525,73 @@ exportSection user model =
 
                 ImportedBackendSuccessfully ->
                     Ui.text "Imported!"
+            ]
+        ]
+
+
+exportSubsetSelector : AdminData -> SeqSet (Discord.Id Discord.PrivateChannelId) -> Element Msg
+exportSubsetSelector adminData selected =
+    Ui.column
+        [ Ui.spacing 8
+        , Ui.padding 8
+        , Ui.border 1
+        , Ui.borderColor (Ui.rgb 100 100 100)
+        , Ui.rounded 4
+        ]
+        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select Discord DM channels to export")
+        , if SeqDict.isEmpty adminData.discordDmChannels then
+            Ui.text "No Discord DM channels"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( channelId, channel ) ->
+                        let
+                            isSelected : Bool
+                            isSelected =
+                                SeqSet.member channelId selected
+                        in
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ MyUi.simpleButton
+                                (Dom.id ("admin_exportSubsetToggle_" ++ Discord.idToString channelId))
+                                (ToggledExportSubsetChannel channelId)
+                                (Ui.text
+                                    (if isSelected then
+                                        "Included"
+
+                                     else
+                                        "Excluded"
+                                    )
+                                )
+                            , Ui.text (Discord.idToString channelId)
+                            , NonemptyDict.toList channel.members
+                                |> List.map
+                                    (\( discordUserId, _ ) ->
+                                        case SeqDict.get discordUserId adminData.discordUsers of
+                                            Just discordUser ->
+                                                discordUserLabel discordUserId discordUser
+
+                                            Nothing ->
+                                                Ui.text (Discord.idToString discordUserId)
+                                    )
+                                |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                            ]
+                    )
+                    (SeqDict.toList adminData.discordDmChannels)
+                )
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_confirmExportSubsetButton")
+                PressedConfirmExportSubset
+                (Ui.text ("Confirm Export (" ++ String.fromInt (SeqSet.size selected) ++ ")"))
+            , MyUi.secondaryButton
+                (Dom.id "admin_cancelExportSubsetButton")
+                PressedCancelExportSubset
+                "Cancel"
             ]
         ]
 
