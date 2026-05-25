@@ -35,6 +35,7 @@ import Ui exposing (Element)
 import Ui.Accessibility
 import Ui.Anim
 import Ui.Font
+import Ui.Lazy
 import User exposing (LocalUser)
 
 
@@ -372,8 +373,8 @@ privateChatWithYourself isMobile currentTab local =
             (Ui.text "Chat with yourself")
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-            [ voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
-            , goGameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
+            [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab local.localUser.session.userId local.localUser local.calls
+            , Ui.Lazy.lazy4 goGameButton isMobile currentTab local.localUser.session.userId SeqDict.empty
             ]
         ]
 
@@ -390,11 +391,11 @@ privateChatWith isMobile currentTab otherUserId local name =
             (Ui.row [ Ui.Font.exactWhitespace ] [ Ui.text "Chat with ", Ui.el [ Ui.Font.color MyUi.font1 ] (Ui.text name) ])
         , Ui.row
             [ Ui.width Ui.shrink, Ui.alignRight, Ui.height Ui.fill ]
-            [ voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
+            [ Ui.Lazy.lazy5 voiceChatButton isMobile currentTab otherUserId local.localUser local.calls
             , SeqDict.get otherUserId local.dmChannels
                 |> Maybe.map .goMatches
                 |> Maybe.withDefault SeqDict.empty
-                |> goGameButton isMobile currentTab local.localUser.session.userId
+                |> Ui.Lazy.lazy4 goGameButton isMobile currentTab local.localUser.session.userId
             ]
         ]
 
@@ -407,6 +408,9 @@ goGameButton :
     -> Element FrontendMsg
 goGameButton isMobile currentTab userId goMatches =
     let
+        _ =
+            Debug.log "rerender goGameButton" ()
+
         viewingGo : Bool
         viewingGo =
             case currentTab of

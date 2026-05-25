@@ -2091,10 +2091,7 @@ isLocalUsersTurn currentUserId setup state =
             setup.whitePlayer == currentUserId
 
 
-hasPendingTurn :
-    Id UserId
-    -> SeqDict (Id ChannelMessageId) MatchData
-    -> SeqSet (Id ChannelMessageId)
+hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)
 hasPendingTurn userId matches =
     SeqDict.foldl
         (\matchId match set ->
