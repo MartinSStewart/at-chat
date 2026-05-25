@@ -6551,11 +6551,21 @@ updateFromFrontendAdmin clientId toBackend model =
                 partialList : List a -> List a
                 partialList list =
                     case isPartial of
-                        ExportSubset ->
-                            List.take 2 list
+                        ExportSubset _ ->
+                            []
 
                         ExportAll ->
                             list
+
+                remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel )
+                remainingDiscordDmChannels =
+                    case isPartial of
+                        ExportSubset selectedDmChannels ->
+                            SeqDict.toList model.discordDmChannels
+                                |> List.filter (\( channelId, _ ) -> SeqSet.member channelId selectedDmChannels)
+
+                        ExportAll ->
+                            SeqDict.toList model.discordDmChannels
             in
             ( { model
                 | exportState =
@@ -6567,7 +6577,7 @@ updateFromFrontendAdmin clientId toBackend model =
                         , encodedDmChannels = []
                         , remainingDiscordGuilds = SeqDict.toList model.discordGuilds |> partialList
                         , encodedDiscordGuilds = []
-                        , remainingDiscordDmChannels = SeqDict.toList model.discordDmChannels |> partialList
+                        , remainingDiscordDmChannels = remainingDiscordDmChannels
                         , encodedDiscordDmChannels = []
                         }
                     , exportSubset = isPartial
