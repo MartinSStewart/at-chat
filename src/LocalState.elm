@@ -4,6 +4,7 @@ module LocalState exposing
     , AdminData_DiscordChannel
     , AdminData_DiscordDmChannel
     , AdminData_DiscordGuild
+    , AdminData_DmChannel
     , AdminData_Guild
     , AdminData_GuildChannel
     , AdminStatus(..)
@@ -116,7 +117,7 @@ import ChannelName exposing (ChannelName)
 import Cloudflare
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannelId, FrontendDmChannel)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
@@ -498,6 +499,7 @@ type alias AdminData =
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkKey : Postmark.ApiKey
+    , dmChannels : SeqDict DmChannelId AdminData_DmChannel
     , discordDmChannels :
         SeqDict
             (Discord.Id Discord.PrivateChannelId)
@@ -660,6 +662,12 @@ type alias AdminData_DiscordDmChannel =
     { members : NonemptyDict (Discord.Id Discord.UserId) { messagesSent : Int }
     , messageCount : Int
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id Discord.UserId))
+    }
+
+
+type alias AdminData_DmChannel =
+    { messageCount : Int
+    , threadCount : Int
     }
 
 

@@ -4124,6 +4124,7 @@ initAdminData adminData =
     , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
     , cloudflareRealtimeAppId = adminData.cloudflareRealtimeAppId
     , postmarkKey = adminData.postmarkApiKey
+    , dmChannels = adminData.dmChannels
     , discordDmChannels = adminData.discordDmChannels
     , discordUsers = adminData.discordUsers
     , discordGuilds = adminData.discordGuilds

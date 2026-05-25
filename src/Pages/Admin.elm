@@ -36,6 +36,7 @@ import ChannelName
 import Cloudflare
 import CustomEmoji
 import Discord
+import DmChannel exposing (DmChannelId)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -58,7 +59,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -139,7 +140,8 @@ type Msg
     | TypedInReadOnlyTextInput
     | PressedExportBackend
     | PressedExportSubsetBackend
-    | ToggledExportSubsetChannel (Discord.Id Discord.PrivateChannelId) Bool
+    | ToggledExportSubsetDmChannel DmChannelId Bool
+    | ToggledExportSubsetDiscordDmChannel (Discord.Id Discord.PrivateChannelId) Bool
     | PressedConfirmExportSubset
     | PressedCancelExportSubset
     | PressedImportBackend
@@ -162,8 +164,14 @@ type ToBackend
 
 
 type ExportSubset
-    = ExportSubset (SeqSet (Discord.Id Discord.PrivateChannelId))
+    = ExportSubset ExportSubsetSelection
     | ExportAll
+
+
+type alias ExportSubsetSelection =
+    { dmChannels : SeqSet DmChannelId
+    , discordDmChannels : SeqSet (Discord.Id Discord.PrivateChannelId)
+    }
 
 
 type ToFrontend
@@ -195,7 +203,7 @@ type alias Model =
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
-    , exportSubsetSelection : Maybe (SeqSet (Discord.Id Discord.PrivateChannelId))
+    , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
     , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
     }
@@ -236,6 +244,7 @@ type alias InitAdminData =
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkApiKey : Postmark.ApiKey
+    , dmChannels : SeqDict DmChannelId AdminData_DmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
@@ -1181,18 +1190,33 @@ update navigationKey time adminData localState msg model =
             )
 
         PressedExportSubsetBackend ->
-            ( { model | exportSubsetSelection = Just SeqSet.empty }, Command.none, NoOutMsg )
+            ( { model
+                | exportSubsetSelection =
+                    Just { dmChannels = SeqSet.empty, discordDmChannels = SeqSet.empty }
+              }
+            , Command.none
+            , NoOutMsg
+            )
 
-        ToggledExportSubsetChannel channelId isChecked ->
+        ToggledExportSubsetDmChannel channelId isChecked ->
             ( { model
                 | exportSubsetSelection =
                     Maybe.map
-                        (\selected ->
-                            if isChecked then
-                                SeqSet.insert channelId selected
+                        (\selection ->
+                            { selection | dmChannels = setMember isChecked channelId selection.dmChannels }
+                        )
+                        model.exportSubsetSelection
+              }
+            , Command.none
+            , NoOutMsg
+            )
 
-                            else
-                                SeqSet.remove channelId selected
+        ToggledExportSubsetDiscordDmChannel channelId isChecked ->
+            ( { model
+                | exportSubsetSelection =
+                    Maybe.map
+                        (\selection ->
+                            { selection | discordDmChannels = setMember isChecked channelId selection.discordDmChannels }
                         )
                         model.exportSubsetSelection
               }
@@ -1202,9 +1226,9 @@ update navigationKey time adminData localState msg model =
 
         PressedConfirmExportSubset ->
             case model.exportSubsetSelection of
-                Just selected ->
+                Just selection ->
                     ( { model | exportProgress = Just ExportStarting, exportSubsetSelection = Nothing }
-                    , Lamdera.sendToBackend (ExportBackendRequest (ExportSubset selected))
+                    , Lamdera.sendToBackend (ExportBackendRequest (ExportSubset selection))
                     , NoOutMsg
                     )
 
@@ -1620,6 +1644,7 @@ view isMobile2 version time local adminData user model =
             , guildsSection user adminData
             , deletedGuildsSection user adminData
             , discordGuildsSection user adminData
+            , dmChannelsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
             , logSection isMobile2 local.localUser user adminData model
@@ -2523,8 +2548,22 @@ exportSection user adminData model =
         ]
 
 
-exportSubsetSelector : AdminData -> SeqSet (Discord.Id Discord.PrivateChannelId) -> Element Msg
-exportSubsetSelector adminData selected =
+setMember : Bool -> a -> SeqSet a -> SeqSet a
+setMember isChecked item set =
+    if isChecked then
+        SeqSet.insert item set
+
+    else
+        SeqSet.remove item set
+
+
+exportSubsetSelector : AdminData -> ExportSubsetSelection -> Element Msg
+exportSubsetSelector adminData selection =
+    let
+        selectedCount : Int
+        selectedCount =
+            SeqSet.size selection.dmChannels + SeqSet.size selection.discordDmChannels
+    in
     Ui.column
         [ Ui.spacing 8
         , Ui.padding 8
@@ -2532,7 +2571,44 @@ exportSubsetSelector adminData selected =
         , Ui.borderColor (Ui.rgb 100 100 100)
         , Ui.rounded 4
         ]
-        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select Discord DM channels to export")
+        [ Ui.el [ Ui.Font.weight 600 ] (Ui.text "Select channels to export")
+        , Ui.el [ Ui.Font.weight 600, Ui.Font.size 16 ] (Ui.text "DM channels")
+        , if SeqDict.isEmpty adminData.dmChannels then
+            Ui.text "No DM channels"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( channelId, channel ) ->
+                        let
+                            label : { element : Element msg, id : Ui.Input.Label }
+                            label =
+                                Ui.Input.label
+                                    ("admin_exportSubsetDmToggle_" ++ DmChannel.channelIdToString channelId)
+                                    [ Ui.pointer, Ui.width Ui.shrink, Ui.paddingXY 8 0 ]
+                                    (dmChannelParticipants adminData channelId)
+                        in
+                        Ui.row
+                            [ Ui.Font.size 14 ]
+                            [ Ui.Input.checkbox
+                                [ Ui.Font.size 14 ]
+                                { onChange = ToggledExportSubsetDmChannel channelId
+                                , icon = Nothing
+                                , checked = SeqSet.member channelId selection.dmChannels
+                                , label = label.id
+                                }
+                            , label.element
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+                                ]
+                            ]
+                    )
+                    (SeqDict.toList adminData.dmChannels)
+                )
+        , Ui.el [ Ui.Font.weight 600, Ui.Font.size 16 ] (Ui.text "Discord DM channels")
         , if SeqDict.isEmpty adminData.discordDmChannels then
             Ui.text "No Discord DM channels"
 
@@ -2553,9 +2629,9 @@ exportSubsetSelector adminData selected =
                             [ Ui.Font.size 14 ]
                             [ Ui.Input.checkbox
                                 [ Ui.Font.size 14 ]
-                                { onChange = ToggledExportSubsetChannel channelId
+                                { onChange = ToggledExportSubsetDiscordDmChannel channelId
                                 , icon = Nothing
-                                , checked = SeqSet.member channelId selected
+                                , checked = SeqSet.member channelId selection.discordDmChannels
                                 , label = label.id
                                 }
                             , label.element
@@ -2583,7 +2659,7 @@ exportSubsetSelector adminData selected =
             [ MyUi.simpleButton
                 (Dom.id "admin_confirmExportSubsetButton")
                 PressedConfirmExportSubset
-                (Ui.text ("Confirm Export (" ++ String.fromInt (SeqSet.size selected) ++ ")"))
+                (Ui.text ("Confirm Export (" ++ String.fromInt selectedCount ++ ")"))
             , MyUi.secondaryButton
                 (Dom.id "admin_cancelExportSubsetButton")
                 PressedCancelExportSubset
@@ -3178,6 +3254,51 @@ firstMessageView channel =
 channelRowHeight : number
 channelRowHeight =
     30
+
+
+dmChannelParticipants : AdminData -> DmChannelId -> Element msg
+dmChannelParticipants adminData channelId =
+    let
+        ( userIdA, userIdB ) =
+            DmChannel.userIdsFromChannelId channelId
+    in
+    [ userIdA, userIdB ]
+        |> List.map
+            (\userId ->
+                case NonemptyDict.get userId adminData.users of
+                    Just user ->
+                        userLabel userId user
+
+                    Nothing ->
+                        Ui.text (Id.toString userId)
+            )
+        |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+
+
+dmChannelsSection : BackendUser -> AdminData -> Element Msg
+dmChannelsSection user adminData =
+    section
+        8
+        user.expandedSections
+        DmChannelsSection
+        [ if SeqDict.isEmpty adminData.dmChannels then
+            Ui.text "No DM channels"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( channelId, channel ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ dmChannelParticipants adminData channelId
+                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                            , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+                            ]
+                    )
+                    (SeqDict.toList adminData.dmChannels)
+                )
+        ]
 
 
 discordDmChannelsSection : BackendUser -> AdminData -> Element Msg

@@ -770,6 +770,14 @@ adminData model lastLogPageViewed =
     , cloudflareRealtimeApiToken = model.cloudflareRealtimeApiToken
     , cloudflareRealtimeAppId = model.cloudflareRealtimeAppId
     , postmarkApiKey = model.postmarkApiKey
+    , dmChannels =
+        SeqDict.map
+            (\_ channel ->
+                { messageCount = Array.length channel.messages
+                , threadCount = SeqDict.size channel.threads
+                }
+            )
+            model.dmChannels
     , discordDmChannels =
         SeqDict.map
             (\_ channel ->
