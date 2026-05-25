@@ -6548,16 +6548,14 @@ updateFromFrontendAdmin clientId toBackend model =
                         , scheduledExportState = Nothing
                     }
 
-                ( remainingGuilds, remainingDmChannels, remainingDiscordGuilds ) =
+                partialList : List a -> List a
+                partialList list =
                     case isPartial of
                         ExportSubset _ ->
-                            ( [], [], [] )
+                            []
 
                         ExportAll ->
-                            ( SeqDict.toList model.guilds
-                            , SeqDict.toList model.dmChannels
-                            , SeqDict.toList model.discordGuilds
-                            )
+                            list
 
                 remainingDiscordDmChannels : List ( Discord.Id Discord.PrivateChannelId, DiscordDmChannel )
                 remainingDiscordDmChannels =
@@ -6573,11 +6571,11 @@ updateFromFrontendAdmin clientId toBackend model =
                 | exportState =
                     { progress =
                         { baseModel = Bytes.Encode.encode (WireHelper.encodeBackendModel baseModel)
-                        , remainingGuilds = remainingGuilds
+                        , remainingGuilds = SeqDict.toList model.guilds |> partialList
                         , encodedGuilds = []
-                        , remainingDmChannels = remainingDmChannels
+                        , remainingDmChannels = SeqDict.toList model.dmChannels |> partialList
                         , encodedDmChannels = []
-                        , remainingDiscordGuilds = remainingDiscordGuilds
+                        , remainingDiscordGuilds = SeqDict.toList model.discordGuilds |> partialList
                         , encodedDiscordGuilds = []
                         , remainingDiscordDmChannels = remainingDiscordDmChannels
                         , encodedDiscordDmChannels = []
