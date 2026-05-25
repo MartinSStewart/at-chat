@@ -457,6 +457,7 @@ type EmailNotifications
 type AdminUiSection
     = UsersSection
     | LogSection
+    | DmChannelsSection
     | DiscordDmChannelsSection
     | DiscordUsersSection
     | DiscordGuildsSection
@@ -480,6 +481,9 @@ sectionToString section2 =
 
         LogSection ->
             "Logs"
+
+        DmChannelsSection ->
+            "DM channels"
 
         DiscordDmChannelsSection ->
             "Discord DM channels"
