@@ -60,6 +60,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import Sticker
 import String.Extra
@@ -69,33 +70,7 @@ import Thread
 import Toop exposing (T4(..))
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types
-    exposing
-        ( AdminStatusLoginData(..)
-        , Drag(..)
-        , EmojiSelector(..)
-        , FrontendModel(..)
-        , FrontendMsg(..)
-        , GuildChannelNameHover(..)
-        , InitialLoadRequest(..)
-        , LoadStatus(..)
-        , LoadedFrontend
-        , LoadingFrontend
-        , LocalChange(..)
-        , LocalMsg(..)
-        , LoggedIn2
-        , LoginData
-        , LoginResult(..)
-        , LoginStatus(..)
-        , MessageHover(..)
-        , MessageHoverMobileMode(..)
-        , RevealedSpoilers
-        , ScrollPosition(..)
-        , ServerChange(..)
-        , ToBackend(..)
-        , ToFrontend(..)
-        , UserOptionsModel
-        )
+import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), PublicGoMatch(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -277,6 +252,13 @@ init url key =
         , pwaStatus = Ports.BrowserView
         , scrollbarWidth = 0
         , userAgent = Nothing
+        , publicGoMatch =
+            case route of
+                PublicGoMatchRoute _ ->
+                    PublicGoMatch_Loading
+
+                _ ->
+                    PublicGoMatch_NotLoaded
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -284,6 +266,12 @@ init url key =
         , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Dom.getViewport
         , Lamdera.sendToBackend
             (CheckLoginRequest (routeToInitialDataRequest route))
+        , case route of
+            PublicGoMatchRoute goMatchPublicId ->
+                Lamdera.sendToBackend (GetPublicGoMatchRequest goMatchPublicId)
+
+            _ ->
+                Command.none
         , Ports.loadSounds
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
@@ -342,6 +330,7 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , pageHasFocus = True
             , versionNumber = Nothing
             , emojiData = Nothing
+            , publicGoMatch = loading.publicGoMatch
             , toFrontendLogs = Nothing
             }
 
@@ -407,6 +396,7 @@ loadedInitHelper timezone userAgent loginData loading =
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
+            , editGuildForm = SeqDict.empty
             , newGuildForm = Nothing
             , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
@@ -991,12 +981,55 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        EditGuildFormChanged guildId form ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editGuildForm = SeqDict.insert guildId form loggedIn.editGuildForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedDeleteGuild guildId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        ( model2, cmd ) =
+                            FrontendExtra.routePush model HomePageRoute
+
+                        ( loggedIn2, cmd2 ) =
+                            FrontendExtra.handleLocalChange
+                                model2.time
+                                (Local_DeleteGuild guildId |> Just)
+                                { loggedIn
+                                    | editGuildForm = SeqDict.remove guildId loggedIn.editGuildForm
+                                }
+                                cmd
+                    in
+                    ( { model | loginStatus = LoggedIn loggedIn2 }, cmd2 )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
         PressedCreateInviteLink guildId ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     FrontendExtra.handleLocalChange
                         model.time
                         (Local_NewInviteLink model.time guildId EmptyPlaceholder |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedDeleteInviteLink guildId inviteLinkId ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_DeleteInviteLink guildId inviteLinkId |> Just)
                         loggedIn
                         Command.none
                 )
@@ -1964,19 +1997,24 @@ updateLoaded msg model =
 
                                 ( model2, routeCmd ) =
                                     case outMsg of
-                                        Go.OutLocalChange (Go.StartMatch _ _) ->
-                                            FrontendExtra.routePush
-                                                { model | loginStatus = LoggedIn loggedIn2 }
-                                                (DmRoute
-                                                    { dmRoute
-                                                        | tab =
-                                                            DmChannel.latestMessageId dmChannel
-                                                                |> Id.increment
-                                                                |> Just
-                                                                |> DmChannelHeaderTab_Go
-                                                                |> Just
-                                                    }
-                                                )
+                                        Go.OutLocalChange localChange ->
+                                            case localChange of
+                                                Go.StartMatch _ _ ->
+                                                    FrontendExtra.routePush
+                                                        { model | loginStatus = LoggedIn loggedIn2 }
+                                                        (DmRoute
+                                                            { dmRoute
+                                                                | tab =
+                                                                    DmChannel.latestMessageId dmChannel
+                                                                        |> Id.increment
+                                                                        |> Just
+                                                                        |> DmChannelHeaderTab_Go
+                                                                        |> Just
+                                                            }
+                                                        )
+
+                                                _ ->
+                                                    ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
 
                                         Go.OutSelectMatch newMatchId ->
                                             FrontendExtra.routePush
@@ -1987,8 +2025,11 @@ updateLoaded msg model =
                                                     }
                                                 )
 
-                                        _ ->
+                                        Go.NoOutMsg ->
                                             ( { model | loginStatus = LoggedIn loggedIn2 }, Command.none )
+
+                                        Go.CopyText text ->
+                                            copyText text { model | loginStatus = LoggedIn loggedIn2 }
                             in
                             ( model2, Command.batch [ routeCmd, cmd2 ] )
 
@@ -2225,18 +2266,9 @@ updateLoaded msg model =
                                                     SeqDict.update
                                                         threadMessageIndex
                                                         (\maybe ->
-                                                            SeqDict.update
+                                                            SeqDictHelper.addItem
                                                                 messageId
-                                                                (\maybe2 ->
-                                                                    (case maybe2 of
-                                                                        Just revealed ->
-                                                                            NonemptySet.insert spoilerIndex revealed
-
-                                                                        Nothing ->
-                                                                            NonemptySet.singleton spoilerIndex
-                                                                    )
-                                                                        |> Just
-                                                                )
+                                                                spoilerIndex
                                                                 (Maybe.withDefault SeqDict.empty maybe)
                                                                 |> Just
                                                         )
@@ -2246,18 +2278,9 @@ updateLoaded msg model =
                                         NoThreadWithMessage messageId ->
                                             { revealedSpoilers
                                                 | messages =
-                                                    SeqDict.update
+                                                    SeqDictHelper.addItem
                                                         messageId
-                                                        (\maybe ->
-                                                            (case maybe of
-                                                                Just revealed ->
-                                                                    NonemptySet.insert spoilerIndex revealed
-
-                                                                Nothing ->
-                                                                    NonemptySet.singleton spoilerIndex
-                                                            )
-                                                                |> Just
-                                                        )
+                                                        spoilerIndex
                                                         revealedSpoilers.messages
                                             }
                                     )
@@ -2605,6 +2628,9 @@ updateLoaded msg model =
                         LinkDiscord _ ->
                             ( model, Command.none )
 
+                        PublicGoMatchRoute _ ->
+                            ( model, Command.none )
+
                 MessageView.MessageViewMsg_PressedGoMatchStartedCard ->
                     case threadRoute of
                         NoThreadWithMessage messageId ->
@@ -2639,6 +2665,9 @@ updateLoaded msg model =
                                     ( model, Command.none )
 
                                 LinkDiscord _ ->
+                                    ( model, Command.none )
+
+                                PublicGoMatchRoute _ ->
                                     ( model, Command.none )
 
                         ViewThreadWithMessage _ _ ->
@@ -3865,10 +3894,31 @@ updateLoaded msg model =
                     case result of
                         Ok event ->
                             case event of
-                                Call.FromJs_GotSignal connectionId signal ->
+                                Call.FromJs_PublishOffer sdp mids ->
                                     FrontendExtra.handleLocalChange
                                         model.time
-                                        (Call.Local_Signal connectionId signal |> Local_VoiceChatChange |> Just)
+                                        (Call.Local_PublishTracks sdp mids EmptyPlaceholder |> Local_VoiceChatChange |> Just)
+                                        loggedIn
+                                        Command.none
+
+                                Call.FromJs_PublishConnected ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Call.Local_PublishConnected |> Local_VoiceChatChange |> Just)
+                                        loggedIn
+                                        Command.none
+
+                                Call.FromJs_PullAnswer _ sdp ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Call.Local_RenegotiateAnswer sdp EmptyPlaceholder |> Local_VoiceChatChange |> Just)
+                                        loggedIn
+                                        Command.none
+
+                                Call.FromJs_RequestPullTracks connectionId sessionId trackNames ->
+                                    FrontendExtra.handleLocalChange
+                                        model.time
+                                        (Call.Local_PullTracks connectionId sessionId trackNames EmptyPlaceholder |> Local_VoiceChatChange |> Just)
                                         loggedIn
                                         Command.none
 
@@ -4139,9 +4189,7 @@ updateLoaded msg model =
                         model
 
                 Call.PressedCopyError text ->
-                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
-                    , Ports.copyToClipboard text
-                    )
+                    copyText text model
 
                 Call.ChangedVolume connectionId volume ->
                     FrontendExtra.updateLoggedIn
@@ -4313,6 +4361,36 @@ updateLoaded msg model =
 
                 LinkDiscord _ ->
                     ( model, Command.none )
+
+                PublicGoMatchRoute _ ->
+                    ( model, Command.none )
+
+        GoSpectatorMsg spectatorMsg ->
+            case model.publicGoMatch of
+                PublicGoMatch_Loaded data gameModel ->
+                    ( { model
+                        | publicGoMatch =
+                            Go.updateSpectator spectatorMsg (Go.foldActions data.actions data.setup) gameModel
+                                |> PublicGoMatch_Loaded data
+                      }
+                    , Command.none
+                    )
+
+                PublicGoMatch_NotLoaded ->
+                    ( model, Command.none )
+
+                PublicGoMatch_Loading ->
+                    ( model, Command.none )
+
+                PublicGoMatch_Missing ->
+                    ( model, Command.none )
+
+
+copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
+copyText text model =
+    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+    , Ports.copyToClipboard text
+    )
 
 
 checkCallDisplayModeChange : LoadedFrontend -> LoadedFrontend -> Command FrontendOnly toMsg msg
@@ -5532,6 +5610,18 @@ updateFromBackend msg model =
                 YouConnected clientId ->
                     tryInitLoadedFrontend { loading | clientId = Just clientId }
 
+                GetPublicGoMatchResponse result ->
+                    tryInitLoadedFrontend
+                        { loading
+                            | publicGoMatch =
+                                case result of
+                                    Ok ok ->
+                                        PublicGoMatch_Loaded ok Go.initGame
+
+                                    Err () ->
+                                        PublicGoMatch_Missing
+                        }
+
                 _ ->
                     ( model, Command.none )
 
@@ -5714,33 +5804,43 @@ updateLoadedFromBackend msg model =
                     , case localChange of
                         Local_VoiceChatChange callChange ->
                             case callChange of
-                                Call.Local_Join time roomId (FilledInByBackend turn) ->
-                                    case SeqDict.get roomId local.calls.voiceChats of
-                                        Just nonempty ->
-                                            List.map
-                                                (\otherSession ->
-                                                    Call.startArgs
-                                                        model.clientId
-                                                        local.localUser.session.userId
-                                                        { roomId = roomId, otherClientId = otherSession }
-                                                        time
-                                                        turn
-                                                        loggedIn.voiceChat
-                                                )
-                                                (NonemptySet.toList nonempty)
-                                                |> Command.batch
+                                Call.Local_Join _ roomId (FilledInByBackend existingPeers) ->
+                                    case existingPeers of
+                                        Ok existingPeers2 ->
+                                            Call.startCallCmd roomId existingPeers2 loggedIn.voiceChat
 
-                                        Nothing ->
+                                        Err () ->
                                             Command.none
 
                                 Call.Local_Join _ _ EmptyPlaceholder ->
-                                    -- Backend should never return EmptyPlaceholder
                                     Command.none
 
                                 Call.Local_Leave _ ->
                                     Command.none
 
-                                Call.Local_Signal _ _ ->
+                                Call.Local_PublishTracks _ _ (FilledInByBackend publishResult) ->
+                                    Call.toJs (Call.ToJs_PublishAnswer { answerSdp = publishResult.answerSdp })
+
+                                Call.Local_PublishTracks _ _ EmptyPlaceholder ->
+                                    Command.none
+
+                                Call.Local_PublishConnected ->
+                                    Command.none
+
+                                Call.Local_PullTracks connectionId _ _ (FilledInByBackend result) ->
+                                    case result of
+                                        Ok pullTracks ->
+                                            { connectionId = connectionId, offerSdp = pullTracks.offerSdp }
+                                                |> Call.ToJs_AcceptPullOffer
+                                                |> Call.toJs
+
+                                        Err () ->
+                                            Command.none
+
+                                Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
+                                    Command.none
+
+                                Call.Local_RenegotiateAnswer _ _ ->
                                     Command.none
 
                         Local_TextEditor TextEditor.Local_Undo ->
@@ -6155,6 +6255,9 @@ updateLoadedFromBackend msg model =
                                                     Ports.playSound "pop"
                                             )
 
+                                        Go.CreatePublicLink _ _ ->
+                                            ( loggedIn2, Command.none )
+
                                 _ ->
                                     ( loggedIn2, Command.none )
 
@@ -6236,6 +6339,19 @@ updateLoadedFromBackend msg model =
                             ( { loggedIn | guildIconEditor = Nothing }, Command.none )
                 )
                 model
+
+        GetPublicGoMatchResponse result ->
+            ( { model
+                | publicGoMatch =
+                    case result of
+                        Ok data ->
+                            PublicGoMatch_Loaded data Go.initGame
+
+                        Err () ->
+                            PublicGoMatch_Missing
+              }
+            , Command.none
+            )
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -6410,6 +6526,7 @@ view model =
                                                 Pages.Admin.view
                                                     (MyUi.isMobile loaded)
                                                     loaded.versionNumber
+                                                    loaded.time
                                                     local
                                                     adminData
                                                     user
@@ -6521,6 +6638,32 @@ view model =
                                             LinkDiscordInvalidData ->
                                                 "Failed to link your Discord account due to some problem with the bookmarklet"
                                         )
+                            )
+
+                    PublicGoMatchRoute _ ->
+                        FrontendExtra.layout
+                            loaded
+                            [ Ui.background MyUi.background3, Ui.contentCenterX, Ui.contentCenterY ]
+                            (case loaded.publicGoMatch of
+                                PublicGoMatch_Loaded data gameModel ->
+                                    Ui.el
+                                        [ Ui.htmlAttribute (Html.Attributes.id "public_go_container")
+                                        , Ui.centerX
+                                        , Ui.centerY
+                                        , Ui.width Ui.shrink
+                                        ]
+                                        (Go.spectatorView loaded.windowSize data gameModel |> Ui.map GoSpectatorMsg)
+
+                                PublicGoMatch_Missing ->
+                                    errorPage loaded "Go match not found"
+
+                                PublicGoMatch_Loading ->
+                                    Ui.el
+                                        [ Ui.centerX, Ui.centerY, Ui.htmlAttribute (Html.Attributes.id "public_go_loading") ]
+                                        (Ui.text "Loading match...")
+
+                                PublicGoMatch_NotLoaded ->
+                                    errorPage loaded "Something went wrong when loading Go match"
                             )
         ]
     }

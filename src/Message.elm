@@ -29,6 +29,7 @@ import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet
 import Sticker exposing (StickerData)
 import Time
@@ -323,19 +324,7 @@ addReactionEmoji userId emoji message =
 
 addReactionEmojiHelper : userId -> EmojiOrCustomEmoji -> SeqDict EmojiOrCustomEmoji (NonemptySet userId) -> SeqDict EmojiOrCustomEmoji (NonemptySet userId)
 addReactionEmojiHelper userId emoji reactions =
-    SeqDict.update
-        emoji
-        (\maybeSet ->
-            (case maybeSet of
-                Just nonempty ->
-                    NonemptySet.insert userId nonempty
-
-                Nothing ->
-                    NonemptySet.singleton userId
-            )
-                |> Just
-        )
-        reactions
+    SeqDictHelper.addItem emoji userId reactions
 
 
 removeReactionEmoji : userId -> EmojiOrCustomEmoji -> Message messageId userId -> Message messageId userId

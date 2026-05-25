@@ -45,7 +45,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import LocalState exposing (ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (ChangeAttachments(..), Message(..))
@@ -1357,18 +1357,9 @@ websocketCreateHandle debugName msg url =
     Websocket.createHandle msg url
 
 
-websocketClose : String -> Websocket.Connection -> Task restriction x ()
+websocketClose : (Time.Posix -> WebsocketClosedEvent) -> Websocket.Connection -> Task BackendOnly x WebsocketClosedEvent
 websocketClose debugName connection =
-    Task.map
-        (\() ->
-            let
-                _ =
-                    Debug.log ("websocketClose " ++ debugName) connection
-            in
-            ()
-        )
-        (Task.succeed ())
-        |> Task.andThen (\() -> Websocket.close connection)
+    Websocket.close connection |> Task.andThen (\() -> Time.now |> Task.map debugName)
 
 
 discordUserWebsocketMsg : Discord.Id Discord.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -1384,7 +1375,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                     case outMsg of
                         Discord.UserOutMsg_CloseAndReopenHandle connection ->
                             ( model2
-                            , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (websocketClose "UserOutMsg_CloseAndReopenHandle" connection)
+                            , Task.perform
+                                (WebsocketClosedByBackendForUser discordUserId True)
+                                (websocketClose (WebsocketClosed_CloseAndReopenForUser discordUserId) connection)
                                 :: cmds
                             )
 
@@ -1897,6 +1890,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                               }
                             , getUserAvatars model2.serverSecret model2.discordUsers [ user ] :: cmds
                             )
+
+                        Discord.UserOutMsg_GuildScheduledEventUserAdd _ ->
+                            ( model2, cmds )
+
+                        Discord.UserOutMsg_GuildScheduledEventUserRemove _ ->
+                            ( model2, cmds )
                 )
                 ( { model
                     | discordUsers =

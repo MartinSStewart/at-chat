@@ -9,6 +9,7 @@ module Pages.Admin exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , RealtimeSessionInfoStatus
     , ToBackend(..)
     , ToFrontend(..)
     , UserColumn(..)
@@ -17,6 +18,7 @@ module Pages.Admin exposing
     , UsersChangeError(..)
     , applyChangesToBackendUsers
     , disconnectClient
+    , endAllCalls
     , initForAdmin
     , initForUser
     , logSectionId
@@ -30,8 +32,8 @@ module Pages.Admin exposing
 import Array exposing (Array)
 import Array.Extra
 import Bytes exposing (Bytes)
-import Call exposing (RoomId(..))
 import ChannelName
+import Cloudflare
 import CustomEmoji
 import Discord
 import Duration exposing (Duration)
@@ -54,14 +56,14 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import List.Nonempty
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..))
+import List.Nonempty exposing (Nonempty)
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
+import OneOrGreater exposing (OneOrGreater)
 import Pagination exposing (ItemId, PageId, Pagination)
 import PersonName
 import Ports
@@ -69,12 +71,15 @@ import Postmark
 import Quantity
 import Route
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Set exposing (Set)
 import Slack
 import Sticker
 import String.Nonempty
+import Svg
+import Svg.Attributes
 import Table
 import ToBackendLog exposing (ToBackendLogData, toBackendLogToString)
 import Toop exposing (T2(..), T3(..))
@@ -117,10 +122,13 @@ type Msg
     | PressedExpandDiscordGuild (Discord.Id Discord.GuildId)
     | PressedExpandGuild (Id GuildId)
     | PressedDeleteGuild (Id GuildId)
+    | PressedRestoreGuild (Id GuildId)
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.RealtimeApiToken))
+    | CloudflareRealtimeAppIdEditableMsg (Editable.Msg (Maybe Cloudflare.AppId))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -137,6 +145,10 @@ type Msg
     | PressedShowHiddenLogs Bool
     | PressedDisconnectClient SessionIdHash ClientId
     | PressedRegenerateServerSecret
+    | PressedDeleteCall
+    | PressedWebsocketCloseEventsPage Int
+    | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
+    | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
 
 
 type ToBackend
@@ -172,10 +184,14 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , cloudflareRealtimeApiToken : Editable.Model
+    , cloudflareRealtimeAppId : Editable.Model
     , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
     , exportProgress : Maybe ExportProgress
+    , websocketCloseEventsPage : Int
+    , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
     }
 
 
@@ -211,11 +227,14 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
+    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkApiKey : Postmark.ApiKey
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
@@ -224,6 +243,7 @@ type alias InitAdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , websocketCloseEvents : Array WebsocketClosedEvent
     }
 
 
@@ -243,10 +263,13 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
+    | SetCloudflareRealtimeApiToken (Maybe Cloudflare.RealtimeApiToken)
+    | SetCloudflareRealtimeAppId (Maybe Cloudflare.AppId)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
     | DeleteGuild (Id GuildId)
+    | RestoreGuild (Id GuildId)
     | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id Discord.UserId) (Discord.Id Discord.PrivateChannelId)
     | ExpandGuild (Id GuildId)
@@ -257,6 +280,7 @@ type AdminChange
     | UnhideLog (Id ItemId)
     | DisconnectClient SessionIdHash ClientId
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
+    | EndAllCalls
 
 
 type alias EditedBackendUser =
@@ -292,10 +316,14 @@ initForUser =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , cloudflareRealtimeApiToken = Editable.init
+    , cloudflareRealtimeAppId = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , websocketCloseEventsPage = 0
+    , realtimeSessionData = SeqDict.empty
     }
 
 
@@ -315,10 +343,14 @@ initForAdmin { highlightLog } =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , cloudflareRealtimeApiToken = Editable.init
+    , cloudflareRealtimeAppId = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
     , exportProgress = Nothing
+    , websocketCloseEventsPage = 0
+    , realtimeSessionData = SeqDict.empty
     }
 
 
@@ -396,6 +428,12 @@ updateAdmin changedBy change adminData local =
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
 
+        SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
+            { local | adminData = IsAdmin { adminData | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken } }
+
+        SetCloudflareRealtimeAppId cloudflareRealtimeAppId ->
+            { local | adminData = IsAdmin { adminData | cloudflareRealtimeAppId = cloudflareRealtimeAppId } }
+
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
 
@@ -407,6 +445,29 @@ updateAdmin changedBy change adminData local =
 
         DeleteGuild guildId ->
             { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
+
+        RestoreGuild guildId ->
+            case SeqDict.get guildId adminData.deletedGuilds of
+                Just deletedGuild ->
+                    { local
+                        | adminData =
+                            IsAdmin
+                                { adminData
+                                    | deletedGuilds = SeqDict.remove guildId adminData.deletedGuilds
+                                    , guilds =
+                                        SeqDict.insert
+                                            guildId
+                                            { name = deletedGuild.name
+                                            , channels = SeqDict.empty
+                                            , memberCount = deletedGuild.memberCount
+                                            , owner = deletedGuild.owner
+                                            }
+                                            adminData.guilds
+                                }
+                    }
+
+                Nothing ->
+                    local
 
         StartReloadingDiscordGuildChannel time userId guildId channelId ->
             if LocalState.userIsLoadingDiscordChannel userId adminData.loadingDiscordChannels then
@@ -554,6 +615,23 @@ updateAdmin changedBy change adminData local =
                                                 RegenerationFailed error
                         }
             }
+
+        EndAllCalls ->
+            { local | adminData = endAllCalls adminData |> IsAdmin }
+
+
+endAllCalls :
+    { a | connections : SeqDict sessionId (NonemptyDict ClientId ConnectionData) }
+    -> { a | connections : SeqDict sessionId (NonemptyDict ClientId ConnectionData) }
+endAllCalls adminData =
+    { adminData
+        | connections =
+            SeqDict.map
+                (\_ connection ->
+                    NonemptyDict.map (\_ connection2 -> { connection2 | call = Nothing, callSfu = Nothing }) connection
+                )
+                adminData.connections
+    }
 
 
 disconnectClient :
@@ -1006,6 +1084,9 @@ update navigationKey time adminData localState msg model =
         PressedDeleteGuild guildId ->
             ( model, Command.none, AdminChange (DeleteGuild guildId) )
 
+        PressedRestoreGuild guildId ->
+            ( model, Command.none, AdminChange (RestoreGuild guildId) )
+
         SlackClientSecretEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1038,6 +1119,22 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetOpenRouterKey value |> AdminChange )
 
+        CloudflareRealtimeApiTokenEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | cloudflareRealtimeApiToken = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetCloudflareRealtimeApiToken value |> AdminChange )
+
+        CloudflareRealtimeAppIdEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | cloudflareRealtimeAppId = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetCloudflareRealtimeAppId value |> AdminChange )
+
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1062,10 +1159,16 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, NoOutMsg )
 
         PressedExportBackend ->
-            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportAll), NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }
+            , Lamdera.sendToBackend (ExportBackendRequest ExportAll)
+            , NoOutMsg
+            )
 
         PressedExportSubsetBackend ->
-            ( { model | exportProgress = Just ExportStarting }, Lamdera.sendToBackend (ExportBackendRequest ExportSubset), NoOutMsg )
+            ( { model | exportProgress = Just ExportStarting }
+            , Lamdera.sendToBackend (ExportBackendRequest ExportSubset)
+            , NoOutMsg
+            )
 
         PressedImportBackend ->
             case model.importBackendStatus of
@@ -1089,6 +1192,55 @@ update navigationKey time adminData localState msg model =
 
         PressedRegenerateServerSecret ->
             ( model, Command.none, AdminChange (RegenerateServerSecret EmptyPlaceholder) )
+
+        PressedDeleteCall ->
+            ( model, Command.none, AdminChange EndAllCalls )
+
+        PressedWebsocketCloseEventsPage page ->
+            ( { model | websocketCloseEventsPage = page }, Command.none, NoOutMsg )
+
+        PressedLoadRealtimeSessionData realtimeSessionId ->
+            case ( SeqDict.get realtimeSessionId model.realtimeSessionData, adminData.cloudflareRealtimeApiToken, adminData.cloudflareRealtimeAppId ) of
+                ( Just LoadingRealtimeSessionInfo, _, _ ) ->
+                    ( model, Command.none, NoOutMsg )
+
+                ( _, Just apiToken, Just appId ) ->
+                    ( { model | realtimeSessionData = SeqDict.insert realtimeSessionId LoadingRealtimeSessionInfo model.realtimeSessionData }
+                    , Cloudflare.sessionInfo appId apiToken realtimeSessionId |> Task.attempt (GotRealtimeSessionInfo realtimeSessionId)
+                    , NoOutMsg
+                    )
+
+                _ ->
+                    ( model, Command.none, NoOutMsg )
+
+        GotRealtimeSessionInfo realtimeSessionId result ->
+            case result of
+                Ok ok ->
+                    ( { model
+                        | realtimeSessionData =
+                            SeqDict.insert realtimeSessionId (LoadedRealtimeSessionInfo ok) model.realtimeSessionData
+                      }
+                    , Command.none
+                    , NoOutMsg
+                    )
+
+                Err error ->
+                    ( { model
+                        | realtimeSessionData =
+                            SeqDict.insert
+                                realtimeSessionId
+                                (FailedToLoadRealtimeSessionInfo error)
+                                model.realtimeSessionData
+                      }
+                    , Command.none
+                    , NoOutMsg
+                    )
+
+
+type RealtimeSessionInfoStatus
+    = LoadingRealtimeSessionInfo
+    | LoadedRealtimeSessionInfo Cloudflare.SessionStateResponse
+    | FailedToLoadRealtimeSessionInfo Http.Error
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -1276,6 +1428,11 @@ deleteGuildButtonId guildId =
     "Admin_deleteGuildButton_" ++ Id.toString guildId |> Dom.id
 
 
+restoreGuildButtonId : Id GuildId -> HtmlId
+restoreGuildButtonId guildId =
+    "Admin_restoreGuildButton_" ++ Id.toString guildId |> Dom.id
+
+
 deleteDiscordGuildButtonId : Discord.Id Discord.GuildId -> HtmlId
 deleteDiscordGuildButtonId guildId =
     "Admin_deleteDiscordGuildButton_" ++ Discord.idToString guildId |> Dom.id
@@ -1327,6 +1484,12 @@ pendingChangesText change =
         SetOpenRouterKey _ ->
             "Set OpenRouter key"
 
+        SetCloudflareRealtimeApiToken _ ->
+            "Set Cloudflare Realtime API token"
+
+        SetCloudflareRealtimeAppId _ ->
+            "Set Cloudflare Realtime App ID"
+
         SetPostmarkKey _ ->
             "Set Postmark key"
 
@@ -1338,6 +1501,9 @@ pendingChangesText change =
 
         DeleteGuild _ ->
             "Deleted guild"
+
+        RestoreGuild _ ->
+            "Restored guild"
 
         StartReloadingDiscordGuildChannel _ _ _ _ ->
             "Reset Discord channel"
@@ -1369,9 +1535,12 @@ pendingChangesText change =
         RegenerateServerSecret _ ->
             "Regenerate server secret"
 
+        EndAllCalls ->
+            "End all call"
 
-view : Bool -> Maybe Int -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
-view isMobile2 version local adminData user model =
+
+view : Bool -> Maybe Int -> Time.Posix -> LocalState -> AdminData -> BackendUser -> Model -> Element Msg
+view isMobile2 version time local adminData user model =
     Ui.el
         [ Ui.scrollable
         , Ui.background MyUi.background1
@@ -1396,13 +1565,15 @@ view isMobile2 version local adminData user model =
             , adminData.vulnerabilityChecks |> Ui.text
             , userSection user adminData model
             , guildsSection user adminData
+            , deletedGuildsSection user adminData
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
-            , voiceChatSection local adminData user
+            , websocketCloseEventsSection time local.localUser.timezone user adminData model
+            , voiceChatSection adminData model user
             , filesSection user adminData
             , stickersAndEmojisSection local user
             , toBackendLogsSection user adminData
@@ -1457,6 +1628,345 @@ connectionsSection timezone user adminData =
         ]
 
 
+websocketCloseEventToString : WebsocketClosedEvent -> ( ( String, String ), Time.Posix )
+websocketCloseEventToString event =
+    case event of
+        WebsocketClosed_CloseAndReopenForUser _ time ->
+            ( ( "CloseAndReopenForUser", "#e0625e" ), time )
+
+        WebsocketClosed_UnlinkDiscordUser _ time ->
+            ( ( "UnlinkDiscordUser", "#5e9be0" ), time )
+
+        WebsocketClosed_ClosedByBackendForUser _ time ->
+            ( ( "ClosedByBackendForUser", "#5ee07d" ), time )
+
+        WebsocketClosed_ListenCloseEvent _ _ time ->
+            ( ( "ListenCloseEvent", "#bb5ee0" ), time )
+
+
+websocketCloseEventsSection : Time.Posix -> Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+websocketCloseEventsSection currentTime timezone user adminData model =
+    let
+        allEvents : SeqDict ( String, String ) (Nonempty Time.Posix)
+        allEvents =
+            Array.foldl
+                (\event dict ->
+                    let
+                        ( name, time ) =
+                            websocketCloseEventToString event
+                    in
+                    SeqDictHelper.addList name time dict
+                )
+                SeqDict.empty
+                adminData.websocketCloseEvents
+    in
+    section
+        8
+        user.expandedSections
+        WebsocketCloseEventsSection
+        [ if Array.isEmpty adminData.websocketCloseEvents then
+            Ui.text "No websocket close events recorded"
+
+          else
+            Ui.column
+                [ Ui.spacing 12 ]
+                (Ui.text ("Total recorded: " ++ String.fromInt (Array.length adminData.websocketCloseEvents))
+                    :: List.map
+                        (\( ( label, color ), times ) ->
+                            Ui.column
+                                [ Ui.spacing 4 ]
+                                [ Ui.el
+                                    [ Ui.Font.bold, Ui.Font.size 14 ]
+                                    (Ui.text (label ++ " (" ++ String.fromInt (List.Nonempty.length times) ++ ")"))
+                                , websocketCloseEventLineGraph currentTime color times
+                                ]
+                        )
+                        (SeqDict.toList allEvents)
+                    ++ [ websocketCloseEventsList timezone model adminData.websocketCloseEvents ]
+                )
+        ]
+
+
+websocketCloseEventsPageSize : Int
+websocketCloseEventsPageSize =
+    20
+
+
+websocketCloseEventsList : Time.Zone -> Model -> Array WebsocketClosedEvent -> Element Msg
+websocketCloseEventsList timezone model events =
+    let
+        total : Int
+        total =
+            Array.length events
+
+        pageCount : Int
+        pageCount =
+            ((websocketCloseEventsPageSize - 1) + total) // websocketCloseEventsPageSize
+
+        currentPage : Int
+        currentPage =
+            model.websocketCloseEventsPage |> clamp 0 (max 0 (pageCount - 1))
+
+        startIndex : Int
+        startIndex =
+            max 0 (total - (currentPage + 1) * websocketCloseEventsPageSize)
+
+        endIndex : Int
+        endIndex =
+            total - currentPage * websocketCloseEventsPageSize
+
+        pageItems : List ( Int, WebsocketClosedEvent )
+        pageItems =
+            Array.slice startIndex endIndex events
+                |> Array.toIndexedList
+                |> List.map (\( i, e ) -> ( startIndex + i, e ))
+                |> List.reverse
+    in
+    Ui.column
+        [ Ui.spacing 6 ]
+        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text "All events")
+        , Ui.column
+            [ Ui.spacing 2, Ui.Font.size 13 ]
+            (List.map (websocketCloseEventListItem timezone) pageItems)
+        , if pageCount <= 1 then
+            Ui.none
+
+          else
+            Ui.row
+                [ Ui.spacing 8, Ui.Font.size 12 ]
+                [ if currentPage + 1 >= pageCount then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton
+                        (Dom.id "admin_websocketCloseEventsPrev")
+                        (PressedWebsocketCloseEventsPage (currentPage + 1))
+                        (Ui.text "← Older")
+                        |> Ui.el [ Ui.width Ui.shrink ]
+                , Ui.el
+                    [ Ui.width Ui.shrink, Ui.centerY ]
+                    (Ui.text ("Page " ++ String.fromInt (currentPage + 1) ++ " of " ++ String.fromInt pageCount))
+                , if currentPage <= 0 then
+                    Ui.none
+
+                  else
+                    MyUi.simpleButton
+                        (Dom.id "admin_websocketCloseEventsNext")
+                        (PressedWebsocketCloseEventsPage (currentPage - 1))
+                        (Ui.text "Newer →")
+                        |> Ui.el [ Ui.width Ui.shrink ]
+                ]
+        ]
+
+
+websocketCloseEventListItem : Time.Zone -> ( Int, WebsocketClosedEvent ) -> Element msg
+websocketCloseEventListItem timezone ( index, event ) =
+    let
+        ( ( label, _ ), time ) =
+            websocketCloseEventToString event
+
+        details : String
+        details =
+            case event of
+                WebsocketClosed_CloseAndReopenForUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_UnlinkDiscordUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_ClosedByBackendForUser userId _ ->
+                    "user " ++ Discord.idToString userId
+
+                WebsocketClosed_ListenCloseEvent userId reason _ ->
+                    "user " ++ Discord.idToString userId ++ ", reason: " ++ reason
+    in
+    Ui.row
+        [ Ui.spacing 8 ]
+        [ Ui.el [ Ui.width Ui.shrink ]
+            (Ui.text ("#" ++ String.fromInt (index + 1)))
+        , Ui.el [ Ui.width Ui.shrink ]
+            (Ui.text (MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone))
+        , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text label)
+        , Ui.text details
+        ]
+
+
+websocketCloseEventLineGraph : Time.Posix -> String -> Nonempty Time.Posix -> Element msg
+websocketCloseEventLineGraph now color eventTimes =
+    let
+        bucketCount : Int
+        bucketCount =
+            24
+
+        bucketDurationMs : Int
+        bucketDurationMs =
+            60 * 60 * 1000
+
+        windowMs : Int
+        windowMs =
+            bucketCount * bucketDurationMs
+
+        nowMs : Int
+        nowMs =
+            Time.posixToMillis now
+
+        windowStartMs : Int
+        windowStartMs =
+            nowMs - windowMs
+
+        emptyBuckets : Array Int
+        emptyBuckets =
+            Array.repeat bucketCount 0
+
+        buckets : Array Int
+        buckets =
+            List.Nonempty.foldl
+                (\eventTime acc ->
+                    let
+                        ms : Int
+                        ms =
+                            Time.posixToMillis eventTime
+                    in
+                    if ms < windowStartMs || ms > nowMs then
+                        acc
+
+                    else
+                        let
+                            index : Int
+                            index =
+                                (ms - windowStartMs) // bucketDurationMs |> min (bucketCount - 1)
+                        in
+                        Array.set index ((Array.get index acc |> Maybe.withDefault 0) + 1) acc
+                )
+                emptyBuckets
+                eventTimes
+
+        maxCount : Int
+        maxCount =
+            Array.foldl max 0 buckets
+
+        chartWidth : Int
+        chartWidth =
+            600
+
+        chartHeight : Int
+        chartHeight =
+            100
+
+        scaleDenominator : Int
+        scaleDenominator =
+            max 1 maxCount
+
+        pointStepX : Float
+        pointStepX =
+            if bucketCount <= 1 then
+                0
+
+            else
+                toFloat chartWidth / toFloat (bucketCount - 1)
+
+        pointAt : Int -> Int -> ( Float, Float )
+        pointAt i count =
+            let
+                x : Float
+                x =
+                    toFloat i * pointStepX
+
+                y : Float
+                y =
+                    toFloat chartHeight - (toFloat count / toFloat scaleDenominator * toFloat chartHeight)
+            in
+            ( x, y )
+
+        points : List ( Float, Float )
+        points =
+            Array.toList buckets |> List.indexedMap pointAt
+
+        pointsAttr : String
+        pointsAttr =
+            points
+                |> List.map (\( x, y ) -> String.fromFloat x ++ "," ++ String.fromFloat y)
+                |> String.join " "
+
+        polyline : Svg.Svg msg
+        polyline =
+            Svg.polyline
+                [ Svg.Attributes.fill "none"
+                , Svg.Attributes.stroke color
+                , Svg.Attributes.strokeWidth "2"
+                , Svg.Attributes.points pointsAttr
+                ]
+                []
+
+        dots : List (Svg.Svg msg)
+        dots =
+            points
+                |> List.indexedMap
+                    (\i ( x, y ) ->
+                        let
+                            count : Int
+                            count =
+                                Array.get i buckets |> Maybe.withDefault 0
+                        in
+                        Svg.circle
+                            [ Svg.Attributes.cx (String.fromFloat x)
+                            , Svg.Attributes.cy (String.fromFloat y)
+                            , Svg.Attributes.r "2.5"
+                            , Svg.Attributes.fill color
+                            ]
+                            [ Svg.title []
+                                [ Svg.text
+                                    (String.fromInt count
+                                        ++ " events, "
+                                        ++ String.fromInt (bucketCount - 1 - i)
+                                        ++ "h ago"
+                                    )
+                                ]
+                            ]
+                    )
+
+        baseline : Svg.Svg msg
+        baseline =
+            Svg.line
+                [ Svg.Attributes.x1 "0"
+                , Svg.Attributes.y1 (String.fromInt chartHeight)
+                , Svg.Attributes.x2 (String.fromInt chartWidth)
+                , Svg.Attributes.y2 (String.fromInt chartHeight)
+                , Svg.Attributes.stroke "#888"
+                , Svg.Attributes.strokeWidth "1"
+                ]
+                []
+
+        graphSvg : Element msg
+        graphSvg =
+            Svg.svg
+                [ Svg.Attributes.viewBox ("0 0 " ++ String.fromInt chartWidth ++ " " ++ String.fromInt chartHeight)
+                , Svg.Attributes.width (String.fromInt chartWidth)
+                , Svg.Attributes.height (String.fromInt chartHeight)
+                , Html.Attributes.style "max-width" "100%"
+                , Html.Attributes.style "height" "auto"
+                ]
+                (baseline :: polyline :: dots)
+                |> Ui.html
+    in
+    Ui.column
+        [ Ui.spacing 4, Ui.width Ui.shrink ]
+        [ Ui.el [ Ui.Font.size 12 ]
+            (Ui.text
+                ("Events per hour over the last 24 hours (peak: "
+                    ++ String.fromInt maxCount
+                    ++ ")"
+                )
+            )
+        , graphSvg
+        , Ui.row
+            [ Ui.Font.size 11, Ui.spacing 8 ]
+            [ Ui.text "24h ago"
+            , Ui.el [ Ui.alignRight, Ui.width Ui.shrink ] (Ui.text "now")
+            ]
+        ]
+
+
 filesSection : BackendUser -> AdminData -> Element Msg
 filesSection user adminData =
     section
@@ -1466,64 +1976,124 @@ filesSection user adminData =
         [ Ui.text ("File count: " ++ String.fromInt adminData.filesCount) ]
 
 
-voiceChatSection : LocalState -> AdminData -> BackendUser -> Element Msg
-voiceChatSection local adminData user =
+voiceChatSection : AdminData -> Model -> BackendUser -> Element Msg
+voiceChatSection adminData model user =
     let
-        rooms : List ( RoomId, NonemptySet ( Id UserId, ClientId ) )
-        rooms =
-            SeqDict.toList local.calls.voiceChats
+        usersInCalls : SeqDict Cloudflare.RealtimeSessionId OneOrGreater
+        usersInCalls =
+            SeqDict.foldl
+                (\_ connection count ->
+                    NonemptyDict.foldl
+                        (\_ connection2 count2 ->
+                            case connection2.callSfu of
+                                Just call ->
+                                    SeqDictHelper.increment call.sessionId count2
+
+                                Nothing ->
+                                    count2
+                        )
+                        count
+                        connection
+                )
+                SeqDict.empty
+                adminData.connections
     in
     section
         8
         user.expandedSections
         VoiceChatSection
-        [ if List.isEmpty rooms then
-            Ui.text "No ongoing voice chats"
-
-          else
-            Ui.column
-                [ Ui.spacing 8 ]
-                (List.map (voiceChatRoomView adminData) rooms)
-        ]
-
-
-voiceChatRoomView : AdminData -> ( RoomId, NonemptySet ( Id UserId, ClientId ) ) -> Element msg
-voiceChatRoomView adminData ( roomId, participants ) =
-    Ui.column
-        [ Ui.spacing 2 ]
-        [ Ui.el [ Ui.Font.bold, Ui.Font.size 14 ] (Ui.text (roomIdLabel adminData roomId))
-        , Ui.column
-            [ Ui.paddingWith { left = 16, right = 0, top = 0, bottom = 0 }, Ui.spacing 2 ]
+        [ Ui.column
+            [ Ui.spacing 8 ]
             (List.map
-                (\( userId, clientId ) ->
-                    Ui.row
-                        [ Ui.spacing 8, Ui.Font.size 14, Ui.widthMax 600 ]
-                        [ case NonemptyDict.get userId adminData.users of
-                            Just participant ->
-                                Ui.text (PersonName.toString participant.name)
+                (\( realtimeSessionId, count ) ->
+                    let
+                        shortId : Cloudflare.RealtimeSessionId -> String
+                        shortId id =
+                            let
+                                id2 : String
+                                id2 =
+                                    Cloudflare.sessionIdToString id
+                            in
+                            String.left 4 id2 ++ "..." ++ String.right 4 id2
+                    in
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ Ui.row
+                            [ Ui.spacing 4 ]
+                            [ Ui.text (shortId realtimeSessionId ++ ": " ++ OneOrGreater.toString count)
+                            , Ui.el
+                                [ Ui.alignRight ]
+                                (MyUi.secondaryButton
+                                    (Dom.id "admin_loadRealtimeSessionData")
+                                    (PressedLoadRealtimeSessionData realtimeSessionId)
+                                    "Load data"
+                                )
+                            ]
+                        , case SeqDict.get realtimeSessionId model.realtimeSessionData of
+                            Just LoadingRealtimeSessionInfo ->
+                                Ui.text "Loading..."
+
+                            Just (LoadedRealtimeSessionInfo info) ->
+                                Ui.column
+                                    [ Ui.spacing 4 ]
+                                    (List.map
+                                        (\track ->
+                                            "Track name: "
+                                                ++ track.trackName
+                                                ++ ", mid: "
+                                                ++ track.mid
+                                                ++ ", location: "
+                                                ++ (case track.location of
+                                                        Cloudflare.Location_Local ->
+                                                            "local"
+
+                                                        Cloudflare.Location_Remote ->
+                                                            "remote"
+                                                   )
+                                                ++ ", status: "
+                                                ++ (case track.status of
+                                                        Cloudflare.TrackActive ->
+                                                            "active"
+
+                                                        Cloudflare.TrackInactive ->
+                                                            "inactive"
+
+                                                        Cloudflare.TrackWaiting ->
+                                                            "waiting"
+                                                   )
+                                                ++ (case track.sessionId of
+                                                        Just sessionId ->
+                                                            ", owner: " ++ shortId sessionId
+
+                                                        Nothing ->
+                                                            ""
+                                                   )
+                                                |> Ui.text
+                                        )
+                                        info.tracks
+                                    )
+
+                            Just (FailedToLoadRealtimeSessionInfo error) ->
+                                Ui.text (Log.httpErrorToString error)
 
                             Nothing ->
-                                Ui.text ("Unknown user " ++ Id.toString userId)
-                        , Ui.el
-                            [ Ui.alignRight, Ui.width Ui.shrink ]
-                            (Ui.text ("Client: " ++ Lamdera.clientIdToString clientId))
+                                Ui.none
                         ]
                 )
-                (NonemptySet.toList participants)
+                (SeqDict.toList usersInCalls)
             )
+        , MyUi.rowButton
+            (Dom.id "admin_deleteCall")
+            PressedDeleteCall
+            [ Ui.background MyUi.deleteButtonBackground
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.paddingXY 16 8
+            , Ui.rounded 4
+            , Ui.width Ui.shrink
+            , Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
+            ]
+            [ Ui.text "End all calls" ]
         ]
-
-
-roomIdLabel : AdminData -> RoomId -> String
-roomIdLabel adminData roomId =
-    case roomId of
-        DmRoomId userId ->
-            case NonemptyDict.get userId adminData.users of
-                Just user ->
-                    "DM with " ++ PersonName.toString user.name
-
-                Nothing ->
-                    "DM with unknown user " ++ Id.toString userId
 
 
 stickersAndEmojisSection : LocalState -> BackendUser -> Element Msg
@@ -1912,6 +2482,54 @@ apiKeysSection local user adminData2 model =
             )
             model.openRouterKey
         , Editable.view
+            (Dom.id "userOptions_cloudflareRealtimeApiToken")
+            True
+            "Cloudflare Realtime API token"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just (Cloudflare.realtimeApiToken text2) |> Ok
+            )
+            CloudflareRealtimeApiTokenEditableMsg
+            (case adminData2.cloudflareRealtimeApiToken of
+                Just key ->
+                    Cloudflare.realtimeApiTokenToString key
+
+                Nothing ->
+                    ""
+            )
+            model.cloudflareRealtimeApiToken
+        , Editable.view
+            (Dom.id "userOptions_cloudflareRealtimeAppId")
+            True
+            "Cloudflare Realtime App ID"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just (Cloudflare.appId text2) |> Ok
+            )
+            CloudflareRealtimeAppIdEditableMsg
+            (case adminData2.cloudflareRealtimeAppId of
+                Just key ->
+                    Cloudflare.appIdToString key
+
+                Nothing ->
+                    ""
+            )
+            model.cloudflareRealtimeAppId
+        , Editable.view
             (Dom.id "userOptions_postmarkKey")
             True
             "Postmark API key"
@@ -2119,6 +2737,46 @@ guildsSection user adminData =
                             ]
                     )
                     (SeqDict.toList adminData.guilds)
+                )
+        ]
+
+
+deletedGuildsSection : BackendUser -> AdminData -> Element Msg
+deletedGuildsSection user adminData =
+    section
+        8
+        user.expandedSections
+        DeletedGuildsSection
+        [ if SeqDict.isEmpty adminData.deletedGuilds then
+            Ui.text "No deleted guilds"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( guildId, deletedGuild ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ Ui.text (Id.toString guildId)
+                            , Ui.text (GuildName.toString deletedGuild.name)
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.text "Owner:"
+                                , case NonemptyDict.get deletedGuild.owner adminData.users of
+                                    Just user2 ->
+                                        userLabel deletedGuild.owner user2
+
+                                    Nothing ->
+                                        Ui.text (Id.toString deletedGuild.owner)
+                                ]
+                            , Ui.text ("Members: " ++ String.fromInt deletedGuild.memberCount)
+                            , MyUi.simpleButton
+                                (restoreGuildButtonId guildId)
+                                (PressedRestoreGuild guildId)
+                                (Ui.text "Restore")
+                            ]
+                    )
+                    (SeqDict.toList adminData.deletedGuilds)
                 )
         ]
 

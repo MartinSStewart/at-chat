@@ -23,7 +23,7 @@ import Bitwise
 import Call
 import ChannelDescription
 import ChannelHeader
-import ChannelName
+import ChannelName exposing (ChannelName)
 import Coord
 import CustomEmoji exposing (CustomEmojiData)
 import Date exposing (Date)
@@ -61,6 +61,7 @@ import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, DmRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import SecretId
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Sticker exposing (AnimationMode(..))
@@ -68,7 +69,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditChannelForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditChannelForm, EditGuildForm, EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1697,6 +1698,13 @@ guildSettingsForm model loggedIn local guildId guild =
                             Ui.row
                                 [ Ui.spacing 16 ]
                                 [ Ui.el [ Ui.widthMax 300 ] (copyableText (Env.domain ++ url) model)
+                                , if isOwner then
+                                    MyUi.deleteButton
+                                        (Dom.id ("guild_deleteInviteLink_" ++ SecretId.toString inviteId))
+                                        (PressedDeleteInviteLink guildId inviteId)
+
+                                  else
+                                    Ui.none
                                 , if Duration.from data.createdAt model.time |> Quantity.lessThan (Duration.minutes 5) then
                                     Ui.text "Created just now!"
 
@@ -1721,8 +1729,99 @@ guildSettingsForm model loggedIn local guildId guild =
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
                 )
+            , if isOwner then
+                deleteGuildSection guildId
+                    guild
+                    (SeqDict.get guildId loggedIn.editGuildForm
+                        |> Maybe.withDefault editGuildFormInit
+                    )
+
+              else
+                Ui.none
             ]
         )
+
+
+editGuildFormInit : EditGuildForm
+editGuildFormInit =
+    { deleteConfirmation = "", showDeleteConfirmation = False }
+
+
+deleteGuildSection : Id GuildId -> FrontendGuild -> EditGuildForm -> Element FrontendMsg
+deleteGuildSection guildId guild form =
+    let
+        guildNameString : String
+        guildNameString =
+            GuildName.toString guild.name
+
+        confirmationMatches : Bool
+        confirmationMatches =
+            form.deleteConfirmation == guildNameString
+
+        ( deleteOnPress, deleteEnabled ) =
+            if not form.showDeleteConfirmation then
+                ( EditGuildFormChanged guildId { form | showDeleteConfirmation = True }, True )
+
+            else if confirmationMatches then
+                ( PressedDeleteGuild guildId, True )
+
+            else
+                ( FrontendNoOp, False )
+    in
+    Ui.column
+        [ Ui.spacing 12, Ui.paddingXY 16 0 ]
+        [ Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border2 ] Ui.none
+        , if form.showDeleteConfirmation then
+            deleteGuildConfirmationInput guildId guildNameString form
+
+          else
+            Ui.none
+        , MyUi.elButton
+            (Dom.id "guild_deleteGuild")
+            deleteOnPress
+            [ Ui.paddingXY 16 8
+            , Ui.background
+                (if deleteEnabled then
+                    MyUi.deleteButtonBackground
+
+                 else
+                    MyUi.disabledButtonBackground
+                )
+            , Ui.width Ui.shrink
+            , Ui.rounded 8
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.Font.bold
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.border 1
+            ]
+            (Ui.text "Delete guild")
+        ]
+
+
+deleteGuildConfirmationInput : Id GuildId -> String -> EditGuildForm -> Element FrontendMsg
+deleteGuildConfirmationInput guildId guildNameString form =
+    let
+        confirmLabel =
+            Ui.Input.label
+                "deleteGuildConfirmation"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text ("Type \"" ++ guildNameString ++ "\" to confirm deletion"))
+    in
+    Ui.column
+        []
+        [ confirmLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> EditGuildFormChanged guildId { form | deleteConfirmation = text }
+            , text = form.deleteConfirmation
+            , placeholder = Nothing
+            , label = confirmLabel.id
+            }
+        ]
 
 
 copyableText : String -> LoadedFrontend -> Element FrontendMsg
@@ -6278,7 +6377,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                                 (SeqDict.get (GuildOrDmId (GuildOrDmId_Guild guildId channelId)) localUser.user.lastViewed)
                                 channel
                     in
-                    ( hasNotifications
+                    ( channelSortName hasNotifications channel
                     , Ui.column
                         []
                         [ channelColumnRow
@@ -6312,23 +6411,27 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                     )
                 )
                 (SeqDict.toList guild.channels)
-                |> List.sortBy
-                    (\( hasNotifications, _ ) ->
-                        case hasNotifications of
-                            NoNotification ->
-                                2
-
-                            NewMessage _ ->
-                                1
-
-                            NewMessageForUser _ ->
-                                0
-                    )
+                |> List.sortBy Tuple.first
                 |> List.map Tuple.second
              )
                 ++ [ newChannelButton ]
             )
         )
+
+
+channelSortName : ChannelNotificationType -> { a | name : ChannelName } -> String
+channelSortName hasNotifications channel =
+    (case hasNotifications of
+        NoNotification ->
+            "c"
+
+        NewMessage _ ->
+            "b"
+
+        NewMessageForUser _ ->
+            "a"
+    )
+        ++ ChannelName.toString channel.name
 
 
 discordChannelColumn :
@@ -6403,7 +6506,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                                 (SeqDict.get (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)) localUser.user.lastViewed)
                                 channel
                     in
-                    ( hasNotifications
+                    ( channelSortName hasNotifications channel
                     , Ui.column
                         []
                         [ discordChannelColumnRow
@@ -6435,18 +6538,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                     )
                 )
                 (SeqDict.toList guild.channels)
-                |> List.sortBy
-                    (\( hasNotifications, _ ) ->
-                        case hasNotifications of
-                            NoNotification ->
-                                2
-
-                            NewMessage _ ->
-                                1
-
-                            NewMessageForUser _ ->
-                                0
-                    )
+                |> List.sortBy Tuple.first
                 |> List.map Tuple.second
             )
         )

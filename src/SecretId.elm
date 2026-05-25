@@ -1,15 +1,12 @@
 module SecretId exposing
     ( SecretId(..)
     , ServerSecret(..)
-    , TurnCredentials
-    , codec
     , fromString
     , getShortUniqueId
     , getUniqueId
     , toString
     )
 
-import Codec exposing (Codec)
 import Effect.Time as Time
 import Env
 import Sha256
@@ -23,10 +20,6 @@ type SecretId a
 
 type ServerSecret
     = ServerSecret Never
-
-
-type TurnCredentials
-    = TurnCredentials Never
 
 
 getUniqueId :
@@ -80,8 +73,3 @@ toString (SecretId text) =
 fromString : String -> SecretId a
 fromString =
     SecretId
-
-
-codec : Codec (SecretId a)
-codec =
-    Codec.map fromString toString Codec.string

@@ -6,6 +6,7 @@ module Types exposing
     , DiscordAttachmentData
     , Drag(..)
     , EditChannelForm
+    , EditGuildForm
     , EditMessage
     , EmojiSelector(..)
     , ExportState
@@ -30,6 +31,7 @@ module Types exposing
     , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
+    , PublicGoMatch(..)
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -47,6 +49,7 @@ import Bytes exposing (Bytes)
 import Call exposing (ChannelSidebarMode, FromJs, RoomId)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import Cloudflare
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData)
@@ -70,11 +73,11 @@ import Emoji exposing (CachedEmojiData, EmojiOrCustomEmoji, SkinTone)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import Go
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, ConnectionData, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -82,6 +85,7 @@ import MembersAndOwner exposing (MembersAndOwner)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown, TextInputFocus)
 import MessageView
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -129,6 +133,7 @@ type alias LoadingFrontend =
     , timezone : Time.Zone
     , scrollbarWidth : Int
     , userAgent : Maybe UserAgent
+    , publicGoMatch : PublicGoMatch
     }
 
 
@@ -148,7 +153,7 @@ type alias LoadedFrontend =
     , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
-    , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
+    , lastCopied : Maybe MyUi.LastCopy
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , drag : Drag
@@ -159,9 +164,17 @@ type alias LoadedFrontend =
     , pageHasFocus : Bool
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
+    , publicGoMatch : PublicGoMatch
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
+
+
+type PublicGoMatch
+    = PublicGoMatch_NotLoaded
+    | PublicGoMatch_Loading
+    | PublicGoMatch_Loaded Go.PublicGoMatchData Go.GameModel
+    | PublicGoMatch_Missing
 
 
 type Drag
@@ -191,6 +204,7 @@ type alias LoggedIn2 =
     , drafts : SeqDict ( AnyGuildOrDmId, ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) EditChannelForm
+    , editGuildForm : SeqDict (Id GuildId) EditGuildForm
     , newGuildForm : Maybe NewGuildForm
     , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
@@ -299,7 +313,9 @@ type alias BackendModel =
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
+    , nextGuildId : Id GuildId
     , guilds : SeqDict (Id GuildId) BackendGuild
+    , deletedGuilds : SeqDict (Id GuildId) DeletedBackendGuild
     , isInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
@@ -314,6 +330,8 @@ type alias BackendModel =
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
+    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
@@ -333,6 +351,8 @@ type alias BackendModel =
     , postmarkApiKey : Postmark.ApiKey
     , serverSecret : SecretId ServerSecret
     , serverSecretRegeneratedAt : Maybe Time.Posix
+    , websocketCloseEvents : Array WebsocketClosedEvent
+    , goMatchPublicIds : OneToOne (SecretId GoMatchPublicId) ( DmChannelId, Id ChannelMessageId )
     }
 
 
@@ -395,7 +415,10 @@ type FrontendMsg
     | PressedResetEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) EditChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
+    | EditGuildFormChanged (Id GuildId) EditGuildForm
+    | PressedDeleteGuild (Id GuildId)
     | PressedCreateInviteLink (Id GuildId)
+    | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
     | PressedCreateGuild
@@ -440,6 +463,7 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | GoMsg Go.Msg
+    | GoSpectatorMsg Go.SpectatorMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | GuildIconEditorMsg (Id GuildId) ImageEditor.Msg
@@ -521,6 +545,12 @@ type alias EditChannelForm =
     }
 
 
+type alias EditGuildForm =
+    { deleteConfirmation : String
+    , showDeleteConfirmation : Bool
+    }
+
+
 type alias NewGuildForm =
     { name : String
     , pressedSubmit : Bool
@@ -552,6 +582,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | AdminDataRequest (Maybe (Id PageId))
+    | GetPublicGoMatchRequest (SecretId GoMatchPublicId)
 
 
 type BackendMsg
@@ -589,6 +620,10 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
+    | GotCloudflareSessionCreated ClientId ChangeId Time.Posix RoomId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
+    | GotCloudflareSession ClientId ChangeId Time.Posix RoomId Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.PushTracksResult)
+    | GotCloudflarePullOffer Time.Posix ClientId ChangeId Call.ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
+    | GotCloudflareRenegotiateAck ClientId ChangeId Cloudflare.Sdp (Result Http.Error ())
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
@@ -610,7 +645,7 @@ type BackendMsg
             )
         )
     | WebsocketCreatedHandleForUser (Discord.Id Discord.UserId) Websocket.Connection
-    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool
+    | WebsocketClosedByBackendForUser (Discord.Id Discord.UserId) Bool WebsocketClosedEvent
     | WebsocketSentDataForUser (Discord.Id Discord.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (Nonempty (Result Http.Error ( Discord.Id Discord.AttachmentId, FileStatus.UploadResponse )))
@@ -646,6 +681,7 @@ type BackendMsg
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
+    | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) String Time.Posix
 
 
 type MessageFromGuildOrDm
@@ -695,6 +731,7 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
+    | GetPublicGoMatchResponse (Result () Go.PublicGoMatchData)
 
 
 type alias LoginData =
@@ -735,7 +772,9 @@ type ServerChange
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Server_DeleteGuild (Id GuildId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
+    | Server_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
     | Server_YouJoinedGuildByInvite
         (Result
@@ -813,7 +852,9 @@ type LocalChange
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName ChannelDescription
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName ChannelDescription
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Local_DeleteGuild (Id GuildId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+    | Local_DeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix ( AnyGuildOrDmId, ThreadRoute )
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage EmojiOrCustomEmoji

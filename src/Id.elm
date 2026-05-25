@@ -5,6 +5,7 @@ module Id exposing
     , CustomEmojiId(..)
     , DiscordGuildOrDmId(..)
     , DiscordGuildOrDmId_DmData
+    , GoMatchPublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
     , Id(..)
@@ -133,6 +134,10 @@ type CustomEmojiId
 
 type VideoNodeId
     = VideoNodeId Never
+
+
+type GoMatchPublicId
+    = GoMatchPublicId Never
 
 
 type Id a

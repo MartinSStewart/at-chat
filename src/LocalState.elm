@@ -1,5 +1,6 @@
 module LocalState exposing
     ( AdminData
+    , AdminData_DeletedGuild
     , AdminData_DiscordChannel
     , AdminData_DiscordDmChannel
     , AdminData_DiscordGuild
@@ -11,6 +12,7 @@ module LocalState exposing
     , BackendGuild
     , ChannelStatus(..)
     , ConnectionData
+    , DeletedBackendGuild
     , DiscordBackendChannel
     , DiscordBackendGuild
     , DiscordFrontendChannel
@@ -27,6 +29,7 @@ module LocalState exposing
     , LogWithTime
     , PrivateVapidKey(..)
     , ServerSecretStatus(..)
+    , WebsocketClosedEvent(..)
     , addEmbedBackend
     , addEmbedFrontend
     , addInvite
@@ -93,6 +96,7 @@ module LocalState exposing
     , messageReactionsHelper
     , messageReactionsNoThread
     , messageToString
+    , removeInvite
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , removeReactionEmojiFrontendHelper
@@ -109,6 +113,7 @@ import Array.Extra
 import Call
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
+import Cloudflare
 import Discord exposing (OptionalData)
 import DiscordUserData exposing (DiscordUserLoadingData)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
@@ -179,6 +184,10 @@ type alias BackendGuild =
     , membersAndOwner : MembersAndOwner (Id UserId) { joinedAt : Time.Posix }
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
+
+
+type alias DeletedBackendGuild =
+    { guild : BackendGuild, deletedAt : Time.Posix }
 
 
 type alias DiscordBackendGuild =
@@ -485,6 +494,8 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
+    , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkKey : Postmark.ApiKey
     , discordDmChannels :
         SeqDict
@@ -493,6 +504,7 @@ type alias AdminData =
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id Discord.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    , deletedGuilds : SeqDict (Id GuildId) AdminData_DeletedGuild
     , loadingDiscordChannels : SeqDict (Discord.Id Discord.UserId) (LoadingDiscordChannel Int)
     , signupsEnabled : Bool
     , logs : Pagination LogWithTime
@@ -501,11 +513,22 @@ type alias AdminData =
     , toBackendLogs : Array ToBackendLogData
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
+    , websocketCloseEvents : Array WebsocketClosedEvent
     }
 
 
+type WebsocketClosedEvent
+    = WebsocketClosed_CloseAndReopenForUser (Discord.Id Discord.UserId) Time.Posix
+    | WebsocketClosed_UnlinkDiscordUser (Discord.Id Discord.UserId) Time.Posix
+    | WebsocketClosed_ClosedByBackendForUser (Discord.Id Discord.UserId) Time.Posix
+    | WebsocketClosed_ListenCloseEvent (Discord.Id Discord.UserId) String Time.Posix
+
+
 type alias ConnectionData =
-    { lastRequest : LastRequest, call : Maybe Call.RoomId }
+    { lastRequest : LastRequest
+    , call : Maybe Call.RoomId
+    , callSfu : Maybe { sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName, connected : Bool }
+    }
 
 
 type ServerSecretStatus
@@ -643,6 +666,14 @@ type alias AdminData_Guild =
     , channels : SeqDict (Id ChannelId) AdminData_GuildChannel
     , memberCount : Int
     , owner : Id UserId
+    }
+
+
+type alias AdminData_DeletedGuild =
+    { name : GuildName
+    , owner : Id UserId
+    , memberCount : Int
+    , deletedAt : Time.Posix
     }
 
 
@@ -1432,6 +1463,14 @@ addInvite :
     -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
 addInvite inviteId userId time guild =
     { guild | invites = SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites }
+
+
+removeInvite :
+    SecretId InviteLinkId
+    -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
+    -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
+removeInvite inviteId guild =
+    { guild | invites = SeqDict.remove inviteId guild.invites }
 
 
 addMemberBackend : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
@@ -2457,6 +2496,9 @@ routeToViewing route local =
             StopViewingChannel
 
         LinkDiscord _ ->
+            StopViewingChannel
+
+        PublicGoMatchRoute _ ->
             StopViewingChannel
 
 

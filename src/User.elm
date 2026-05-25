@@ -461,6 +461,7 @@ type AdminUiSection
     | DiscordUsersSection
     | DiscordGuildsSection
     | GuildsSection
+    | DeletedGuildsSection
     | ApiKeysSection
     | ExportSection
     | ConnectionsSection
@@ -468,6 +469,7 @@ type AdminUiSection
     | ToBackendLogsSection
     | StickersAndEmojisSection
     | VoiceChatSection
+    | WebsocketCloseEventsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -491,6 +493,9 @@ sectionToString section2 =
         GuildsSection ->
             "Guilds"
 
+        DeletedGuildsSection ->
+            "Deleted guilds"
+
         ApiKeysSection ->
             "API keys"
 
@@ -511,6 +516,9 @@ sectionToString section2 =
 
         VoiceChatSection ->
             "Voice chat"
+
+        WebsocketCloseEventsSection ->
+            "Websocket close events"
 
 
 {-| User containing only publicly visible data
@@ -683,7 +691,7 @@ profileImage userId maybeFileHash =
                 }
 
         Nothing ->
-            GuildIcon.defaultUser profileImageSize 8 userId
+            GuildIcon.defaultUser False profileImageSize 8 userId
 
 
 discordProfileImage : Discord.Id Discord.UserId -> Maybe FileHash -> Element msg
@@ -711,8 +719,8 @@ discordProfileImage _ maybeFileHash =
                 Ui.none
 
 
-profileImageNoRounding : Maybe FileHash -> Element msg
-profileImageNoRounding maybeFileHash =
+profileImageNoRounding : Id UserId -> Maybe FileHash -> Element msg
+profileImageNoRounding userId maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
             Ui.image
@@ -725,12 +733,7 @@ profileImageNoRounding maybeFileHash =
                 }
 
         Nothing ->
-            Ui.el
-                [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                ]
-                Ui.none
+            GuildIcon.defaultUser False profileImageSize 0 userId
 
 
 multipleProfileImages : List ( Discord.Id Discord.UserId, Maybe FileHash ) -> Element msg

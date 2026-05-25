@@ -10,3 +10,8 @@ The following will run tests
 ```
 npx elm-test-rs --compiler `which lamdera`
 ```
+
+If `elm-test-rs` fails with "failed to fetch ... package.elm-lang.org" (happens in some sandboxed environments due to TLS interception), fall back to:
+```
+npx --yes elm-test --compiler=`which lamdera`
+```

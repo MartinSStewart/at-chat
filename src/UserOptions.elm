@@ -6,7 +6,6 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress
 import Env
-import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
@@ -418,49 +417,12 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                     , Ui.column
                                         [ Ui.spacing 2, Ui.widthMax 400 ]
                                         [ bookmarkletLabel.element
-                                        , Ui.row
-                                            []
-                                            [ Ui.Input.text
-                                                [ Ui.clipWithEllipsis
-                                                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
-                                                , Ui.htmlAttribute (Html.Attributes.readonly True)
-                                                , Ui.background MyUi.background1
-                                                , Ui.border 1
-                                                , Ui.borderColor MyUi.inputBorder
-                                                , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
-                                                , Ui.height Ui.fill
-                                                ]
-                                                { onChange = \_ -> TypedDiscordLinkBookmarklet
-                                                , text = bookmarklet
-                                                , placeholder = Nothing
-                                                , label = bookmarkletLabel.id
-                                                }
-                                            , MyUi.elButton
-                                                (Dom.id "userOptions_copyBookmarklet")
-                                                (PressedCopyText bookmarklet)
-                                                [ Ui.width Ui.shrink
-                                                , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
-                                                , Ui.borderColor MyUi.inputBorder
-                                                , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-                                                , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
-                                                , Ui.spacing 4
-                                                , Ui.background MyUi.buttonBackground
-                                                , Ui.Font.size 14
-                                                , Ui.height Ui.fill
-                                                , Ui.contentCenterY
-                                                ]
-                                                (case loaded.lastCopied of
-                                                    Just copied ->
-                                                        if copied.copiedText == bookmarklet then
-                                                            Ui.text "Copied!"
-
-                                                        else
-                                                            Ui.html Icons.copy
-
-                                                    Nothing ->
-                                                        Ui.html Icons.copy
-                                                )
-                                            ]
+                                        , MyUi.copyBox
+                                            (Dom.id "userOptions_bookmarklet")
+                                            PressedCopyText
+                                            TypedDiscordLinkBookmarklet
+                                            loaded
+                                            bookmarklet
                                         ]
                                     ]
 
@@ -486,7 +448,9 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Connected devices"
-                    (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
+                    (viewConnectedDevice True local.localUser.session
+                        :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions)
+                    )
                 , Ui.row
                     [ Ui.paddingXY 16 0 ]
                     [ MyUi.simpleButton

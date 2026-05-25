@@ -10,8 +10,9 @@
 * Make it more clear when a message hasn't been sent yet
 * Message stickers and message custom emojis gets added to a user's available emojis on the frontend when it shouldn't
   do that
-* Video call not previewing when loaded directly via url
 * Video call preview not closed when leaving channel on mobile
+* Messages disappear for one user (are still sent but vanishing locally). This is happening when backups are created.
+  Need to make backups lock up server less
 
 Requested features:
 

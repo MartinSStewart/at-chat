@@ -18,11 +18,13 @@ import Env
 import Expect
 import FileStatus
 import Frontend
+import Html.Attributes
 import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import Json.Encode
 import Local exposing (ChangeId(..))
 import LoginForm
+import MembersAndOwner
 import NonemptyDict
 import Pages.Home
 import PersonName
@@ -898,12 +900,12 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , RecordedTestExtra.writeMessage admin 100 "First message"
                 , RecordedTestExtra.writeMessage admin 100 "Next message"
                 , RecordedTestExtra.writeMessage admin 100 "Third message"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ])
                 , user.click 100 (Dom.id "guild_openGuild_1")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "3" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "3") ])
                 , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve Hello!"
                 , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve Hello again!"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
                 , T.connectFrontend
                     100
                     RecordedTestExtra.sessionId1
@@ -911,7 +913,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     RecordedTestExtra.desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
-                        , userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.style "aria-label" "2" ])
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.attribute (Html.Attributes.attribute "aria-label" "2") ])
                         ]
                     )
                 ]
@@ -1176,6 +1180,33 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                         ]
                                                     )
                                                 , user.snapshotView 100 { name = "user overview with two factor already complete" }
+                                                , user.click 100 (Dom.id "userOverview_startDisable2Fa")
+                                                , user.snapshotView 100 { name = "2FA disable prompt" }
+                                                , user.input 100 (Dom.id "userOverview_disableTwoFactorCodeInput") "123123"
+                                                , user.snapshotView 100 { name = "2FA disable with wrong code" }
+                                                , user.input
+                                                    100
+                                                    (Dom.id "userOverview_disableTwoFactorCodeInput")
+                                                    (TwoFactorAuthentication.getCode RecordedTestExtra.startTime key
+                                                        |> Maybe.withDefault 0
+                                                        |> String.fromInt
+                                                        |> String.padLeft LoginForm.twoFactorCodeLength '0'
+                                                    )
+                                                , user.checkView
+                                                    100
+                                                    (Test.Html.Query.has
+                                                        [ Test.Html.Selector.exactText "Add two factor authentication" ]
+                                                    )
+                                                , T.checkState
+                                                    100
+                                                    (\data2 ->
+                                                        if SeqDict.member userId data2.backend.twoFactorAuthentication then
+                                                            Err "2FA should have been disabled for the user"
+
+                                                        else
+                                                            Ok ()
+                                                    )
+                                                , user.snapshotView 100 { name = "2FA disabled" }
                                                 ]
 
                                             Err _ ->
@@ -1703,6 +1734,138 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.startTest
+        "Owner deletes an invite link and a later user cannot join through it"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            RecordedTestExtra.sessionId0
+            "/"
+            RecordedTestExtra.desktopWindow
+            (\admin ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 0
+
+                    secondUserId : Id UserId
+                    secondUserId =
+                        Id.fromInt 1
+
+                    thirdUserId : Id UserId
+                    thirdUserId =
+                        Id.fromInt 2
+                in
+                [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail admin
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_createInviteLink")
+                , admin.click 100 (Dom.id "guild_copyText")
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            List.filter
+                                (\portRequest -> portRequest.clientId == admin.clientId && portRequest.portName == "copy_to_clipboard_to_js")
+                                data.portRequests
+                        of
+                            [ portRequest ] ->
+                                case Json.Decode.decodeValue Json.Decode.string portRequest.value of
+                                    Ok copyText ->
+                                        let
+                                            urlPath : String
+                                            urlPath =
+                                                String.dropLeft (String.length Env.domain) copyText
+
+                                            inviteIdStr : String
+                                            inviteIdStr =
+                                                String.split "/" urlPath
+                                                    |> List.reverse
+                                                    |> List.head
+                                                    |> Maybe.withDefault ""
+                                        in
+                                        [ T.connectFrontend
+                                            100
+                                            RecordedTestExtra.sessionId1
+                                            urlPath
+                                            RecordedTestExtra.desktopWindow
+                                            (\secondUser ->
+                                                [ secondUser.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                                , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.userEmail secondUser
+                                                , secondUser.input 100 (Dom.id "loginForm_name") "Sven"
+                                                , secondUser.click 100 (Dom.id "loginForm_submit")
+                                                , T.checkBackend
+                                                    100
+                                                    (\backend ->
+                                                        case SeqDict.get guildId backend.guilds of
+                                                            Just guild ->
+                                                                case MembersAndOwner.isMember secondUserId guild.membersAndOwner of
+                                                                    MembersAndOwner.IsMember ->
+                                                                        Ok ()
+
+                                                                    _ ->
+                                                                        Err "Second user should have joined the guild via the invite"
+
+                                                            Nothing ->
+                                                                Err "Guild missing"
+                                                    )
+                                                , admin.click 100 (Dom.id ("guild_deleteInviteLink_" ++ inviteIdStr))
+                                                , T.checkBackend
+                                                    100
+                                                    (\backend ->
+                                                        case SeqDict.get guildId backend.guilds of
+                                                            Just guild ->
+                                                                if SeqDict.isEmpty guild.invites then
+                                                                    Ok ()
+
+                                                                else
+                                                                    Err "Invite link should have been removed after the owner clicked delete"
+
+                                                            Nothing ->
+                                                                Err "Guild missing"
+                                                    )
+                                                , T.connectFrontend
+                                                    100
+                                                    RecordedTestExtra.sessionId2
+                                                    urlPath
+                                                    RecordedTestExtra.desktopWindow
+                                                    (\thirdUser ->
+                                                        [ thirdUser.portEvent 10 "user_agent_from_js" (Json.Encode.string RecordedTestExtra.firefoxDesktop)
+                                                        , RecordedTestExtra.handleLoginFromLoginPage RecordedTestExtra.joeEmail thirdUser
+                                                        , thirdUser.input 100 (Dom.id "loginForm_name") "Joe"
+                                                        , thirdUser.click 100 (Dom.id "loginForm_submit")
+                                                        , T.checkBackend
+                                                            100
+                                                            (\backend ->
+                                                                case SeqDict.get guildId backend.guilds of
+                                                                    Just guild ->
+                                                                        case MembersAndOwner.isMember thirdUserId guild.membersAndOwner of
+                                                                            MembersAndOwner.IsNotMember ->
+                                                                                Ok ()
+
+                                                                            _ ->
+                                                                                Err "Third user should not have joined the guild through the deleted invite"
+
+                                                                    Nothing ->
+                                                                        Err "Guild missing"
+                                                            )
+                                                        , RecordedTestExtra.hasText thirdUser [ "Guild not found" ]
+                                                        ]
+                                                    )
+                                                ]
+                                            )
+                                        ]
+
+                                    Err _ ->
+                                        [ admin.checkModel 100 (\_ -> Err "Didn't decode clipboard port value") ]
+
+                            _ ->
+                                [ admin.checkModel 100 (\_ -> Err "Didn't copy invite link to clipboard") ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Owner must confirm deletion of a non-empty channel by typing its name"
         RecordedTestExtra.startTime
         normalConfig
@@ -1758,8 +1921,140 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , T.start
+        "Owner deletes a guild and it is purged after 30 days"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin user ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+                in
+                [ RecordedTestExtra.writeMessage admin 100 "hello world"
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "Type \"My new guild!\" to confirm deletion" ]
+                    )
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "wrong-name"
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        if SeqDict.member guildId backend.guilds then
+                            Ok ()
+
+                        else
+                            Err "Wrong confirmation text should not delete the guild"
+                    )
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "My new guild!"
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
+                , user.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "My new guild!" ])
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.get guildId backend.deletedGuilds ) of
+                            ( False, Just _ ) ->
+                                Ok ()
+
+                            ( True, _ ) ->
+                                Err "Guild should be removed from active guilds"
+
+                            ( False, Nothing ) ->
+                                Err "Guild should be present in deletedGuilds"
+                    )
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My second guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        let
+                            newGuildId : Id GuildId
+                            newGuildId =
+                                Id.fromInt 2
+                        in
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.member newGuildId backend.guilds ) of
+                            ( False, True ) ->
+                                Ok ()
+
+                            ( True, _ ) ->
+                                Err "Deleted guild ID should not be reused"
+
+                            ( False, False ) ->
+                                Err ("Expected newly created guild at id 2, got ids: " ++ String.join "," (List.map (Id.toInt >> String.fromInt) (SeqDict.keys backend.guilds)))
+                    )
+                ]
+            )
+        , T.checkBackend
+            (Duration.days 31 |> Duration.inMilliseconds)
+            (\backend ->
+                if SeqDict.isEmpty backend.deletedGuilds then
+                    Ok ()
+
+                else
+                    Err "deletedGuilds should be pruned after 30 days"
+            )
+        ]
+    , T.start
+        "Admin restores a deleted guild"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                let
+                    guildId : Id GuildId
+                    guildId =
+                        Id.fromInt 1
+                in
+                [ RecordedTestExtra.writeMessage admin 100 "hello world"
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , admin.input 100 (Dom.id "deleteGuildConfirmation") "My new guild!"
+                , admin.click 100 (Dom.id "guild_deleteGuild")
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.get guildId backend.deletedGuilds ) of
+                            ( False, Just _ ) ->
+                                Ok ()
+
+                            _ ->
+                                Err "Guild should be in deletedGuilds after deletion"
+                    )
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_Deleted guilds")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.exactText "My new guild!" ])
+                , admin.click 100 (Dom.id ("Admin_restoreGuildButton_" ++ Id.toString guildId))
+                , T.checkBackend
+                    100
+                    (\backend ->
+                        case ( SeqDict.member guildId backend.guilds, SeqDict.member guildId backend.deletedGuilds ) of
+                            ( True, False ) ->
+                                Ok ()
+
+                            ( False, _ ) ->
+                                Err "Guild should be restored to active guilds"
+
+                            ( True, True ) ->
+                                Err "Guild should be removed from deletedGuilds after restore"
+                    )
+                ]
+            )
+        ]
     , RecordedTestExtra.goMatchTest normalConfig
     , RecordedTestExtra.goTurnNotificationDotTest normalConfig
+    , RecordedTestExtra.publicGoMatchViewTest normalConfig
     ]
 
 
@@ -1958,6 +2253,18 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                          else
                                                             [ "Guild data was modified by attacker" ]
                                                         )
+                                                            ++ (if Id.toInt before.backend.nextGuildId <= Id.toInt after.backend.nextGuildId then
+                                                                    []
+
+                                                                else
+                                                                    [ "Next guild ID data was modified by attacker" ]
+                                                               )
+                                                            ++ (if SeqDict.get guildId before.backend.deletedGuilds == SeqDict.get guildId after.backend.deletedGuilds then
+                                                                    []
+
+                                                                else
+                                                                    [ "Deleted guild data was modified by attacker" ]
+                                                               )
                                                             ++ (if before.backend.discordGuilds == after.backend.discordGuilds then
                                                                     []
 

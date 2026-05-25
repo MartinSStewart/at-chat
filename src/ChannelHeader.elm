@@ -8,29 +8,31 @@ module ChannelHeader exposing
     , thread
     )
 
-import Array exposing (Array)
 import Call exposing (RoomId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Lamdera exposing (ClientId)
 import Go
 import GuildIcon
+import Html.Attributes
 import Icons
 import Id exposing (ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildOrDmId(..), Id, UserId)
 import LocalState exposing (LocalState)
 import MyUi
 import NonemptyDict
-import NonemptySet exposing (NonemptySet)
-import OneOrGreater
+import NonemptySet
+import OneOrGreater exposing (OneOrGreater)
+import PersonName
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DmChannelHeaderTab(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet
 import Svg
 import Svg.Attributes
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2)
 import Ui exposing (Element)
+import Ui.Accessibility
 import Ui.Anim
 import Ui.Font
 import User exposing (LocalUser)
@@ -401,7 +403,7 @@ goGameButton :
     Bool
     -> Maybe DmChannelHeaderTab
     -> Id UserId
-    -> SeqDict (Id ChannelMessageId) ( Go.ValidatedSetup, Array Go.ActionWithTime )
+    -> SeqDict (Id ChannelMessageId) Go.MatchData
     -> Element FrontendMsg
 goGameButton isMobile currentTab userId goMatches =
     let
@@ -436,7 +438,7 @@ goGameButton isMobile currentTab userId goMatches =
                         , Ui.borderColor MyUi.background1
                         , Ui.move { x = -3, y = 3, z = 0 }
                         , Ui.alignRight
-                        , MyUi.htmlStyle "aria-label" "Your turn"
+                        , Ui.Accessibility.description "Your turn"
                         , Ui.htmlAttribute (Dom.idToAttribute (Dom.id "guild_goMatchTurnDot"))
                         ]
                         Ui.none
@@ -452,61 +454,51 @@ goGameButton isMobile currentTab userId goMatches =
 voiceChatButton : Bool -> Maybe DmChannelHeaderTab -> Id UserId -> LocalUser -> Call.Local -> Element FrontendMsg
 voiceChatButton isMobile currentTab otherUserId localUser calls =
     let
-        joinedUsers : SeqDict (Id UserId) (NonemptySet ClientId)
+        joinedUsers : SeqDict (Id UserId) OneOrGreater
         joinedUsers =
             case SeqDict.get (DmRoomId otherUserId) calls.voiceChats of
                 Just voiceChat ->
                     NonemptySet.foldl
-                        (\( userId, clientId ) dict ->
-                            SeqDict.update
-                                userId
-                                (\maybe ->
-                                    case maybe of
-                                        Just nonempty ->
-                                            NonemptySet.insert clientId nonempty |> Just
-
-                                        Nothing ->
-                                            NonemptySet.singleton clientId |> Just
-                                )
-                                dict
-                        )
+                        (\( userId, _ ) dict -> SeqDictHelper.increment userId dict)
                         SeqDict.empty
                         voiceChat
 
                 Nothing ->
                     SeqDict.empty
 
+        joinedUsers2 =
+            if calls.currentRoom == Just (DmRoomId otherUserId) then
+                SeqDictHelper.increment localUser.session.userId joinedUsers
+
+            else
+                joinedUsers
+
         joined : Element msg
         joined =
-            joinedUsers
-                |> SeqDict.toList
+            SeqDict.toList joinedUsers2
                 |> List.map
-                    (\( userId, clientIds ) ->
-                        let
-                            count =
-                                NonemptySet.size clientIds
-                        in
-                        Ui.el
-                            [ case ( count > 1, OneOrGreater.fromInt count ) of
-                                ( True, Just count2 ) ->
-                                    GuildIcon.notificationHelper
-                                        MyUi.background1
-                                        MyUi.white
-                                        MyUi.border1
-                                        2
-                                        -2
-                                        count2
+                    (\( userId, count ) ->
+                        case User.getUser userId localUser of
+                            Just user ->
+                                Ui.el
+                                    [ if OneOrGreater.toInt count > 1 then
+                                        GuildIcon.notificationHelper
+                                            MyUi.background1
+                                            MyUi.white
+                                            MyUi.border1
+                                            2
+                                            -2
+                                            count
 
-                                _ ->
-                                    Ui.noAttr
-                            ]
-                            (case User.getUser userId localUser of
-                                Just user ->
-                                    User.profileImage userId user.icon
+                                      else
+                                        Ui.noAttr
+                                    , Html.Attributes.attribute "aria-label" (PersonName.toString user.name ++ " is in a call")
+                                        |> Ui.htmlAttribute
+                                    ]
+                                    (User.profileImage userId user.icon)
 
-                                Nothing ->
-                                    User.profileImage userId Nothing
-                            )
+                            Nothing ->
+                                Ui.none
                     )
                 |> Ui.row [ Ui.width Ui.shrink, Ui.spacing 4 ]
     in
@@ -580,6 +572,7 @@ tabBodyView local loggedIn model =
                         Just (DmChannelHeaderTab_Go maybeMatchId) ->
                             Go.view
                                 model.windowSize
+                                model.lastCopied
                                 local.localUser
                                 otherUserId
                                 maybeMatchId
@@ -660,6 +653,9 @@ tabBodyView local loggedIn model =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ ->
             Nothing
 
 

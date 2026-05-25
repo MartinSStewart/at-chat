@@ -1,4 +1,4 @@
-module OneOrGreater exposing (OneOrGreater(..), fromInt, increment, one, plus, toInt)
+module OneOrGreater exposing (OneOrGreater(..), fromInt, increment, one, plus, toInt, toString)
 
 {-| A integer that's guaranteed to be 1 or a value greater than 1
 -}
@@ -37,3 +37,8 @@ fromInt int =
 plus : OneOrGreater -> OneOrGreater -> OneOrGreater
 plus (OneOrGreater a) (OneOrGreater b) =
     OneOrGreater (a + b)
+
+
+toString : OneOrGreater -> String
+toString (OneOrGreater a) =
+    String.fromInt a

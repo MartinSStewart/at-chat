@@ -96,11 +96,16 @@ type alias FrontendModel =
     , pendingResponses : SeqDict ResponseId PendingResponse
     , responseCounter : Int
     , showOptions : Bool
-    , selectedModel : Maybe AiModelName
+    , selectedModels : List AiModelName
     , debounceCounter : Int
     , sendMessageWith : SendMessageWith
     , aiModels : AiModelsStatus
     }
+
+
+maxModels : Int
+maxModels =
+    3
 
 
 type AiModelName
@@ -112,7 +117,7 @@ type alias LocalStorage =
     , chatHistory : String
     , pendingResponses : SeqDict ResponseId PendingResponse
     , showOptions : Bool
-    , selectedModel : Maybe AiModelName
+    , selectedModels : List AiModelName
     , sendMessageWith : SendMessageWith
     , responseCounter : Int
     }
@@ -124,7 +129,7 @@ type ResponseId
 
 type PendingResponse
     = Pending AiModelName
-    | GotResponse AiModelName String
+    | GotResponse AiModelName String (Maybe Float)
     | GotError AiModelName Http.Error
 
 
@@ -143,7 +148,9 @@ type Msg
     | PressedChatHistoryContainer
     | PressedClearChatHistory
     | PressedOptionsButton
-    | SelectedAiModel AiModelName
+    | SelectedAiModel Int AiModelName
+    | PressedAddModel
+    | PressedRemoveModel Int
     | SelectedSendMessageWith SendMessageWith
     | CheckDebounce Int
     | GotLocalStorage String
@@ -183,7 +190,7 @@ init =
       , pendingResponses = SeqDict.empty
       , responseCounter = 0
       , showOptions = True
-      , selectedModel = Nothing
+      , selectedModels = []
       , debounceCounter = 0
       , sendMessageWith = SendWithShiftEnter
       , aiModels = LoadingAiModels
@@ -232,8 +239,14 @@ isPressMsg msg =
         PressedOptionsButton ->
             True
 
-        SelectedAiModel _ ->
+        SelectedAiModel _ _ ->
             False
+
+        PressedAddModel ->
+            True
+
+        PressedRemoveModel _ ->
+            True
 
         SelectedSendMessageWith _ ->
             False
@@ -299,7 +312,7 @@ localStorageCodec =
         |> Serialize.field .chatHistory Serialize.string
         |> Serialize.field .pendingResponses (seqDictCodec responseIdCodec pendingResponseCodec)
         |> Serialize.field .showOptions Serialize.bool
-        |> Serialize.field .selectedModel (Serialize.maybe aiModelCodec)
+        |> Serialize.field .selectedModels (Serialize.list aiModelCodec)
         |> Serialize.field .sendMessageWith sendMessageWithCodec
         |> Serialize.field .responseCounter Serialize.int
         |> Serialize.finishRecord
@@ -330,14 +343,14 @@ pendingResponseCodec =
                 Pending arg0 ->
                     pendingEncoder arg0
 
-                GotResponse argA argB ->
-                    gotResponseEncoder argA argB
+                GotResponse argA argB argC ->
+                    gotResponseEncoder argA argB argC
 
                 GotError argA argB ->
                     gotErrorEncoder argA argB
         )
         |> Serialize.variant1 Pending aiModelCodec
-        |> Serialize.variant2 GotResponse aiModelCodec Serialize.string
+        |> Serialize.variant3 GotResponse aiModelCodec Serialize.string (Serialize.maybe Serialize.float)
         |> Serialize.variant2 GotError aiModelCodec errorCodec
         |> Serialize.finishCustomType
 
@@ -405,7 +418,7 @@ modelToLocalStorage model =
     , chatHistory = model.chatHistory
     , pendingResponses = model.pendingResponses
     , showOptions = model.showOptions
-    , selectedModel = model.selectedModel
+    , selectedModels = model.selectedModels
     , sendMessageWith = model.sendMessageWith
     , responseCounter = model.responseCounter
     }
@@ -537,49 +550,71 @@ update msg model =
             startDebounceSave { model | message = message }
 
         PressedSend ->
-            if SeqDict.size model.pendingResponses < 3 then
-                case getAiModel model of
-                    Just aiModel ->
-                        let
-                            newChatHistory : String
-                            newChatHistory =
-                                if String.trim model.message == "" then
-                                    model.chatHistory
+            let
+                aiModelsToSend : List AiModel
+                aiModelsToSend =
+                    getSelectedAiModels model
+            in
+            if
+                not (List.isEmpty aiModelsToSend)
+                    && (SeqDict.size model.pendingResponses + List.length aiModelsToSend <= maxModels)
+            then
+                let
+                    newChatHistory : String
+                    newChatHistory =
+                        if String.trim model.message == "" then
+                            model.chatHistory
 
-                                else
-                                    String.trimRight model.chatHistory
-                                        ++ prefixWrapper userPrefix
-                                        ++ String.trim model.message
-                                        ++ prefixWrapper botPrefix
-                                        |> String.trimLeft
+                        else
+                            String.trimRight model.chatHistory
+                                ++ prefixWrapper userPrefix
+                                ++ String.trim model.message
+                                ++ prefixWrapper botPrefix
+                                |> String.trimLeft
 
-                            responseId =
-                                RespondId model.responseCounter
-                        in
-                        ( { model
-                            | message = ""
-                            , chatHistory = newChatHistory
-                            , pendingResponses =
+                    indexedModels : List ( Int, AiModel )
+                    indexedModels =
+                        List.indexedMap Tuple.pair aiModelsToSend
+
+                    newPendings : SeqDict ResponseId PendingResponse
+                    newPendings =
+                        List.foldl
+                            (\( i, aiModel ) acc ->
                                 SeqDict.insert
-                                    responseId
+                                    (RespondId (model.responseCounter + i))
                                     (Pending aiModel.id)
-                                    model.pendingResponses
-                            , responseCounter = model.responseCounter + 1
-                          }
-                        , Command.batch
-                            [ (if List.member "image" aiModel.inputs then
-                                AiMessageRequest aiModel.id responseId (chatToMessage newChatHistory)
+                                    acc
+                            )
+                            model.pendingResponses
+                            indexedModels
 
-                               else
-                                AiMessageRequestSimple aiModel.id responseId newChatHistory
-                              )
-                                |> Lamdera.sendToBackend
-                            , scrollToBottom
-                            ]
-                        )
+                    requestCmds : List (Command FrontendOnly ToBackend Msg)
+                    requestCmds =
+                        List.map
+                            (\( i, aiModel ) ->
+                                let
+                                    responseId : ResponseId
+                                    responseId =
+                                        RespondId (model.responseCounter + i)
+                                in
+                                (if List.member "image" aiModel.inputs then
+                                    AiMessageRequest aiModel.id responseId (chatToMessage newChatHistory)
 
-                    Nothing ->
-                        ( model, Command.none )
+                                 else
+                                    AiMessageRequestSimple aiModel.id responseId newChatHistory
+                                )
+                                    |> Lamdera.sendToBackend
+                            )
+                            indexedModels
+                in
+                ( { model
+                    | message = ""
+                    , chatHistory = newChatHistory
+                    , pendingResponses = newPendings
+                    , responseCounter = model.responseCounter + List.length aiModelsToSend
+                  }
+                , Command.batch (scrollToBottom :: requestCmds)
+                )
 
             else
                 ( model, Command.none )
@@ -589,7 +624,7 @@ update msg model =
 
         PressedKeep responseId ->
             case SeqDict.get responseId model.pendingResponses of
-                Just (GotResponse _ text) ->
+                Just (GotResponse _ text _) ->
                     saveToLocalStorage
                         { model
                             | pendingResponses = SeqDict.empty
@@ -642,8 +677,67 @@ update msg model =
         PressedOptionsButton ->
             saveToLocalStorage { model | showOptions = not model.showOptions }
 
-        SelectedAiModel aiModel ->
-            saveToLocalStorage { model | selectedModel = Just aiModel }
+        SelectedAiModel index aiModel ->
+            saveToLocalStorage
+                { model
+                    | selectedModels =
+                        if index >= List.length model.selectedModels then
+                            model.selectedModels ++ [ aiModel ]
+
+                        else
+                            List.indexedMap
+                                (\i existing ->
+                                    if i == index then
+                                        aiModel
+
+                                    else
+                                        existing
+                                )
+                                model.selectedModels
+                }
+
+        PressedAddModel ->
+            if List.length model.selectedModels < maxModels then
+                let
+                    defaultModel : Maybe AiModelName
+                    defaultModel =
+                        case List.reverse model.selectedModels of
+                            last :: _ ->
+                                Just last
+
+                            [] ->
+                                case model.aiModels of
+                                    LoadedAiModels (first :: _) ->
+                                        Just first.id
+
+                                    _ ->
+                                        Nothing
+                in
+                case defaultModel of
+                    Just newModel ->
+                        saveToLocalStorage
+                            { model | selectedModels = model.selectedModels ++ [ newModel ] }
+
+                    Nothing ->
+                        ( model, Command.none )
+
+            else
+                ( model, Command.none )
+
+        PressedRemoveModel index ->
+            saveToLocalStorage
+                { model
+                    | selectedModels =
+                        List.indexedMap Tuple.pair model.selectedModels
+                            |> List.filterMap
+                                (\( i, existing ) ->
+                                    if i == index then
+                                        Nothing
+
+                                    else
+                                        Just existing
+                                )
+                }
 
         SelectedSendMessageWith sendMessageWith ->
             saveToLocalStorage { model | sendMessageWith = sendMessageWith }
@@ -663,7 +757,7 @@ update msg model =
                         , chatHistory = ok.chatHistory
                         , pendingResponses = ok.pendingResponses
                         , showOptions = ok.showOptions
-                        , selectedModel = ok.selectedModel
+                        , selectedModels = ok.selectedModels
                         , sendMessageWith = ok.sendMessageWith
                         , responseCounter = ok.responseCounter
                       }
@@ -680,8 +774,8 @@ update msg model =
                         SeqDict.updateIfExists responseId
                             (\response ->
                                 case response of
-                                    GotResponse modelId _ ->
-                                        GotResponse modelId text
+                                    GotResponse modelId _ cost ->
+                                        GotResponse modelId text cost
 
                                     Pending _ ->
                                         response
@@ -700,15 +794,15 @@ update msg model =
                 Ok ok ->
                     { model
                         | aiModels = LoadedAiModels (List.sortBy (\a -> aiModelNameToString a.id) ok)
-                        , selectedModel =
+                        , selectedModels =
                             if
                                 List.any (\a -> a.id == AiModelName "anthropic/claude-sonnet-4") ok
-                                    && (model.selectedModel == Nothing)
+                                    && List.isEmpty model.selectedModels
                             then
-                                Just (AiModelName "anthropic/claude-sonnet-4")
+                                [ AiModelName "anthropic/claude-sonnet-4" ]
 
                             else
-                                model.selectedModel
+                                model.selectedModels
                     }
 
                 Err err ->
@@ -724,14 +818,16 @@ aiModelNameToString (AiModelName a) =
     a
 
 
-getAiModel : FrontendModel -> Maybe AiModel
-getAiModel model =
-    case ( model.selectedModel, model.aiModels ) of
-        ( Just selected, LoadedAiModels aiModels ) ->
-            List.Extra.find (\aiModel -> aiModel.id == selected) aiModels
+getSelectedAiModels : FrontendModel -> List AiModel
+getSelectedAiModels model =
+    case model.aiModels of
+        LoadedAiModels aiModels ->
+            List.filterMap
+                (\selected -> List.Extra.find (\aiModel -> aiModel.id == selected) aiModels)
+                model.selectedModels
 
         _ ->
-            Nothing
+            []
 
 
 getAiModelById : AiModelName -> FrontendModel -> Maybe AiModel
@@ -750,11 +846,29 @@ pendingResponseModelId response =
         Pending modelId ->
             modelId
 
-        GotResponse modelId _ ->
+        GotResponse modelId _ _ ->
             modelId
 
         GotError modelId _ ->
             modelId
+
+
+pendingResponseCost : PendingResponse -> Maybe Float
+pendingResponseCost response =
+    case response of
+        GotResponse _ _ cost ->
+            cost
+
+        Pending _ ->
+            Nothing
+
+        GotError _ _ ->
+            Nothing
+
+
+formatCost : Float -> String
+formatCost cost =
+    "$" ++ String.fromFloat (toFloat (round (cost * 1000000)) / 1000000)
 
 
 prefixWrapper : String -> String
@@ -790,7 +904,8 @@ updateFromBackend msg model =
                                 (case result of
                                     Ok aiMessage ->
                                         let
-                                            aiMessage2 =
+                                            text : String
+                                            text =
                                                 case String.split (prefixWrapper botPrefix) aiMessage.content of
                                                     aiMessage3 :: _ ->
                                                         case String.split (prefixWrapper userPrefix) aiMessage3 of
@@ -803,7 +918,7 @@ updateFromBackend msg model =
                                                     [] ->
                                                         aiMessage.content
                                         in
-                                        String.replace "\\\"" "\"" aiMessage2 |> GotResponse modelId
+                                        GotResponse modelId (String.replace "\\\"" "\"" text) aiMessage.cost
 
                                     Err error ->
                                         GotError modelId error
@@ -987,7 +1102,7 @@ responseView windowWidth responseCount responseId response =
             |> Ui.px
             |> Ui.width
         , [ case response of
-                GotResponse _ _ ->
+                GotResponse _ _ _ ->
                     responseButton (PressedKeep responseId) MyUi.background2 Icons.checkmark "Keep"
 
                 Pending _ ->
@@ -1029,7 +1144,7 @@ responseView windowWidth responseCount responseId response =
                         ]
                         (Ui.text "Loading...")
 
-                GotResponse _ response2 ->
+                GotResponse _ response2 _ ->
                     Ui.el
                         [ Ui.scrollable
                         , Ui.roundedWith { topLeft = 4, topRight = 4, bottomRight = 0, bottomLeft = 0 }
@@ -1088,7 +1203,17 @@ responseView windowWidth responseCount responseId response =
                 , Ui.borderColor MyUi.inputBorder
                 , Ui.roundedWith { topLeft = 0, topRight = 0, bottomRight = 4, bottomLeft = 4 }
                 ]
-                (Ui.text (aiModelNameToString modelId))
+                (Ui.text
+                    (aiModelNameToString modelId
+                        ++ (case pendingResponseCost response of
+                                Just cost ->
+                                    " · " ++ formatCost cost
+
+                                Nothing ->
+                                    ""
+                           )
+                    )
+                )
             ]
         )
 
@@ -1158,14 +1283,14 @@ optionsView model =
             , Ui.paddingXY 16 0
             ]
             [ Ui.column
-                []
-                [ Ui.el
+                [ Ui.spacing 4 ]
+                (Ui.el
                     [ Ui.Font.size 14
                     , Ui.paddingXY 4 4
                     ]
-                    (Ui.text "AI Model")
-                , Ui.html (aiModelDropdown model.aiModels model.selectedModel)
-                ]
+                    (Ui.text "AI Models")
+                    :: aiModelDropdowns model.aiModels model.selectedModels
+                )
             , Ui.column
                 []
                 [ Ui.el
@@ -1262,57 +1387,44 @@ userMessageView model =
         ]
 
 
-aiModelDropdown : AiModelsStatus -> Maybe AiModelName -> Html Msg
-aiModelDropdown status selected =
+aiModelDropdowns : AiModelsStatus -> List AiModelName -> List (Element Msg)
+aiModelDropdowns status selectedModels =
     case status of
         LoadedAiModels aiModels ->
-            Html.select
-                [ Html.Attributes.value (Maybe.withDefault "" (Maybe.map aiModelNameToString selected))
-                , Html.Events.onInput (\a -> AiModelName a |> SelectedAiModel)
-                , Html.Attributes.style "width" "100%"
-                , Html.Attributes.style "padding" "7px 8px"
-                , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
-                , Html.Attributes.style "border-radius" "4px"
-                , Html.Attributes.style "font-size" "16px"
-                , Html.Attributes.style "background-color" "rgb(32,40,70)"
-                , Html.Attributes.style "color" "rgb(255,255,255)"
-                , Html.Attributes.style "cursor" "pointer"
-                ]
-                (List.map
-                    (\aiModel ->
-                        Html.option
-                            [ Html.Attributes.value (aiModelNameToString aiModel.id)
-                            , Html.Attributes.selected (Just aiModel.id == selected)
-                            ]
-                            [ Html.text (aiModelNameToString aiModel.id ++ " ")
-                            , if List.member "image" aiModel.inputs then
-                                Html.text "🖼️"
+            let
+                rows : List (Element Msg)
+                rows =
+                    if List.isEmpty selectedModels then
+                        [ aiModelDropdownRow aiModels Nothing 0 False ]
 
-                              else
-                                Html.text ""
-                            , if List.member "file" aiModel.inputs then
-                                Html.text "🗎"
+                    else
+                        List.indexedMap
+                            (\index selected ->
+                                aiModelDropdownRow
+                                    aiModels
+                                    (Just selected)
+                                    index
+                                    (List.length selectedModels > 1)
+                            )
+                            selectedModels
 
-                              else
-                                Html.text ""
-                            , if List.member "audio" aiModel.inputs then
-                                Html.text "🔈"
+                addButton : List (Element Msg)
+                addButton =
+                    if List.length selectedModels < maxModels then
+                        [ addModelButton ]
 
-                              else
-                                Html.text ""
-                            ]
-                    )
-                    aiModels
-                )
+                    else
+                        []
+            in
+            rows ++ addButton
 
         LoadingAiModels ->
-            Html.text "Loading..."
+            [ Ui.html (Html.text "Loading...") ]
 
         LoadingFailed error ->
-            (case error of
+            [ (case error of
                 Http.BadUrl url ->
-                    "Bad url: "
-                        ++ url
+                    "Bad url: " ++ url
 
                 Http.Timeout ->
                     "Request timed out"
@@ -1325,8 +1437,92 @@ aiModelDropdown status selected =
 
                 Http.BadBody string ->
                     "Bad body: " ++ string
-            )
+              )
                 |> Html.text
+                |> Ui.html
+            ]
+
+
+aiModelDropdownRow : List AiModel -> Maybe AiModelName -> Int -> Bool -> Element Msg
+aiModelDropdownRow aiModels selected index showRemove =
+    Ui.row
+        [ Ui.spacing 4 ]
+        [ Ui.html (aiModelSelect aiModels selected index)
+        , if showRemove then
+            Ui.el
+                [ Ui.Input.button (PressedRemoveModel index)
+                , Ui.width (Ui.px 36)
+                , Ui.height (Ui.px 36)
+                , Ui.background MyUi.buttonBackground
+                , Ui.border 1
+                , Ui.borderColor MyUi.border1
+                , Ui.rounded 4
+                , Ui.paddingXY 8 8
+                , MyUi.noShrinking
+                ]
+                (Ui.html closeIcon)
+
+          else
+            Ui.none
+        ]
+
+
+aiModelSelect : List AiModel -> Maybe AiModelName -> Int -> Html Msg
+aiModelSelect aiModels selected index =
+    Html.select
+        [ Html.Attributes.value (Maybe.withDefault "" (Maybe.map aiModelNameToString selected))
+        , Html.Events.onInput (\a -> SelectedAiModel index (AiModelName a))
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "padding" "7px 8px"
+        , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "font-size" "16px"
+        , Html.Attributes.style "background-color" "rgb(32,40,70)"
+        , Html.Attributes.style "color" "rgb(255,255,255)"
+        , Html.Attributes.style "cursor" "pointer"
+        ]
+        (List.map
+            (\aiModel ->
+                Html.option
+                    [ Html.Attributes.value (aiModelNameToString aiModel.id)
+                    , Html.Attributes.selected (Just aiModel.id == selected)
+                    ]
+                    [ Html.text (aiModelNameToString aiModel.id ++ " ")
+                    , if List.member "image" aiModel.inputs then
+                        Html.text "🖼️"
+
+                      else
+                        Html.text ""
+                    , if List.member "file" aiModel.inputs then
+                        Html.text "🗎"
+
+                      else
+                        Html.text ""
+                    , if List.member "audio" aiModel.inputs then
+                        Html.text "🔈"
+
+                      else
+                        Html.text ""
+                    ]
+            )
+            aiModels
+        )
+
+
+addModelButton : Element Msg
+addModelButton =
+    Ui.el
+        [ Ui.Input.button PressedAddModel
+        , Ui.paddingXY 8 6
+        , Ui.background MyUi.buttonBackground
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.rounded 4
+        , Ui.Font.size 14
+        , Ui.Font.bold
+        , Ui.width Ui.shrink
+        ]
+        (Ui.text "+ Add model")
 
 
 
@@ -1359,19 +1555,26 @@ encodeMessage message =
 type alias AiResponse =
     { images : List String
     , content : String
+    , cost : Maybe Float
     }
 
 
-decodeAiMessage : Decoder AiResponse
+type alias AiMessageContent =
+    { images : List String
+    , content : String
+    }
+
+
+decodeAiMessage : Decoder AiMessageContent
 decodeAiMessage =
     Json.Decode.oneOf
         [ Json.Decode.field "message"
             (Json.Decode.map2
-                AiResponse
+                AiMessageContent
                 (Json.Decode.Extra.optionalField "images" (Json.Decode.list decodeImage) |> Json.Decode.map (Maybe.withDefault []))
                 (Json.Decode.field "content" Json.Decode.string)
             )
-        , Json.Decode.field "text" Json.Decode.string |> Json.Decode.map (AiResponse [])
+        , Json.Decode.field "text" Json.Decode.string |> Json.Decode.map (AiMessageContent [])
         ]
 
 
@@ -1429,6 +1632,7 @@ openRouterRequest openRouterKey aiModel message =
                 , ( "reasoning"
                   , Json.Encode.object [ ( "effort", Json.Encode.string "high" ), ( "enabled", Json.Encode.bool True ) ]
                   )
+                , ( "usage", Json.Encode.object [ ( "include", Json.Encode.bool True ) ] )
                 ]
                 |> Http.jsonBody
         , resolver =
@@ -1450,12 +1654,12 @@ openRouterRequest openRouterKey aiModel message =
                         GoodStatus_ _ body ->
                             case
                                 Json.Decode.decodeString
-                                    (Json.Decode.field
-                                        "choices"
-                                        (Json.Decode.index
-                                            0
-                                            decodeAiMessage
+                                    (Json.Decode.map2
+                                        (\content cost ->
+                                            { images = content.images, content = content.content, cost = cost }
                                         )
+                                        (Json.Decode.field "choices" (Json.Decode.index 0 decodeAiMessage))
+                                        (Json.Decode.maybe (Json.Decode.at [ "usage", "cost" ] Json.Decode.float))
                                     )
                                     body
                             of

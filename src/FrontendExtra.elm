@@ -71,13 +71,14 @@ import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
+import SeqDictHelper
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
 import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
+import Types exposing (FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), PublicGoMatch(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -115,8 +116,14 @@ pendingChangesText localChange =
         Local_DeleteChannel _ _ ->
             "Deleted channel"
 
+        Local_DeleteGuild _ ->
+            "Deleted guild"
+
         Local_NewInviteLink _ _ _ ->
             "Created invite link"
+
+        Local_DeleteInviteLink _ _ ->
+            "Deleted invite link"
 
         Local_NewGuild _ _ _ ->
             "Created new guild"
@@ -220,8 +227,17 @@ pendingChangesText localChange =
                 Call.Local_Leave _ ->
                     "Left voice chat"
 
-                Call.Local_Signal _ _ ->
-                    "Voice chat state change"
+                Call.Local_PublishTracks _ _ _ ->
+                    "Publish tracks"
+
+                Call.Local_PublishConnected ->
+                    "Publish connected"
+
+                Call.Local_PullTracks _ _ _ _ ->
+                    "Pull tracks"
+
+                Call.Local_RenegotiateAnswer _ _ ->
+                    "Renegotiate"
 
         Local_Go _ change ->
             case change of
@@ -230,6 +246,9 @@ pendingChangesText localChange =
 
                 Go.Action _ _ ->
                     "Made a move in Go"
+
+                Go.CreatePublicLink _ _ ->
+                    "Shared Go match"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -501,6 +520,9 @@ canDropFiles currentUserId route =
             Nothing
 
         LinkDiscord _ ->
+            Nothing
+
+        PublicGoMatchRoute _ ->
             Nothing
 
 
@@ -1346,6 +1368,11 @@ routeRequest previousRoute newRoute model =
                     Command.none
             )
 
+        PublicGoMatchRoute publicGoMatchId ->
+            ( { model2 | publicGoMatch = PublicGoMatch_Loading }
+            , Lamdera.sendToBackend (GetPublicGoMatchRequest publicGoMatchId)
+            )
+
 
 updateLoggedIn :
     (LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg ))
@@ -1455,7 +1482,16 @@ isPressMsg msg =
         PressedDeleteChannel _ _ ->
             True
 
+        EditGuildFormChanged _ _ ->
+            False
+
+        PressedDeleteGuild _ ->
+            True
+
         PressedCreateInviteLink _ ->
+            True
+
+        PressedDeleteInviteLink _ _ ->
             True
 
         FrontendNoOp ->
@@ -1763,6 +1799,17 @@ isPressMsg msg =
 
         FileDropped _ ->
             False
+
+        GoSpectatorMsg spectatorMsg ->
+            case spectatorMsg of
+                Go.PressedArrowLeft ->
+                    True
+
+                Go.PressedArrowRight ->
+                    True
+
+                Go.ChangedViewingMove _ ->
+                    False
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -2086,6 +2133,9 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
+                Local_DeleteGuild guildId ->
+                    { local | guilds = SeqDict.remove guildId local.guilds }
+
                 Local_NewInviteLink time guildId inviteLinkId ->
                     case inviteLinkId of
                         EmptyPlaceholder ->
@@ -2099,6 +2149,15 @@ changeUpdate localMsg local =
                                         (LocalState.addInvite inviteLinkId2 local.localUser.session.userId time)
                                         local.guilds
                             }
+
+                Local_DeleteInviteLink guildId inviteLinkId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.removeInvite inviteLinkId)
+                                local.guilds
+                    }
 
                 Local_NewGuild time guildName guildIdPlaceholder ->
                     case guildIdPlaceholder of
@@ -2639,8 +2698,18 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Local_Join time roomId _ ->
+                        Call.Local_Join time roomId peers ->
                             let
+                                peers3 : Result () (List Call.ExistingPeer)
+                                peers3 =
+                                    case peers of
+                                        EmptyPlaceholder ->
+                                            Ok []
+
+                                        FilledInByBackend peers2 ->
+                                            peers2
+
+                                local2 : LocalState
                                 local2 =
                                     case local.calls.currentRoom of
                                         Just _ ->
@@ -2649,30 +2718,71 @@ changeUpdate localMsg local =
                                         Nothing ->
                                             local
                             in
-                            case roomId of
-                                DmRoomId otherUserId ->
-                                    { local2
-                                        | calls = { calls | currentRoom = Just roomId }
-                                        , dmChannels =
-                                            if SeqDict.member roomId calls.voiceChats then
-                                                local2.dmChannels
+                            case peers3 of
+                                Ok peer4 ->
+                                    case roomId of
+                                        DmRoomId otherUserId ->
+                                            { local2
+                                                | calls =
+                                                    { calls
+                                                        | currentRoom = Just roomId
+                                                        , voiceChats =
+                                                            List.foldl
+                                                                (\peer5 set2 ->
+                                                                    SeqDictHelper.addItem roomId peer5.connectionId.otherClientId set2
+                                                                )
+                                                                calls.voiceChats
+                                                                peer4
+                                                        , error = Nothing
+                                                    }
+                                                , dmChannels =
+                                                    if SeqDict.member roomId calls.voiceChats then
+                                                        local2.dmChannels
 
-                                            else
-                                                SeqDict.update
-                                                    otherUserId
-                                                    (\maybe ->
-                                                        Maybe.withDefault DmChannel.frontendInit maybe
-                                                            |> LocalState.createChannelMessageFrontend
-                                                                (CallStarted time local2.localUser.session.userId SeqDict.empty)
-                                                            |> Just
-                                                    )
-                                                    local2.dmChannels
-                                    }
+                                                    else
+                                                        SeqDict.update
+                                                            otherUserId
+                                                            (\maybe ->
+                                                                Maybe.withDefault DmChannel.frontendInit maybe
+                                                                    |> LocalState.createChannelMessageFrontend
+                                                                        (CallStarted time local2.localUser.session.userId SeqDict.empty)
+                                                                    |> Just
+                                                            )
+                                                            local2.dmChannels
+                                            }
+
+                                Err () ->
+                                    { local2 | calls = { calls | error = Just Call.MissingApiKeys } }
 
                         Call.Local_Leave time ->
                             leaveCall time local
 
-                        Call.Local_Signal _ _ ->
+                        Call.Local_PublishTracks _ _ _ ->
+                            local
+
+                        Call.Local_PublishConnected ->
+                            local
+
+                        Call.Local_PullTracks _ _ _ (FilledInByBackend result) ->
+                            case result of
+                                Ok _ ->
+                                    local
+
+                                Err _ ->
+                                    { local | calls = { calls | error = Just Call.FailedToPullTracks } }
+
+                        Call.Local_PullTracks _ _ _ EmptyPlaceholder ->
+                            local
+
+                        Call.Local_RenegotiateAnswer _ (FilledInByBackend result) ->
+                            case result of
+                                Ok () ->
+                                    local
+
+                                Err () ->
+                                    { local | calls = { calls | error = Just Call.FailedToRenegotiate } }
+
+                        Call.Local_RenegotiateAnswer _ EmptyPlaceholder ->
                             local
 
                 Local_Go { otherUserId } goChange ->
@@ -2986,12 +3096,24 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
+                Server_DeleteGuild guildId ->
+                    { local | guilds = SeqDict.remove guildId local.guilds }
+
                 Server_NewInviteLink time userId guildId inviteLinkId ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.addInvite inviteLinkId userId time)
+                                local.guilds
+                    }
+
+                Server_DeleteInviteLink guildId inviteLinkId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.removeInvite inviteLinkId)
                                 local.guilds
                     }
 
@@ -3727,23 +3849,10 @@ changeUpdate localMsg local =
                             local.calls
                     in
                     case voiceChatChange of
-                        Call.Server_Joined time { roomId, otherClientId } _ ->
+                        Call.Server_Joined time { roomId, otherClientId } _ _ ->
                             { local
                                 | calls =
-                                    { calls
-                                        | voiceChats =
-                                            SeqDict.update
-                                                roomId
-                                                (\maybe ->
-                                                    case maybe of
-                                                        Just nonemptySet ->
-                                                            NonemptySet.insert otherClientId nonemptySet |> Just
-
-                                                        Nothing ->
-                                                            NonemptySet.singleton otherClientId |> Just
-                                                )
-                                                calls.voiceChats
-                                    }
+                                    { calls | voiceChats = SeqDictHelper.addItem roomId otherClientId calls.voiceChats }
                                 , dmChannels =
                                     case roomId of
                                         DmRoomId otherUserId ->
@@ -3765,9 +3874,6 @@ changeUpdate localMsg local =
 
                         Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
-
-                        Call.Server_SignalReceived _ _ ->
-                            local
 
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
@@ -3804,7 +3910,11 @@ goChangeUpdate changeBy otherUserId goChange local =
                                     DmChannel.latestMessageId dmChannel2
                             in
                             { dmChannel2
-                                | goMatches = SeqDict.insert matchId ( setup, Array.empty ) dmChannel2.goMatches
+                                | goMatches =
+                                    SeqDict.insert
+                                        matchId
+                                        { setup = setup, actions = Array.empty, publicLink = Nothing }
+                                        dmChannel2.goMatches
                             }
 
                         Go.Action matchId actionWithTime ->
@@ -3812,9 +3922,23 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 | goMatches =
                                     SeqDict.updateIfExists
                                         matchId
-                                        (\( setup, actions ) -> ( setup, Array.push actionWithTime actions ))
+                                        (\match -> { match | actions = Array.push actionWithTime match.actions })
                                         dmChannel.goMatches
                             }
+
+                        Go.CreatePublicLink matchId data ->
+                            case data of
+                                FilledInByBackend publicId ->
+                                    { dmChannel
+                                        | goMatches =
+                                            SeqDict.updateIfExists
+                                                matchId
+                                                (\match -> { match | publicLink = Just publicId })
+                                                dmChannel.goMatches
+                                    }
+
+                                EmptyPlaceholder ->
+                                    dmChannel
                     )
                         |> Just
                 )
@@ -3997,11 +4121,14 @@ initAdminData adminData =
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
     , openRouterKey = adminData.openRouterKey
+    , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
+    , cloudflareRealtimeAppId = adminData.cloudflareRealtimeAppId
     , postmarkKey = adminData.postmarkApiKey
     , discordDmChannels = adminData.discordDmChannels
     , discordUsers = adminData.discordUsers
     , discordGuilds = adminData.discordGuilds
     , guilds = adminData.guilds
+    , deletedGuilds = adminData.deletedGuilds
     , loadingDiscordChannels = adminData.loadingDiscordChannels
     , signupsEnabled = adminData.signupsEnabled
     , logs = adminData.logs
@@ -4010,6 +4137,7 @@ initAdminData adminData =
     , toBackendLogs = adminData.toBackendLogs
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
+    , websocketCloseEvents = adminData.websocketCloseEvents
     }
 
 

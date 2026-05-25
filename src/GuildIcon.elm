@@ -22,6 +22,7 @@ import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)
+import Ui.Accessibility
 import Ui.Font
 
 
@@ -77,7 +78,7 @@ notificationHelper color fontColor borderColor xOffset yOffset count =
             , Ui.Font.color fontColor
             , Ui.contentCenterX
             , Ui.contentCenterY
-            , MyUi.htmlStyle "aria-label" (String.fromInt count2)
+            , Ui.Accessibility.description (String.fromInt count2)
             ]
         |> Ui.inFront
 
@@ -161,18 +162,22 @@ userView notification maybeIcon userId =
                 iconView (Normal notification) icon
 
             Nothing ->
-                defaultUser size (round (toFloat size * 8 / 50)) userId
+                defaultUser True size (round (toFloat size * 8 / 50)) userId
         )
 
 
-defaultUser : Int -> Int -> Id UserId -> Element msg
-defaultUser size2 rounded userId =
+defaultUser : Bool -> Int -> Int -> Id UserId -> Element msg
+defaultUser centerX size2 rounded userId =
     Ui.el
         [ Ui.contentCenterX
         , Ui.contentCenterY
         , Ui.rounded rounded
         , Ui.background (userDefaultColor userId)
-        , Ui.centerX
+        , if centerX then
+            Ui.centerX
+
+          else
+            Ui.noAttr
         , Ui.width (Ui.px size2)
         , Ui.height (Ui.px size2)
         , Ui.paddingXY 4 0
