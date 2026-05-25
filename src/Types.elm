@@ -593,7 +593,7 @@ type BackendMsg
     | UserDisconnectedWithTime SessionId ClientId Time.Posix
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) Discord.Msg
+    | DiscordUserWebsocketMsg (Discord.Id Discord.UserId) (Result ( Websocket.CloseEventCode, String ) String)
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMaybeMessage (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id Discord.PrivateChannelId) (Discord.Id Discord.UserId) (Result Discord.HttpError Discord.Message)
     | DeletedDiscordGuildMessage Time.Posix (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) (Result Discord.HttpError ())
@@ -682,7 +682,7 @@ type BackendMsg
     | GotDiscordStandardStickerPacks Time.Posix (Result Discord.HttpError (List Discord.StickerPack))
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
-    | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) String Time.Posix
+    | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
 
 
 type MessageFromGuildOrDm

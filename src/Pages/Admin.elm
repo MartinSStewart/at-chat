@@ -48,6 +48,7 @@ import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Task as Task
 import Effect.Time as Time
+import Effect.Websocket exposing (CloseEventCode(..))
 import EmailAddress
 import Env
 import GuildName
@@ -1793,8 +1794,61 @@ websocketCloseEventListItem timezone ( index, event ) =
                 WebsocketClosed_ClosedByBackendForUser userId _ ->
                     "user " ++ Discord.idToString userId
 
-                WebsocketClosed_ListenCloseEvent userId reason _ ->
-                    "user " ++ Discord.idToString userId ++ ", reason: " ++ reason
+                WebsocketClosed_ListenCloseEvent userId code reason _ ->
+                    "user "
+                        ++ Discord.idToString userId
+                        ++ ", code: "
+                        ++ (case code of
+                                NormalClosure ->
+                                    "1000 Normal Closure"
+                                        ++ ", reason: "
+                                        ++ reason
+
+
+                            GoingAway ->
+
+
+                            ProtocolError ->
+
+
+                            UnsupportedData ->
+
+
+                            NoStatusReceived ->
+
+
+                            AbnormalClosure ->
+
+
+                            InvalidFramePayloadData ->
+
+
+                            PolicyViolation ->
+
+
+                            MessageTooBig ->
+
+
+                            MissingExtension ->
+
+
+                            InternalError ->
+
+
+                            ServiceRestart ->
+
+
+                            TryAgainLater ->
+
+
+                            BadGateway ->
+
+
+                            TlsHandshake ->
+
+
+                            UnknownCode int ->
+                                                           )
     in
     Ui.row
         [ Ui.spacing 8 ]

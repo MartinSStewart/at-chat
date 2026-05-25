@@ -251,20 +251,23 @@ subscriptions model =
             (\( discordUserId, data ) ->
                 case data of
                     FullData data2 ->
-                        Discord.subscription
-                            (\connection onData onClose ->
-                                Websocket.listen connection
-                                    onData
+                        case data2.connection.websocketHandle of
+                            Just connection ->
+                                Websocket.listen
+                                    connection
+                                    Ok
                                     (\data3 ->
                                         let
                                             _ =
                                                 Debug.log "Websocket unexpected close" ()
                                         in
-                                        onClose data3.reason
+                                        Err ( data3.code, data3.reason )
                                     )
-                            )
-                            data2.connection
-                            |> Maybe.map (Subscription.map (DiscordUserWebsocketMsg discordUserId))
+                                    |> Subscription.map (DiscordUserWebsocketMsg discordUserId)
+                                    |> Just
+
+                            Nothing ->
+                                Nothing
 
                     BasicData _ ->
                         Nothing
@@ -371,25 +374,34 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.SendLogErrorEmailFailed error email) model
 
-        DiscordUserWebsocketMsg discordUserId discordMsg ->
+        DiscordUserWebsocketMsg discordUserId result ->
             let
                 ( model2, cmd ) =
-                    DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
+                    DiscordSync.discordUserWebsocketMsg
+                        discordUserId
+                        (case result of
+                            Ok text ->
+                                Discord.GotWebsocketData text
+
+                            Err ( _, reason ) ->
+                                Discord.WebsocketClosed reason
+                        )
+                        model
             in
             ( model2
             , Command.batch
                 [ cmd
-                , case discordMsg of
-                    Discord.GotWebsocketData _ ->
+                , case result of
+                    Ok _ ->
                         Command.none
 
-                    Discord.WebsocketClosed text ->
-                        Task.perform (GotTimeForWebsocketListenClose discordUserId text) Time.now
+                    Err ( code, text ) ->
+                        Task.perform (GotTimeForWebsocketListenClose discordUserId code text) Time.now
                 ]
             )
 
-        GotTimeForWebsocketListenClose userId text time ->
-            ( recordWebsocketCloseEvent (WebsocketClosed_ListenCloseEvent userId text time) model, Command.none )
+        GotTimeForWebsocketListenClose userId code text time ->
+            ( recordWebsocketCloseEvent (WebsocketClosed_ListenCloseEvent userId code text time) model, Command.none )
 
         GotSlackChannels _ _ result ->
             case result of

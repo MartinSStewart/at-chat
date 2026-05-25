@@ -120,6 +120,7 @@ import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendD
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId)
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import Embed exposing (EmbedData)
 import Emoji exposing (EmojiOrCustomEmoji)
 import FileStatus exposing (FileHash)
@@ -522,7 +523,7 @@ type WebsocketClosedEvent
     = WebsocketClosed_CloseAndReopenForUser (Discord.Id Discord.UserId) Time.Posix
     | WebsocketClosed_UnlinkDiscordUser (Discord.Id Discord.UserId) Time.Posix
     | WebsocketClosed_ClosedByBackendForUser (Discord.Id Discord.UserId) Time.Posix
-    | WebsocketClosed_ListenCloseEvent (Discord.Id Discord.UserId) String Time.Posix
+    | WebsocketClosed_ListenCloseEvent (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
 
 
 type alias ConnectionData =

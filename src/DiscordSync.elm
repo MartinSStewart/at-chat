@@ -1567,7 +1567,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                                     Discord.GotWebsocketData data ->
                                                         data
 
-                                                    Discord.WebsocketClosed data ->
+                                                    Discord.WebsocketClosed _ data ->
                                                         data
                                                 )
                                                 message
@@ -1641,7 +1641,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             Json.Decode.decodeString (Json.Decode.field "t" Json.Decode.string) text
                                                 |> Result.toMaybe
 
-                                        Discord.WebsocketClosed _ ->
+                                        Discord.WebsocketClosed _ _ ->
                                             Just "Websocket closed"
                                     )
                                     (Json.Decode.errorToString error)
