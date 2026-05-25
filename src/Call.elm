@@ -36,6 +36,7 @@ port module Call exposing
     , startLocalStream
     , toJs
     , videoNodes
+    , videoPosAndSize
     , view
     , voiceChatToJsCodec
     )
@@ -56,7 +57,7 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Icons
-import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), Id, UserId, VideoNodeId)
 import IdString exposing (IdString)
 import Json.Decode
 import Json.Encode
@@ -376,17 +377,17 @@ videoNodes currentUserId config loggedIn local =
         voiceChatX : Int
         voiceChatX =
             if isMobile then
-                0
+                padding
 
             else
-                MyUi.channelAndGuildColumnWidth config.windowSize
+                MyUi.channelAndGuildColumnWidth config.windowSize + padding
 
         voiceChatY =
             MyUi.channelHeaderHeight
 
         maxWidth : Int
         maxWidth =
-            Coord.xRaw config.windowSize - voiceChatX
+            Coord.xRaw config.windowSize - voiceChatX - padding
 
         --|> min (ceiling (toFloat voiceChatHeight * 16 / 9))
         maxHeight : Int
@@ -399,6 +400,7 @@ videoNodes currentUserId config loggedIn local =
                    else
                     120
                   )
+                - (padding * 2)
 
         padding =
             8
@@ -406,44 +408,14 @@ videoNodes currentUserId config loggedIn local =
         spacing =
             8
 
-        videoPosAndSize : Int -> Int -> ( Int, Int, Int )
-        videoPosAndSize total index =
-            case total of
-                1 ->
-                    let
-                        width =
-                            min (round (toFloat maxHeight * aspectRatio)) maxWidth - padding * 2
+        posAndSizes total =
+            videoPosAndSize
+                { containerWidth = maxWidth, containerHeight = maxHeight, spacing = spacing }
+                (List.range 1 total |> List.map (\index -> { id = Id.fromInt index, aspectRatio = 16 / 9 }))
+                |> List.map (\a -> ( a.x + voiceChatX, a.y + voiceChatY, a.width ))
 
-                        voiceChatX2 =
-                            voiceChatX + (maxWidth - width) // 2 + sidebarOffsetAttr loggedIn.sidebarMode config
-                    in
-                    ( voiceChatX2
-                    , voiceChatY + padding
-                    , width
-                    )
-
-                2 ->
-                    let
-                        width =
-                            min (round (toFloat maxHeight * aspectRatio * 2)) maxWidth
-
-                        voiceChatX2 =
-                            voiceChatX + (maxWidth - width) // 2 + sidebarOffsetAttr loggedIn.sidebarMode config
-
-                        width2 =
-                            (width - padding * 2 - spacing) // 2
-                    in
-                    if index == 0 then
-                        ( voiceChatX2 + padding, voiceChatY + padding, width2 )
-
-                    else
-                        ( voiceChatX2 + padding + spacing + width2, voiceChatY + padding, width2 )
-
-                _ ->
-                    ( padding + index * 20 + sidebarOffsetAttr loggedIn.sidebarMode config
-                    , voiceChatY + padding
-                    , maxWidth // total
-                    )
+        getPosAndSize index list =
+            List.Extra.getAt index list |> Maybe.withDefault ( 0, 0, 100 )
 
         isMobile : Bool
         isMobile =
@@ -494,8 +466,11 @@ videoNodes currentUserId config loggedIn local =
                             total : Int
                             total =
                                 NonemptySet.size sessions + 1
+
+                            list =
+                                posAndSizes total
                         in
-                        videoNode IsLocal False (videoPosAndSize total 0) model.localIsSpeaking model
+                        videoNode IsLocal False (getPosAndSize 0 list) model.localIsSpeaking model
                             :: List.indexedMap
                                 (\index session ->
                                     let
@@ -506,23 +481,23 @@ videoNodes currentUserId config loggedIn local =
                                     videoNode
                                         (IsConnection connectionId)
                                         False
-                                        (videoPosAndSize total (index + 1))
+                                        (getPosAndSize (index + 1) list)
                                         (SeqSet.member connectionId model.isSpeaking)
                                         model
                                 )
                                 (NonemptySet.toList sessions)
 
                     Nothing ->
-                        [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                        [ videoNode IsLocal False (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
 
             else if isTabExpanded then
-                [ videoNode IsLocal False (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal False (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
 
             else
-                [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+                [ videoNode IsLocal True (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
 
         Nothing ->
-            [ videoNode IsLocal True (videoPosAndSize 1 0) model.localIsSpeaking model ]
+            [ videoNode IsLocal True (getPosAndSize 0 (posAndSizes 1)) model.localIsSpeaking model ]
     )
         |> Html.Keyed.node "div" []
 
@@ -530,6 +505,178 @@ videoNodes currentUserId config loggedIn local =
 aspectRatio : Float
 aspectRatio =
     16 / 9
+
+
+videoPosAndSize :
+    { containerWidth : Int, containerHeight : Int, spacing : Int }
+    -> List { id : Id VideoNodeId, aspectRatio : Float }
+    -> List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int }
+videoPosAndSize container videos =
+    let
+        count : Int
+        count =
+            List.length videos
+    in
+    if count == 0 then
+        []
+
+    else
+        let
+            bestCols : Int
+            bestCols =
+                List.range 1 count
+                    |> List.Extra.maximumBy
+                        (\cols -> layoutScore container videos cols)
+                    |> Maybe.withDefault 1
+        in
+        layoutVideos container videos bestCols
+
+
+layoutScore :
+    { containerWidth : Int, containerHeight : Int, spacing : Int }
+    -> List { a | aspectRatio : Float }
+    -> Int
+    -> Float
+layoutScore container videos cols =
+    let
+        rows : Int
+        rows =
+            (List.length videos + cols - 1) // cols
+
+        spacing : Float
+        spacing =
+            toFloat container.spacing
+
+        cellWidth : Float
+        cellWidth =
+            (toFloat container.containerWidth - toFloat (cols - 1) * spacing) / toFloat cols
+
+        cellHeight : Float
+        cellHeight =
+            (toFloat container.containerHeight - toFloat (rows - 1) * spacing) / toFloat rows
+    in
+    if cellWidth <= 0 || cellHeight <= 0 then
+        0
+
+    else
+        List.foldl
+            (\video total ->
+                let
+                    fittedWidth : Float
+                    fittedWidth =
+                        min cellWidth (cellHeight * video.aspectRatio)
+
+                    fittedHeight : Float
+                    fittedHeight =
+                        fittedWidth / video.aspectRatio
+                in
+                total + fittedWidth * fittedHeight
+            )
+            0
+            videos
+
+
+layoutVideos :
+    { containerWidth : Int, containerHeight : Int, spacing : Int }
+    -> List { id : Id VideoNodeId, aspectRatio : Float }
+    -> Int
+    -> List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int }
+layoutVideos container videos cols =
+    let
+        count : Int
+        count =
+            List.length videos
+
+        rows : Int
+        rows =
+            (count + cols - 1) // cols
+
+        spacing : Float
+        spacing =
+            toFloat container.spacing
+
+        rowBudget : Float
+        rowBudget =
+            (toFloat container.containerHeight - toFloat (rows - 1) * spacing) / toFloat rows
+
+        videoRows : List (List { id : Id VideoNodeId, aspectRatio : Float })
+        videoRows =
+            List.Extra.greedyGroupsOf cols videos
+
+        rowHeight : List { id : Id VideoNodeId, aspectRatio : Float } -> Float
+        rowHeight rowVideos =
+            let
+                k : Int
+                k =
+                    List.length rowVideos
+
+                sumAspectRatio : Float
+                sumAspectRatio =
+                    List.sum (List.map .aspectRatio rowVideos)
+
+                availableWidth : Float
+                availableWidth =
+                    toFloat container.containerWidth - toFloat (k - 1) * spacing
+            in
+            if sumAspectRatio <= 0 || availableWidth <= 0 then
+                0
+
+            else
+                min rowBudget (availableWidth / sumAspectRatio)
+
+        rowsWithHeights : List ( List { id : Id VideoNodeId, aspectRatio : Float }, Float )
+        rowsWithHeights =
+            List.map (\rowVideos -> ( rowVideos, rowHeight rowVideos )) videoRows
+
+        totalHeight : Float
+        totalHeight =
+            List.sum (List.map Tuple.second rowsWithHeights) + toFloat (rows - 1) * spacing
+
+        yStart : Float
+        yStart =
+            (toFloat container.containerHeight - totalHeight) / 2
+
+        layoutRow : ( List { id : Id VideoNodeId, aspectRatio : Float }, Float ) -> ( Float, List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int } ) -> ( Float, List { id : Id VideoNodeId, x : Int, y : Int, width : Int, height : Int } )
+        layoutRow ( rowVideos, height ) ( y, acc ) =
+            let
+                k : Int
+                k =
+                    List.length rowVideos
+
+                rowWidth : Float
+                rowWidth =
+                    height * List.sum (List.map .aspectRatio rowVideos) + toFloat (k - 1) * spacing
+
+                xStart : Float
+                xStart =
+                    (toFloat container.containerWidth - rowWidth) / 2
+
+                ( _, rowResults ) =
+                    List.foldl
+                        (\video ( x, list ) ->
+                            let
+                                w : Float
+                                w =
+                                    height * video.aspectRatio
+                            in
+                            ( x + w + spacing
+                            , { id = video.id
+                              , x = round x
+                              , y = round y
+                              , width = round w
+                              , height = round height
+                              }
+                                :: list
+                            )
+                        )
+                        ( xStart, [] )
+                        rowVideos
+            in
+            ( y + height + spacing, rowResults ++ acc )
+    in
+    List.foldl layoutRow ( yStart, [] ) rowsWithHeights
+        |> Tuple.second
+        |> List.reverse
 
 
 videoNode :
