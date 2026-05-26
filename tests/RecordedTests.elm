@@ -67,163 +67,128 @@ tests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon emojiJson =
     let
-        handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
-        handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
-            case overrides httpRequests of
-                Just response ->
-                    response
+        handleNormalHttpRequests : { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
+        handleNormalHttpRequests ({ currentRequest } as httpRequests) =
+            case String.split "/" currentRequest.url of
+                [ "", "_i" ] ->
+                    RecordedTestExtra.httpBasic currentRequest.url 200 RecordedTestExtra.infoEndpointResponse
 
-                Nothing ->
-                    case String.split "/" currentRequest.url of
-                        [ "", "_i" ] ->
-                            StringHttpResponse
-                                { url = currentRequest.url
-                                , statusCode = 200
-                                , statusText = "OK"
-                                , headers = Dict.empty
-                                }
-                                RecordedTestExtra.infoEndpointResponse
+                [ "", "compact-emoji.json" ] ->
+                    RecordedTestExtra.httpBasic currentRequest.url 200 emojiJson
 
-                        [ "", "compact-emoji.json" ] ->
-                            StringHttpResponse
-                                { url = currentRequest.url
-                                , statusCode = 200
-                                , statusText = "OK"
-                                , headers = Dict.empty
-                                }
-                                emojiJson
+                "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
+                    RecordedTestExtra.mockCloudflareSfu rest httpRequests
 
-                        "http:" :: "" :: "localhost:3000" :: "file" :: rest ->
-                            case rest of
-                                "internal" :: rest2 ->
-                                    RecordedTestExtra.handleInternalRequests discordStickerPacks currentRequest rest2
+                "http:" :: "" :: "localhost:3000" :: "file" :: rest ->
+                    case rest of
+                        "internal" :: rest2 ->
+                            RecordedTestExtra.handleInternalRequests discordStickerPacks currentRequest rest2
 
-                                [ "upload" ] ->
-                                    StringHttpResponse
-                                        { url = currentRequest.url
-                                        , statusCode = 200
-                                        , statusText = "OK"
-                                        , headers = Dict.empty
+                        [ "upload" ] ->
+                            RecordedTestExtra.httpBasic
+                                currentRequest.url
+                                200
+                                (Codec.encodeToString
+                                    0
+                                    FileStatus.uploadResponseCodec
+                                    { fileHash = FileStatus.fileHash "123123123"
+                                    , imageSize =
+                                        { imageSize = Coord.xy 128 128
+                                        , orientation = Nothing
+                                        , gpsLocation = Nothing
+                                        , cameraOwner = Nothing
+                                        , exposureTime = Nothing
+                                        , fNumber = Nothing
+                                        , focalLength = Nothing
+                                        , isoSpeedRating = Nothing
+                                        , make = Nothing
+                                        , model = Nothing
+                                        , software = Nothing
+                                        , userComment = Nothing
                                         }
-                                        (Codec.encodeToString
-                                            0
-                                            FileStatus.uploadResponseCodec
-                                            { fileHash = FileStatus.fileHash "123123123"
-                                            , imageSize =
-                                                { imageSize = Coord.xy 128 128
-                                                , orientation = Nothing
-                                                , gpsLocation = Nothing
-                                                , cameraOwner = Nothing
-                                                , exposureTime = Nothing
-                                                , fNumber = Nothing
-                                                , focalLength = Nothing
-                                                , isoSpeedRating = Nothing
-                                                , make = Nothing
-                                                , model = Nothing
-                                                , software = Nothing
-                                                , userComment = Nothing
-                                                }
-                                                    |> Just
-                                            }
-                                        )
+                                            |> Just
+                                    }
+                                )
 
-                                [ "upload-url" ] ->
-                                    case currentRequest.body of
-                                        T.JsonBody json ->
-                                            case Codec.decodeValue FileStatus.uploadUrlCodec json of
-                                                Ok request ->
-                                                    -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
-                                                    if String.contains "796138864933863456" request.url then
-                                                        UnhandledHttpRequest
-
-                                                    else
-                                                        StringHttpResponse
-                                                            { url = currentRequest.url
-                                                            , statusCode = 200
-                                                            , statusText = "OK"
-                                                            , headers = Dict.empty
-                                                            }
-                                                            (Codec.encodeToString
-                                                                0
-                                                                FileStatus.uploadResponseCodec
-                                                                { fileHash = FileStatus.fileHash request.url
-                                                                , imageSize =
-                                                                    { imageSize = Coord.xy 128 128
-                                                                    , orientation = Nothing
-                                                                    , gpsLocation = Nothing
-                                                                    , cameraOwner = Nothing
-                                                                    , exposureTime = Nothing
-                                                                    , fNumber = Nothing
-                                                                    , focalLength = Nothing
-                                                                    , isoSpeedRating = Nothing
-                                                                    , make = Nothing
-                                                                    , model = Nothing
-                                                                    , software = Nothing
-                                                                    , userComment = Nothing
-                                                                    }
-                                                                        |> Just
-                                                                }
-                                                            )
-
-                                                Err _ ->
-                                                    StringHttpResponse
-                                                        { url = currentRequest.url
-                                                        , statusCode = 500
-                                                        , statusText = "Bad request"
-                                                        , headers = Dict.empty
-                                                        }
-                                                        ""
-
-                                        _ ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 500
-                                                , statusText = "Bad request"
-                                                , headers = Dict.empty
-                                                }
-                                                ""
-
-                                _ ->
-                                    UnhandledHttpRequest
-
-                        [ "https:", "", "api.postmarkapp.com", "email" ] ->
+                        [ "upload-url" ] ->
                             case currentRequest.body of
                                 T.JsonBody json ->
-                                    case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of
-                                        Ok email ->
-                                            StringHttpResponse
-                                                { url = currentRequest.url
-                                                , statusCode = 200
-                                                , statusText = "OK"
-                                                , headers = Dict.empty
-                                                }
-                                                ("""{"To":\""""
-                                                    ++ email
-                                                    ++ """","SubmittedAt":"2023-09-30T14:26:56.6614723Z","MessageID":"edd386b7-63f1-471f-a4ba-2b216188fb6c","ErrorCode":0,"Message":"OK"}"""
-                                                )
+                                    case Codec.decodeValue FileStatus.uploadUrlCodec json of
+                                        Ok request ->
+                                            -- Check if we are trying to upload a Discord standard sticker. We don't want those loaded by automated systems as they are copyrighted material
+                                            if String.contains "796138864933863456" request.url then
+                                                UnhandledHttpRequest
 
-                                        Err err ->
-                                            let
-                                                _ =
-                                                    Debug.log "Parse postmark request error" err
-                                            in
-                                            UnhandledHttpRequest
+                                            else
+                                                RecordedTestExtra.httpBasic
+                                                    currentRequest.url
+                                                    200
+                                                    (Codec.encodeToString
+                                                        0
+                                                        FileStatus.uploadResponseCodec
+                                                        { fileHash = FileStatus.fileHash request.url
+                                                        , imageSize =
+                                                            { imageSize = Coord.xy 128 128
+                                                            , orientation = Nothing
+                                                            , gpsLocation = Nothing
+                                                            , cameraOwner = Nothing
+                                                            , exposureTime = Nothing
+                                                            , fNumber = Nothing
+                                                            , focalLength = Nothing
+                                                            , isoSpeedRating = Nothing
+                                                            , make = Nothing
+                                                            , model = Nothing
+                                                            , software = Nothing
+                                                            , userComment = Nothing
+                                                            }
+                                                                |> Just
+                                                        }
+                                                    )
+
+                                        Err _ ->
+                                            RecordedTestExtra.httpBasic currentRequest.url 500 ""
 
                                 _ ->
+                                    RecordedTestExtra.httpBasic currentRequest.url 500 ""
+
+                        _ ->
+                            UnhandledHttpRequest
+
+                [ "https:", "", "api.postmarkapp.com", "email" ] ->
+                    case currentRequest.body of
+                        T.JsonBody json ->
+                            case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of
+                                Ok email ->
+                                    RecordedTestExtra.httpBasic
+                                        currentRequest.url
+                                        200
+                                        ("""{"To":\""""
+                                            ++ email
+                                            ++ """","SubmittedAt":"2023-09-30T14:26:56.6614723Z","MessageID":"edd386b7-63f1-471f-a4ba-2b216188fb6c","ErrorCode":0,"Message":"OK"}"""
+                                        )
+
+                                Err err ->
+                                    let
+                                        _ =
+                                            Debug.log "Parse postmark request error" err
+                                    in
                                     UnhandledHttpRequest
 
                         _ ->
-                            if String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url then
-                                BytesHttpResponse
-                                    { url = currentRequest.url
-                                    , statusCode = 200
-                                    , statusText = "OK"
-                                    , headers = Dict.empty
-                                    }
-                                    atUserIcon
+                            UnhandledHttpRequest
 
-                            else
-                                UnhandledHttpRequest
+                _ ->
+                    if String.startsWith "https://cdn.discordapp.com/avatars/" currentRequest.url then
+                        BytesHttpResponse
+                            { url = currentRequest.url
+                            , statusCode = 200
+                            , statusText = "OK"
+                            , headers = Dict.empty
+                            }
+                            atUserIcon
+
+                    else
+                        UnhandledHttpRequest
 
         handleFileRequest : { data : T.Data frontendModel backendModel, mimeTypes : List String } -> FileUpload
         handleFileRequest _ =
@@ -238,7 +203,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             T.Config
                 Frontend.app_
                 Backend.app_
-                (handleNormalHttpRequests (\_ -> Nothing))
+                handleNormalHttpRequests
                 RecordedTestExtra.handlePortToJs
                 handleFileRequest
                 handleMultiFileUpload
@@ -1529,7 +1494,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         (T.Config
             Frontend.app_
             Backend.app_
-            (handleNormalHttpRequests (\_ -> Nothing))
+            handleNormalHttpRequests
             RecordedTestExtra.handlePortToJs
             (\requestData ->
                 case requestData.data.downloads of
@@ -1638,7 +1603,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
         (T.Config
             Frontend.app_
             Backend.app_
-            (handleNormalHttpRequests (\_ -> Nothing))
+            handleNormalHttpRequests
             RecordedTestExtra.handlePortToJs
             (\requestData ->
                 case backupRequests requestData.data of
