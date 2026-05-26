@@ -623,6 +623,7 @@ update msg model =
 
         GotCloudflareSessionCreated sessionId clientId changeId time roomId offerSdp transceiverMids result ->
             let
+                cmd : Command BackendOnly ToFrontend BackendMsg
                 cmd =
                     Call.Local_Leave time
                         |> Local_VoiceChatChange
@@ -5341,7 +5342,7 @@ collectExistingPeers roomId currentUserId currentClientId model =
                                     ConnectedToCall otherRoomId sfu ->
                                         if
                                             isPeerInSameCall roomId currentUserId session.userId otherRoomId
-                                                && not (session.userId == currentUserId && clientId2 == currentClientId)
+                                                && (clientId2 /= currentClientId)
                                                 && sfu.pullTracksReady
                                         then
                                             Just
@@ -5553,7 +5554,13 @@ handlePublishConnected time sessionId clientId changeId model session _ =
                     }
 
                 -- Every other connected peer already in this call.
-                peers : List { peerUserId : Id UserId, peerClientId : ClientId, sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName }
+                peers :
+                    List
+                        { peerUserId : Id UserId
+                        , peerClientId : ClientId
+                        , realtimeSessionId : Cloudflare.RealtimeSessionId
+                        , trackNames : List Cloudflare.TrackName
+                        }
                 peers =
                     List.concatMap
                         (\( sid, conns ) ->
@@ -5564,14 +5571,14 @@ handlePublishConnected time sessionId clientId changeId model session _ =
                                             case c.call of
                                                 ConnectedToCall callId peerSfu ->
                                                     if
-                                                        not (s.userId == userId && cId == clientId)
+                                                        (cId /= clientId)
                                                             && isPeerInSameCall roomId userId s.userId callId
                                                             && peerSfu.pullTracksReady
                                                     then
                                                         Just
                                                             { peerUserId = s.userId
                                                             , peerClientId = cId
-                                                            , sessionId = peerSfu.sessionId
+                                                            , realtimeSessionId = peerSfu.sessionId
                                                             , trackNames = peerSfu.trackNames
                                                             }
 
@@ -5613,7 +5620,7 @@ handlePublishConnected time sessionId clientId changeId model session _ =
                                 { roomId = roomId
                                 , otherClientId = ( peer.peerUserId, peer.peerClientId )
                                 }
-                                peer.sessionId
+                                peer.realtimeSessionId
                                 peer.trackNames
                                 |> Server_VoiceChatChange
                                 |> ServerChange
