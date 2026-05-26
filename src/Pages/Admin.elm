@@ -4,6 +4,7 @@ module Pages.Admin exposing
     , EditingCell
     , ExportProgress(..)
     , ExportSubset(..)
+    , ExportSubsetSelection
     , ImportBackendStatus(..)
     , InitAdminData
     , Model
