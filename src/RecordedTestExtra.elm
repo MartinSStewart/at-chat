@@ -452,7 +452,9 @@ sfuHandshakeTest config =
                         , user.click 100 (Dom.id "guild_openDm_0")
                         ]
                     , admin.click 100 (Dom.id "guild_voiceChat")
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
                     , user.click 100 (Dom.id "guild_voiceChat")
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
                     , admin.click 100 (Dom.id "guild_startVoiceChat")
                     , T.checkBackend 200
                         (\m ->
@@ -473,6 +475,7 @@ sfuHandshakeTest config =
                                             ++ String.fromInt (List.length other)
                                         )
                         )
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
                     , user.click 100 (Dom.id "guild_startVoiceChat")
                     , T.checkBackend 200
                         (\m ->
@@ -493,6 +496,7 @@ sfuHandshakeTest config =
                                             ++ String.fromInt (List.length other)
                                         )
                         )
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
                     , T.checkBackend 500
                         (\m ->
                             case
@@ -512,7 +516,7 @@ sfuHandshakeTest config =
                                             ++ String.fromInt (List.length other)
                                         )
                         )
-                    , T.checkState 100 checkVoiceChatFromJsEvents
+                    , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
                     , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                     ]
                 ]
@@ -781,42 +785,91 @@ fromJsEvent value =
 
 Every `voice_chat_to_js` message the frontend emits is fed through the same
 `mockVoiceChatPorts` JS simulation the test uses, and the resulting
-`voice_chat_from_js` payloads are captured as JSON. We then assert that the
-exact ordered list of from-JS payloads matches what the handshake produces
-today. If a refactor changes which to-JS messages are emitted (or their
-shape), the derived from-JS events change and this check fails.
+`voice_chat_from_js` payloads are captured as JSON. `sfuHandshakeTest` then
+asserts the exact ordered list of from-JS payloads _after each step that is
+meant to trigger one_, so that an event firing later than it should (or not at
+all) fails the check at the point where it was expected — not silently at the
+end. If a refactor changes which to-JS messages are emitted (or their shape),
+the derived from-JS events change and the relevant checkpoint fails.
 
 -}
-checkVoiceChatFromJsEvents : T.Data FrontendModel BackendModel -> Result String ()
-checkVoiceChatFromJsEvents data =
+fromJs_GotMediaDevices : String
+fromJs_GotMediaDevices =
+    "{\"tag\":\"got-media-devices\",\"args\":[[{\"deviceId\":\"microphoneDeviceId\",\"groupId\":\"microphoneGroupId\",\"kind\":\"audioinput\",\"label\":\"Default microphone\"},{\"deviceId\":\"webcameraDeviceId\",\"groupId\":\"webcameraGroupId\",\"kind\":\"videoinput\",\"label\":\"Default webcamera\"},{\"deviceId\":\"speakersDeviceId\",\"groupId\":\"speakersGroupId\",\"kind\":\"audiooutput\",\"label\":\"Default speakers\"}],[\"microphoneDeviceId\",\"webcameraDeviceId\",\"speakersDeviceId\"]]}"
+
+
+fromJs_PublishOffer : String
+fromJs_PublishOffer =
+    "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
+
+
+fromJs_PublishConnected : String
+fromJs_PublishConnected =
+    "{\"tag\":\"publish-connected\",\"args\":[]}"
+
+
+fromJs_RequestPullTracksSession1 : String
+fromJs_RequestPullTracksSession1 =
+    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"sfu-session-1\",[\"0\",\"1\"]]}"
+
+
+fromJs_RequestPullTracksSession0 : String
+fromJs_RequestPullTracksSession0 =
+    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"1\"]]}"
+
+
+fromJs_PullAnswerSession1 : String
+fromJs_PullAnswerSession1 =
+    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"fake-pull-answer-sdp\"]}"
+
+
+fromJs_PullAnswerSession0 : String
+fromJs_PullAnswerSession0 =
+    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"fake-pull-answer-sdp\"]}"
+
+
+{-| Cumulative `voice_chat_from_js` payloads expected at each handshake
+checkpoint. Each value extends the previous one with the events that step is
+supposed to add, so the checks pin down _when_ each event fires, not just that
+it eventually does.
+-}
+fromJsAfterAdminOpensVoiceChat : List String
+fromJsAfterAdminOpensVoiceChat =
+    [ fromJs_GotMediaDevices ]
+
+
+fromJsAfterUserOpensVoiceChat : List String
+fromJsAfterUserOpensVoiceChat =
+    fromJsAfterAdminOpensVoiceChat ++ [ fromJs_GotMediaDevices ]
+
+
+fromJsAfterAdminPublishes : List String
+fromJsAfterAdminPublishes =
+    fromJsAfterUserOpensVoiceChat ++ [ fromJs_PublishOffer, fromJs_PublishConnected ]
+
+
+fromJsAfterUserPublishes : List String
+fromJsAfterUserPublishes =
+    fromJsAfterAdminPublishes
+        ++ [ fromJs_PublishOffer
+           , fromJs_PublishConnected
+           , fromJs_RequestPullTracksSession1
+           , fromJs_RequestPullTracksSession0
+           ]
+
+
+fromJsAfterPullsComplete : List String
+fromJsAfterPullsComplete =
+    fromJsAfterUserPublishes ++ [ fromJs_PullAnswerSession1, fromJs_PullAnswerSession0 ]
+
+
+{-| Assert the exact ordered list of `voice_chat_from_js` payloads that have
+been produced so far equals `expected`. Placed at each handshake checkpoint so
+the prefix is pinned down step by step.
+-}
+checkVoiceChatFromJsEvents : List String -> T.Data FrontendModel BackendModel -> Result String ()
+checkVoiceChatFromJsEvents expected data =
     let
-        gotMediaDevices : String
-        gotMediaDevices =
-            "{\"tag\":\"got-media-devices\",\"args\":[[{\"deviceId\":\"microphoneDeviceId\",\"groupId\":\"microphoneGroupId\",\"kind\":\"audioinput\",\"label\":\"Default microphone\"},{\"deviceId\":\"webcameraDeviceId\",\"groupId\":\"webcameraGroupId\",\"kind\":\"videoinput\",\"label\":\"Default webcamera\"},{\"deviceId\":\"speakersDeviceId\",\"groupId\":\"speakersGroupId\",\"kind\":\"audiooutput\",\"label\":\"Default speakers\"}],[\"microphoneDeviceId\",\"webcameraDeviceId\",\"speakersDeviceId\"]]}"
-
-        expected : List String
-        expected =
-            [ -- Two ToJs_StartLocalStream (admin + bob) each fetch media devices.
-              gotMediaDevices
-            , gotMediaDevices
-
-            -- Admin publishes, JS hands back its publish offer, then reports connected.
-            , "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
-            , "{\"tag\":\"publish-connected\",\"args\":[]}"
-
-            -- Bob publishes next, same handshake.
-            , "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
-            , "{\"tag\":\"publish-connected\",\"args\":[]}"
-
-            -- Each peer learns about the other and asks Elm to pull their tracks.
-            , "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"sfu-session-1\",[\"0\",\"1\"]]}"
-            , "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"1\"]]}"
-
-            -- Elm asks JS to accept the pull offers; JS returns each pull answer.
-            , "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"fake-pull-answer-sdp\"]}"
-            , "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"fake-pull-answer-sdp\"]}"
-            ]
-
         actual : List String
         actual =
             voiceChatFromJsPayloads data
@@ -826,7 +879,7 @@ checkVoiceChatFromJsEvents data =
 
     else
         Err
-            ("voice_chat_from_js events changed.\nExpected:\n  "
+            ("voice_chat_from_js events not as expected at this step.\nExpected:\n  "
                 ++ String.join "\n  " expected
                 ++ "\nActual:\n  "
                 ++ String.join "\n  " actual
