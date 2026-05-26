@@ -493,25 +493,6 @@ sfuHandshakeTest config =
                                             ++ String.fromInt (List.length other)
                                         )
                         )
-                    , T.checkState
-                        100
-                        (\data ->
-                            let
-                                _ =
-                                    Debug.log "port requests"
-                                        (List.filterMap
-                                            (\request ->
-                                                if request.portName == "voice_chat_to_js" then
-                                                    Codec.decodeValue Call.voiceChatToJsCodec request.value |> Just
-
-                                                else
-                                                    Nothing
-                                            )
-                                            data.portRequests
-                                        )
-                            in
-                            Ok ()
-                        )
                     , T.checkBackend 500
                         (\m ->
                             case
@@ -531,6 +512,7 @@ sfuHandshakeTest config =
                                             ++ String.fromInt (List.length other)
                                         )
                         )
+                    , T.checkState 100 checkVoiceChatFromJsEvents
                     , admin.click 100 (Dom.id "guild_leaveVoiceChat")
                     ]
                 ]
@@ -793,6 +775,81 @@ mockVoiceChatPorts request =
 fromJsEvent : Call.FromJs -> Maybe ( String, Json.Decode.Value )
 fromJsEvent value =
     Just ( "voice_chat_from_js", Call.encodeFromJs value )
+
+
+{-| Regression guard for the JS → Elm side of the voice-chat handshake.
+
+Every `voice_chat_to_js` message the frontend emits is fed through the same
+`mockVoiceChatPorts` JS simulation the test uses, and the resulting
+`voice_chat_from_js` payloads are captured as JSON. We then assert that the
+exact ordered list of from-JS payloads matches what the handshake produces
+today. If a refactor changes which to-JS messages are emitted (or their
+shape), the derived from-JS events change and this check fails.
+
+-}
+checkVoiceChatFromJsEvents : T.Data FrontendModel BackendModel -> Result String ()
+checkVoiceChatFromJsEvents data =
+    let
+        gotMediaDevices : String
+        gotMediaDevices =
+            "{\"tag\":\"got-media-devices\",\"args\":[[{\"deviceId\":\"microphoneDeviceId\",\"groupId\":\"microphoneGroupId\",\"kind\":\"audioinput\",\"label\":\"Default microphone\"},{\"deviceId\":\"webcameraDeviceId\",\"groupId\":\"webcameraGroupId\",\"kind\":\"videoinput\",\"label\":\"Default webcamera\"},{\"deviceId\":\"speakersDeviceId\",\"groupId\":\"speakersGroupId\",\"kind\":\"audiooutput\",\"label\":\"Default speakers\"}],[\"microphoneDeviceId\",\"webcameraDeviceId\",\"speakersDeviceId\"]]}"
+
+        expected : List String
+        expected =
+            [ -- Two ToJs_StartLocalStream (admin + bob) each fetch media devices.
+              gotMediaDevices
+            , gotMediaDevices
+
+            -- Admin publishes, JS hands back its publish offer, then reports connected.
+            , "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
+            , "{\"tag\":\"publish-connected\",\"args\":[]}"
+
+            -- Bob publishes next, same handshake.
+            , "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
+            , "{\"tag\":\"publish-connected\",\"args\":[]}"
+
+            -- Each peer learns about the other and asks Elm to pull their tracks.
+            , "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"sfu-session-1\",[\"0\",\"1\"]]}"
+            , "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"1\"]]}"
+
+            -- Elm asks JS to accept the pull offers; JS returns each pull answer.
+            , "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"fake-pull-answer-sdp\"]}"
+            , "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"fake-pull-answer-sdp\"]}"
+            ]
+
+        actual : List String
+        actual =
+            voiceChatFromJsPayloads data
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("voice_chat_from_js events changed.\nExpected:\n  "
+                ++ String.join "\n  " expected
+                ++ "\nActual:\n  "
+                ++ String.join "\n  " actual
+            )
+
+
+voiceChatFromJsPayloads : T.Data FrontendModel BackendModel -> List String
+voiceChatFromJsPayloads data =
+    data.portRequests
+        |> List.reverse
+        |> List.filterMap
+            (\request ->
+                if request.portName == "voice_chat_to_js" then
+                    case mockVoiceChatPorts { data = data, currentRequest = request } of
+                        Just ( _, value ) ->
+                            Just (Json.Encode.encode 0 value)
+
+                        Nothing ->
+                            Nothing
+
+                else
+                    Nothing
+            )
 
 
 voiceChatTest :
