@@ -538,7 +538,7 @@ type alias ConnectionData =
 type CallStatus
     = NotInCall
     | ConnectingToCall Call.CallId
-    | ConnectedToCall Call.CallId { sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName, connected : Bool }
+    | ConnectedToCall Call.CallId { sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName, pullTracksReady : Bool }
 
 
 type ServerSecretStatus

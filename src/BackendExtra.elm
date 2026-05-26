@@ -48,7 +48,7 @@ import Lamdera.Wire3
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
+import LocalState exposing (BackendGuild, CallStatus(..), DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
 import MembersAndOwner
@@ -595,6 +595,32 @@ getLoginData sessionId clientId session user requestMessagesFor model =
     }
 
 
+getVoiceChatDataHelper :
+    CallId
+    -> UserSession
+    -> UserSession
+    -> ClientId
+    -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
+    -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
+getVoiceChatDataHelper roomId session otherSession otherClientId dict2 =
+    case roomId of
+        DmRoomId dmingWith ->
+            let
+                dmChannelId : DmChannelId
+                dmChannelId =
+                    DmChannel.channelIdFromUserIds otherSession.userId dmingWith
+            in
+            case DmChannel.otherUserId session.userId dmChannelId of
+                Just otherUserId ->
+                    SeqDictHelper.addItem
+                        (DmRoomId otherUserId)
+                        ( otherSession.userId, otherClientId )
+                        dict2
+
+                Nothing ->
+                    dict2
+
+
 getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
 getVoiceChatData clientId session model =
     SeqDict.foldl
@@ -604,23 +630,11 @@ getVoiceChatData clientId session model =
                     NonemptyDict.foldl
                         (\otherClientId data dict2 ->
                             case ( data.call, otherClientId == clientId ) of
-                                ( Just roomId, False ) ->
-                                    case roomId of
-                                        DmRoomId dmingWith ->
-                                            let
-                                                dmChannelId : DmChannelId
-                                                dmChannelId =
-                                                    DmChannel.channelIdFromUserIds otherSession.userId dmingWith
-                                            in
-                                            case DmChannel.otherUserId session.userId dmChannelId of
-                                                Just otherUserId ->
-                                                    SeqDictHelper.addItem
-                                                        (DmRoomId otherUserId)
-                                                        ( otherSession.userId, otherClientId )
-                                                        dict2
+                                ( ConnectedToCall roomId _, False ) ->
+                                    getVoiceChatDataHelper roomId session otherSession otherClientId dict2
 
-                                                Nothing ->
-                                                    dict2
+                                ( ConnectingToCall roomId, False ) ->
+                                    getVoiceChatDataHelper roomId session otherSession otherClientId dict2
 
                                 _ ->
                                     dict2

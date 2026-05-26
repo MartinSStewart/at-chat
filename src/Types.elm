@@ -621,7 +621,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotCloudflareSessionCreated ClientId ChangeId Time.Posix CallId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
+    | GotCloudflareSessionCreated SessionId ClientId ChangeId Time.Posix CallId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
     | GotCloudflareSession SessionId ClientId ChangeId Time.Posix CallId Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.PushTracksResult)
     | GotCloudflarePullOffer Time.Posix ClientId ChangeId Call.ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
     | GotCloudflareRenegotiateAck ClientId ChangeId Cloudflare.Sdp (Result Http.Error ())

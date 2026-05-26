@@ -97,6 +97,7 @@ import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
+import LocalState exposing (CallStatus(..))
 import LoginForm
 import NonemptyDict
 import NonemptySet
@@ -469,7 +470,18 @@ mockCloudflareSfu path { currentRequest, data } =
             SeqDict.foldl
                 (\_ conns acc ->
                     NonemptyDict.toList conns
-                        |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
+                        |> List.filter
+                            (\( _, c ) ->
+                                case c.call of
+                                    ConnectedToCall _ _ ->
+                                        True
+
+                                    NotInCall ->
+                                        False
+
+                                    ConnectingToCall callId ->
+                                        False
+                            )
                         |> List.length
                         |> (+) acc
                 )
@@ -822,19 +834,30 @@ voiceChatTest normalConfig =
                         , T.checkBackend 200
                             (\m ->
                                 case
-                                    SeqDict.toList m.connections
-                                        |> List.concatMap
-                                            (\( _, conns ) ->
-                                                NonemptyDict.toList conns
-                                                    |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                            )
+                                    List.concatMap
+                                        (\( _, conns ) ->
+                                            List.filter
+                                                (\( _, c ) ->
+                                                    case c.call of
+                                                        ConnectedToCall _ _ ->
+                                                            True
+
+                                                        NotInCall ->
+                                                            False
+
+                                                        ConnectingToCall callId ->
+                                                            False
+                                                )
+                                                (NonemptyDict.toList conns)
+                                        )
+                                        (SeqDict.toList m.connections)
                                 of
                                     [ _ ] ->
                                         Ok ()
 
                                     other ->
                                         Err
-                                            ("Expected exactly one connection with callSfu after admin publishes, got "
+                                            ("Expected exactly one ConnectedToCall after admin publishes, got "
                                                 ++ String.fromInt (List.length other)
                                             )
                             )
@@ -843,12 +866,23 @@ voiceChatTest normalConfig =
                         , T.checkBackend 200
                             (\m ->
                                 case
-                                    SeqDict.toList m.connections
-                                        |> List.concatMap
-                                            (\( _, conns ) ->
-                                                NonemptyDict.toList conns
-                                                    |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                            )
+                                    List.concatMap
+                                        (\( _, conns ) ->
+                                            List.filter
+                                                (\( _, c ) ->
+                                                    case c.call of
+                                                        ConnectedToCall _ _ ->
+                                                            True
+
+                                                        NotInCall ->
+                                                            False
+
+                                                        ConnectingToCall callId ->
+                                                            False
+                                                )
+                                                (NonemptyDict.toList conns)
+                                        )
+                                        (SeqDict.toList m.connections)
                                 of
                                     [ _, _ ] ->
                                         Ok ()
@@ -863,12 +897,23 @@ voiceChatTest normalConfig =
                         , T.checkBackend 500
                             (\m ->
                                 case
-                                    SeqDict.toList m.connections
-                                        |> List.concatMap
-                                            (\( _, conns ) ->
-                                                NonemptyDict.toList conns
-                                                    |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                            )
+                                    List.concatMap
+                                        (\( _, conns ) ->
+                                            List.filter
+                                                (\( _, c ) ->
+                                                    case c.call of
+                                                        ConnectedToCall _ _ ->
+                                                            True
+
+                                                        NotInCall ->
+                                                            False
+
+                                                        ConnectingToCall callId ->
+                                                            False
+                                                )
+                                                (NonemptyDict.toList conns)
+                                        )
+                                        (SeqDict.toList m.connections)
                                 of
                                     [ _, _ ] ->
                                         Ok ()
