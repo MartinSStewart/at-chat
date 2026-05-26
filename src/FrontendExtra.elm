@@ -3875,6 +3875,32 @@ changeUpdate localMsg local =
                         Call.Server_Left time connectionId ->
                             otherUserLeaveCall time connectionId local
 
+                        Call.Server_Joining time connectionId ->
+                            case connectionId.roomId of
+                                DmRoomId otherUserId ->
+                                    { local
+                                        | calls =
+                                            { calls
+                                                | voiceChats =
+                                                    SeqDictHelper.addItem connectionId.roomId connectionId.otherClientId calls.voiceChats
+                                                , error = Nothing
+                                            }
+                                        , dmChannels =
+                                            if SeqDict.member connectionId.roomId calls.voiceChats then
+                                                local.dmChannels
+
+                                            else
+                                                SeqDict.update
+                                                    otherUserId
+                                                    (\maybe ->
+                                                        Maybe.withDefault DmChannel.frontendInit maybe
+                                                            |> LocalState.createChannelMessageFrontend
+                                                                (CallStarted time local.localUser.session.userId SeqDict.empty)
+                                                            |> Just
+                                                    )
+                                                    local.dmChannels
+                                    }
+
                 Server_Go changeBy { otherUserId } goChange ->
                     goChangeUpdate changeBy otherUserId goChange local
 

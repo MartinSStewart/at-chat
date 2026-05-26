@@ -84,6 +84,7 @@ type LocalChange
 
 type ServerChange
     = Server_Joined Time.Posix ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName)
+    | Server_Joining Time.Posix ConnectionId
     | Server_Left Time.Posix ConnectionId
 
 
@@ -1060,6 +1061,9 @@ serverChangeCmd change _ _ local _ =
 
                 Nothing ->
                     Command.none
+
+        Server_Joining _ _ ->
+            Command.none
 
         Server_Left _ connectionId ->
             toJs (ToJs_PeerLeft connectionId)

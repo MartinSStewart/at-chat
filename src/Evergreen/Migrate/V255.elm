@@ -21,7 +21,6 @@ See <https://dashboard.lamdera.app/docs/evergreen> for more info.
 
 import Array
 import Dict
-import Effect.Lamdera
 import Evergreen.V254.AiChat
 import Evergreen.V254.Call
 import Evergreen.V254.ChannelDescription

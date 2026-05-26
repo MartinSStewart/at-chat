@@ -5303,6 +5303,19 @@ joinDmVoiceChat sessionId clientId time changeId otherUserId model session _ _ d
                                     |> Local_VoiceChatChange
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toDmChannelExcludingOne
+                                    clientId
+                                    session.userId
+                                    otherUserId
+                                    (\otherUserId2 ->
+                                        Call.Server_Joining
+                                            time
+                                            { roomId = Call.DmRoomId otherUserId2
+                                            , otherClientId = ( otherUserId2, clientId )
+                                            }
+                                            |> Server_VoiceChatChange
+                                    )
+                                    model3
                                 , leaveCmd
                                 ]
                             )
