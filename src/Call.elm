@@ -1,5 +1,6 @@
 port module Call exposing
     ( CallError(..)
+    , CallId(..)
     , ChannelSidebarMode(..)
     , ConnectionId
     , DeviceKind(..)
@@ -16,7 +17,6 @@ port module Call exposing
     , Msg(..)
     , PublishResult
     , Recording
-    , RoomId(..)
     , ServerChange(..)
     , StartCallData
     , StartLocalStreamData
@@ -74,7 +74,7 @@ import UserSession exposing (ToBeFilledInByBackend)
 
 
 type LocalChange
-    = Local_Join Time.Posix RoomId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
+    = Local_Join Time.Posix CallId (ToBeFilledInByBackend (Result () (List ExistingPeer)))
     | Local_Leave Time.Posix
     | Local_PublishTracks Cloudflare.Sdp (List String) (ToBeFilledInByBackend PublishResult)
     | Local_PublishConnected
@@ -115,9 +115,9 @@ type Msg
     | SelectedVideoInputDevice (IdString MediaDeviceId)
     | PressedToggleMute
     | PressedTogglePauseVideo
-    | PressedJoinCall RoomId
+    | PressedJoinCall CallId
     | PressedLeaveCall
-    | PressedDownloadRecording RoomId
+    | PressedDownloadRecording CallId
     | PressedCopyError String
     | ChangedVolume ConnectionId Float
     | MouseEnterVideoNode LocalOrConnection
@@ -125,8 +125,8 @@ type Msg
 
 
 type alias Local =
-    { currentRoom : Maybe RoomId
-    , voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    { currentRoom : Maybe CallId
+    , voiceChats : SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
     , error : Maybe CallError
     }
 
@@ -144,7 +144,7 @@ type alias Model =
     , audioInputEnabled : Bool
     , videoInputEnabled : Bool
     , isSpeaking : SeqSet ConnectionId
-    , recordings : SeqDict RoomId (Nonempty Recording)
+    , recordings : SeqDict CallId (Nonempty Recording)
     , localIsSpeaking : Bool
     , startConnectionError : Maybe String
     , volume : SeqDict ( Id UserId, ClientId ) Float
@@ -175,7 +175,7 @@ type ChannelSidebarMode
     | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
-init : SeqDict RoomId (NonemptySet ( Id UserId, ClientId )) -> Local
+init : SeqDict CallId (NonemptySet ( Id UserId, ClientId )) -> Local
 init voiceChats =
     { currentRoom = Nothing
     , voiceChats = voiceChats
@@ -227,10 +227,10 @@ gotUserMediaDevices devices selectedDevices model =
 
 
 type alias ConnectionId =
-    { roomId : RoomId, otherClientId : ( Id UserId, ClientId ) }
+    { roomId : CallId, otherClientId : ( Id UserId, ClientId ) }
 
 
-type RoomId
+type CallId
     = DmRoomId (Id UserId)
 
 
@@ -365,7 +365,7 @@ videoNodes currentUserId config loggedIn local =
         model =
             loggedIn.voiceChat
 
-        viewingRoomId : Maybe RoomId
+        viewingRoomId : Maybe CallId
         viewingRoomId =
             case Route.toGuildOrDmId currentUserId config.route of
                 Just ( GuildOrDmId (GuildOrDmId_Dm otherUserId), _ ) ->
@@ -858,7 +858,7 @@ viewHeight windowSize =
     round (toFloat (Coord.yRaw windowSize * 2) / 3)
 
 
-view : Coord CssPixels -> RoomId -> Local -> Model -> Element Msg
+view : Coord CssPixels -> CallId -> Local -> Model -> Element Msg
 view windowSize roomId calls model =
     let
         ongoingCall : Maybe (NonemptySet ( Id UserId, ClientId ))
@@ -1025,7 +1025,7 @@ voiceChatControlButton htmlId iconHtml isEnabled onPress =
         iconHtml
 
 
-hasJoined : RoomId -> Local -> Bool
+hasJoined : CallId -> Local -> Bool
 hasJoined roomId model =
     model.currentRoom == Just roomId
 
@@ -1117,7 +1117,7 @@ startLocalStreamDataCodec =
 
 
 type alias StartCallData =
-    { roomId : RoomId
+    { roomId : CallId
     , audioInput : Maybe (IdString MediaDeviceId)
     , videoInput : Maybe (IdString MediaDeviceId)
     , audioInputEnabled : Bool
@@ -1247,7 +1247,7 @@ toJs msg =
         (Codec.encoder voiceChatToJsCodec msg)
 
 
-startCallCmd : RoomId -> List ExistingPeer -> Model -> Command FrontendOnly toMsg msg
+startCallCmd : CallId -> List ExistingPeer -> Model -> Command FrontendOnly toMsg msg
 startCallCmd roomId existingPeers model =
     { roomId = roomId
     , audioInput = model.selectedAudioInputDevice
@@ -1435,7 +1435,7 @@ otherClientIdCodec =
         Codec.string
 
 
-roomIdCodec : Codec RoomId
+roomIdCodec : Codec CallId
 roomIdCodec =
     Codec.andThen
         (\text ->
@@ -1476,7 +1476,7 @@ connectionIdCodec =
 --    Codec.string
 
 
-mediaDeviceSelectors : Bool -> RoomId -> Model -> Element Msg
+mediaDeviceSelectors : Bool -> CallId -> Model -> Element Msg
 mediaDeviceSelectors isMobile roomId model =
     case model.userMediaDevices of
         MediaDevicesNotLoaded ->

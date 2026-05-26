@@ -8,7 +8,7 @@ module ChannelHeader exposing
     , thread
     )
 
-import Call exposing (RoomId(..))
+import Call exposing (CallId(..))
 import ChannelDescription
 import ChannelName exposing (ChannelName)
 import DmChannel

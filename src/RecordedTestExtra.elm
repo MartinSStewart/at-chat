@@ -33,6 +33,7 @@ module RecordedTestExtra exposing
     , hasNotExactText
     , hasNotText
     , hasText
+    , httpBasic
     , infoEndpointResponse
     , inviteUser
     , inviteUserAndDmChat
@@ -44,6 +45,7 @@ module RecordedTestExtra exposing
     , linkDiscordUrl
     , linkSecondDiscordAccount
     , mobileWindow
+    , mockCloudflareSfu
     , noMissingMessages
     , publicGoMatchViewTest
     , regeneratedServerSecretValue
@@ -95,6 +97,7 @@ import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
+import LocalState exposing (CallStatus(..))
 import LoginForm
 import NonemptyDict
 import NonemptySet
@@ -139,6 +142,9 @@ handlePortToJs :
     -> Maybe ( String, Json.Decode.Value )
 handlePortToJs requestAndData =
     case requestAndData.currentRequest.portName of
+        "voice_chat_to_js" ->
+            mockVoiceChatPorts requestAndData
+
         "get_window_size" ->
             Just
                 ( "got_window_size"
@@ -417,125 +423,24 @@ checkNotification body =
         )
 
 
-sfuHandshakeTest :
-    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-sfuHandshakeTest config =
-    startTest
-        "SFU handshake — two users join a 1:1 call (narrated)"
-        startTime
-        config
-        [ connectTwoUsersAndJoinNewGuild desktopWindow
-            (\admin user ->
-                [ T.collapsableGroup
-                    "Voice chat"
-                    [ T.collapsableGroup
-                        "Setup"
-                        [ admin.click 100 (Dom.id "guild_showUserOptions")
-                        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
-                        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
-                        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeAppId_label") "test-app-id"
-                        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeAppId_acceptEdit")
-                        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_label") "test-api-token"
-                        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_acceptEdit")
-                        , admin.navigateBack 100
-                        , T.checkBackend 100
-                            (\m ->
-                                case ( m.cloudflareRealtimeAppId, m.cloudflareRealtimeApiToken ) of
-                                    ( Just _, Just _ ) ->
-                                        Ok ()
+httpBasic : String -> Int -> String -> HttpResponse
+httpBasic url statusCode body =
+    StringHttpResponse
+        { url = url
+        , statusCode = statusCode
+        , statusText =
+            case statusCode of
+                200 ->
+                    "OK"
 
-                                    _ ->
-                                        Err "Cloudflare keys did not land on the backend"
-                            )
-                        , admin.click 100 (Dom.id "guild_openDm_1")
-                        , user.click 100 (Dom.id "guild_openDm_0")
-                        ]
-                    , admin.click 100 (Dom.id "guild_voiceChat")
-                    , user.click 100 (Dom.id "guild_voiceChat")
-                    , admin.click 100 (Dom.id "guild_startVoiceChat")
-                    , T.checkBackend 200
-                        (\m ->
-                            case
-                                SeqDict.toList m.connections
-                                    |> List.concatMap
-                                        (\( _, conns ) ->
-                                            NonemptyDict.toList conns
-                                                |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                        )
-                            of
-                                [ _ ] ->
-                                    Ok ()
+                201 ->
+                    "OK"
 
-                                other ->
-                                    Err
-                                        ("Expected exactly one connection with callSfu after admin publishes, got "
-                                            ++ String.fromInt (List.length other)
-                                        )
-                        )
-                    , user.click 100 (Dom.id "guild_startVoiceChat")
-                    , T.checkBackend 200
-                        (\m ->
-                            case
-                                SeqDict.toList m.connections
-                                    |> List.concatMap
-                                        (\( _, conns ) ->
-                                            NonemptyDict.toList conns
-                                                |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                        )
-                            of
-                                [ _, _ ] ->
-                                    Ok ()
-
-                                other ->
-                                    Err
-                                        ("Expected two connections with callSfu after bob publishes, got "
-                                            ++ String.fromInt (List.length other)
-                                        )
-                        )
-                    , T.checkState
-                        100
-                        (\data ->
-                            let
-                                _ =
-                                    Debug.log "port requests"
-                                        (List.filterMap
-                                            (\request ->
-                                                if request.portName == "voice_chat_to_js" then
-                                                    Codec.decodeValue Call.voiceChatToJsCodec request.value |> Just
-
-                                                else
-                                                    Nothing
-                                            )
-                                            data.portRequests
-                                        )
-                            in
-                            Ok ()
-                        )
-                    , T.checkBackend 500
-                        (\m ->
-                            case
-                                SeqDict.toList m.connections
-                                    |> List.concatMap
-                                        (\( _, conns ) ->
-                                            NonemptyDict.toList conns
-                                                |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
-                                        )
-                            of
-                                [ _, _ ] ->
-                                    Ok ()
-
-                                other ->
-                                    Err
-                                        ("Expected two connections with callSfu at end, got "
-                                            ++ String.fromInt (List.length other)
-                                        )
-                        )
-                    , admin.click 100 (Dom.id "guild_leaveVoiceChat")
-                    ]
-                ]
-            )
-        ]
+                _ ->
+                    "Bad request"
+        , headers = Dict.empty
+        }
+        body
 
 
 {-| Mock Cloudflare Realtime SFU API. Used as a fall-through in the SFU
@@ -555,30 +460,28 @@ handler.
 
 -}
 mockCloudflareSfu :
-    { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel }
-    -> Maybe HttpResponse
-mockCloudflareSfu { currentRequest, data } =
+    List String
+    -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel }
+    -> HttpResponse
+mockCloudflareSfu path { currentRequest, data } =
     let
-        _ =
-            Debug.log "currentRequest" currentRequest
-
-        ok : Int -> String -> Maybe HttpResponse
-        ok statusCode body =
-            StringHttpResponse
-                { url = currentRequest.url
-                , statusCode = statusCode
-                , statusText = "OK"
-                , headers = Dict.empty
-                }
-                body
-                |> Just
-
         sessionsWithCallSfu : Int
         sessionsWithCallSfu =
             SeqDict.foldl
                 (\_ conns acc ->
                     NonemptyDict.toList conns
-                        |> List.filter (\( _, c ) -> c.callSfu /= Nothing)
+                        |> List.filter
+                            (\( _, c ) ->
+                                case c.call of
+                                    ConnectedToCall _ _ ->
+                                        True
+
+                                    NotInCall ->
+                                        False
+
+                                    ConnectingToCall callId ->
+                                        False
+                            )
                         |> List.length
                         |> (+) acc
                 )
@@ -593,76 +496,40 @@ mockCloudflareSfu { currentRequest, data } =
 
                 _ ->
                     Json.Encode.null
-
-        hasSessionDescription : Bool
-        hasSessionDescription =
-            Json.Decode.decodeValue
-                (Json.Decode.field "sessionDescription" Json.Decode.value)
-                bodyJson
-                |> (\r ->
-                        case r of
-                            Ok _ ->
-                                True
-
-                            Err _ ->
-                                False
-                   )
-
-        -- https://rtc.live.cloudflare.com/v1/apps/test-app-id/sessions/sfu-session-1/tracks/new
     in
-    case String.split "/" currentRequest.url of
-        "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
-            case rest of
-                [ "sessions", "new" ] ->
-                    ok 201
-                        ("{\"sessionId\":\"sfu-session-"
-                            ++ String.fromInt sessionsWithCallSfu
-                            ++ "\"}"
-                        )
+    case path of
+        [ "sessions", "new" ] ->
+            httpBasic
+                currentRequest.url
+                201
+                ("{\"sessionId\":\"sfu-session-"
+                    ++ String.fromInt sessionsWithCallSfu
+                    ++ "\"}"
+                )
 
-                [ "sessions", realtimeSessionId, "tracks", "new" ] ->
-                    if hasSessionDescription then
-                        -- publish: client sent us an offer; we return an answer + assigned trackNames
-                        "{\"sessionDescription\":{\"sdp\":\"answer-sdp-from-"
-                            ++ realtimeSessionId
-                            ++ "\",\"type\":\"answer\"},\"tracks\":[{\"trackName\":\"0\"},{\"trackName\":\"1\"}]}"
-                            |> ok 200
+        [ "sessions", realtimeSessionId, "tracks", "new" ] ->
+            case Json.Decode.decodeValue (Json.Decode.field "sessionDescription" Json.Decode.value) bodyJson of
+                Ok _ ->
+                    -- publish: client sent us an offer; we return an answer + assigned trackNames
+                    "{\"sessionDescription\":{\"sdp\":\"answer-sdp-from-"
+                        ++ realtimeSessionId
+                        ++ "\",\"type\":\"answer\"},\"tracks\":[{\"trackName\":\"0\"},{\"trackName\":\"1\"}]}"
+                        |> httpBasic currentRequest.url 200
 
-                    else
-                        -- pull: client asked for someone else's tracks; we return an offer the client must answer
-                        "{\"sessionDescription\":{\"sdp\":\"pull-offer-sdp-from-"
-                            ++ realtimeSessionId
-                            ++ "\",\"type\":\"offer\"},\"requiresImmediateRenegotiation\":true}"
-                            |> ok 200
+                Err _ ->
+                    -- pull: client asked for someone else's tracks; we return an offer the client must answer
+                    "{\"sessionDescription\":{\"sdp\":\"pull-offer-sdp-from-"
+                        ++ realtimeSessionId
+                        ++ "\",\"type\":\"offer\"},\"requiresImmediateRenegotiation\":true}"
+                        |> httpBasic currentRequest.url 200
 
-                [ "sessions", _, "renegotiate" ] ->
-                    ok 200 ""
-
-                _ ->
-                    Nothing
+        [ "sessions", _, "renegotiate" ] ->
+            httpBasic currentRequest.url 200 ""
 
         _ ->
-            Nothing
+            UnhandledHttpRequest
 
 
-{-| Stand in for the JS half of `elm-pkg-js/voice-chat.js`. Each time the
-Elm frontend sends a message to the `voice_chat_to_js` port we fake what
-real JS would push back. Returning `Nothing` means "JS would not send
-anything in response to that message".
-
-Most cases are straightforward 1-in / 1-out. Two need to look at backend
-state:
-
-  - `ToJs_PublishAnswer`: real JS, after applying the SDP answer, iterates
-    the existing peers it learned about in `ToJs_StartCall` and sends one
-    `FromJs_RequestPullTracks` per peer. We can't carry that list across
-    port messages, so instead we look at the backend state to find peers
-    already in this call that have a Cloudflare SFU session. For 1:1 there
-    is at most one, so a single port event suffices.
-
-  - The publisher's own connection is excluded by clientId.
-
--}
 mockVoiceChatPorts :
     { data : T.Data FrontendModel BackendModel, currentRequest : T.PortToJs }
     -> Maybe ( String, Json.Decode.Value )
@@ -795,108 +662,320 @@ fromJsEvent value =
     Just ( "voice_chat_from_js", Call.encodeFromJs value )
 
 
+{-| Regression guard for the JS → Elm side of the voice-chat handshake.
+
+Every `voice_chat_to_js` message the frontend emits is fed through the same
+`mockVoiceChatPorts` JS simulation the test uses, and the resulting
+`voice_chat_from_js` payloads are captured as JSON. `sfuHandshakeTest` then
+asserts the exact ordered list of from-JS payloads _after each step that is
+meant to trigger one_, so that an event firing later than it should (or not at
+all) fails the check at the point where it was expected — not silently at the
+end. If a refactor changes which to-JS messages are emitted (or their shape),
+the derived from-JS events change and the relevant checkpoint fails.
+
+-}
+fromJs_GotMediaDevices : String
+fromJs_GotMediaDevices =
+    "{\"tag\":\"got-media-devices\",\"args\":[[{\"deviceId\":\"microphoneDeviceId\",\"groupId\":\"microphoneGroupId\",\"kind\":\"audioinput\",\"label\":\"Default microphone\"},{\"deviceId\":\"webcameraDeviceId\",\"groupId\":\"webcameraGroupId\",\"kind\":\"videoinput\",\"label\":\"Default webcamera\"},{\"deviceId\":\"speakersDeviceId\",\"groupId\":\"speakersGroupId\",\"kind\":\"audiooutput\",\"label\":\"Default speakers\"}],[\"microphoneDeviceId\",\"webcameraDeviceId\",\"speakersDeviceId\"]]}"
+
+
+fromJs_PublishOffer : String
+fromJs_PublishOffer =
+    "{\"tag\":\"publish-offer\",\"args\":[\"fake-publish-offer-sdp\",[\"0\",\"1\"]]}"
+
+
+fromJs_PublishConnected : String
+fromJs_PublishConnected =
+    "{\"tag\":\"publish-connected\",\"args\":[]}"
+
+
+fromJs_RequestPullTracksSession1 : String
+fromJs_RequestPullTracksSession1 =
+    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"sfu-session-1\",[\"0\",\"1\"]]}"
+
+
+fromJs_RequestPullTracksSession0 : String
+fromJs_RequestPullTracksSession0 =
+    "{\"tag\":\"request-pull-tracks\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"sfu-session-0\",[\"0\",\"1\"]]}"
+
+
+fromJs_PullAnswerSession1 : String
+fromJs_PullAnswerSession1 =
+    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"1\",\"otherClientId\":\"1 clientId 2\"},\"fake-pull-answer-sdp\"]}"
+
+
+fromJs_PullAnswerSession0 : String
+fromJs_PullAnswerSession0 =
+    "{\"tag\":\"pull-answer\",\"args\":[{\"roomId\":\"0\",\"otherClientId\":\"0 clientId 1\"},\"fake-pull-answer-sdp\"]}"
+
+
+{-| Cumulative `voice_chat_from_js` payloads expected at each handshake
+checkpoint. Each value extends the previous one with the events that step is
+supposed to add, so the checks pin down _when_ each event fires, not just that
+it eventually does.
+-}
+fromJsAfterAdminOpensVoiceChat : List String
+fromJsAfterAdminOpensVoiceChat =
+    [ fromJs_GotMediaDevices ]
+
+
+fromJsAfterUserOpensVoiceChat : List String
+fromJsAfterUserOpensVoiceChat =
+    fromJsAfterAdminOpensVoiceChat ++ [ fromJs_GotMediaDevices ]
+
+
+fromJsAfterAdminPublishes : List String
+fromJsAfterAdminPublishes =
+    fromJsAfterUserOpensVoiceChat ++ [ fromJs_PublishOffer, fromJs_PublishConnected ]
+
+
+fromJsAfterUserPublishes : List String
+fromJsAfterUserPublishes =
+    fromJsAfterAdminPublishes
+        ++ [ fromJs_PublishOffer
+           , fromJs_PublishConnected
+           , fromJs_RequestPullTracksSession1
+           , fromJs_RequestPullTracksSession0
+           ]
+
+
+fromJsAfterPullsComplete : List String
+fromJsAfterPullsComplete =
+    fromJsAfterUserPublishes ++ [ fromJs_PullAnswerSession1, fromJs_PullAnswerSession0 ]
+
+
+{-| Assert the exact ordered list of `voice_chat_from_js` payloads that have
+been produced so far equals `expected`. Placed at each handshake checkpoint so
+the prefix is pinned down step by step.
+-}
+checkVoiceChatFromJsEvents : List String -> T.Data FrontendModel BackendModel -> Result String ()
+checkVoiceChatFromJsEvents expected data =
+    let
+        actual : List String
+        actual =
+            voiceChatFromJsPayloads data
+    in
+    if actual == expected then
+        Ok ()
+
+    else
+        Err
+            ("voice_chat_from_js events not as expected at this step.\nExpected:\n  "
+                ++ String.join "\n  " expected
+                ++ "\nActual:\n  "
+                ++ String.join "\n  " actual
+            )
+
+
+voiceChatFromJsPayloads : T.Data FrontendModel BackendModel -> List String
+voiceChatFromJsPayloads data =
+    data.portRequests
+        |> List.reverse
+        |> List.filterMap
+            (\request ->
+                if request.portName == "voice_chat_to_js" then
+                    case mockVoiceChatPorts { data = data, currentRequest = request } of
+                        Just ( _, value ) ->
+                            Just (Json.Encode.encode 0 value)
+
+                        Nothing ->
+                            Nothing
+
+                else
+                    Nothing
+            )
+
+
+addCloudflareRealtimeApiKeys admin =
+    T.collapsableGroup
+        "Add Cloudflare Realtime API keys"
+        [ admin.click 100 (Dom.id "guild_showUserOptions")
+        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
+        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeAppId_label") "test-app-id"
+        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeAppId_acceptEdit")
+        , admin.input 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_label") "test-api-token"
+        , admin.click 100 (Dom.id "userOptions_cloudflareRealtimeApiToken_acceptEdit")
+        , admin.navigateBack 100
+        , T.checkBackend 100
+            (\m ->
+                case ( m.cloudflareRealtimeAppId, m.cloudflareRealtimeApiToken ) of
+                    ( Just _, Just _ ) ->
+                        Ok ()
+
+                    _ ->
+                        Err "Cloudflare keys did not land on the backend"
+            )
+        ]
+
+
 voiceChatTest :
     T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 voiceChatTest normalConfig =
-    let
-        configWithCloudflareMock : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-        configWithCloudflareMock =
-            { normalConfig
-                | handleHttpRequest =
-                    \req ->
-                        case mockCloudflareSfu req of
-                            Just response ->
-                                response
-
-                            Nothing ->
-                                normalConfig.handleHttpRequest req
-                , handlePortToJs =
-                    \request ->
-                        case request.currentRequest.portName of
-                            "voice_chat_to_js" ->
-                                mockVoiceChatPorts request
-
-                            _ ->
-                                normalConfig.handlePortToJs request
-            }
-    in
     T.testGroup
         "Voice chat"
-        [ sfuHandshakeTest configWithCloudflareMock
-
-        --, startTest
-        --    "Hop between voice calls"
-        --    startTime
-        --    normalConfig
-        --    [ connectTwoUsersAndJoinNewGuild
-        --        desktopWindow
-        --        (\admin user ->
-        --            [ admin.click 100 (Dom.id "guild_openDm_0")
-        --            , user.click 100 (Dom.id "guild_openDm_0")
-        --            , admin.checkView
-        --                100
-        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
-        --            , admin.click 100 (Dom.id "guild_voiceChat")
-        --            , admin.click 100 (Dom.id "guild_startVoiceChat")
-        --            , admin.checkView
-        --                100
-        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
-        --            , admin.checkView
-        --                100
-        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
-        --            , admin.navigateBack 100
-        --            , admin.navigateBack 100
-        --            , admin.click 100 (Dom.id "guild_openDm_1")
-        --            , user.checkView
-        --                100
-        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
-        --            , admin.click 100 (Dom.id "guild_voiceChat")
-        --            , admin.click 100 (Dom.id "guild_startVoiceChat")
-        --            , user.checkView
-        --                100
-        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
-        --            , user.checkView
-        --                100
-        --                (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
-        --            , admin.navigateBack 100
-        --            , admin.navigateBack 100
-        --            , admin.click 100 (Dom.id "guild_openDm_0")
-        --            , admin.checkView
-        --                100
-        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
-        --            , admin.click 100 (Dom.id "guild_voiceChat")
-        --            , admin.click 100 (Dom.id "guild_startVoiceChat")
-        --            , user.checkView
-        --                100
-        --                (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
-        --            ]
-        --        )
-        --    ]
-        , startTest
-            "Multiple user instances"
+        [ startTest
+            "SFU handshake — two users join a 1:1 call"
             startTime
             normalConfig
-            [ T.connectFrontend
-                100
-                sessionId0
-                "/"
+            [ connectTwoUsersAndJoinNewGuild desktopWindow
+                (\admin user ->
+                    [ T.collapsableGroup
+                        "Voice chat"
+                        [ addCloudflareRealtimeApiKeys admin
+                        , admin.click 100 (Dom.id "guild_openDm_1")
+                        , user.click 100 (Dom.id "guild_openDm_0")
+                        , admin.click 100 (Dom.id "guild_voiceChat")
+                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminOpensVoiceChat)
+                        , user.click 100 (Dom.id "guild_voiceChat")
+                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
+                        , admin.click 100 (Dom.id "guild_startVoiceChat")
+                        , T.checkBackend 200
+                            (\m ->
+                                case
+                                    List.concatMap
+                                        (\( _, conns ) ->
+                                            List.filter
+                                                (\( _, c ) ->
+                                                    case c.call of
+                                                        ConnectedToCall _ _ ->
+                                                            True
+
+                                                        NotInCall ->
+                                                            False
+
+                                                        ConnectingToCall callId ->
+                                                            False
+                                                )
+                                                (NonemptyDict.toList conns)
+                                        )
+                                        (SeqDict.toList m.connections)
+                                of
+                                    [ _ ] ->
+                                        Ok ()
+
+                                    other ->
+                                        Err
+                                            ("Expected exactly one ConnectedToCall after admin publishes, got "
+                                                ++ String.fromInt (List.length other)
+                                            )
+                            )
+                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
+                        , user.click 100 (Dom.id "guild_startVoiceChat")
+                        , T.checkBackend 200
+                            (\m ->
+                                case
+                                    List.concatMap
+                                        (\( _, conns ) ->
+                                            List.filter
+                                                (\( _, c ) ->
+                                                    case c.call of
+                                                        ConnectedToCall _ _ ->
+                                                            True
+
+                                                        NotInCall ->
+                                                            False
+
+                                                        ConnectingToCall callId ->
+                                                            False
+                                                )
+                                                (NonemptyDict.toList conns)
+                                        )
+                                        (SeqDict.toList m.connections)
+                                of
+                                    [ _, _ ] ->
+                                        Ok ()
+
+                                    other ->
+                                        Err
+                                            ("Expected two connections with callSfu after bob publishes, got "
+                                                ++ String.fromInt (List.length other)
+                                            )
+                            )
+                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
+                        , T.checkBackend 500
+                            (\m ->
+                                case
+                                    List.concatMap
+                                        (\( _, conns ) ->
+                                            List.filter
+                                                (\( _, c ) ->
+                                                    case c.call of
+                                                        ConnectedToCall _ _ ->
+                                                            True
+
+                                                        NotInCall ->
+                                                            False
+
+                                                        ConnectingToCall callId ->
+                                                            False
+                                                )
+                                                (NonemptyDict.toList conns)
+                                        )
+                                        (SeqDict.toList m.connections)
+                                of
+                                    [ _, _ ] ->
+                                        Ok ()
+
+                                    other ->
+                                        Err
+                                            ("Expected two connections with callSfu at end, got "
+                                                ++ String.fromInt (List.length other)
+                                            )
+                            )
+                        , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
+                        , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                        ]
+                    ]
+                )
+            ]
+        , startTest
+            "Hop between voice calls"
+            startTime
+            normalConfig
+            [ connectTwoUsersAndJoinNewGuild
                 desktopWindow
-                (\adminA ->
-                    [ handleLogin firefoxDesktop adminEmail adminA
-                    , T.connectFrontend
+                (\admin user ->
+                    [ addCloudflareRealtimeApiKeys admin
+                    , admin.click 100 (Dom.id "guild_openDm_0")
+                    , user.click 100 (Dom.id "guild_openDm_0")
+                    , admin.checkView
                         100
-                        sessionId0
-                        "/"
-                        desktopWindow
-                        (\adminB ->
-                            [ adminB.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                            , adminA.click 100 (Dom.id "guild_friendLabel_0")
-                            , adminB.click 100 (Dom.id "guild_friendLabel_0")
-                            , adminB.click 100 (Dom.id "guild_voiceChat")
-                            , adminA.click 100 (Dom.id "guild_voiceChat")
-                            ]
-                        )
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                    , admin.navigateBack 100
+                    , admin.navigateBack 100
+                    , admin.click 100 (Dom.id "guild_openDm_1")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
+                    , user.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                    , admin.navigateBack 100
+                    , admin.navigateBack 100
+                    , admin.click 100 (Dom.id "guild_openDm_0")
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
+                    , admin.click 100 (Dom.id "guild_voiceChat")
+                    , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    , user.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.text "started a call", Test.Html.Selector.text "Call ended" ])
                     ]
                 )
             ]

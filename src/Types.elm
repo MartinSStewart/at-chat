@@ -46,7 +46,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
-import Call exposing (ChannelSidebarMode, FromJs, RoomId)
+import Call exposing (CallId, ChannelSidebarMode, FromJs)
 import ChannelDescription exposing (ChannelDescription)
 import ChannelName exposing (ChannelName)
 import Cloudflare
@@ -621,8 +621,8 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotCloudflareSessionCreated ClientId ChangeId Time.Posix RoomId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
-    | GotCloudflareSession ClientId ChangeId Time.Posix RoomId Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.PushTracksResult)
+    | GotCloudflareSessionCreated SessionId ClientId ChangeId Time.Posix CallId Cloudflare.Sdp (List String) (Result Http.Error Cloudflare.RealtimeSessionId)
+    | GotCloudflareSession SessionId ClientId ChangeId Time.Posix CallId Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.PushTracksResult)
     | GotCloudflarePullOffer Time.Posix ClientId ChangeId Call.ConnectionId Cloudflare.RealtimeSessionId (List Cloudflare.TrackName) (Result Http.Error Cloudflare.PullTracksResult)
     | GotCloudflareRenegotiateAck ClientId ChangeId Cloudflare.Sdp (Result Http.Error ())
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
@@ -752,7 +752,7 @@ type alias LoginData =
     , textEditor : TextEditor.LocalState
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
-    , voiceChatPeers : SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+    , voiceChatPeers : SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
     }
 
 
