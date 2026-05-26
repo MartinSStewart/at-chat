@@ -479,7 +479,7 @@ mockCloudflareSfu path { currentRequest, data } =
                                     NotInCall ->
                                         False
 
-                                    ConnectingToCall callId ->
+                                    ConnectingToCall _ ->
                                         False
                             )
                         |> List.length
@@ -786,6 +786,9 @@ voiceChatFromJsPayloads data =
             )
 
 
+addCloudflareRealtimeApiKeys :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 addCloudflareRealtimeApiKeys admin =
     T.collapsableGroup
         "Add Cloudflare Realtime API keys"
@@ -845,7 +848,7 @@ voiceChatTest normalConfig =
                                                         NotInCall ->
                                                             False
 
-                                                        ConnectingToCall callId ->
+                                                        ConnectingToCall _ ->
                                                             False
                                                 )
                                                 (NonemptyDict.toList conns)
@@ -877,7 +880,7 @@ voiceChatTest normalConfig =
                                                         NotInCall ->
                                                             False
 
-                                                        ConnectingToCall callId ->
+                                                        ConnectingToCall _ ->
                                                             False
                                                 )
                                                 (NonemptyDict.toList conns)
@@ -908,7 +911,7 @@ voiceChatTest normalConfig =
                                                         NotInCall ->
                                                             False
 
-                                                        ConnectingToCall callId ->
+                                                        ConnectingToCall _ ->
                                                             False
                                                 )
                                                 (NonemptyDict.toList conns)

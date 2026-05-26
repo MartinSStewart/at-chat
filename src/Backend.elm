@@ -5378,9 +5378,14 @@ ids instead.
 -}
 isPeerInSameCall : Call.CallId -> Id UserId -> Id UserId -> Call.CallId -> Bool
 isPeerInSameCall myRoomId myUserId peerUserId peerCall =
-    case ( myRoomId, peerCall ) of
-        ( Call.DmRoomId myOther, Call.DmRoomId peerOther ) ->
-            DmChannel.channelIdFromUserIds myUserId myOther == DmChannel.channelIdFromUserIds peerUserId peerOther
+    let
+        (Call.DmRoomId myOther) =
+            myRoomId
+
+        (Call.DmRoomId peerOther) =
+            peerCall
+    in
+    DmChannel.channelIdFromUserIds myUserId myOther == DmChannel.channelIdFromUserIds peerUserId peerOther
 
 
 handlePublishTracks :
@@ -5404,7 +5409,7 @@ handlePublishTracks sessionId clientId changeId time offerSdp transceiverMids mo
                         |> Task.attempt (GotCloudflareSessionCreated sessionId clientId changeId time roomId offerSdp transceiverMids)
                     )
 
-                ConnectedToCall callId record ->
+                ConnectedToCall _ _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 NotInCall ->
