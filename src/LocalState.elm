@@ -11,6 +11,7 @@ module LocalState exposing
     , Archived
     , BackendChannel
     , BackendGuild
+    , CallStatus(..)
     , ChannelStatus(..)
     , ConnectionData
     , DeletedBackendGuild
@@ -530,9 +531,14 @@ type WebsocketClosedEvent
 
 type alias ConnectionData =
     { lastRequest : LastRequest
-    , call : Maybe Call.RoomId
-    , callSfu : Maybe { sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName, connected : Bool }
+    , call : CallStatus
     }
+
+
+type CallStatus
+    = NotInCall
+    | ConnectingToCall Call.CallId
+    | ConnectedToCall Call.CallId { sessionId : Cloudflare.RealtimeSessionId, trackNames : List Cloudflare.TrackName, connected : Bool }
 
 
 type ServerSecretStatus

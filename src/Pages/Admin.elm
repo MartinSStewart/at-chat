@@ -59,7 +59,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
+import LocalState exposing (AdminData, AdminData_DeletedGuild, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_DmChannel, AdminData_Guild, AdminStatus(..), CallStatus(..), ConnectionData, DiscordUserData_ForAdmin(..), LastRequest(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..), ServerSecretStatus(..), WebsocketClosedEvent(..))
 import Log
 import MembersAndOwner
 import Message exposing (Message)
@@ -649,9 +649,7 @@ endAllCalls adminData =
     { adminData
         | connections =
             SeqDict.map
-                (\_ connection ->
-                    NonemptyDict.map (\_ connection2 -> { connection2 | call = Nothing, callSfu = Nothing }) connection
-                )
+                (\_ connection -> NonemptyDict.map (\_ connection2 -> { connection2 | call = NotInCall }) connection)
                 adminData.connections
     }
 
@@ -2116,11 +2114,14 @@ voiceChatSection adminData model user =
                 (\_ connection count ->
                     NonemptyDict.foldl
                         (\_ connection2 count2 ->
-                            case connection2.callSfu of
-                                Just call ->
+                            case connection2.call of
+                                ConnectedToCall _ call ->
                                     SeqDictHelper.increment call.sessionId count2
 
-                                Nothing ->
+                                ConnectingToCall _ ->
+                                    count2
+
+                                NotInCall ->
                                     count2
                         )
                         count

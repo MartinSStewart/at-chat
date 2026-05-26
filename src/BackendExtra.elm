@@ -29,7 +29,7 @@ import Array
 import Broadcast
 import Bytes.Decode
 import Bytes.Encode
-import Call exposing (RoomId(..))
+import Call exposing (CallId(..))
 import Discord
 import DiscordUserData exposing (DiscordUserData(..), DiscordUserLoadingData(..))
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
@@ -595,7 +595,7 @@ getLoginData sessionId clientId session user requestMessagesFor model =
     }
 
 
-getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict RoomId (NonemptySet ( Id UserId, ClientId ))
+getVoiceChatData : ClientId -> UserSession -> BackendModel -> SeqDict CallId (NonemptySet ( Id UserId, ClientId ))
 getVoiceChatData clientId session model =
     SeqDict.foldl
         (\otherSessionId connections dict ->

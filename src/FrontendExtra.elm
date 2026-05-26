@@ -21,7 +21,7 @@ module FrontendExtra exposing
 
 import AiChat
 import Array exposing (Array)
-import Call exposing (ChannelSidebarMode(..), RoomId(..))
+import Call exposing (CallId(..), ChannelSidebarMode(..))
 import ChannelDescription
 import ChannelName
 import Discord
@@ -3955,7 +3955,7 @@ otherUserLeaveCall time { roomId, otherClientId } local =
     case SeqDict.get roomId calls.voiceChats of
         Just dmVoiceChat ->
             let
-                voiceChats : SeqDict RoomId (NonemptySet ( Id UserId, Lamdera.ClientId ))
+                voiceChats : SeqDict CallId (NonemptySet ( Id UserId, Lamdera.ClientId ))
                 voiceChats =
                     SeqDict.update
                         roomId
