@@ -3,11 +3,12 @@ module SafeJson exposing (SafeJson(..), decoder, encoder, toString)
 import Dict exposing (Dict)
 import Json.Decode
 import Json.Encode
+import SafeFloat exposing (SafeFloat)
 
 
 type SafeJson
     = JsonString String
-    | JsonNumber Float
+    | JsonNumber SafeFloat
     | JsonBool Bool
     | JsonObject (Dict String SafeJson)
     | JsonArray (List SafeJson)
@@ -18,7 +19,7 @@ decoder : Json.Decode.Decoder SafeJson
 decoder =
     Json.Decode.oneOf
         [ Json.Decode.map JsonString Json.Decode.string
-        , Json.Decode.map JsonNumber Json.Decode.float
+        , Json.Decode.map JsonNumber SafeFloat.decode
         , Json.Decode.map JsonBool Json.Decode.bool
         , Json.Decode.map JsonObject (Json.Decode.dict (Json.Decode.lazy (\() -> decoder)))
         , Json.Decode.map JsonArray (Json.Decode.list (Json.Decode.lazy (\() -> decoder)))
@@ -33,7 +34,7 @@ encoder safeJson =
             Json.Encode.string text
 
         JsonNumber float ->
-            Json.Encode.float float
+            SafeFloat.encode float
 
         JsonBool bool ->
             Json.Encode.bool bool
