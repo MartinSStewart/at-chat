@@ -34,6 +34,7 @@ module RecordedTestExtra exposing
     , hasNotText
     , hasText
     , httpBasic
+    , inactiveThreadsAreHiddenTest
     , infoEndpointResponse
     , inviteUser
     , inviteUserAndDmChat
@@ -78,6 +79,7 @@ import Cloudflare
 import Codec
 import Dict
 import Discord
+import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, HttpRequest, HttpResponse(..), RequestedBy(..))
@@ -2496,6 +2498,57 @@ inviteUserAndDmChat config =
                         , admin.click 100 (Dom.id "guild_threadStarterIndicator_1")
                         ]
                     )
+                ]
+            )
+        ]
+
+
+inactiveThreadsAreHiddenTest : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+inactiveThreadsAreHiddenTest config =
+    T.start
+        "Inactive threads are hidden"
+        startTime
+        config
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , inviteUser
+                    admin
+                    (\user ->
+                        [ writeMessage user 100 "Hello!"
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , writeMessage admin 100 "Hello from admin!"
+                        , createThread admin (Id.fromInt 0)
+                        , writeMessage admin 100 "Hello from admin in thread!"
+                        , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                        , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                        ]
+                    )
+                ]
+            )
+        , T.connectFrontend
+            (Duration.days 7.1 |> Duration.inMilliseconds)
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ admin.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
+                , writeMessage admin 100 "Hello again from thread!"
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
                 ]
             )
         ]

@@ -228,6 +228,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 ]
             )
         ]
+    , RecordedTestExtra.inactiveThreadsAreHiddenTest normalConfig
     , RecordedTestExtra.startTest
         "Admin can disable Discord account linking"
         RecordedTestExtra.startTime
