@@ -122,7 +122,6 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, InitialLoadRequest(..), LocalChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import Untrusted
 import Url exposing (Protocol(..), Url)
 import User
 import UserAgent
@@ -2183,7 +2182,7 @@ allAttackerToBackendChanges =
     [ CheckLoginRequest InitialLoadRequested_None
     , LoginWithTokenRequest InitialLoadRequested_None 0 UserAgent.init
     , LoginWithTwoFactorRequest InitialLoadRequested_None 0 UserAgent.init
-    , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com" |> Untrusted.untrust)
+    , GetLoginTokenRequest (Unsafe.emailAddress "attacker@example.com")
     , AdminToBackend (Pages.Admin.ExportBackendRequest Pages.Admin.ExportAll)
     , LocalModelChangeRequest (ChangeId 0) Local_Invalid
     , TwoFactorToBackend TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest

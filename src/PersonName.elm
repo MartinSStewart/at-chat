@@ -29,6 +29,11 @@ fromString text =
             Err "Can't be empty"
 
 
+w3_validate_PersonName : PersonName -> Result String ()
+w3_validate_PersonName (PersonName text) =
+    fromString (String.Nonempty.toString text) |> Result.map (\_ -> ())
+
+
 fromStringLossy : String -> PersonName
 fromStringLossy text =
     case

@@ -10,6 +10,16 @@ type OneOrGreater
     = OneOrGreater Int
 
 
+w3_validate_OneOrGreater : OneOrGreater -> Result String ()
+w3_validate_OneOrGreater (OneOrGreater value) =
+    case fromInt value of
+        Just _ ->
+            Ok ()
+
+        Nothing ->
+            Err "Invalid OneOrGreater"
+
+
 one : OneOrGreater
 one =
     OneOrGreater 1
