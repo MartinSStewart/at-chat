@@ -111,7 +111,6 @@ import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
-import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
@@ -588,7 +587,7 @@ type ToBackend
     = CheckLoginRequest InitialLoadRequest
     | LoginWithTokenRequest InitialLoadRequest Int UserAgent
     | LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
-    | GetLoginTokenRequest (Untrusted EmailAddress)
+    | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange

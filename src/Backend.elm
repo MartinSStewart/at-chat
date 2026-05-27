@@ -74,7 +74,6 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, ExportStateProgress, LocalChange(..), LocalMsg(..), LoginResult(..), LoginTokenData(..), MessageFromGuildOrDm(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import Untrusted
 import User exposing (BackendUser, LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -2391,76 +2390,71 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
 
         GetLoginTokenRequest email ->
-            case Untrusted.emailAddress email of
-                Just email2 ->
-                    let
-                        ( model3, result ) =
-                            BackendExtra.getLoginCode time model
-                    in
-                    case
-                        ( NonemptyDict.toList model3.users
-                            |> List.Extra.find (\( _, user ) -> user.email == email2)
-                        , result
+            let
+                ( model3, result ) =
+                    BackendExtra.getLoginCode time model
+            in
+            case
+                ( NonemptyDict.toList model3.users
+                    |> List.Extra.find (\( _, user ) -> user.email == email)
+                , result
+                )
+            of
+                ( Just ( userId, user ), Ok loginCode ) ->
+                    if BackendExtra.shouldRateLimit time user then
+                        let
+                            ( model4, cmd ) =
+                                BackendExtra.addLog time (Log.LoginsRateLimited userId) model3
+                        in
+                        ( model4
+                        , Command.batch [ cmd, Lamdera.sendToFrontend clientId GetLoginTokenRateLimited ]
                         )
-                    of
-                        ( Just ( userId, user ), Ok loginCode ) ->
-                            if BackendExtra.shouldRateLimit time user then
-                                let
-                                    ( model4, cmd ) =
-                                        BackendExtra.addLog time (Log.LoginsRateLimited userId) model3
-                                in
-                                ( model4
-                                , Command.batch [ cmd, Lamdera.sendToFrontend clientId GetLoginTokenRateLimited ]
-                                )
 
-                            else
-                                ( { model3
-                                    | pendingLogins =
-                                        SeqDict.insert
-                                            sessionId
-                                            (WaitingForLoginToken
-                                                { creationTime = time
-                                                , userId = userId
-                                                , loginAttempts = 0
-                                                , loginCode = loginCode
-                                                }
-                                            )
-                                            model3.pendingLogins
-                                    , users =
-                                        NonemptyDict.insert
-                                            userId
-                                            { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
-                                            model3.users
-                                  }
-                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model3.postmarkApiKey
-                                )
+                    else
+                        ( { model3
+                            | pendingLogins =
+                                SeqDict.insert
+                                    sessionId
+                                    (WaitingForLoginToken
+                                        { creationTime = time
+                                        , userId = userId
+                                        , loginAttempts = 0
+                                        , loginCode = loginCode
+                                        }
+                                    )
+                                    model3.pendingLogins
+                            , users =
+                                NonemptyDict.insert
+                                    userId
+                                    { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
+                                    model3.users
+                          }
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode model3.postmarkApiKey
+                        )
 
-                        ( Nothing, Ok loginCode ) ->
-                            if model3.signupsEnabled then
-                                ( { model3
-                                    | pendingLogins =
-                                        SeqDict.insert
-                                            sessionId
-                                            (WaitingForLoginTokenForSignup
-                                                { creationTime = time
-                                                , loginAttempts = 0
-                                                , emailAddress = email2
-                                                , loginCode = loginCode
-                                                }
-                                            )
-                                            model3.pendingLogins
-                                  }
-                                , BackendExtra.sendLoginEmail (SentLoginEmail time email2) email2 loginCode model3.postmarkApiKey
-                                )
+                ( Nothing, Ok loginCode ) ->
+                    if model3.signupsEnabled then
+                        ( { model3
+                            | pendingLogins =
+                                SeqDict.insert
+                                    sessionId
+                                    (WaitingForLoginTokenForSignup
+                                        { creationTime = time
+                                        , loginAttempts = 0
+                                        , emailAddress = email
+                                        , loginCode = loginCode
+                                        }
+                                    )
+                                    model3.pendingLogins
+                          }
+                        , BackendExtra.sendLoginEmail (SentLoginEmail time email) email loginCode model3.postmarkApiKey
+                        )
 
-                            else
-                                ( model3, Lamdera.sendToFrontend clientId SignupsDisabledResponse )
+                    else
+                        ( model3, Lamdera.sendToFrontend clientId SignupsDisabledResponse )
 
-                        ( _, Err () ) ->
-                            ( model3, Command.none )
-
-                Nothing ->
-                    ( model, Command.none )
+                ( _, Err () ) ->
+                    ( model3, Command.none )
 
         AdminToBackend adminToBackend ->
             asAdmin

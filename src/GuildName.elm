@@ -29,6 +29,11 @@ fromString text =
             Err "Can't be empty"
 
 
+w3_validate_GuildName : GuildName -> Result String ()
+w3_validate_GuildName (GuildName text) =
+    fromString (String.Nonempty.toString text) |> Result.map (\_ -> ())
+
+
 fromStringLossy : String -> GuildName
 fromStringLossy text =
     case
