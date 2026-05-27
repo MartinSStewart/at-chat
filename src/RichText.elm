@@ -1818,7 +1818,7 @@ parseUrlBody startedWithAngleBracket modifierToString modifiers index source =
                             if stop then
                                 ( idx, True )
 
-                            else if char == '.' || char == ')' || char == ',' || char == '"' || char == ':' || Set.member char modifierChars then
+                            else if char == '.' || char == ')' || char == ']' || char == ',' || char == '"' || char == ':' || Set.member char modifierChars then
                                 ( idx - 1, False )
 
                             else if startedWithAngleBracket && char == '>' then
