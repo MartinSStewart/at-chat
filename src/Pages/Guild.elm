@@ -6575,69 +6575,65 @@ channelColumnThreads :
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg
 channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
-    SeqDict.foldr
-        (\threadMessageIndex thread ( index, list ) ->
-            let
-                isSelected : Bool
-                isSelected =
-                    case channelRoute of
-                        ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
-                            a == channelId && b == threadMessageIndex
+    let
+        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 =
+            List.filterMap
+                (\( threadMessageIndex, thread ) ->
+                    let
+                        isSelected : Bool
+                        isSelected =
+                            case channelRoute of
+                                ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
+                                    a == channelId && b == threadMessageIndex
+
+                                _ ->
+                                    False
+
+                        hasNotifications : ChannelNotificationType
+                        hasNotifications =
+                            channelOrThreadHasNotifications
+                                directMentions
+                                (SeqSet.member guildId localUser.user.notifyOnAllMessages)
+                                channelId
+                                (ViewThread threadMessageIndex)
+                                (SeqDict.get
+                                    ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
+                                    localUser.user.lastViewedThreads
+                                )
+                                thread
+                    in
+                    case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                        ( NoNotification, False, Just (MessageLoaded message) ) ->
+                            if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
+                                Just ( threadMessageIndex, hasNotifications, isSelected )
+
+                            else
+                                Nothing
 
                         _ ->
-                            False
+                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                )
+                (SeqDict.toList threads)
 
-                hasNotifications : ChannelNotificationType
-                hasNotifications =
-                    channelOrThreadHasNotifications
-                        directMentions
-                        (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                        channelId
-                        (ViewThread threadMessageIndex)
-                        (SeqDict.get
-                            ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
-                            localUser.user.lastViewedThreads
-                        )
-                        thread
-            in
-            ( index - 1
-            , case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
-                ( NoNotification, False, Just (MessageLoaded message) ) ->
-                    if Duration.from (Message.createdAt message) now |> Debug.log "thread duration" |> Quantity.lessThan Duration.week then
-                        channelColumnThreadsHelper
-                            isMobile
-                            isSelected
-                            hasNotifications
-                            index
-                            threads
-                            (MouseEnteredChannelName guildId channelId (ViewThread threadMessageIndex))
-                            (MouseExitedChannelName guildId channelId (ViewThread threadMessageIndex))
-                            (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
-                            (threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel)
-                            :: list
-
-                    else
-                        list
-
-                _ ->
-                    channelColumnThreadsHelper
-                        isMobile
-                        isSelected
-                        hasNotifications
-                        index
-                        threads
-                        (MouseEnteredChannelName guildId channelId (ViewThread threadMessageIndex))
-                        (MouseExitedChannelName guildId channelId (ViewThread threadMessageIndex))
-                        (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                        (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
-                        (threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel)
-                        :: list
-            )
+        count =
+            List.length threads2
+    in
+    List.indexedMap
+        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+            channelColumnThreadsHelper
+                isMobile
+                isSelected
+                hasNotifications
+                index
+                count
+                (MouseEnteredChannelName guildId channelId (ViewThread threadMessageIndex))
+                (MouseExitedChannelName guildId channelId (ViewThread threadMessageIndex))
+                (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
+                (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
+                (threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel)
         )
-        ( SeqDict.size threads - 1, [] )
-        threads
-        |> Tuple.second
+        threads2
         |> Ui.column []
 
 
@@ -6646,14 +6642,14 @@ channelColumnThreadsHelper :
     -> Bool
     -> ChannelNotificationType
     -> Int
-    -> SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
+    -> Int
     -> FrontendMsg
     -> FrontendMsg
     -> HtmlId
     -> Route
     -> String
     -> Element FrontendMsg
-channelColumnThreadsHelper isMobile isSelected hasNotifications index threads onMouseEnter onMouseLeave htmlId route name =
+channelColumnThreadsHelper isMobile isSelected hasNotifications index visibleThreadCount onMouseEnter onMouseLeave htmlId route name =
     Ui.row
         [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         , Ui.attrIf (not isMobile) (Ui.Events.onMouseEnter onMouseEnter)
@@ -6683,10 +6679,10 @@ channelColumnThreadsHelper isMobile isSelected hasNotifications index threads on
                 , Ui.width Ui.shrink
                 ]
                 (Ui.html
-                    (if SeqDict.size threads == 1 then
+                    (if visibleThreadCount == 1 then
                         Icons.threadSingleSegment
 
-                     else if SeqDict.size threads - 1 == index then
+                     else if visibleThreadCount - 1 == index then
                         Icons.threadBottomSegment
 
                      else if index == 0 then
@@ -6719,83 +6715,77 @@ discordChannelColumnThreads :
     -> SeqDict (Id ChannelMessageId) DiscordFrontendThread
     -> Element FrontendMsg
 discordChannelColumnThreads isMobile now routeData directMentions localUser channelId channel threads =
-    SeqDict.foldr
-        (\threadMessageIndex thread ( index, list ) ->
-            let
-                isSelected : Bool
-                isSelected =
-                    case routeData.channelRoute of
-                        DiscordChannel_ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
-                            a == channelId && b == threadMessageIndex
+    let
+        threads2 : List ( Id ChannelMessageId, ChannelNotificationType, Bool )
+        threads2 =
+            List.filterMap
+                (\( threadMessageIndex, thread ) ->
+                    let
+                        isSelected : Bool
+                        isSelected =
+                            case routeData.channelRoute of
+                                DiscordChannel_ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
+                                    a == channelId && b == threadMessageIndex
+
+                                _ ->
+                                    False
+
+                        hasNotifications : ChannelNotificationType
+                        hasNotifications =
+                            channelOrThreadHasNotifications
+                                directMentions
+                                (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
+                                channelId
+                                (ViewThread threadMessageIndex)
+                                (SeqDict.get
+                                    ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
+                                    , threadMessageIndex
+                                    )
+                                    localUser.user.lastViewedThreads
+                                )
+                                thread
+                    in
+                    case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                        ( NoNotification, False, Just (MessageLoaded message) ) ->
+                            if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
+                                Just ( threadMessageIndex, hasNotifications, isSelected )
+
+                            else
+                                Nothing
 
                         _ ->
-                            False
+                            Just ( threadMessageIndex, hasNotifications, isSelected )
+                )
+                (SeqDict.toList threads)
 
-                hasNotifications : ChannelNotificationType
-                hasNotifications =
-                    channelOrThreadHasNotifications
-                        directMentions
-                        (SeqSet.member routeData.guildId localUser.user.discordNotifyOnAllMessages)
-                        channelId
-                        (ViewThread threadMessageIndex)
-                        (SeqDict.get
-                            ( DiscordGuildOrDmId
-                                (DiscordGuildOrDmId_Guild routeData.currentDiscordUserId routeData.guildId channelId)
-                            , threadMessageIndex
-                            )
-                            localUser.user.lastViewedThreads
-                        )
-                        thread
-
-                linkRoute =
-                    DiscordGuildRoute
-                        { currentDiscordUserId = routeData.currentDiscordUserId
-                        , guildId = routeData.guildId
-                        , channelRoute =
-                            DiscordChannel_ChannelRoute
-                                channelId
-                                (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)
-                                Nothing
-                        }
-            in
-            ( index - 1
-            , case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
-                ( NoNotification, False, Just (MessageLoaded message) ) ->
-                    if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
-                        channelColumnThreadsHelper
-                            isMobile
-                            isSelected
-                            hasNotifications
-                            index
-                            threads
-                            (MouseEnteredDiscordChannelName routeData.guildId channelId (ViewThread threadMessageIndex))
-                            (MouseExitedDiscordChannelName routeData.guildId channelId (ViewThread threadMessageIndex))
-                            (Dom.id ("guild_viewThread_" ++ Discord.idToString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                            linkRoute
-                            (threadPreviewText (LocalState.allDiscordUsers localUser) threadMessageIndex channel)
-                            :: list
-
-                    else
-                        list
-
-                _ ->
-                    channelColumnThreadsHelper
-                        isMobile
-                        isSelected
-                        hasNotifications
-                        index
-                        threads
-                        (MouseEnteredDiscordChannelName routeData.guildId channelId (ViewThread threadMessageIndex))
-                        (MouseExitedDiscordChannelName routeData.guildId channelId (ViewThread threadMessageIndex))
-                        (Dom.id ("guild_viewThread_" ++ Discord.idToString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                        linkRoute
-                        (threadPreviewText (LocalState.allDiscordUsers localUser) threadMessageIndex channel)
-                        :: list
-            )
+        count : Int
+        count =
+            List.length threads2
+    in
+    List.indexedMap
+        (\index ( threadMessageIndex, hasNotifications, isSelected ) ->
+            channelColumnThreadsHelper
+                isMobile
+                isSelected
+                hasNotifications
+                index
+                count
+                (MouseEnteredDiscordChannelName routeData.guildId channelId (ViewThread threadMessageIndex))
+                (MouseExitedDiscordChannelName routeData.guildId channelId (ViewThread threadMessageIndex))
+                (Dom.id ("guild_viewThread_" ++ Discord.idToString channelId ++ "_" ++ Id.toString threadMessageIndex))
+                (DiscordGuildRoute
+                    { currentDiscordUserId = routeData.currentDiscordUserId
+                    , guildId = routeData.guildId
+                    , channelRoute =
+                        DiscordChannel_ChannelRoute
+                            channelId
+                            (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)
+                            Nothing
+                    }
+                )
+                (threadPreviewText (LocalState.allDiscordUsers localUser) threadMessageIndex channel)
         )
-        ( SeqDict.size threads - 1, [] )
-        threads
-        |> Tuple.second
+        threads2
         |> Ui.column []
 
 
