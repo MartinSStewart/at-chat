@@ -1,7 +1,7 @@
-module NoFloatInToBackend exposing (rule)
+module NoInvalidTypesInToBackend exposing (rule)
 
-{-| Forbids `ToBackend` from referencing `Float`, either directly or indirectly
-through other types.
+{-| Forbids `ToBackend` from referencing a set of disallowed types, either
+directly or indirectly through other types.
 
 @docs rule
 
@@ -18,51 +18,59 @@ import Review.Rule as Rule exposing (ModuleKey, Rule)
 import Set exposing (Set)
 
 
-{-| Reports when the `ToBackend` type references a `Float`, directly or through
-any chain of other types.
+{-| Reports when the `ToBackend` type references one of the `disallowed` types,
+directly or through any chain of other types.
 
     config =
-        [ NoFloatInToBackend.rule []
+        [ NoInvalidTypesInToBackend.rule
+            { disallowed = [ ( [ "Basics" ], "Float" ) ]
+            , exempt = []
+            }
         ]
 
-`Float` values sent from the frontend can't be trusted and floating point
-serialization is lossy, so they shouldn't appear in messages sent to the
-backend.
+Types are identified by their canonical module name and name. For example
+`Float` lives in `Basics`, so it is `( [ "Basics" ], "Float" )`, and a project
+type `Coord` defined in `Geometry` is `( [ "Geometry" ], "Coord" )`.
 
-The argument is a list of types that are exempt from the check. When the
-traversal reaches an exempt type it stops, so any `Float` only reachable
-through that type is ignored. Types are identified by their canonical module
-name and name, for example:
+`exempt` is a list of types that are skipped during the traversal. When the
+traversal reaches an exempt type it stops, so a disallowed type only reachable
+through that type is ignored:
 
     config =
-        [ NoFloatInToBackend.rule [ ( [ "Geometry" ], "Coord" ) ]
+        [ NoInvalidTypesInToBackend.rule
+            { disallowed = [ ( [ "Basics" ], "Float" ) ]
+            , exempt = [ ( [ "SafeJson" ], "SafeJson" ) ]
+            }
         ]
 
-When a `Float` is found the error shows the path that leads to it, for example
-`ToBackend -> ServerChange -> Coord`.
+When a disallowed type is found the error shows the path that leads to it, for
+example `ToBackend -> ServerChange -> Coord -> Float`.
 
 -}
-rule : List ( ModuleName, String ) -> Rule
-rule exemptList =
+rule :
+    { disallowed : List ( ModuleName, String )
+    , exempt : List ( ModuleName, String )
+    }
+    -> Rule
+rule config =
     let
+        disallowed : Set ( ModuleName, String )
+        disallowed =
+            Set.fromList config.disallowed
+
         exempt : Set ( ModuleName, String )
         exempt =
-            Set.fromList exemptList
+            Set.fromList config.exempt
     in
-    Rule.newProjectRuleSchema "NoFloatInToBackend" initialContext
+    Rule.newProjectRuleSchema "NoInvalidTypesInToBackend" initialContext
         |> Rule.withModuleVisitor moduleVisitor
         |> Rule.withModuleContextUsingContextCreator conversion
-        |> Rule.withFinalProjectEvaluation (finalProjectEvaluation exempt)
+        |> Rule.withFinalProjectEvaluation (finalProjectEvaluation disallowed exempt)
         |> Rule.fromProjectRuleSchema
 
 
-type Target
-    = ToType ( ModuleName, String )
-    | ToFloat
-
-
 type alias TypeInfo =
-    { references : List Target
+    { references : List ( ModuleName, String )
     , range : Range
     , key : ModuleKey
     }
@@ -124,7 +132,7 @@ declarationVisitor (Node _ declaration) context =
     case declaration of
         Declaration.CustomTypeDeclaration customType ->
             let
-                references : List Target
+                references : List ( ModuleName, String )
                 references =
                     customType.constructors
                         |> List.concatMap
@@ -146,7 +154,7 @@ declarationVisitor (Node _ declaration) context =
             ( [], context )
 
 
-insertType : Node String -> List Target -> ModuleContext -> ModuleContext
+insertType : Node String -> List ( ModuleName, String ) -> ModuleContext -> ModuleContext
 insertType (Node nameRange name) references context =
     { context
         | types =
@@ -157,10 +165,11 @@ insertType (Node nameRange name) references context =
     }
 
 
-{-| Collects every type referenced by a type annotation. Type arguments are
-flattened in, so `List Coord` references both `List` and `Coord`.
+{-| Collects the canonical name of every type referenced by a type annotation.
+Type arguments are flattened in, so `List Coord` references both `List` and
+`Coord`.
 -}
-collectTargets : ModuleContext -> Node TypeAnnotation -> List Target
+collectTargets : ModuleContext -> Node TypeAnnotation -> List ( ModuleName, String )
 collectTargets context node =
     case Node.value node of
         TypeAnnotation.GenericType _ ->
@@ -168,26 +177,18 @@ collectTargets context node =
 
         TypeAnnotation.Typed (Node range ( rawModuleName, name )) arguments ->
             let
-                resolved : Maybe ModuleName
-                resolved =
-                    ModuleNameLookupTable.moduleNameAt context.lookupTable range
-
-                target : Target
+                target : ( ModuleName, String )
                 target =
-                    if resolved == Just [ "Basics" ] && name == "Float" then
-                        ToFloat
+                    case ModuleNameLookupTable.moduleNameAt context.lookupTable range of
+                        -- An empty module name means the type is defined in the current module.
+                        Just [] ->
+                            ( context.moduleName, name )
 
-                    else
-                        case resolved of
-                            -- An empty module name means the type is defined in the current module.
-                            Just [] ->
-                                ToType ( context.moduleName, name )
+                        Just moduleName ->
+                            ( moduleName, name )
 
-                            Just moduleName ->
-                                ToType ( moduleName, name )
-
-                            Nothing ->
-                                ToType ( rawModuleName, name )
+                        Nothing ->
+                            ( rawModuleName, name )
             in
             target :: List.concatMap (collectTargets context) arguments
 
@@ -207,14 +208,18 @@ collectTargets context node =
             collectTargets context a ++ collectTargets context b
 
 
-finalProjectEvaluation : Set ( ModuleName, String ) -> ProjectContext -> List (Rule.Error { useErrorForModule : () })
-finalProjectEvaluation exempt context =
+finalProjectEvaluation :
+    Set ( ModuleName, String )
+    -> Set ( ModuleName, String )
+    -> ProjectContext
+    -> List (Rule.Error { useErrorForModule : () })
+finalProjectEvaluation disallowed exempt context =
     context.types
         |> Dict.toList
         |> List.filterMap
             (\( key, info ) ->
                 if Tuple.second key == "ToBackend" then
-                    findFloatPath exempt context.types key
+                    findDisallowedPath disallowed exempt context.types key
                         |> Maybe.map (\path -> toError info path)
 
                 else
@@ -225,39 +230,41 @@ finalProjectEvaluation exempt context =
 toError : TypeInfo -> List String -> Rule.Error { useErrorForModule : () }
 toError info path =
     Rule.errorForModule info.key
-        { message = "Found a Float referenced by ToBackend"
+        { message = "Found a disallowed type referenced by ToBackend"
         , details =
-            [ "Float can potentially be NaN or infinity. We don't allow this in ToBackend because it makes it hard to predict all the ways an attacker might use these values as exploits. Instead use SafeFloat which doesn't allow NaN or infinity."
+            [ "ToBackend references a type that this rule disallows, either directly or indirectly through other types."
             , "Path: " ++ String.join " -> " path
             ]
         }
         info.range
 
 
-{-| Breadth first search from `ToBackend` to the nearest type that directly
-references a `Float`. Returns the path of type names leading to it, e.g.
-`[ "ToBackend", "ServerChange", "Coord" ]`.
+{-| Breadth first search from `ToBackend` to the nearest disallowed type.
+Returns the path of type names leading to it (ending with the disallowed type),
+e.g. `[ "ToBackend", "ServerChange", "Coord", "Float" ]`.
 -}
-findFloatPath :
+findDisallowedPath :
     Set ( ModuleName, String )
+    -> Set ( ModuleName, String )
     -> Dict ( ModuleName, String ) TypeInfo
     -> ( ModuleName, String )
     -> Maybe (List String)
-findFloatPath exempt types start =
+findDisallowedPath disallowed exempt types start =
     if Set.member start exempt then
         Nothing
 
     else
-        bfs exempt types [ ( start, [ Tuple.second start ] ) ] (Set.singleton start)
+        bfs disallowed exempt types [ ( start, [ Tuple.second start ] ) ] (Set.singleton start)
 
 
 bfs :
     Set ( ModuleName, String )
+    -> Set ( ModuleName, String )
     -> Dict ( ModuleName, String ) TypeInfo
     -> List ( ( ModuleName, String ), List String )
     -> Set ( ModuleName, String )
     -> Maybe (List String)
-bfs exempt types queue visited =
+bfs disallowed exempt types queue visited =
     case queue of
         [] ->
             Nothing
@@ -265,35 +272,41 @@ bfs exempt types queue visited =
         ( key, path ) :: rest ->
             case Dict.get key types of
                 Nothing ->
-                    bfs exempt types rest visited
+                    bfs disallowed exempt types rest visited
 
                 Just info ->
-                    if List.member ToFloat info.references then
-                        Just path
+                    case disallowedHit disallowed exempt info.references of
+                        Just hit ->
+                            Just (path ++ [ Tuple.second hit ])
 
-                    else
-                        let
-                            ( newQueue, newVisited ) =
-                                info.references
-                                    |> List.filterMap
-                                        (\target ->
-                                            case target of
-                                                ToType next ->
-                                                    Just next
+                        Nothing ->
+                            let
+                                ( newQueue, newVisited ) =
+                                    info.references
+                                        |> List.foldl
+                                            (\next ( q, v ) ->
+                                                if Set.member next v || Set.member next exempt then
+                                                    ( q, v )
 
-                                                ToFloat ->
-                                                    Nothing
-                                        )
-                                    |> List.foldl
-                                        (\next ( q, v ) ->
-                                            if Set.member next v || Set.member next exempt then
-                                                ( q, v )
+                                                else
+                                                    ( q ++ [ ( next, path ++ [ Tuple.second next ] ) ]
+                                                    , Set.insert next v
+                                                    )
+                                            )
+                                            ( rest, visited )
+                            in
+                            bfs disallowed exempt types newQueue newVisited
 
-                                            else
-                                                ( q ++ [ ( next, path ++ [ Tuple.second next ] ) ]
-                                                , Set.insert next v
-                                                )
-                                        )
-                                        ( rest, visited )
-                        in
-                        bfs exempt types newQueue newVisited
+
+{-| Finds the first reference that is disallowed and not exempt. Exempt wins, so
+a type that is both disallowed and exempt is ignored.
+-}
+disallowedHit :
+    Set ( ModuleName, String )
+    -> Set ( ModuleName, String )
+    -> List ( ModuleName, String )
+    -> Maybe ( ModuleName, String )
+disallowedHit disallowed exempt references =
+    references
+        |> List.filter (\target -> Set.member target disallowed && not (Set.member target exempt))
+        |> List.head
