@@ -12,7 +12,7 @@ rule : Rule
 rule =
     NoInvalidTypesInToBackend.rule
         { disallowed = [ ( [ "Basics" ], "Float" ) ]
-        , exempt = []
+        , unlessWrappedIn = []
         }
 
 
@@ -201,7 +201,7 @@ type ToBackend
                         |> Review.Test.runOnModules
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Money" ], "Money" ) ]
-                                , exempt = []
+                                , unlessWrappedIn = []
                                 }
                             )
                         |> Review.Test.expectErrorsForModules
@@ -219,7 +219,7 @@ type ToBackend
                         |> Review.Test.run
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Time" ], "Posix" ) ]
-                                , exempt = []
+                                , unlessWrappedIn = []
                                 }
                             )
                         |> Review.Test.expectNoErrors
@@ -236,7 +236,7 @@ type ToBackend
                                     [ ( [ "Basics" ], "Float" )
                                     , ( [ "Basics" ], "Int" )
                                     ]
-                                , exempt = []
+                                , unlessWrappedIn = []
                                 }
                             )
                         |> Review.Test.expectErrors
@@ -256,7 +256,7 @@ type ToBackend
                         |> Review.Test.run
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Basics" ], "Float" ) ]
-                                , exempt = [ ( [ "Types" ], "Coord" ) ]
+                                , unlessWrappedIn = [ ( [ "Types" ], "Coord" ) ]
                                 }
                             )
                         |> Review.Test.expectNoErrors
@@ -276,7 +276,7 @@ type ToBackend
                         |> Review.Test.run
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Basics" ], "Float" ) ]
-                                , exempt = [ ( [ "Types" ], "ServerChange" ) ]
+                                , unlessWrappedIn = [ ( [ "Types" ], "ServerChange" ) ]
                                 }
                             )
                         |> Review.Test.expectNoErrors
@@ -293,7 +293,7 @@ type ToBackend
                         |> Review.Test.run
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Basics" ], "Float" ) ]
-                                , exempt = [ ( [ "Types" ], "SomethingElse" ) ]
+                                , unlessWrappedIn = [ ( [ "Types" ], "SomethingElse" ) ]
                                 }
                             )
                         |> Review.Test.expectErrors
@@ -315,7 +315,7 @@ type ToBackend
                         |> Review.Test.runOnModules
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Basics" ], "Float" ) ]
-                                , exempt = [ ( [ "Geometry" ], "Coord" ) ]
+                                , unlessWrappedIn = [ ( [ "Geometry" ], "Coord" ) ]
                                 }
                             )
                         |> Review.Test.expectNoErrors
@@ -329,7 +329,7 @@ type ToBackend
                         |> Review.Test.run
                             (NoInvalidTypesInToBackend.rule
                                 { disallowed = [ ( [ "Basics" ], "Float" ) ]
-                                , exempt = [ ( [ "Basics" ], "Float" ) ]
+                                , unlessWrappedIn = [ ( [ "Basics" ], "Float" ) ]
                                 }
                             )
                         |> Review.Test.expectNoErrors
