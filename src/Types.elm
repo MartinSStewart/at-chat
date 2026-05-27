@@ -140,7 +140,6 @@ import ToBackendLog exposing (ToBackendLog, ToBackendLogData)
 import Touch exposing (Drag, Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
-import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
@@ -772,8 +771,8 @@ type ToBackend
     = CheckLoginRequest InitialLoadRequest
     | LoginWithTokenRequest InitialLoadRequest Int UserAgent
     | LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
+    | GetLoginTokenRequest EmailAddress
     | LoginWithRecoveryPasswordRequest InitialLoadRequest String UserAgent
-    | GetLoginTokenRequest (Untrusted EmailAddress)
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest SessionIdHash
     | LocalModelChangeRequest ChangeId LocalChange

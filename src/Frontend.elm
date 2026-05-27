@@ -95,7 +95,6 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import Ui.Lazy
-import Untrusted
 import Url exposing (Url)
 import User exposing (FrontendUser)
 import UserAgent
@@ -964,7 +963,7 @@ updateLoaded msg model =
                     in
                     case
                         LoginForm.update
-                            (\email -> GetLoginTokenRequest (Untrusted.untrust email) |> Lamdera.sendToBackend)
+                            (\email -> GetLoginTokenRequest email |> Lamdera.sendToBackend)
                             (\loginToken ->
                                 LoginWithTokenRequest requestMessagesFor loginToken model.startupData.userAgent
                                     |> Lamdera.sendToBackend

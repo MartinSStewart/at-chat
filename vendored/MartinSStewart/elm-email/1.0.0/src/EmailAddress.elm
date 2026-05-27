@@ -37,6 +37,16 @@ fromString string =
             Nothing
 
 
+w3_validate_EmailAddress : EmailAddress -> Result String ()
+w3_validate_EmailAddress email =
+    case toString email |> fromString of
+        Just _ ->
+            Ok ()
+
+        Nothing ->
+            Err "Invalid email address"
+
+
 {-| Render Email to a String
 -}
 toString : EmailAddress -> String

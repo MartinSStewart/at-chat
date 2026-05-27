@@ -91,6 +91,25 @@ type alias FrontendDmChannel =
     }
 
 
+{-| OpaqueVariants
+-}
+type DmChannelId
+    = DmChannelId (Id UserId) (Id UserId)
+
+
+w3_validate_DmChannelId : DmChannelId -> Result String ()
+w3_validate_DmChannelId dmChannelId =
+    let
+        ( userIdA, userIdB ) =
+            userIdsFromChannelId dmChannelId
+    in
+    if channelIdFromUserIds userIdA userIdB == dmChannelId then
+        Ok ()
+
+    else
+        Err "Invalid DmChannelID"
+
+
 backendInit : BackendDmChannel
 backendInit =
     { messages = IdArray.empty
