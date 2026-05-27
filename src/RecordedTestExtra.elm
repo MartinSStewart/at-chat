@@ -1717,7 +1717,7 @@ discordUserAuth =
                 , ( "browser_user_agent", JsonString "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0" )
                 , ( "browser_version", JsonString "143.0" )
                 , ( "client_app_state", JsonString "unfocused" )
-                , ( "client_build_number", JsonNumber 453248 )
+                , ( "client_build_number", JsonNumber (Unsafe.safeFloat 453248) )
                 , ( "client_event_source", JsonNull )
                 , ( "client_heartbeat_session_id", JsonString "1a49edbe-0c97-4445-996f-5cc93d84bbae" )
                 , ( "client_launch_id", JsonString "1b1343e7-e590-4b53-9d1b-b929fdd42419" )

@@ -63,6 +63,7 @@ import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..),
 import Json.Decode
 import MyUi
 import OneToOne exposing (OneToOne)
+import SafeFloat exposing (SafeFloat)
 import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
@@ -253,8 +254,8 @@ imageMetadataCodec =
         |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
         |> Codec.field "camera_owner" .cameraOwner (Codec.nullable Codec.string)
         |> Codec.field "exposure_time" .exposureTime (Codec.nullable exposureTimeCodec)
-        |> Codec.field "f_number" .fNumber (Codec.nullable Codec.float)
-        |> Codec.field "focal_length" .focalLength (Codec.nullable Codec.float)
+        |> Codec.field "f_number" .fNumber (Codec.nullable SafeFloat.codec)
+        |> Codec.field "focal_length" .focalLength (Codec.nullable SafeFloat.codec)
         |> Codec.field "iso_speed_rating" .isoSpeedRating (Codec.nullable Codec.int)
         |> Codec.field "make" .make (Codec.nullable Codec.string)
         |> Codec.field "model" .model (Codec.nullable Codec.string)
@@ -266,8 +267,8 @@ imageMetadataCodec =
 locationCodec : Codec Location
 locationCodec =
     Codec.object Location
-        |> Codec.field "lat" .lat Codec.float
-        |> Codec.field "lon" .lon Codec.float
+        |> Codec.field "lat" .lat SafeFloat.codec
+        |> Codec.field "lon" .lon SafeFloat.codec
         |> Codec.buildObject
 
 
@@ -285,8 +286,8 @@ type alias ImageMetadata =
     , gpsLocation : Maybe Location
     , cameraOwner : Maybe String
     , exposureTime : Maybe ExposureTime
-    , fNumber : Maybe Float
-    , focalLength : Maybe Float
+    , fNumber : Maybe SafeFloat
+    , focalLength : Maybe SafeFloat
     , isoSpeedRating : Maybe Int
     , make : Maybe String
     , model : Maybe String
@@ -368,7 +369,7 @@ orientationCodec =
 
 
 type alias Location =
-    { lat : Float, lon : Float }
+    { lat : SafeFloat, lon : SafeFloat }
 
 
 type alias ExposureTime =
@@ -620,8 +621,8 @@ imageInfoView onPressClose fileData =
                         , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
                         , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
                         , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
-                        , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
-                        , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                        , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ SafeFloat.toString fNumber)) metadata.fNumber
+                        , Maybe.map (\focal -> imageLabel "Focal length" (SafeFloat.toString focal ++ "mm")) metadata.focalLength
                         , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
                         , Maybe.map (imageLabel "Make") metadata.make
                         , Maybe.map (imageLabel "Model") metadata.model
@@ -678,7 +679,7 @@ orientationToString orientation =
 
 locationToString : Location -> String
 locationToString location =
-    String.fromFloat location.lat ++ ", " ++ String.fromFloat location.lon
+    SafeFloat.toString location.lat ++ ", " ++ SafeFloat.toString location.lon
 
 
 exposureTimeToString : ExposureTime -> String

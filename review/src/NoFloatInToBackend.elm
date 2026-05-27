@@ -227,7 +227,7 @@ toError info path =
     Rule.errorForModule info.key
         { message = "Found a Float referenced by ToBackend"
         , details =
-            [ "Floats sent from the frontend can't be trusted and floating point serialization is lossy, so ToBackend shouldn't reference Float (even indirectly through other types)."
+            [ "Float can potentially be NaN or infinity. We don't allow this in ToBackend because it makes it hard to predict all the ways an attacker might use these values as exploits. Instead use SafeFloat which doesn't allow NaN or infinity."
             , "Path: " ++ String.join " -> " path
             ]
         }
