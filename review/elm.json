@@ -2,7 +2,8 @@
     "type": "application",
     "source-directories": [
         "src",
-        "vendored/Arkham/elm-review-no-missing-type-constructor/1.0.3/src"
+        "vendored/Arkham/elm-review-no-missing-type-constructor/1.0.3/src",
+        "vendored/jfmengels/elm-review-unused/1.2.4/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
@@ -22,7 +23,6 @@
             "jfmengels/elm-review-debug": "1.0.8",
             "jfmengels/elm-review-documentation": "2.0.4",
             "jfmengels/elm-review-simplify": "2.1.9",
-            "jfmengels/elm-review-unused": "1.2.4",
             "miniBill/elm-fast-dict": "1.2.4",
             "miniBill/elm-review-no-broken-elm-parser-functions": "1.0.0",
             "miniBill/elm-unicode": "1.1.1",
