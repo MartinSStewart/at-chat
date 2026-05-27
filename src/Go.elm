@@ -128,6 +128,11 @@ type BoardSize
     = BoardSize Int
 
 
+w3_validate_BoardSize : BoardSize -> Result String ()
+w3_validate_BoardSize (BoardSize size) =
+    boardSizeFromInt size |> Result.map (\_ -> ())
+
+
 boardSize9 : BoardSize
 boardSize9 =
     BoardSize 9
@@ -147,17 +152,22 @@ boardSizeFromString : String -> Result String BoardSize
 boardSizeFromString text =
     case String.toInt (String.trim text) of
         Just n ->
-            if n < minDimension then
-                Err ("Minimum dimension is " ++ String.fromInt minDimension)
-
-            else if n > maxDimension then
-                Err ("Maximum dimension is " ++ String.fromInt maxDimension)
-
-            else
-                Ok (BoardSize n)
+            boardSizeFromInt n
 
         Nothing ->
             Err "Enter a number"
+
+
+boardSizeFromInt : Int -> Result String BoardSize
+boardSizeFromInt n =
+    if n < minDimension then
+        Err ("Minimum dimension is " ++ String.fromInt minDimension)
+
+    else if n > maxDimension then
+        Err ("Maximum dimension is " ++ String.fromInt maxDimension)
+
+    else
+        Ok (BoardSize n)
 
 
 boardSizeToInt : BoardSize -> Int
