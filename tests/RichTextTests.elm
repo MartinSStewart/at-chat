@@ -508,6 +508,8 @@ test =
         , fromNonemptyStringTest "❓\u{2060}" (Nonempty (NormalText '❓' "\u{2060}") [])
         , fromNonemptyStringTest "❓\u{2060}\u{FEFF}❓\u{2060}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 3)) [ CustomEmoji (Id.fromInt 3) ])
         , fromNonemptyStringTest "❓\u{2060}\u{200C}\u{FEFF}" (Nonempty (CustomEmoji (Id.fromInt 13)) [])
+        , fromNonemptyStringTest "https://a.com/abc]" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc")) [ NormalText ']' "" ])
+        , fromNonemptyStringTest "https://a.com/abc]d" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc]d")) [])
         ]
 
 
