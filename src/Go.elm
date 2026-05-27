@@ -43,6 +43,7 @@ import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Dict exposing (Dict)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Time as Time
@@ -54,6 +55,7 @@ import Icons
 import Id exposing (ChannelMessageId, GoMatchPublicId, Id, UserId)
 import MyUi
 import Ports
+import Quantity
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -111,8 +113,8 @@ type alias Snapshot =
 
 
 type alias TimeControl =
-    { mainTime : Float
-    , increment : Float
+    { mainTimeMinutes : Int
+    , incrementSeconds : Int
     }
 
 
@@ -125,8 +127,8 @@ type alias GameState =
     , currentPlayer : Stone
     , phase : Phase
     , lastTick : Maybe Time.Posix
-    , blackTime : Float
-    , whiteTime : Float
+    , blackTime : Duration
+    , whiteTime : Duration
     , history : List Snapshot
     }
 
@@ -425,17 +427,17 @@ initGameState setup =
     { blackTime =
         case setup.timeControl of
             Just tc ->
-                tc.mainTime
+                Duration.minutes (toFloat tc.mainTimeMinutes)
 
             Nothing ->
-                0
+                Quantity.zero
     , whiteTime =
         case setup.timeControl of
             Just tc ->
-                tc.mainTime
+                Duration.minutes (toFloat tc.mainTimeMinutes)
 
             Nothing ->
-                0
+                Quantity.zero
     , lastTick = Nothing
     , board = board
     , lastMove = Nothing
@@ -678,10 +680,16 @@ applyIncrement setup mover model =
         Just tc ->
             case mover of
                 Black ->
-                    { model | blackTime = model.blackTime + tc.increment, lastTick = Nothing }
+                    { model
+                        | blackTime = Duration.seconds (toFloat tc.incrementSeconds) |> Quantity.plus model.blackTime
+                        , lastTick = Nothing
+                    }
 
                 White ->
-                    { model | whiteTime = model.whiteTime + tc.increment, lastTick = Nothing }
+                    { model
+                        | whiteTime = Duration.seconds (toFloat tc.incrementSeconds) |> Quantity.plus model.whiteTime
+                        , lastTick = Nothing
+                    }
 
         Nothing ->
             { model | lastTick = Nothing }
@@ -1075,7 +1083,7 @@ parseTimeControl model =
                                 Err "Increment cannot be negative"
 
                             else
-                                Ok (Just { mainTime = minutes * 60, increment = inc })
+                                Ok (Just { mainTimeMinutes = round minutes, incrementSeconds = round inc })
 
 
 update :
@@ -1934,12 +1942,12 @@ timeInput htmlId label value onChange =
         ]
 
 
-formatClock : Float -> String
+formatClock : Duration -> String
 formatClock seconds =
     let
         clamped : Int
         clamped =
-            max 0 (floor seconds)
+            max 0 (floor (Duration.inSeconds seconds))
 
         minutes : Int
         minutes =
@@ -2049,7 +2057,7 @@ currentPlayersTurn actions =
         actions
 
 
-clockChip : Id UserId -> Maybe FrontendUser -> Float -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
+clockChip : Id UserId -> Maybe FrontendUser -> Duration -> Bool -> Stone -> ValidatedSetup -> Float -> Element msg
 clockChip userId maybeUser seconds isActive stone setup score =
     let
         ( colorA, colorB ) =

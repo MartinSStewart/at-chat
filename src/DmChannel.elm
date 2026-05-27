@@ -25,7 +25,7 @@ module DmChannel exposing
 import Array exposing (Array)
 import Discord
 import Go
-import Id exposing (ChannelMessageId, GoMatchPublicId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelMessageId, GoMatchPublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)

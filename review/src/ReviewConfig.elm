@@ -130,7 +130,7 @@ config =
         |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
     , NoBrokenParserFunctions.rule
-    , NoFloatInToBackend.rule [ ( [ "SafeFloat" ], "SafeFloat" ) ]
+    , NoFloatInToBackend.rule [ ( [ "SafeFloat" ], "SafeFloat" ) ] |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
     , BackendOnly.rule
         { functions =
             []
