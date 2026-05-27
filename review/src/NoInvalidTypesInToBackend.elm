@@ -49,7 +49,7 @@ example `ToBackend -> ServerChange -> Coord -> Float`.
 -}
 rule :
     { disallowed : List ( ModuleName, String )
-    , exempt : List ( ModuleName, String )
+    , unlessWrappedIn : List ( ModuleName, String )
     }
     -> Rule
 rule config =
@@ -60,7 +60,7 @@ rule config =
 
         exempt : Set ( ModuleName, String )
         exempt =
-            Set.fromList config.exempt
+            Set.fromList config.unlessWrappedIn
     in
     Rule.newProjectRuleSchema "NoInvalidTypesInToBackend" initialContext
         |> Rule.withModuleVisitor moduleVisitor

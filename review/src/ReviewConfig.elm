@@ -131,8 +131,11 @@ config =
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
     , NoBrokenParserFunctions.rule
     , NoInvalidTypesInToBackend.rule
-        { disallowed = [ ( [ "Basics" ], "Float" ) ]
-        , exempt = [ ( [ "SafeFloat" ], "SafeFloat" ) ]
+        { disallowed =
+            [ ( [ "Basics" ], "Float" )
+            , ( [ "Duration" ], "Duration" )
+            ]
+        , unlessWrappedIn = [ ( [ "SafeFloat" ], "SafeFloat" ) ]
         }
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
     , BackendOnly.rule
