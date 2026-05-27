@@ -967,7 +967,7 @@ guildView model guildId channelRoute loggedIn local =
 
 nearestHour : Time.Posix -> Int
 nearestHour time =
-    Time.posixToMillis time // 60 * 60 * 1000 |> (*) (60 * 60 * 1000)
+    Time.posixToMillis time // (60 * 60 * 1000) |> (*) (60 * 60 * 1000)
 
 
 discordGuildView :
@@ -6603,7 +6603,7 @@ channelColumnThreads isMobile now channelRoute directMentions localUser guildId 
             ( index - 1
             , case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
                 ( NoNotification, False, Just (MessageLoaded message) ) ->
-                    if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
+                    if Duration.from (Message.createdAt message) now |> Debug.log "thread duration" |> Quantity.lessThan Duration.week then
                         channelColumnThreadsHelper
                             isMobile
                             isSelected

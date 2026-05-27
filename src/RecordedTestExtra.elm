@@ -2540,9 +2540,15 @@ inactiveThreadsAreHiddenTest config =
             (\admin ->
                 [ admin.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                 , admin.click 100 (Dom.id "guild_openGuild_0")
-                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
-                , admin.click 100 (Dom.id "guild_openChannel_0")
                 , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.id "guild_viewThread_0_0" ])
+                , admin.click 100 (Dom.id "guild_threadStarterIndicator_0")
+                , writeMessage admin 100 "Hello again from thread!"
+                , admin.navigateBack 100
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "guild_viewThread_0_0" ])
                 ]
             )
         ]
