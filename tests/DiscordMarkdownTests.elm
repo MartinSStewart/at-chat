@@ -174,6 +174,7 @@ basicFormattingTests =
         , fromNonemptyStringTest
             "[url has leading line break](\nhttps://example.com/)"
             (Nonempty (MarkdownLink (NonemptyString 'u' "rl has leading line break") (unsafeUrl "https://example.com/")) [])
+        , fromNonemptyStringTest "https://a.com/abc]" (Nonempty (Hyperlink (unsafeUrl "https://a.com/abc")) [ NormalText ']' "" ])
         ]
 
 
