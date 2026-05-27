@@ -205,6 +205,11 @@ latestFrontendMessageId channel =
 latestThreadMessageId : { a | messages : IdArray ThreadMessageId b } -> Id ThreadMessageId
 latestThreadMessageId thread =
     IdArray.length thread.messages - 1 |> Id.fromInt
+channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
+channelIdFromUserIds userIdA userIdB =
+    DmChannelId
+        (min (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
+        (max (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
 
 
 latestFrontendThreadMessageId : { a | messages : MessageArray ThreadMessageId b } -> Id ThreadMessageId
