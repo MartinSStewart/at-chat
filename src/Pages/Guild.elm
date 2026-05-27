@@ -867,7 +867,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                 [ guildColumnLazy True model local
-                                , Ui.Lazy.lazy5
+                                , Ui.Lazy.lazy6
                                     (if canScroll2 then
                                         channelColumnCanScrollMobile
 
@@ -875,6 +875,7 @@ guildView model guildId channelRoute loggedIn local =
                                         channelColumnCannotScrollMobile
                                     )
                                     local.localUser
+                                    (nearestHour model.time)
                                     guildId
                                     guild
                                     channelRoute
@@ -893,9 +894,10 @@ guildView model guildId channelRoute loggedIn local =
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
                                     [ guildColumnLazy False model local
-                                    , Ui.Lazy.lazy5
+                                    , Ui.Lazy.lazy6
                                         channelColumnNotMobile
                                         local.localUser
+                                        (nearestHour model.time)
                                         guildId
                                         guild
                                         channelRoute
@@ -961,6 +963,11 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                             , pageMissing "Guild not found"
                             ]
+
+
+nearestHour : Time.Posix -> Int
+nearestHour time =
+    Time.posixToMillis time // 60 * 60 * 1000 |> (*) (60 * 60 * 1000)
 
 
 discordGuildView :
@@ -6200,13 +6207,14 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
 
 channelColumnNotMobile :
     LocalUser
+    -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> GuildChannelNameHover
     -> Element FrontendMsg
-channelColumnNotMobile localUser guildId guild channelRoute channelNameHover =
-    channelColumn False localUser guildId guild channelRoute channelNameHover True
+channelColumnNotMobile localUser time guildId guild channelRoute channelNameHover =
+    channelColumn False (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True
 
 
 discordChannelColumnNotMobile :
@@ -6221,24 +6229,26 @@ discordChannelColumnNotMobile localUser routeData guild channelNameHover =
 
 channelColumnCanScrollMobile :
     LocalUser
+    -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> GuildChannelNameHover
     -> Element FrontendMsg
-channelColumnCanScrollMobile localUser guildId guild channelRoute channelNameHover =
-    channelColumn True localUser guildId guild channelRoute channelNameHover True
+channelColumnCanScrollMobile localUser time guildId guild channelRoute channelNameHover =
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover True
 
 
 channelColumnCannotScrollMobile :
     LocalUser
+    -> Int
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> GuildChannelNameHover
     -> Element FrontendMsg
-channelColumnCannotScrollMobile localUser guildId guild channelRoute channelNameHover =
-    channelColumn True localUser guildId guild channelRoute channelNameHover False
+channelColumnCannotScrollMobile localUser time guildId guild channelRoute channelNameHover =
+    channelColumn True (Time.millisToPosix time) localUser guildId guild channelRoute channelNameHover False
 
 
 discordChannelColumnCanScrollMobile :
@@ -6298,6 +6308,7 @@ bounceScroll isMobile =
 
 channelColumn :
     Bool
+    -> Time.Posix
     -> LocalUser
     -> Id GuildId
     -> FrontendGuild
@@ -6305,7 +6316,7 @@ channelColumn :
     -> GuildChannelNameHover
     -> Bool
     -> Element FrontendMsg
-channelColumn isMobile localUser guildId guild channelRoute channelNameHover canScroll2 =
+channelColumn isMobile time localUser guildId guild channelRoute channelNameHover canScroll2 =
     let
         guildName : String
         guildName =
@@ -6390,6 +6401,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             channel
                         , channelColumnThreads
                             isMobile
+                            time
                             channelRoute
                             directMentions
                             localUser
@@ -6546,6 +6558,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
 
 channelColumnThreads :
     Bool
+    -> Time.Posix
     -> ChannelRoute
     -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
@@ -6554,103 +6567,152 @@ channelColumnThreads :
     -> FrontendChannel
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg
-channelColumnThreads isMobile channelRoute directMentions localUser guildId channelId channel threads =
-    Ui.column
-        []
-        (SeqDict.toList threads
-            |> List.indexedMap
-                (\index ( threadMessageIndex, thread ) ->
-                    let
-                        threadRoute : ThreadRoute
-                        threadRoute =
-                            ViewThread threadMessageIndex
+channelColumnThreads isMobile now channelRoute directMentions localUser guildId channelId channel threads =
+    SeqDict.foldr
+        (\threadMessageIndex thread ( index, list ) ->
+            let
+                isSelected : Bool
+                isSelected =
+                    case channelRoute of
+                        ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
+                            a == channelId && b == threadMessageIndex
 
-                        isSelected : Bool
-                        isSelected =
-                            case channelRoute of
-                                ChannelRoute a (ViewThreadWithFriends b _ _) _ ->
-                                    a == channelId && b == threadMessageIndex
+                        _ ->
+                            False
 
-                                _ ->
-                                    False
+                hasNotifications : ChannelNotificationType
+                hasNotifications =
+                    channelOrThreadHasNotifications
+                        directMentions
+                        (SeqSet.member guildId localUser.user.notifyOnAllMessages)
+                        channelId
+                        (ViewThread threadMessageIndex)
+                        (SeqDict.get
+                            ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
+                            localUser.user.lastViewedThreads
+                        )
+                        thread
+            in
+            ( index - 1
+            , case ( hasNotifications, isSelected, Array.Extra.last thread.messages ) of
+                ( NoNotification, False, Just (MessageLoaded message) ) ->
+                    if Duration.from (Message.createdAt message) now |> Quantity.lessThan Duration.week then
+                        channelColumnThreadsHelper
+                            isMobile
+                            isSelected
+                            hasNotifications
+                            index
+                            threads
+                            guildId
+                            channelId
+                            threadMessageIndex
+                            localUser
+                            channel
+                            :: list
 
-                        name =
-                            threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel
-                    in
-                    Ui.row
-                        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-                        , Ui.attrIf
-                            (not isMobile)
-                            (Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId threadRoute))
-                        , Ui.attrIf
-                            (not isMobile)
-                            (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId threadRoute))
-                        , Ui.clipWithEllipsis
-                        , Ui.height (Ui.px MyUi.channelHeaderHeight)
-                        , MyUi.hoverText name
-                        , Ui.contentCenterY
-                        , MyUi.noShrinking
-                        ]
-                        [ elLinkButton
-                            (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
-                            [ Ui.height Ui.fill
-                            , Ui.contentCenterY
-                            , Ui.paddingWith
-                                { left = 28
-                                , right = 8
-                                , top = 0
-                                , bottom = 0
-                                }
-                            , Ui.el
-                                [ (if isSelected && not isMobile then
-                                    NoNotification
+                    else
+                        list
 
-                                   else
-                                    channelOrThreadHasNotifications
-                                        directMentions
-                                        (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                                        channelId
-                                        (ViewThread threadMessageIndex)
-                                        (SeqDict.get
-                                            ( GuildOrDmId (GuildOrDmId_Guild guildId channelId)
-                                            , threadMessageIndex
-                                            )
-                                            localUser.user.lastViewedThreads
-                                        )
-                                        thread
-                                  )
-                                    |> GuildIcon.notificationView 4 5 MyUi.background2
-                                , Ui.move { x = 0, y = 0, z = 0 }
-                                , Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                ]
-                                (Ui.html
-                                    (if SeqDict.size threads == 1 then
-                                        Icons.threadSingleSegment
-
-                                     else if SeqDict.size threads - 1 == index then
-                                        Icons.threadBottomSegment
-
-                                     else if index == 0 then
-                                        Icons.threadTopSegment
-
-                                     else
-                                        Icons.threadMiddleSegment
-                                    )
-                                )
-                                |> Ui.inFront
-                            , if isSelected then
-                                Ui.Font.color MyUi.font1
-
-                              else
-                                Ui.Font.color MyUi.font3
-                            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-                            ]
-                            (Ui.text name)
-                        ]
-                )
+                _ ->
+                    channelColumnThreadsHelper
+                        isMobile
+                        isSelected
+                        hasNotifications
+                        index
+                        threads
+                        guildId
+                        channelId
+                        threadMessageIndex
+                        localUser
+                        channel
+                        :: list
+            )
         )
+        ( SeqDict.size threads - 1, [] )
+        threads
+        |> Tuple.second
+        |> Ui.column []
+
+
+channelColumnThreadsHelper :
+    Bool
+    -> Bool
+    -> ChannelNotificationType
+    -> Int
+    -> SeqDict (Id ChannelMessageId) FrontendThread
+    -> Id GuildId
+    -> Id ChannelId
+    -> Id ChannelMessageId
+    -> LocalUser
+    -> FrontendChannel
+    -> Element FrontendMsg
+channelColumnThreadsHelper isMobile isSelected hasNotifications index threads guildId channelId threadMessageIndex localUser channel =
+    let
+        name : String
+        name =
+            threadPreviewText (LocalState.allUsers localUser) threadMessageIndex channel
+
+        threadRoute : ThreadRoute
+        threadRoute =
+            ViewThread threadMessageIndex
+    in
+    Ui.row
+        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        , Ui.attrIf (not isMobile) (Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId threadRoute))
+        , Ui.attrIf (not isMobile) (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId threadRoute))
+        , Ui.clipWithEllipsis
+        , Ui.height (Ui.px MyUi.channelHeaderHeight)
+        , MyUi.hoverText name
+        , Ui.contentCenterY
+        , MyUi.noShrinking
+        ]
+        [ elLinkButton
+            (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
+            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab) Nothing))
+            [ Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.paddingWith
+                { left = 28
+                , right = 8
+                , top = 0
+                , bottom = 0
+                }
+            , Ui.el
+                [ (if isSelected && not isMobile then
+                    NoNotification
+
+                   else
+                    hasNotifications
+                  )
+                    |> GuildIcon.notificationView 4 5 MyUi.background2
+                , Ui.move { x = 0, y = 0, z = 0 }
+                , Ui.Font.color MyUi.font3
+                , Ui.width Ui.shrink
+                ]
+                (Ui.html
+                    (if SeqDict.size threads == 1 then
+                        Icons.threadSingleSegment
+
+                     else if SeqDict.size threads - 1 == index then
+                        Icons.threadBottomSegment
+
+                     else if index == 0 then
+                        Icons.threadTopSegment
+
+                     else
+                        Icons.threadMiddleSegment
+                    )
+                )
+                |> Ui.inFront
+            , if isSelected then
+                Ui.Font.color MyUi.font1
+
+              else
+                Ui.Font.color MyUi.font3
+            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+            ]
+            (Ui.text name)
+        ]
 
 
 discordChannelColumnThreads :
