@@ -19,9 +19,9 @@ import NoBrokenParserFunctions
 import NoConfusingPrefixOperator
 import NoDebug.TodoOrToString
 import NoExposingEverything
-import NoFloatInToBackend
 import NoImportingEverything
 import NoInconsistentAliases
+import NoInvalidTypesInToBackend
 import NoMissingTypeAnnotation
 import NoMissingTypeConstructor
 import NoMissingTypeExpose
@@ -130,7 +130,11 @@ config =
         |> Review.Rule.ignoreErrorsForFiles [ "src/LamderaRPC.elm" ]
         |> Review.Rule.ignoreErrorsForDirectories [ "src/Evergreen", "vendored/mdgriffith" ]
     , NoBrokenParserFunctions.rule
-    , NoFloatInToBackend.rule [ ( [ "SafeFloat" ], "SafeFloat" ) ] |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
+    , NoInvalidTypesInToBackend.rule
+        { disallowed = [ ( [ "Basics" ], "Float" ) ]
+        , exempt = [ ( [ "SafeFloat" ], "SafeFloat" ) ]
+        }
+        |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]
     , BackendOnly.rule
         { functions =
             []
