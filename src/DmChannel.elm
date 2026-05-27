@@ -31,6 +31,9 @@ import Id exposing (ChannelMessageId, GamePublicId, Id, ThreadMessageId, ThreadR
 import IdArray exposing (IdArray)
 import Message exposing (Message)
 import MessageArray exposing (MessageArray)
+import Go
+import Id exposing (ChannelMessageId, GoMatchPublicId, Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Message exposing (Message, MessageState(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SecretId exposing (SecretId)
