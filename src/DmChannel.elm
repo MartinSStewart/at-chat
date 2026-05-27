@@ -199,8 +199,10 @@ setArray id message array =
 
 
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
-channelIdFromUserIds (Id userIdA) (Id userIdB) =
-    DmChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
+channelIdFromUserIds userIdA userIdB =
+    DmChannelId
+        (min (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
+        (max (Id.toInt userIdA) (Id.toInt userIdB) |> Id.fromInt)
 
 
 userIdsFromChannelId : DmChannelId -> ( Id UserId, Id UserId )

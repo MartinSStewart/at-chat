@@ -8,7 +8,7 @@ module Id exposing
     , GoMatchPublicId(..)
     , GuildId(..)
     , GuildOrDmId(..)
-    , Id(..)
+    , Id
     , InviteLinkId(..)
     , StickerId(..)
     , ThreadMessageId(..)
@@ -29,6 +29,7 @@ module Id exposing
     , toString
     )
 
+import Basics.Extra
 import Discord
 import List.Extra
 import SeqDict exposing (SeqDict)
@@ -140,6 +141,8 @@ type GoMatchPublicId
     = GoMatchPublicId Never
 
 
+{-| OpaqueVariants
+-}
 type Id a
     = Id Int
 
@@ -157,6 +160,16 @@ nextId dict =
 fromInt : Int -> Id a
 fromInt =
     Id
+
+
+w3_validate_Id : Id a -> Result String ()
+w3_validate_Id (Id id) =
+    -- Make sure ID is under the max safe integer with some margin so that an attacker can't get weird behavior out of the backend
+    if abs id < Basics.Extra.maxSafeInteger - 10000 then
+        Ok ()
+
+    else
+        Err "Invalid Id"
 
 
 toInt : Id a -> Int
