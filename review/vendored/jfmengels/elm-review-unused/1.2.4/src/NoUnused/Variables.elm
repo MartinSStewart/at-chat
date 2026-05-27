@@ -1216,6 +1216,8 @@ declarationEnterVisitor node context =
                         context.exposesEverything
                             -- The main function is "exposed" by default for applications
                             || (context.isApplication && functionName == "main")
+                            -- w3_validate_ functions are generated and intentionally left unused
+                            || String.startsWith "w3_validate_" functionName
                     then
                         context
 
