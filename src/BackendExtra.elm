@@ -780,7 +780,6 @@ adminData model lastLogPageViewed =
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
-    , openRouterKey = model.openRouterKey
     , cloudflareRealtimeApiToken = model.cloudflareRealtimeApiToken
     , cloudflareRealtimeAppId = model.cloudflareRealtimeAppId
     , postmarkApiKey = model.postmarkApiKey

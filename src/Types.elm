@@ -329,7 +329,6 @@ type alias BackendModel =
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
-    , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , textEditor : TextEditor.LocalState

@@ -130,7 +130,6 @@ type Msg
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
-    | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.RealtimeApiToken))
     | CloudflareRealtimeAppIdEditableMsg (Editable.Msg (Maybe Cloudflare.AppId))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
@@ -197,7 +196,6 @@ type alias Model =
     , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
-    , openRouterKey : Editable.Model
     , cloudflareRealtimeApiToken : Editable.Model
     , cloudflareRealtimeAppId : Editable.Model
     , postmarkKey : Editable.Model
@@ -241,7 +239,6 @@ type alias InitAdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
-    , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkApiKey : Postmark.ApiKey
@@ -280,7 +277,6 @@ type AdminChange
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
-    | SetOpenRouterKey (Maybe String)
     | SetCloudflareRealtimeApiToken (Maybe Cloudflare.RealtimeApiToken)
     | SetCloudflareRealtimeAppId (Maybe Cloudflare.AppId)
     | SetPostmarkKey Postmark.ApiKey
@@ -333,7 +329,6 @@ initForUser =
     , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
-    , openRouterKey = Editable.init
     , cloudflareRealtimeApiToken = Editable.init
     , cloudflareRealtimeAppId = Editable.init
     , postmarkKey = Editable.init
@@ -361,7 +356,6 @@ initForAdmin { highlightLog } =
     , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
-    , openRouterKey = Editable.init
     , cloudflareRealtimeApiToken = Editable.init
     , cloudflareRealtimeAppId = Editable.init
     , postmarkKey = Editable.init
@@ -447,9 +441,6 @@ updateAdmin changedBy change adminData local =
 
         SetSlackClientSecret clientSecret ->
             { local | adminData = IsAdmin { adminData | slackClientSecret = clientSecret } }
-
-        SetOpenRouterKey openRouterKey ->
-            { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
 
         SetCloudflareRealtimeApiToken cloudflareRealtimeApiToken ->
             { local | adminData = IsAdmin { adminData | cloudflareRealtimeApiToken = cloudflareRealtimeApiToken } }
@@ -1135,14 +1126,6 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetPrivateVapidKey value |> AdminChange )
 
-        OpenRouterKeyEditableMsg editableMsg ->
-            case editableMsg of
-                Editable.Edit editable ->
-                    ( { model | openRouterKey = editable }, Command.none, NoOutMsg )
-
-                Editable.PressedAcceptEdit value ->
-                    ( model, Command.none, SetOpenRouterKey value |> AdminChange )
-
         CloudflareRealtimeApiTokenEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1556,9 +1539,6 @@ pendingChangesText change =
 
         SetSlackClientSecret _ ->
             "Set slack client secret"
-
-        SetOpenRouterKey _ ->
-            "Set OpenRouter key"
 
         SetCloudflareRealtimeApiToken _ ->
             "Set Cloudflare Realtime API token"
@@ -2716,30 +2696,6 @@ apiKeysSection local user adminData2 model =
             PrivateVapidKeyEditableMsg
             (adminData2.privateVapidKey |> (\(PrivateVapidKey a) -> a))
             model.privateVapidKey
-        , Editable.view
-            (Dom.id "userOptions_openRouterKey")
-            True
-            "OpenRouter API key"
-            (\text ->
-                let
-                    text2 =
-                        String.trim text
-                in
-                if text2 == "" then
-                    Ok Nothing
-
-                else
-                    Just text2 |> Ok
-            )
-            OpenRouterKeyEditableMsg
-            (case adminData2.openRouterKey of
-                Just key ->
-                    key
-
-                Nothing ->
-                    ""
-            )
-            model.openRouterKey
         , Editable.view
             (Dom.id "userOptions_cloudflareRealtimeApiToken")
             True

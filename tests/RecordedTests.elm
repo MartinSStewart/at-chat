@@ -2354,12 +2354,6 @@ attackerTriesToLeakSensitiveData config discordOpReady discordOpSupplemental =
                                                                 else
                                                                     [ "Slack client secret was modified by attacker" ]
                                                                )
-                                                            ++ (if before.backend.openRouterKey == after.backend.openRouterKey then
-                                                                    []
-
-                                                                else
-                                                                    [ "OpenRouter key was modified by attacker" ]
-                                                               )
                                                             ++ (if before.backend.emailNotificationsEnabled == after.backend.emailNotificationsEnabled then
                                                                     []
 

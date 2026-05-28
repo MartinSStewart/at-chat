@@ -496,7 +496,6 @@ type alias AdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
-    , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
     , postmarkKey : Postmark.ApiKey

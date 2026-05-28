@@ -212,7 +212,6 @@ init =
             else
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
-      , openRouterKey = Nothing
       , cloudflareRealtimeApiToken = Nothing
       , cloudflareRealtimeAppId = Nothing
       , textEditor = TextEditor.initLocalState
@@ -4886,7 +4885,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             , Command.map
                 AiChatToFrontend
                 AiChatBackendMsg
-                (AiChat.updateFromFrontend clientId aiChatToBackend model.openRouterKey)
+                (AiChat.updateFromFrontend clientId aiChatToBackend)
             )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
@@ -6278,11 +6277,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetSlackClientSecret clientSecret ->
             ( { model | slackClientSecret = clientSecret }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.SetOpenRouterKey openRouterKey ->
-            ( { model | openRouterKey = openRouterKey }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

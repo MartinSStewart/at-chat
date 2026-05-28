@@ -2190,7 +2190,7 @@ allAttackerToBackendChanges =
     , TwoFactorToBackend (TwoFactorAuthentication.DisableTwoFactorAuthenticationRequest 123456)
     , JoinGuildByInviteRequest (Id.fromInt 0) (SecretId "fake-invite-link")
     , FinishUserCreationRequest InitialLoadRequested_None (Unsafe.personName "hacked") UserAgent.init
-    , AiChatToBackend (AiChat.AiMessageRequestSimple (AiModelName "model") (AiChat.RespondId 0) "hacked")
+    , AiChatToBackend (AiChat.AiMessageRequestSimple (Just "attacker-key") (AiModelName "model") (AiChat.RespondId 0) "hacked")
     , ReloadDataRequest InitialLoadRequested_None
     , LinkSlackOAuthCode (Slack.OAuthCode "fake-code") (SessionIdHash "fake-hash")
     , LinkDiscordRequest { discordUserAuth | token = "attacker-token" }

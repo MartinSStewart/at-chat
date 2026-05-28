@@ -4146,7 +4146,6 @@ initAdminData adminData =
     , twoFactorAuthentication = adminData.twoFactorAuthentication
     , privateVapidKey = adminData.privateVapidKey
     , slackClientSecret = adminData.slackClientSecret
-    , openRouterKey = adminData.openRouterKey
     , cloudflareRealtimeApiToken = adminData.cloudflareRealtimeApiToken
     , cloudflareRealtimeAppId = adminData.cloudflareRealtimeAppId
     , postmarkKey = adminData.postmarkApiKey

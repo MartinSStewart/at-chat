@@ -100,6 +100,7 @@ type alias FrontendModel =
     , debounceCounter : Int
     , sendMessageWith : SendMessageWith
     , aiModels : AiModelsStatus
+    , openRouterKey : String
     }
 
 
@@ -120,6 +121,7 @@ type alias LocalStorage =
     , selectedModels : List AiModelName
     , sendMessageWith : SendMessageWith
     , responseCounter : Int
+    , openRouterKey : String
     }
 
 
@@ -157,11 +159,12 @@ type Msg
     | EditedResponse ResponseId String
     | NoOp
     | GotAiModels (Result Http.Error (List AiModel))
+    | TypedOpenRouterKey String
 
 
 type ToBackend
-    = AiMessageRequest AiModelName ResponseId (List Message)
-    | AiMessageRequestSimple AiModelName ResponseId String
+    = AiMessageRequest (Maybe String) AiModelName ResponseId (List Message)
+    | AiMessageRequestSimple (Maybe String) AiModelName ResponseId String
 
 
 {-| OpaqueVariants
@@ -194,6 +197,7 @@ init =
       , debounceCounter = 0
       , sendMessageWith = SendWithShiftEnter
       , aiModels = LoadingAiModels
+      , openRouterKey = ""
       }
     , loadUserSettingsToJs
     )
@@ -266,6 +270,9 @@ isPressMsg msg =
         GotAiModels _ ->
             False
 
+        TypedOpenRouterKey _ ->
+            False
+
 
 getModels : Command restriction toFrontend Msg
 getModels =
@@ -315,6 +322,7 @@ localStorageCodec =
         |> Serialize.field .selectedModels (Serialize.list aiModelCodec)
         |> Serialize.field .sendMessageWith sendMessageWithCodec
         |> Serialize.field .responseCounter Serialize.int
+        |> Serialize.field .openRouterKey Serialize.string
         |> Serialize.finishRecord
 
 
@@ -421,6 +429,7 @@ modelToLocalStorage model =
     , selectedModels = model.selectedModels
     , sendMessageWith = model.sendMessageWith
     , responseCounter = model.responseCounter
+    , openRouterKey = model.openRouterKey
     }
 
 
@@ -588,6 +597,10 @@ update msg model =
                             model.pendingResponses
                             indexedModels
 
+                    apiKey : Maybe String
+                    apiKey =
+                        openRouterKeyToMaybe model.openRouterKey
+
                     requestCmds : List (Command FrontendOnly ToBackend Msg)
                     requestCmds =
                         List.map
@@ -598,10 +611,10 @@ update msg model =
                                         RespondId (model.responseCounter + i)
                                 in
                                 (if List.member "image" aiModel.inputs then
-                                    AiMessageRequest aiModel.id responseId (chatToMessage newChatHistory)
+                                    AiMessageRequest apiKey aiModel.id responseId (chatToMessage newChatHistory)
 
                                  else
-                                    AiMessageRequestSimple aiModel.id responseId newChatHistory
+                                    AiMessageRequestSimple apiKey aiModel.id responseId newChatHistory
                                 )
                                     |> Lamdera.sendToBackend
                             )
@@ -647,15 +660,20 @@ update msg model =
                     in
                     case getAiModelById modelId model of
                         Just aiModel ->
+                            let
+                                apiKey : Maybe String
+                                apiKey =
+                                    openRouterKeyToMaybe model.openRouterKey
+                            in
                             ( { model
                                 | pendingResponses = SeqDict.insert responseId (Pending modelId) model.pendingResponses
                               }
                             , Command.batch
                                 [ (if List.member "image" aiModel.inputs then
-                                    AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
+                                    AiMessageRequest apiKey aiModel.id responseId (chatToMessage model.chatHistory)
 
                                    else
-                                    AiMessageRequestSimple aiModel.id responseId model.chatHistory
+                                    AiMessageRequestSimple apiKey aiModel.id responseId model.chatHistory
                                   )
                                     |> Lamdera.sendToBackend
                                 , scrollToTop (responseContainerId responseId)
@@ -760,12 +778,16 @@ update msg model =
                         , selectedModels = ok.selectedModels
                         , sendMessageWith = ok.sendMessageWith
                         , responseCounter = ok.responseCounter
+                        , openRouterKey = ok.openRouterKey
                       }
                     , scrollToBottom
                     )
 
                 Err _ ->
                     ( model, Command.none )
+
+        TypedOpenRouterKey text ->
+            startDebounceSave { model | openRouterKey = text }
 
         EditedResponse responseId text ->
             startDebounceSave
@@ -1292,6 +1314,26 @@ optionsView model =
                     :: aiModelDropdowns model.aiModels model.selectedModels
                 )
             , Ui.column
+                [ Ui.spacing 4 ]
+                [ Ui.el
+                    [ Ui.Font.size 14
+                    , Ui.paddingXY 4 4
+                    ]
+                    (Ui.text "OpenRouter API Key")
+                , Ui.Input.text
+                    [ Ui.paddingXY 8 6
+                    , Ui.border 1
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.rounded 4
+                    , Ui.background MyUi.inputBackground
+                    ]
+                    { onChange = TypedOpenRouterKey
+                    , text = model.openRouterKey
+                    , placeholder = Just "Enter your OpenRouter API key"
+                    , label = Ui.Input.labelHidden "openrouter-api-key"
+                    }
+                ]
+            , Ui.column
                 []
                 [ Ui.el
                     [ Ui.Font.size 14
@@ -1583,12 +1625,35 @@ decodeImage =
     Json.Decode.at [ "image_url", "url" ] Json.Decode.string
 
 
-updateFromFrontend : ClientId -> ToBackend -> Maybe String -> Command BackendOnly ToFrontend BackendMsg
-updateFromFrontend clientId msg maybeOpenRouterKey =
-    case maybeOpenRouterKey of
-        Just openRouterKey ->
+openRouterKeyToMaybe : String -> Maybe String
+openRouterKeyToMaybe text =
+    let
+        trimmed =
+            String.trim text
+    in
+    if trimmed == "" then
+        Nothing
+
+    else
+        Just trimmed
+
+
+updateFromFrontend : ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
+updateFromFrontend clientId msg =
+    let
+        keyAndId : ( Maybe String, ResponseId )
+        keyAndId =
             case msg of
-                AiMessageRequest aiModel responseId messages ->
+                AiMessageRequest key _ id _ ->
+                    ( key, id )
+
+                AiMessageRequestSimple key _ id _ ->
+                    ( key, id )
+    in
+    case keyAndId of
+        ( Just openRouterKey, _ ) ->
+            case msg of
+                AiMessageRequest _ aiModel responseId messages ->
                     openRouterRequest
                         openRouterKey
                         aiModel
@@ -1604,19 +1669,13 @@ updateFromFrontend clientId msg maybeOpenRouterKey =
                         )
                         |> Task.attempt (GotAiMessage clientId responseId)
 
-                AiMessageRequestSimple aiModel responseId text ->
+                AiMessageRequestSimple _ aiModel responseId text ->
                     openRouterRequest openRouterKey aiModel ( "prompt", Json.Encode.string text ) |> Task.attempt (GotAiMessage clientId responseId)
 
-        Nothing ->
+        ( Nothing, id ) ->
             Lamdera.sendToFrontend
                 clientId
-                (case msg of
-                    AiMessageRequest _ id _ ->
-                        AiMessageResponse id (Err (Http.BadBody "OpenRouter API key not configured"))
-
-                    AiMessageRequestSimple _ id _ ->
-                        AiMessageResponse id (Err (Http.BadBody "OpenRouter API key not configured"))
-                )
+                (AiMessageResponse id (Err (Http.BadBody "OpenRouter API key not configured")))
 
 
 openRouterRequest : String -> AiModelName -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
