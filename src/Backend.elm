@@ -5678,7 +5678,7 @@ handlePullTracks :
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model _ _ =
+handlePullTracks time sessionId clientId changeId connectionId remoteSessionId trackNames model session _ =
     case
         ( model.cloudflareRealtimeApiToken
         , model.cloudflareRealtimeAppId
@@ -5687,15 +5687,26 @@ handlePullTracks time sessionId clientId changeId connectionId remoteSessionId t
     of
         ( Just apiToken, Just appId, Just connection ) ->
             case connection.call of
-                ConnectedToCall _ sfu ->
-                    ( model
-                    , Cloudflare.pullRemoteTracks
-                        appId
-                        apiToken
-                        sfu.sessionId
-                        { remoteSessionId = remoteSessionId, trackNames = trackNames }
-                        |> Task.attempt (GotCloudflarePullOffer time clientId changeId connectionId remoteSessionId trackNames)
-                    )
+                ConnectedToCall roomId sfu ->
+                    -- Only allow pulling tracks belonging to a peer that is in the
+                    -- caller's own call. Without this check a client could supply an
+                    -- arbitrary Cloudflare session id and pull another user's
+                    -- audio/video tracks from a call they aren't part of.
+                    if
+                        collectExistingPeers roomId session.userId clientId model
+                            |> List.any (\peer -> peer.sessionId == remoteSessionId)
+                    then
+                        ( model
+                        , Cloudflare.pullRemoteTracks
+                            appId
+                            apiToken
+                            sfu.sessionId
+                            { remoteSessionId = remoteSessionId, trackNames = trackNames }
+                            |> Task.attempt (GotCloudflarePullOffer time clientId changeId connectionId remoteSessionId trackNames)
+                        )
+
+                    else
+                        ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
                 ConnectingToCall _ ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
