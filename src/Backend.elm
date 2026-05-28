@@ -5688,10 +5688,6 @@ handlePullTracks time sessionId clientId changeId connectionId remoteSessionId t
         ( Just apiToken, Just appId, Just connection ) ->
             case connection.call of
                 ConnectedToCall roomId sfu ->
-                    -- Only allow pulling tracks belonging to a peer that is in the
-                    -- caller's own call. Without this check a client could supply an
-                    -- arbitrary Cloudflare session id and pull another user's
-                    -- audio/video tracks from a call they aren't part of.
                     if
                         collectExistingPeers roomId session.userId clientId model
                             |> List.any (\peer -> peer.sessionId == remoteSessionId)
