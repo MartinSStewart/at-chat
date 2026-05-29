@@ -231,13 +231,13 @@ monthlyEgressBytes config =
         , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
         , url = "https://api.cloudflare.com/client/v4/graphql"
         , body = Http.jsonBody body
-        , resolver = stringResolver egressBytesDecoder
+        , resolver = stringResolver decodeEgressBytes
         , timeout = Just (Duration.seconds 30)
         }
 
 
-egressBytesDecoder : Decode.Decoder Int
-egressBytesDecoder =
+decodeEgressBytes : Decode.Decoder Int
+decodeEgressBytes =
     Decode.at [ "data", "viewer", "accounts" ]
         (Decode.list
             (Decode.map2 (+)
