@@ -18,6 +18,7 @@ import Call
 import ChannelDescription
 import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
+import Date exposing (Date)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -215,6 +216,8 @@ init =
       , openRouterKey = Nothing
       , cloudflareRealtimeApiToken = Nothing
       , cloudflareRealtimeAppId = Nothing
+      , cloudflareAccountId = Nothing
+      , cloudflareAnalyticsApiToken = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -240,6 +243,55 @@ init =
       }
     , Command.none
     )
+
+
+{-| Alert when estimated Cloudflare costs exceed this many US dollars per month.
+-}
+cloudflareCostThresholdUsd : Float
+cloudflareCostThresholdUsd =
+    1
+
+
+{-| Query Cloudflare for this month's Realtime egress so we can alert if it's costing us money.
+Disabled (no-op) unless both the account id and analytics token have been configured by an admin.
+-}
+checkCloudflareCost : Time.Posix -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
+checkCloudflareCost time model =
+    case ( model.cloudflareAccountId, model.cloudflareAnalyticsApiToken ) of
+        ( Just accountId, Just analyticsToken ) ->
+            let
+                today : Date
+                today =
+                    Date.fromPosix Time.utc time
+            in
+            Cloudflare.monthlyEgressBytes
+                { accountId = accountId
+                , analyticsToken = analyticsToken
+                , startDate = Date.floor Date.Month today |> Date.toIsoString
+                , endDate = Date.toIsoString today
+                }
+                |> Task.attempt (GotCloudflareUsage time)
+
+        _ ->
+            Command.none
+
+
+{-| To avoid re-logging (and re-emailing about) the same overage every hour, only alert once per
+calendar month. We derive this from the existing log history rather than tracking extra state.
+-}
+cloudflareCostAlreadyLoggedThisMonth : Time.Posix -> BackendModel -> Bool
+cloudflareCostAlreadyLoggedThisMonth time model =
+    Array.toList model.logs
+        |> List.any
+            (\entry ->
+                case entry.log of
+                    Log.CloudflareCostExceeded _ _ ->
+                        (Time.toYear Time.utc entry.time == Time.toYear Time.utc time)
+                            && (Time.toMonth Time.utc entry.time == Time.toMonth Time.utc time)
+
+                    _ ->
+                        False
+            )
 
 
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
@@ -1637,9 +1689,36 @@ update msg model =
                             )
                             model.deletedGuilds
                 }
-            , Discord.getStickerPacksPayload
-                |> DiscordSync.http model.serverSecret
-                |> Task.attempt (GotDiscordStandardStickerPacks time)
+            , Command.batch
+                [ Discord.getStickerPacksPayload
+                    |> DiscordSync.http model.serverSecret
+                    |> Task.attempt (GotDiscordStandardStickerPacks time)
+                , checkCloudflareCost time model
+                ]
+            )
+
+        GotCloudflareUsage time result ->
+            case result of
+                Ok egressBytes ->
+                    let
+                        cost : Float
+                        cost =
+                            Cloudflare.estimatedMonthlyCostUsd egressBytes
+                    in
+                    if cost > cloudflareCostThresholdUsd && not (cloudflareCostAlreadyLoggedThisMonth time model) then
+                        BackendExtra.addLog time (Log.CloudflareCostExceeded cost egressBytes) model
+
+                    else
+                        ( model, Command.none )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        GotCloudflareEgressForAdmin clientId result ->
+            ( model
+            , Pages.Admin.CloudflareEgressResponse result
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend clientId
             )
 
         GotDiscordStandardStickerPacks time result ->
@@ -6303,6 +6382,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.SetCloudflareAccountId maybeAccountId ->
+            ( { model | cloudflareAccountId = maybeAccountId }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetCloudflareAnalyticsApiToken maybeToken ->
+            ( { model | cloudflareAnalyticsApiToken = maybeToken }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
         Pages.Admin.SetPostmarkKey postmarkKey ->
             ( { model | postmarkApiKey = postmarkKey }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
@@ -6568,6 +6657,37 @@ updateFromFrontendAdmin :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 updateFromFrontendAdmin clientId toBackend model =
     case toBackend of
+        Pages.Admin.LoadCloudflareEgressRequest ->
+            case ( model.cloudflareAccountId, model.cloudflareAnalyticsApiToken ) of
+                ( Just accountId, Just analyticsToken ) ->
+                    ( model
+                    , Time.now
+                        |> Task.andThen
+                            (\time ->
+                                let
+                                    today : Date
+                                    today =
+                                        Date.fromPosix Time.utc time
+                                in
+                                Cloudflare.monthlyEgressBytes
+                                    { accountId = accountId
+                                    , analyticsToken = analyticsToken
+                                    , startDate = Date.floor Date.Month today |> Date.toIsoString
+                                    , endDate = Date.toIsoString today
+                                    }
+                            )
+                        |> Task.attempt (GotCloudflareEgressForAdmin clientId)
+                    )
+
+                _ ->
+                    ( model
+                    , Http.BadBody "Cloudflare account id and analytics token must be configured first"
+                        |> Err
+                        |> Pages.Admin.CloudflareEgressResponse
+                        |> AdminToFrontend
+                        |> Lamdera.sendToFrontend clientId
+                    )
+
         Pages.Admin.ExportBackendRequest isPartial ->
             let
                 baseModel : BackendModel

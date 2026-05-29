@@ -499,6 +499,8 @@ type alias AdminData =
     , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
+    , cloudflareAccountId : Maybe Cloudflare.AccountId
+    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , postmarkKey : Postmark.ApiKey
     , dmChannels : SeqDict DmChannelId AdminData_DmChannel
     , discordDmChannels :

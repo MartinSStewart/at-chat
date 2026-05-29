@@ -51,6 +51,33 @@ type Log
     | FailedCloudflarePullOffer Http.Error
     | FailedCloudflareSessionCreate Http.Error
     | FailedCloudflarePushLocalTracks Http.Error
+    | CloudflareCostExceeded Float Int
+
+
+{-| Format a USD amount with two decimal places (e.g. `1.5` -> `"1.50"`).
+-}
+formatUsd : Float -> String
+formatUsd amount =
+    let
+        cents : Int
+        cents =
+            round (amount * 100)
+    in
+    String.fromInt (cents // 100)
+        ++ "."
+        ++ String.padLeft 2 '0' (String.fromInt (modBy 100 (abs cents)))
+
+
+{-| Format a byte count as gigabytes with one decimal place (e.g. `1500000000` -> `"1.5"`).
+-}
+formatGb : Int -> String
+formatGb bytes =
+    let
+        tenths : Int
+        tenths =
+            round (toFloat bytes / 1.0e8)
+    in
+    String.fromInt (tenths // 10) ++ "." ++ String.fromInt (modBy 10 (abs tenths))
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -142,6 +169,9 @@ shouldNotifyAdmin log =
 
         FailedCloudflarePushLocalTracks _ ->
             Nothing
+
+        CloudflareCostExceeded cost _ ->
+            Just ("Cloudflare services are estimated to cost $" ++ formatUsd cost ++ " this month")
 
 
 monthToString : Month -> String
@@ -562,6 +592,14 @@ logContent onPressCopy customEmojis log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Failed to push local tracks"
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        CloudflareCostExceeded cost egressBytes ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag warningTag "Cloudflare cost threshold exceeded"
+                , fieldRow "Estimated cost" (Ui.text ("$" ++ formatUsd cost ++ " / month"))
+                , fieldRow "Egress this month" (Ui.text (formatGb egressBytes ++ " GB"))
                 ]
 
 

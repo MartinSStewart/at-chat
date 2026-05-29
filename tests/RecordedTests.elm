@@ -79,6 +79,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 "https:" :: "" :: "rtc.live.cloudflare.com" :: "v1" :: "apps" :: _ :: rest ->
                     RecordedTestExtra.mockCloudflareSfu rest httpRequests
 
+                [ "https:", "", "api.cloudflare.com", "client", "v4", "graphql" ] ->
+                    -- Realtime egress usage query. 1100 GB of SFU egress => (1100 - 1000) * $0.05 = $5.00
+                    RecordedTestExtra.httpBasic
+                        currentRequest.url
+                        200
+                        """{"data":{"viewer":{"accounts":[{"sfu":[{"sum":{"egressBytes":1100000000000}}],"turn":[{"sum":{"egressBytes":0}}]}]}}}"""
+
                 "http:" :: "" :: "localhost:3000" :: "file" :: rest ->
                     case rest of
                         "internal" :: rest2 ->
@@ -1257,6 +1264,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.voiceChatTest normalConfig
+    , RecordedTestExtra.cloudflareCostTest normalConfig
     , RecordedTestExtra.startTest "Logins are rate limited"
         RecordedTestExtra.startTime
         normalConfig

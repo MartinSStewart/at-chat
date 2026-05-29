@@ -332,6 +332,8 @@ type alias BackendModel =
     , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
+    , cloudflareAccountId : Maybe Cloudflare.AccountId
+    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )
@@ -683,6 +685,8 @@ type BackendMsg
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
+    | GotCloudflareUsage Time.Posix (Result Http.Error Int)
+    | GotCloudflareEgressForAdmin ClientId (Result Http.Error Int)
 
 
 type MessageFromGuildOrDm

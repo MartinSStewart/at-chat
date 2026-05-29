@@ -1,5 +1,7 @@
 module Cloudflare exposing
-    ( AppId(..)
+    ( AccountId(..)
+    , AnalyticsApiToken(..)
+    , AppId(..)
     , Location(..)
     , PullTracksResult
     , PushTracksResult
@@ -10,9 +12,15 @@ module Cloudflare exposing
     , TrackName(..)
     , TrackObject
     , TrackStatus(..)
+    , accountId
+    , accountIdToString
+    , analyticsApiToken
+    , analyticsApiTokenToString
     , appId
     , appIdToString
     , createSession
+    , estimatedMonthlyCostUsd
+    , monthlyEgressBytes
     , pullRemoteTracks
     , pushLocalTracks
     , realtimeApiToken
@@ -63,6 +71,38 @@ realtimeApiToken =
 
 realtimeApiTokenToString : RealtimeApiToken -> String
 realtimeApiTokenToString (RealtimeApiToken a) =
+    a
+
+
+{-| OpaqueVariants
+-}
+type AccountId
+    = AccountId String
+
+
+accountId : String -> AccountId
+accountId =
+    AccountId
+
+
+accountIdToString : AccountId -> String
+accountIdToString (AccountId a) =
+    a
+
+
+{-| OpaqueVariants
+-}
+type AnalyticsApiToken
+    = AnalyticsApiToken String
+
+
+analyticsApiToken : String -> AnalyticsApiToken
+analyticsApiToken =
+    AnalyticsApiToken
+
+
+analyticsApiTokenToString : AnalyticsApiToken -> String
+analyticsApiTokenToString (AnalyticsApiToken a) =
     a
 
 
@@ -127,6 +167,92 @@ sdpCodec =
 apiBase : AppId -> String
 apiBase (AppId aid) =
     "https://rtc.live.cloudflare.com/v1/apps/" ++ aid
+
+
+{-| Realtime SFU and TURN services cost $0.05 per GB of data egress, after a combined free
+allowance of 1000 GB per month. See <https://developers.cloudflare.com/realtime/sfu/pricing/>.
+-}
+freeEgressGb : Float
+freeEgressGb =
+    1000
+
+
+usdPerGb : Float
+usdPerGb =
+    0.05
+
+
+{-| Estimated monthly cost in USD given the total Realtime egress in bytes (SFU + TURN combined).
+-}
+estimatedMonthlyCostUsd : Int -> Float
+estimatedMonthlyCostUsd egressBytes =
+    let
+        egressGb : Float
+        egressGb =
+            toFloat egressBytes / 1.0e9
+    in
+    max 0 (egressGb - freeEgressGb) * usdPerGb
+
+
+{-| Query the Cloudflare GraphQL Analytics API for the total Realtime egress (SFU + TURN combined)
+in bytes between two dates (inclusive). `startDate` and `endDate` must be formatted as `YYYY-MM-DD`.
+The token must have the "Account Analytics" read permission.
+-}
+monthlyEgressBytes :
+    { accountId : AccountId, analyticsToken : AnalyticsApiToken, startDate : String, endDate : String }
+    -> Task restriction Http.Error Int
+monthlyEgressBytes config =
+    let
+        (AccountId accountTag) =
+            config.accountId
+
+        (AnalyticsApiToken token) =
+            config.analyticsToken
+
+        query : String
+        query =
+            "query Usage($accountTag: String!, $start: Date!, $end: Date!) { viewer { accounts(filter: { accountTag: $accountTag }) { sfu: callsUsageAdaptiveGroups(filter: { date_geq: $start, date_leq: $end }, limit: 10000) { sum { egressBytes } } turn: callsTurnUsageAdaptiveGroups(filter: { date_geq: $start, date_leq: $end }, limit: 10000) { sum { egressBytes } } } } }"
+
+        body : Encode.Value
+        body =
+            Encode.object
+                [ ( "query", Encode.string query )
+                , ( "variables"
+                  , Encode.object
+                        [ ( "accountTag", Encode.string accountTag )
+                        , ( "start", Encode.string config.startDate )
+                        , ( "end", Encode.string config.endDate )
+                        ]
+                  )
+                ]
+    in
+    Http.task
+        { method = "POST"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , url = "https://api.cloudflare.com/client/v4/graphql"
+        , body = Http.jsonBody body
+        , resolver = stringResolver egressBytesDecoder
+        , timeout = Just (Duration.seconds 30)
+        }
+
+
+egressBytesDecoder : Decode.Decoder Int
+egressBytesDecoder =
+    Decode.at [ "data", "viewer", "accounts" ]
+        (Decode.list
+            (Decode.map2 (+)
+                (datasetEgressBytes "sfu")
+                (datasetEgressBytes "turn")
+            )
+        )
+        |> Decode.map List.sum
+
+
+datasetEgressBytes : String -> Decode.Decoder Int
+datasetEgressBytes field =
+    Decode.field field
+        (Decode.list (Decode.at [ "sum", "egressBytes" ] Decode.int))
+        |> Decode.map List.sum
 
 
 bearer : RealtimeApiToken -> Http.Header
