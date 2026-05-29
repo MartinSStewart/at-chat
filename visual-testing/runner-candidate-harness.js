@@ -98,38 +98,7 @@ server.listen(port, () => {
     while (snapshot.hasMore) {
       // @TODO security
       // snapshotName = sanitize(snapshotName);
-
-      // Resize the window so the viewport (innerHeight) matches the full page
-      // height. saveScreenshot only captures the viewport, so without this tall
-      // pages get cut off, and elements fixed to the bottom of the viewport end
-      // up floating in the middle of the snapshot. snapshot.height acts as a
-      // minimum height (e.g. for short pages). We loop because growing the
-      // viewport can change the layout (e.g. elm-ui `height fill` / 100vh
-      // elements), so we iterate until the content height stabilises.
-      await browser.setWindowSize(snapshot.width, snapshot.height);
-      // Browser chrome (toolbars etc) means outerHeight > innerHeight; the
-      // screenshot is innerHeight tall, so account for the difference.
-      const chromeHeight = await browser.execute(function () {
-        return window.outerHeight - window.innerHeight;
-      });
-      var targetHeight = 0;
-      for (var i = 0; i < 5; i++) {
-        const contentHeight = await browser.execute(function () {
-          return Math.max(
-            document.documentElement.scrollHeight,
-            document.body.scrollHeight,
-            document.documentElement.offsetHeight,
-            document.body.offsetHeight
-          );
-        });
-        const nextHeight = Math.max(contentHeight, snapshot.height);
-        if (nextHeight === targetHeight) {
-          break;
-        }
-        targetHeight = nextHeight;
-        await browser.setWindowSize(snapshot.width, targetHeight + chromeHeight);
-      }
-
+      browser.setWindowSize(snapshot.width, snapshot.height);
       var exists = false;
       try {
         // exists = await fs.promises.access(join(process.cwd(), `/snapshots/${snapshot.name}-baseline.png`), fs.constants.F_OK)
