@@ -1,5 +1,6 @@
 module Pages.Admin exposing
     ( AdminChange(..)
+    , CloudflareEgressStatus(..)
     , EditedBackendUser
     , EditingCell
     , ExportProgress(..)
@@ -36,6 +37,7 @@ import Bytes exposing (Bytes)
 import ChannelName
 import Cloudflare
 import CustomEmoji
+import Date exposing (Date)
 import Discord
 import DmChannel exposing (DmChannelId)
 import Duration exposing (Duration)
@@ -72,6 +74,7 @@ import PersonName
 import Ports
 import Postmark
 import Quantity
+import Round
 import Route
 import SeqDict exposing (SeqDict)
 import SeqDictHelper
@@ -159,6 +162,8 @@ type Msg
     | PressedWebsocketCloseEventsPage Int
     | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
     | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
+    | PressedLoadCloudflareEgress
+    | GotCloudflareEgress (Result Http.Error Int)
 
 
 type ToBackend
@@ -211,6 +216,7 @@ type alias Model =
     , exportSubsetSelection : Maybe ExportSubsetSelection
     , websocketCloseEventsPage : Int
     , realtimeSessionData : SeqDict Cloudflare.RealtimeSessionId RealtimeSessionInfoStatus
+    , cloudflareEgress : CloudflareEgressStatus
     }
 
 
@@ -353,6 +359,7 @@ initForUser =
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , realtimeSessionData = SeqDict.empty
+    , cloudflareEgress = EgressNotRequested
     }
 
 
@@ -383,6 +390,7 @@ initForAdmin { highlightLog } =
     , exportSubsetSelection = Nothing
     , websocketCloseEventsPage = 0
     , realtimeSessionData = SeqDict.empty
+    , cloudflareEgress = EgressNotRequested
     }
 
 
@@ -1337,6 +1345,45 @@ update navigationKey time adminData localState msg model =
                     , NoOutMsg
                     )
 
+        PressedLoadCloudflareEgress ->
+            case ( model.cloudflareEgress, adminData.cloudflareAccountId, adminData.cloudflareAnalyticsApiToken ) of
+                ( LoadingEgress, _, _ ) ->
+                    ( model, Command.none, NoOutMsg )
+
+                ( _, Just accountId, Just analyticsToken ) ->
+                    let
+                        today : Date
+                        today =
+                            Date.fromPosix Time.utc time
+                    in
+                    ( { model | cloudflareEgress = LoadingEgress }
+                    , Cloudflare.monthlyEgressBytes
+                        { accountId = accountId
+                        , analyticsToken = analyticsToken
+                        , startDate = Date.floor Date.Month today |> Date.toIsoString
+                        , endDate = Date.toIsoString today
+                        }
+                        |> Task.attempt GotCloudflareEgress
+                    , NoOutMsg
+                    )
+
+                _ ->
+                    ( model, Command.none, NoOutMsg )
+
+        GotCloudflareEgress result ->
+            ( { model
+                | cloudflareEgress =
+                    case result of
+                        Ok egressBytes ->
+                            LoadedEgress egressBytes
+
+                        Err error ->
+                            FailedToLoadEgress error
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
 
 {-| OpaqueVariants
 -}
@@ -1344,6 +1391,13 @@ type RealtimeSessionInfoStatus
     = LoadingRealtimeSessionInfo
     | LoadedRealtimeSessionInfo Cloudflare.SessionStateResponse
     | FailedToLoadRealtimeSessionInfo Http.Error
+
+
+type CloudflareEgressStatus
+    = EgressNotRequested
+    | LoadingEgress
+    | LoadedEgress Int
+    | FailedToLoadEgress Http.Error
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -2266,6 +2320,37 @@ voiceChatSection adminData model user =
             , Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
             ]
             [ Ui.text "End all calls" ]
+        , Ui.column
+            [ Ui.spacing 4 ]
+            [ Ui.row
+                [ Ui.spacing 8 ]
+                [ Ui.text "Realtime egress this month"
+                , Ui.el
+                    [ Ui.alignRight ]
+                    (MyUi.secondaryButton
+                        (Dom.id "admin_loadCloudflareEgress")
+                        PressedLoadCloudflareEgress
+                        "Load egress"
+                    )
+                ]
+            , case model.cloudflareEgress of
+                EgressNotRequested ->
+                    Ui.none
+
+                LoadingEgress ->
+                    Ui.text "Loading..."
+
+                LoadedEgress egressBytes ->
+                    Ui.text
+                        (Round.round 2 (toFloat egressBytes / 1.0e9)
+                            ++ " GB used (estimated $"
+                            ++ Round.round 2 (Cloudflare.estimatedMonthlyCostUsd egressBytes)
+                            ++ " this month)"
+                        )
+
+                FailedToLoadEgress error ->
+                    Ui.text (Log.httpErrorToString error)
+            ]
         ]
 
 

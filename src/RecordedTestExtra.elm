@@ -861,6 +861,14 @@ cloudflareCostTest config =
             (\admin ->
                 [ handleLogin firefoxDesktop adminEmail admin
                 , addCloudflareAnalyticsApiKeys admin
+
+                -- The admin can also load current egress on demand from the voice chat section.
+                , admin.click 100 (Dom.id "guild_showUserOptions")
+                , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+                , admin.click 100 (Dom.id "admin_expandSectionButton_Voice chat")
+                , admin.click 100 (Dom.id "admin_loadCloudflareEgress")
+                , hasText admin [ "1100.00 GB used (estimated $5.00 this month)" ]
+                , admin.navigateBack 100
                 ]
             )
         , -- The hourly job queries Cloudflare (mocked to return 1100 GB of egress => $5.00/month).
