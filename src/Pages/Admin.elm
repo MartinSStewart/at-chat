@@ -1346,29 +1346,34 @@ update navigationKey time adminData localState msg model =
                     )
 
         PressedLoadCloudflareEgress ->
-            case ( model.cloudflareEgress, adminData.cloudflareAccountId, adminData.cloudflareAnalyticsApiToken ) of
-                ( LoadingEgress, _, _ ) ->
-                    ( model, Command.none, NoOutMsg )
+            case ( adminData.cloudflareAccountId, adminData.cloudflareAnalyticsApiToken ) of
+                ( Just accountId, Just analyticsToken ) ->
+                    case model.cloudflareEgress of
+                        LoadingEgress ->
+                            ( model, Command.none, NoOutMsg )
 
-                ( _, Just accountId, Just analyticsToken ) ->
-                    let
-                        today : Date
-                        today =
-                            Date.fromPosix Time.utc time
-                    in
-                    ( { model | cloudflareEgress = LoadingEgress }
-                    , Cloudflare.monthlyEgressBytes
-                        { accountId = accountId
-                        , analyticsToken = analyticsToken
-                        , startDate = Date.floor Date.Month today |> Date.toIsoString
-                        , endDate = Date.toIsoString today
-                        }
-                        |> Task.attempt GotCloudflareEgress
-                    , NoOutMsg
-                    )
+                        _ ->
+                            let
+                                today : Date
+                                today =
+                                    Date.fromPosix Time.utc time
+                            in
+                            ( { model | cloudflareEgress = LoadingEgress }
+                            , Cloudflare.monthlyEgressBytes
+                                { accountId = accountId
+                                , analyticsToken = analyticsToken
+                                , startDate = Date.floor Date.Month today |> Date.toIsoString
+                                , endDate = Date.toIsoString today
+                                }
+                                |> Task.attempt GotCloudflareEgress
+                            , NoOutMsg
+                            )
 
                 _ ->
-                    ( model, Command.none, NoOutMsg )
+                    ( { model | cloudflareEgress = FailedToLoadEgress (Http.BadBody "Missing Cloudflare AccountId or Analystic API token") }
+                    , Command.none
+                    , NoOutMsg
+                    )
 
         GotCloudflareEgress result ->
             ( { model
