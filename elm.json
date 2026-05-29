@@ -8,6 +8,7 @@
         "vendored/ianmackenzie/elm-float-extra/1.1.0/src",
         "vendored/ianmackenzie/elm-geometry/3.11.0/src",
         "vendored/MartinSStewart/elm-discord/1.0.0/src",
+        "visual-testing/src",
         "tests"
     ],
     "elm-version": "0.19.1",
