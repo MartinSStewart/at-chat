@@ -242,6 +242,58 @@ init =
     )
 
 
+{-| Alert when estimated Cloudflare costs exceed this many US dollars per month.
+-}
+cloudflareCostThresholdUsd : Float
+cloudflareCostThresholdUsd =
+    1
+
+
+{-| Query Cloudflare for this month's Realtime egress so we can alert if it's costing us money.
+Disabled (no-op) unless both the account id and analytics token are configured in Env.
+-}
+checkCloudflareCost : Time.Posix -> Command BackendOnly ToFrontend BackendMsg
+checkCloudflareCost time =
+    if Env.cloudflareAccountId == "" || Env.cloudflareAnalyticsToken == "" then
+        Command.none
+
+    else
+        Cloudflare.monthlyEgressBytes
+            { accountId = Env.cloudflareAccountId
+            , analyticsToken = Env.cloudflareAnalyticsToken
+            , startDate = isoDate (Time.toYear Time.utc time) (Time.toMonth Time.utc time) 1
+            , endDate = isoDate (Time.toYear Time.utc time) (Time.toMonth Time.utc time) (Time.toDay Time.utc time)
+            }
+            |> Task.attempt (GotCloudflareUsage time)
+
+
+isoDate : Int -> Time.Month -> Int -> String
+isoDate year month day =
+    String.fromInt year
+        ++ "-"
+        ++ String.padLeft 2 '0' (String.fromInt (MyUi.monthToInt month))
+        ++ "-"
+        ++ String.padLeft 2 '0' (String.fromInt day)
+
+
+{-| To avoid re-logging (and re-emailing about) the same overage every hour, only alert once per
+calendar month. We derive this from the existing log history rather than tracking extra state.
+-}
+cloudflareCostAlreadyLoggedThisMonth : Time.Posix -> BackendModel -> Bool
+cloudflareCostAlreadyLoggedThisMonth time model =
+    Array.toList model.logs
+        |> List.any
+            (\entry ->
+                case entry.log of
+                    Log.CloudflareCostExceeded _ _ ->
+                        (Time.toYear Time.utc entry.time == Time.toYear Time.utc time)
+                            && (Time.toMonth Time.utc entry.time == Time.toMonth Time.utc time)
+
+                    _ ->
+                        False
+            )
+
+
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
 subscriptions model =
     Subscription.batch
@@ -1637,10 +1689,30 @@ update msg model =
                             )
                             model.deletedGuilds
                 }
-            , Discord.getStickerPacksPayload
-                |> DiscordSync.http model.serverSecret
-                |> Task.attempt (GotDiscordStandardStickerPacks time)
+            , Command.batch
+                [ Discord.getStickerPacksPayload
+                    |> DiscordSync.http model.serverSecret
+                    |> Task.attempt (GotDiscordStandardStickerPacks time)
+                , checkCloudflareCost time
+                ]
             )
+
+        GotCloudflareUsage time result ->
+            case result of
+                Ok egressBytes ->
+                    let
+                        cost : Float
+                        cost =
+                            Cloudflare.estimatedMonthlyCostUsd egressBytes
+                    in
+                    if cost > cloudflareCostThresholdUsd && not (cloudflareCostAlreadyLoggedThisMonth time model) then
+                        BackendExtra.addLog time (Log.CloudflareCostExceeded cost egressBytes) model
+
+                    else
+                        ( model, Command.none )
+
+                Err _ ->
+                    ( model, Command.none )
 
         GotDiscordStandardStickerPacks time result ->
             case result of

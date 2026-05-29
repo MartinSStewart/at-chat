@@ -683,6 +683,7 @@ type BackendMsg
     | ScheduledExportUploadResult Time.Posix (Result Http.Error ())
     | RegeneratedServerSecret Time.Posix ChangeId ClientId (Result Http.Error (SecretId ServerSecret))
     | GotTimeForWebsocketListenClose (Discord.Id Discord.UserId) Websocket.CloseEventCode String Time.Posix
+    | GotCloudflareUsage Time.Posix (Result Http.Error Int)
 
 
 type MessageFromGuildOrDm

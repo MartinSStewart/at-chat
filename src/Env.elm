@@ -35,3 +35,20 @@ postmarkServerToken_ =
 slackClientId : String
 slackClientId =
     "9460466681300.9470334175105"
+
+
+{-| Cloudflare account tag (the account id, not the Realtime app id) used when querying the
+GraphQL Analytics API to estimate how much Realtime egress is costing. Leave empty to disable
+the Cloudflare cost check.
+-}
+cloudflareAccountId : String
+cloudflareAccountId =
+    ""
+
+
+{-| Cloudflare API token with the "Account Analytics" read permission. Used to query monthly
+Realtime egress usage. Leave empty to disable the Cloudflare cost check.
+-}
+cloudflareAnalyticsToken : String
+cloudflareAnalyticsToken =
+    ""
