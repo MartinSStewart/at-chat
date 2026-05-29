@@ -19,6 +19,10 @@ const sanitize = require("sanitize-filename");
 const port = 8877
 const projectAssets = '../public'
 
+// webdriverio's saveScreenshot throws if the target directory doesn't exist,
+// and the snapshots folder is gitignored, so ensure it exists on a fresh checkout.
+fs.mkdirSync('snapshots', { recursive: true })
+
 
 var app = express()
 app.disable('x-powered-by')
@@ -59,7 +63,10 @@ server.listen(port, () => {
     markTime("boot")
     let browser = await remote({
       capabilities: { browserName: 'chrome',
-        'goog:chromeOptions': { args: ['headless', 'disable-gpu'] },
+        // --no-sandbox and --disable-dev-shm-usage are required to run headless
+        // Chrome on Linux (especially as root / in CI containers). They are
+        // harmless on macOS, so we always pass them to keep this cross-platform.
+        'goog:chromeOptions': { args: ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage'] },
       },
     });
     markTime("remote")

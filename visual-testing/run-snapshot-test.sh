@@ -3,6 +3,15 @@ set -ex
 
 return=$(pwd)
 
+# Use a globally installed `lamdera` if available (e.g. macOS via the official
+# installer), otherwise fall back to the `lamdera` npm package via npx so this
+# works out of the box on Linux where lamdera is typically not on the PATH.
+if command -v lamdera >/dev/null 2>&1; then
+  LAMDERA="lamdera"
+else
+  LAMDERA="npx --yes lamdera"
+fi
+
 # project=~/dev/projects/lamdera-dashboard
 # project=~/dev/projects/realia-app
 
@@ -15,7 +24,7 @@ return=$(pwd)
 # cd $return
 
 cd ..
-LDEBUG=1 lamdera make visual-testing/src/SnapshotHarness.elm --output=visual-testing/snapshot-harnessed-app.js
+LDEBUG=1 $LAMDERA make visual-testing/src/SnapshotHarness.elm --output=visual-testing/snapshot-harnessed-app.js
 cd visual-testing
 cp snapshot-harnessed-app.js dist/snapshot-harnessed-app.js
 

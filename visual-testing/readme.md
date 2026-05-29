@@ -1,28 +1,70 @@
 
+## Visual snapshot testing
+
+Compiles the Elm app through a snapshot harness, drives a headless Chrome via
+WebdriverIO, and saves one PNG per snapshot defined in the recorded tests.
+
 ### Deps
 
-```bash
-# webdriverio deps
-brew install chromedriver geckodriver
+Install the node dependencies in this folder:
 
+```bash
 npm i
 ```
 
-### WebdriverIO raw (candidate)
+That's it for both macOS and Linux:
 
-`./run-snapshot-test.sh`
+- **Chrome / chromedriver** are managed automatically by WebdriverIO (v8). The
+  first run downloads a matching Chrome-for-Testing build and chromedriver, so
+  you do **not** need `brew install chromedriver geckodriver` (or any manual
+  driver install) anymore.
+- **lamdera** is used to compile the harness. If `lamdera` is on your `PATH`
+  (the usual macOS setup) the script uses it directly; otherwise it falls back
+  to the `lamdera` npm package via `npx`, so Linux works with no extra install.
 
-- Will compile the Elm app
+You also need the project's root dependencies installed (run `npm i` in the
+repository root) so the Elm build's esbuild step is available.
+
+#### Linux notes
+
+- Most desktop installs already have the shared libraries headless Chrome
+  needs. On a minimal/CI image you may need to install them — the simplest
+  way is to let `apt` pull in everything Chrome depends on:
+
+  ```bash
+  # Adds the Google repo, then installs Chrome + all of its runtime deps.
+  wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  sudo apt-get update && sudo apt-get install -y /tmp/chrome.deb
+  ```
+
+  (You don't need Chrome itself for the test — WebdriverIO downloads its own —
+  but this is a reliable way to get the right system libraries regardless of
+  distro/version, where individual `lib*` package names differ.)
+- Chrome is started with `--no-sandbox` and `--disable-dev-shm-usage` so it
+  runs headless as root / inside containers. These flags are set in
+  `runner-candidate-harness.js` and are harmless on macOS.
+
+### Running
+
+```bash
+./run-snapshot-test.sh
+```
+
+- Will compile the Elm app (via `lamdera`/`npx lamdera`)
 - Will esbuild the harness
-- Will run the harness which should output 2 files to the ./snapshots folder:
+- Will run the harness, which outputs PNGs to the `./snapshots` folder.
+
+On the first run every snapshot is written as a `*-baseline.png` (the
+`snapshots` folder is created automatically and is gitignored):
 
 ```
 $ ls snapshots
-snapshot1-baseline.png snapshot2-baseline.png
+"Test login: homepage-baseline.png"  "Test login: login-baseline.png"  ...
 ```
 
-Uses [`odiff`](https://github.com/dmtrKovalenko/odiff) for diffs
-
+On subsequent runs each snapshot is captured as `*-actual.png` and compared
+against its baseline using [`odiff`](https://github.com/dmtrKovalenko/odiff),
+writing a `*-odiff.png` diff mask when they differ.
 
 ## Other explorations
 
