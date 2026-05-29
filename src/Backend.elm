@@ -1714,6 +1714,13 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
+        GotCloudflareEgressForAdmin clientId result ->
+            ( model
+            , Pages.Admin.CloudflareEgressResponse result
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend clientId
+            )
+
         GotDiscordStandardStickerPacks time result ->
             case result of
                 Ok stickerPacks ->
@@ -6650,6 +6657,37 @@ updateFromFrontendAdmin :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 updateFromFrontendAdmin clientId toBackend model =
     case toBackend of
+        Pages.Admin.LoadCloudflareEgressRequest ->
+            case ( model.cloudflareAccountId, model.cloudflareAnalyticsApiToken ) of
+                ( Just accountId, Just analyticsToken ) ->
+                    ( model
+                    , Time.now
+                        |> Task.andThen
+                            (\time ->
+                                let
+                                    today : Date
+                                    today =
+                                        Date.fromPosix Time.utc time
+                                in
+                                Cloudflare.monthlyEgressBytes
+                                    { accountId = accountId
+                                    , analyticsToken = analyticsToken
+                                    , startDate = Date.floor Date.Month today |> Date.toIsoString
+                                    , endDate = Date.toIsoString today
+                                    }
+                            )
+                        |> Task.attempt (GotCloudflareEgressForAdmin clientId)
+                    )
+
+                _ ->
+                    ( model
+                    , Http.BadBody "Cloudflare account id and analytics token must be configured first"
+                        |> Err
+                        |> Pages.Admin.CloudflareEgressResponse
+                        |> AdminToFrontend
+                        |> Lamdera.sendToFrontend clientId
+                    )
+
         Pages.Admin.ExportBackendRequest isPartial ->
             let
                 baseModel : BackendModel

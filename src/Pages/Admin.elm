@@ -37,7 +37,6 @@ import Bytes exposing (Bytes)
 import ChannelName
 import Cloudflare
 import CustomEmoji
-import Date exposing (Date)
 import Discord
 import DmChannel exposing (DmChannelId)
 import Duration exposing (Duration)
@@ -163,12 +162,12 @@ type Msg
     | PressedLoadRealtimeSessionData Cloudflare.RealtimeSessionId
     | GotRealtimeSessionInfo Cloudflare.RealtimeSessionId (Result Http.Error Cloudflare.SessionStateResponse)
     | PressedLoadCloudflareEgress
-    | GotCloudflareEgress (Result Http.Error Int)
 
 
 type ToBackend
     = ExportBackendRequest ExportSubset
     | ImportBackendRequest Bytes
+    | LoadCloudflareEgressRequest
 
 
 type ExportSubset
@@ -185,6 +184,7 @@ type alias ExportSubsetSelection =
 type ToFrontend
     = ImportBackendResponse (Result () ())
     | ExportBackendProgress ExportSubset ExportProgress
+    | CloudflareEgressResponse (Result Http.Error Int)
 
 
 type ExportProgress
@@ -1346,48 +1346,17 @@ update navigationKey time adminData localState msg model =
                     )
 
         PressedLoadCloudflareEgress ->
-            case ( adminData.cloudflareAccountId, adminData.cloudflareAnalyticsApiToken ) of
-                ( Just accountId, Just analyticsToken ) ->
-                    case model.cloudflareEgress of
-                        LoadingEgress ->
-                            ( model, Command.none, NoOutMsg )
-
-                        _ ->
-                            let
-                                today : Date
-                                today =
-                                    Date.fromPosix Time.utc time
-                            in
-                            ( { model | cloudflareEgress = LoadingEgress }
-                            , Cloudflare.monthlyEgressBytes
-                                { accountId = accountId
-                                , analyticsToken = analyticsToken
-                                , startDate = Date.floor Date.Month today |> Date.toIsoString
-                                , endDate = Date.toIsoString today
-                                }
-                                |> Task.attempt GotCloudflareEgress
-                            , NoOutMsg
-                            )
+            case model.cloudflareEgress of
+                LoadingEgress ->
+                    ( model, Command.none, NoOutMsg )
 
                 _ ->
-                    ( { model | cloudflareEgress = FailedToLoadEgress (Http.BadBody "Missing Cloudflare AccountId or Analystic API token") }
-                    , Command.none
+                    -- The request is made on the backend; calling Cloudflare directly from the
+                    -- browser is blocked by CORS.
+                    ( { model | cloudflareEgress = LoadingEgress }
+                    , Lamdera.sendToBackend LoadCloudflareEgressRequest
                     , NoOutMsg
                     )
-
-        GotCloudflareEgress result ->
-            ( { model
-                | cloudflareEgress =
-                    case result of
-                        Ok egressBytes ->
-                            LoadedEgress egressBytes
-
-                        Err error ->
-                            FailedToLoadEgress error
-              }
-            , Command.none
-            , NoOutMsg
-            )
 
 
 {-| OpaqueVariants
@@ -1573,6 +1542,19 @@ updateFromBackend toFrontend model =
 
                 Err () ->
                     ( { model | importBackendStatus = ImportBackendFailed }, Command.none )
+
+        CloudflareEgressResponse result ->
+            ( { model
+                | cloudflareEgress =
+                    case result of
+                        Ok egressBytes ->
+                            LoadedEgress egressBytes
+
+                        Err error ->
+                            FailedToLoadEgress error
+              }
+            , Command.none
+            )
 
 
 logSectionId : HtmlId
