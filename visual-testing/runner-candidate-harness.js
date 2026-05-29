@@ -95,6 +95,8 @@ server.listen(port, () => {
       window.advanceSnapshotRequested(readyForSnapshotCallback)
     });
 
+    const mismatches = []
+
     while (snapshot.hasMore) {
       // @TODO security
       // snapshotName = sanitize(snapshotName);
@@ -113,14 +115,20 @@ server.listen(port, () => {
         await browser.saveScreenshot(`snapshots/${snapshot.name}-actual.png`);
         // markTime("actual screenshot")
 
-        // const { match, reason } = await
-        compare(
+        // Await the comparison so the diff mask is fully written before we move
+        // on / call process.exit() (otherwise a mismatch on the last snapshot
+        // could be cut off before odiff finishes writing).
+        const { match, reason } = await compare(
           `snapshots/${snapshot.name}-baseline.png`,
           `snapshots/${snapshot.name}-actual.png`,
           `snapshots/${snapshot.name}-odiff.png`,
           { outputDiffMask: true }
         );
         // markTime("odiff")
+        if (!match) {
+          console.log(`❌ Snapshot changed: ${snapshot.name} (${reason}) -> snapshots/${snapshot.name}-odiff.png`);
+          mismatches.push(snapshot.name);
+        }
 
       } else {
         console.log("Setting baseline: ", `snapshots/${snapshot.name}-baseline.png`)
@@ -133,10 +141,18 @@ server.listen(port, () => {
     }
 
     await browser.deleteSession()
-    process.exit()
+
+    if (mismatches.length > 0) {
+      console.log(`\n❌ ${mismatches.length} snapshot(s) changed:`)
+      mismatches.forEach((name) => console.log(`   - ${name}`))
+      process.exit(1)
+    } else {
+      console.log("\n✅ All snapshots match")
+      process.exit(0)
+    }
 
 })().catch((err) => {
     console.error(err)
     browser.deleteSession()
-    process.exit()
+    process.exit(1)
 })
