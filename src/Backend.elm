@@ -281,8 +281,8 @@ calendar month. We derive this from the existing log history rather than trackin
 -}
 cloudflareCostAlreadyLoggedThisMonth : Time.Posix -> BackendModel -> Bool
 cloudflareCostAlreadyLoggedThisMonth time model =
-    Array.toList model.logs
-        |> List.any
+    Array.slice (Array.length model.logs - 1000) (Array.length model.logs) model.logs
+        |> Array.Extra.any
             (\entry ->
                 case entry.log of
                     Log.CloudflareCostExceeded _ _ ->
