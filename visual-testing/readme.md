@@ -12,6 +12,9 @@ Install the node dependencies in this folder:
 npm i
 ```
 
+(`run-snapshot-test.sh` also runs this automatically if `node_modules` is
+missing, so you can usually skip it.)
+
 That's it for both macOS and Linux:
 
 - **Chrome / chromedriver** are managed automatically by WebdriverIO (v8). The

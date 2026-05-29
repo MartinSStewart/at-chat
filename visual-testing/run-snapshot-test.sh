@@ -3,6 +3,14 @@ set -ex
 
 return=$(pwd)
 
+# Ensure this folder's node dependencies (webdriverio, esbuild, odiff, ...) are
+# installed. They're easy to forget on a fresh checkout / new machine, so just
+# install them automatically when missing.
+if [ ! -d node_modules/webdriverio ]; then
+  echo "Installing visual-testing node dependencies..."
+  npm install
+fi
+
 # Use a globally installed `lamdera` if available (e.g. macOS via the official
 # installer), otherwise fall back to the `lamdera` npm package via npx so this
 # works out of the box on Linux where lamdera is typically not on the PATH.
