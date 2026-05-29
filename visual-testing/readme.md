@@ -1,4 +1,3 @@
-
 ## Visual snapshot testing
 
 Compiles the Elm app through a snapshot harness, drives a headless Chrome via
@@ -14,16 +13,6 @@ npm i
 
 (`run-snapshot-test.sh` also runs this automatically if `node_modules` is
 missing, so you can usually skip it.)
-
-That's it for both macOS and Linux:
-
-- **Chrome / chromedriver** are managed automatically by WebdriverIO (v8). The
-  first run downloads a matching Chrome-for-Testing build and chromedriver, so
-  you do **not** need `brew install chromedriver geckodriver` (or any manual
-  driver install) anymore.
-- **lamdera** is used to compile the harness. If `lamdera` is on your `PATH`
-  (the usual macOS setup) the script uses it directly; otherwise it falls back
-  to the `lamdera` npm package via `npx`, so Linux works with no extra install.
 
 You also need the project's root dependencies installed (run `npm i` in the
 repository root) so the Elm build's esbuild step is available.
