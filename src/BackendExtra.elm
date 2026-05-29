@@ -783,6 +783,8 @@ adminData model lastLogPageViewed =
     , openRouterKey = model.openRouterKey
     , cloudflareRealtimeApiToken = model.cloudflareRealtimeApiToken
     , cloudflareRealtimeAppId = model.cloudflareRealtimeAppId
+    , cloudflareAccountId = model.cloudflareAccountId
+    , cloudflareAnalyticsApiToken = model.cloudflareAnalyticsApiToken
     , postmarkApiKey = model.postmarkApiKey
     , dmChannels =
         SeqDict.map

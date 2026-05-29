@@ -18,6 +18,7 @@ import Call
 import ChannelDescription
 import Cloudflare
 import CustomEmoji exposing (CustomEmojiData)
+import Date exposing (Date)
 import Discord exposing (OptionalData(..))
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
@@ -215,6 +216,8 @@ init =
       , openRouterKey = Nothing
       , cloudflareRealtimeApiToken = Nothing
       , cloudflareRealtimeAppId = Nothing
+      , cloudflareAccountId = Nothing
+      , cloudflareAnalyticsApiToken = Nothing
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
@@ -250,30 +253,27 @@ cloudflareCostThresholdUsd =
 
 
 {-| Query Cloudflare for this month's Realtime egress so we can alert if it's costing us money.
-Disabled (no-op) unless both the account id and analytics token are configured in Env.
+Disabled (no-op) unless both the account id and analytics token have been configured by an admin.
 -}
-checkCloudflareCost : Time.Posix -> Command BackendOnly ToFrontend BackendMsg
-checkCloudflareCost time =
-    if Env.cloudflareAccountId == "" || Env.cloudflareAnalyticsToken == "" then
-        Command.none
+checkCloudflareCost : Time.Posix -> BackendModel -> Command BackendOnly ToFrontend BackendMsg
+checkCloudflareCost time model =
+    case ( model.cloudflareAccountId, model.cloudflareAnalyticsApiToken ) of
+        ( Just accountId, Just analyticsToken ) ->
+            let
+                today : Date
+                today =
+                    Date.fromPosix Time.utc time
+            in
+            Cloudflare.monthlyEgressBytes
+                { accountId = accountId
+                , analyticsToken = analyticsToken
+                , startDate = Date.floor Date.Month today |> Date.toIsoString
+                , endDate = Date.toIsoString today
+                }
+                |> Task.attempt (GotCloudflareUsage time)
 
-    else
-        Cloudflare.monthlyEgressBytes
-            { accountId = Env.cloudflareAccountId
-            , analyticsToken = Env.cloudflareAnalyticsToken
-            , startDate = isoDate (Time.toYear Time.utc time) (Time.toMonth Time.utc time) 1
-            , endDate = isoDate (Time.toYear Time.utc time) (Time.toMonth Time.utc time) (Time.toDay Time.utc time)
-            }
-            |> Task.attempt (GotCloudflareUsage time)
-
-
-isoDate : Int -> Time.Month -> Int -> String
-isoDate year month day =
-    String.fromInt year
-        ++ "-"
-        ++ String.padLeft 2 '0' (String.fromInt (MyUi.monthToInt month))
-        ++ "-"
-        ++ String.padLeft 2 '0' (String.fromInt day)
+        _ ->
+            Command.none
 
 
 {-| To avoid re-logging (and re-emailing about) the same overage every hour, only alert once per
@@ -1693,7 +1693,7 @@ update msg model =
                 [ Discord.getStickerPacksPayload
                     |> DiscordSync.http model.serverSecret
                     |> Task.attempt (GotDiscordStandardStickerPacks time)
-                , checkCloudflareCost time
+                , checkCloudflareCost time model
                 ]
             )
 
@@ -6372,6 +6372,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetCloudflareRealtimeAppId maybeAppId ->
             ( { model | cloudflareRealtimeAppId = maybeAppId }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetCloudflareAccountId maybeAccountId ->
+            ( { model | cloudflareAccountId = maybeAccountId }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetCloudflareAnalyticsApiToken maybeToken ->
+            ( { model | cloudflareAnalyticsApiToken = maybeToken }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

@@ -133,6 +133,8 @@ type Msg
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | CloudflareRealtimeApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.RealtimeApiToken))
     | CloudflareRealtimeAppIdEditableMsg (Editable.Msg (Maybe Cloudflare.AppId))
+    | CloudflareAccountIdEditableMsg (Editable.Msg (Maybe Cloudflare.AccountId))
+    | CloudflareAnalyticsApiTokenEditableMsg (Editable.Msg (Maybe Cloudflare.AnalyticsApiToken))
     | PostmarkKeyEditableMsg (Editable.Msg Postmark.ApiKey)
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId)
@@ -200,6 +202,8 @@ type alias Model =
     , openRouterKey : Editable.Model
     , cloudflareRealtimeApiToken : Editable.Model
     , cloudflareRealtimeAppId : Editable.Model
+    , cloudflareAccountId : Editable.Model
+    , cloudflareAnalyticsApiToken : Editable.Model
     , postmarkKey : Editable.Model
     , importBackendStatus : ImportBackendStatus
     , showHiddenLogs : Bool
@@ -244,6 +248,8 @@ type alias InitAdminData =
     , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
+    , cloudflareAccountId : Maybe Cloudflare.AccountId
+    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , postmarkApiKey : Postmark.ApiKey
     , dmChannels : SeqDict DmChannelId AdminData_DmChannel
     , discordDmChannels : SeqDict (Discord.Id Discord.PrivateChannelId) AdminData_DiscordDmChannel
@@ -283,6 +289,8 @@ type AdminChange
     | SetOpenRouterKey (Maybe String)
     | SetCloudflareRealtimeApiToken (Maybe Cloudflare.RealtimeApiToken)
     | SetCloudflareRealtimeAppId (Maybe Cloudflare.AppId)
+    | SetCloudflareAccountId (Maybe Cloudflare.AccountId)
+    | SetCloudflareAnalyticsApiToken (Maybe Cloudflare.AnalyticsApiToken)
     | SetPostmarkKey Postmark.ApiKey
     | DeleteDiscordDmChannel (Discord.Id Discord.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id Discord.GuildId)
@@ -336,6 +344,8 @@ initForUser =
     , openRouterKey = Editable.init
     , cloudflareRealtimeApiToken = Editable.init
     , cloudflareRealtimeAppId = Editable.init
+    , cloudflareAccountId = Editable.init
+    , cloudflareAnalyticsApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -364,6 +374,8 @@ initForAdmin { highlightLog } =
     , openRouterKey = Editable.init
     , cloudflareRealtimeApiToken = Editable.init
     , cloudflareRealtimeAppId = Editable.init
+    , cloudflareAccountId = Editable.init
+    , cloudflareAnalyticsApiToken = Editable.init
     , postmarkKey = Editable.init
     , importBackendStatus = NotImportingBackend
     , showHiddenLogs = False
@@ -456,6 +468,12 @@ updateAdmin changedBy change adminData local =
 
         SetCloudflareRealtimeAppId cloudflareRealtimeAppId ->
             { local | adminData = IsAdmin { adminData | cloudflareRealtimeAppId = cloudflareRealtimeAppId } }
+
+        SetCloudflareAccountId cloudflareAccountId ->
+            { local | adminData = IsAdmin { adminData | cloudflareAccountId = cloudflareAccountId } }
+
+        SetCloudflareAnalyticsApiToken cloudflareAnalyticsApiToken ->
+            { local | adminData = IsAdmin { adminData | cloudflareAnalyticsApiToken = cloudflareAnalyticsApiToken } }
 
         SetPostmarkKey postmarkKey ->
             { local | adminData = IsAdmin { adminData | postmarkKey = postmarkKey } }
@@ -1159,6 +1177,22 @@ update navigationKey time adminData localState msg model =
                 Editable.PressedAcceptEdit value ->
                     ( model, Command.none, SetCloudflareRealtimeAppId value |> AdminChange )
 
+        CloudflareAccountIdEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | cloudflareAccountId = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetCloudflareAccountId value |> AdminChange )
+
+        CloudflareAnalyticsApiTokenEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | cloudflareAnalyticsApiToken = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetCloudflareAnalyticsApiToken value |> AdminChange )
+
         PostmarkKeyEditableMsg editableMsg ->
             case editableMsg of
                 Editable.Edit editable ->
@@ -1565,6 +1599,12 @@ pendingChangesText change =
 
         SetCloudflareRealtimeAppId _ ->
             "Set Cloudflare Realtime App ID"
+
+        SetCloudflareAccountId _ ->
+            "Set Cloudflare account ID"
+
+        SetCloudflareAnalyticsApiToken _ ->
+            "Set Cloudflare analytics API token"
 
         SetPostmarkKey _ ->
             "Set Postmark key"
@@ -2788,6 +2828,54 @@ apiKeysSection local user adminData2 model =
                     ""
             )
             model.cloudflareRealtimeAppId
+        , Editable.view
+            (Dom.id "userOptions_cloudflareAccountId")
+            True
+            "Cloudflare account ID"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just (Cloudflare.accountId text2) |> Ok
+            )
+            CloudflareAccountIdEditableMsg
+            (case adminData2.cloudflareAccountId of
+                Just key ->
+                    Cloudflare.accountIdToString key
+
+                Nothing ->
+                    ""
+            )
+            model.cloudflareAccountId
+        , Editable.view
+            (Dom.id "userOptions_cloudflareAnalyticsApiToken")
+            True
+            "Cloudflare analytics API token"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just (Cloudflare.analyticsApiToken text2) |> Ok
+            )
+            CloudflareAnalyticsApiTokenEditableMsg
+            (case adminData2.cloudflareAnalyticsApiToken of
+                Just key ->
+                    Cloudflare.analyticsApiTokenToString key
+
+                Nothing ->
+                    ""
+            )
+            model.cloudflareAnalyticsApiToken
         , Editable.view
             (Dom.id "userOptions_postmarkKey")
             True

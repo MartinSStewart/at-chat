@@ -13,6 +13,7 @@ module RecordedTestExtra exposing
     , checkNotification
     , chromeDesktop
     , clickSpoiler
+    , cloudflareCostTest
     , connectTwoUsersAndJoinNewGuild
     , createThread
     , currentDiscordUserId
@@ -100,6 +101,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId(..))
 import LocalState exposing (CallStatus(..))
+import Log
 import LoginForm
 import NonemptyDict
 import NonemptySet
@@ -810,6 +812,90 @@ addCloudflareRealtimeApiKeys admin =
 
                     _ ->
                         Err "Cloudflare keys did not land on the backend"
+            )
+        ]
+
+
+{-| Configure the Cloudflare account id and analytics API token (used for the monthly cost check)
+through the admin page.
+-}
+addCloudflareAnalyticsApiKeys :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+addCloudflareAnalyticsApiKeys admin =
+    T.collapsableGroup
+        "Add Cloudflare analytics API keys"
+        [ admin.click 100 (Dom.id "guild_showUserOptions")
+        , admin.click 100 (Dom.id "userOptions_gotoAdmin")
+        , admin.click 100 (Dom.id "admin_expandSectionButton_API keys")
+        , admin.input 100 (Dom.id "userOptions_cloudflareAccountId_label") "test-account-id"
+        , admin.click 100 (Dom.id "userOptions_cloudflareAccountId_acceptEdit")
+        , admin.input 100 (Dom.id "userOptions_cloudflareAnalyticsApiToken_label") "test-analytics-token"
+        , admin.click 100 (Dom.id "userOptions_cloudflareAnalyticsApiToken_acceptEdit")
+        , admin.navigateBack 100
+        , T.checkBackend 100
+            (\m ->
+                case ( m.cloudflareAccountId, m.cloudflareAnalyticsApiToken ) of
+                    ( Just _, Just _ ) ->
+                        Ok ()
+
+                    _ ->
+                        Err "Cloudflare analytics keys did not land on the backend"
+            )
+        ]
+
+
+cloudflareCostTest :
+    T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+cloudflareCostTest config =
+    startTest
+        "Cloudflare cost alert logs and emails the admin"
+        startTime
+        config
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin firefoxDesktop adminEmail admin
+                , addCloudflareAnalyticsApiKeys admin
+                ]
+            )
+        , -- The hourly job queries Cloudflare (mocked to return 1100 GB of egress => $5.00/month).
+          T.backendUpdate 100 (Types.HourlyUpdate startTime)
+        , T.checkBackend 200
+            (\m ->
+                if
+                    Array.toList m.logs
+                        |> List.any
+                            (\entry ->
+                                case entry.log of
+                                    Log.CloudflareCostExceeded _ _ ->
+                                        True
+
+                                    _ ->
+                                        False
+                            )
+                then
+                    Ok ()
+
+                else
+                    Err "Expected a CloudflareCostExceeded log to be recorded"
+            )
+        , T.checkState 200
+            (\data ->
+                case List.filterMap (isLogErrorEmail adminEmail) data.httpRequests of
+                    log :: _ ->
+                        if String.startsWith "Cloudflare services are estimated to cost" log then
+                            Ok ()
+
+                        else
+                            Err ("Unexpected error email body: " ++ log)
+
+                    [] ->
+                        Err "Expected an error-notification email about Cloudflare costs"
             )
         ]
 

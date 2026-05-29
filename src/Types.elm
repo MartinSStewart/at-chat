@@ -332,6 +332,8 @@ type alias BackendModel =
     , openRouterKey : Maybe String
     , cloudflareRealtimeApiToken : Maybe Cloudflare.RealtimeApiToken
     , cloudflareRealtimeAppId : Maybe Cloudflare.AppId
+    , cloudflareAccountId : Maybe Cloudflare.AccountId
+    , cloudflareAnalyticsApiToken : Maybe Cloudflare.AnalyticsApiToken
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id Discord.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id Discord.UserId, Discord.Id Discord.ChannelId ) ( ClientId, ChangeId )

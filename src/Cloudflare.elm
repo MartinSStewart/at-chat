@@ -1,5 +1,7 @@
 module Cloudflare exposing
-    ( AppId(..)
+    ( AccountId(..)
+    , AnalyticsApiToken(..)
+    , AppId(..)
     , Location(..)
     , PullTracksResult
     , PushTracksResult
@@ -10,6 +12,10 @@ module Cloudflare exposing
     , TrackName(..)
     , TrackObject
     , TrackStatus(..)
+    , accountId
+    , accountIdToString
+    , analyticsApiToken
+    , analyticsApiTokenToString
     , appId
     , appIdToString
     , createSession
@@ -65,6 +71,46 @@ realtimeApiToken =
 
 realtimeApiTokenToString : RealtimeApiToken -> String
 realtimeApiTokenToString (RealtimeApiToken a) =
+    a
+
+
+{-| The Cloudflare account tag (the account id, not the Realtime app id). Used as `accountTag`
+when querying the GraphQL Analytics API.
+
+OpaqueVariants
+
+-}
+type AccountId
+    = AccountId String
+
+
+accountId : String -> AccountId
+accountId =
+    AccountId
+
+
+accountIdToString : AccountId -> String
+accountIdToString (AccountId a) =
+    a
+
+
+{-| A Cloudflare API token with the "Account Analytics" read permission. Kept distinct from
+`RealtimeApiToken` (which is scoped to the Realtime app) so the two can't be mixed up.
+
+OpaqueVariants
+
+-}
+type AnalyticsApiToken
+    = AnalyticsApiToken String
+
+
+analyticsApiToken : String -> AnalyticsApiToken
+analyticsApiToken =
+    AnalyticsApiToken
+
+
+analyticsApiTokenToString : AnalyticsApiToken -> String
+analyticsApiTokenToString (AnalyticsApiToken a) =
     a
 
 
@@ -161,10 +207,16 @@ in bytes between two dates (inclusive). `startDate` and `endDate` must be format
 The token must have the "Account Analytics" read permission.
 -}
 monthlyEgressBytes :
-    { accountId : String, analyticsToken : String, startDate : String, endDate : String }
+    { accountId : AccountId, analyticsToken : AnalyticsApiToken, startDate : String, endDate : String }
     -> Task restriction Http.Error Int
-monthlyEgressBytes { accountId, analyticsToken, startDate, endDate } =
+monthlyEgressBytes config =
     let
+        (AccountId accountTag) =
+            config.accountId
+
+        (AnalyticsApiToken token) =
+            config.analyticsToken
+
         query : String
         query =
             "query Usage($accountTag: String!, $start: Date!, $end: Date!) { viewer { accounts(filter: { accountTag: $accountTag }) { sfu: callsUsageAdaptiveGroups(filter: { date_geq: $start, date_leq: $end }, limit: 10000) { sum { egressBytes } } turn: callsTurnUsageAdaptiveGroups(filter: { date_geq: $start, date_leq: $end }, limit: 10000) { sum { egressBytes } } } } }"
@@ -175,16 +227,16 @@ monthlyEgressBytes { accountId, analyticsToken, startDate, endDate } =
                 [ ( "query", Encode.string query )
                 , ( "variables"
                   , Encode.object
-                        [ ( "accountTag", Encode.string accountId )
-                        , ( "start", Encode.string startDate )
-                        , ( "end", Encode.string endDate )
+                        [ ( "accountTag", Encode.string accountTag )
+                        , ( "start", Encode.string config.startDate )
+                        , ( "end", Encode.string config.endDate )
                         ]
                   )
                 ]
     in
     Http.task
         { method = "POST"
-        , headers = [ Http.header "Authorization" ("Bearer " ++ analyticsToken) ]
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
         , url = "https://api.cloudflare.com/client/v4/graphql"
         , body = Http.jsonBody body
         , resolver = stringResolver egressBytesDecoder
