@@ -74,11 +74,7 @@ realtimeApiTokenToString (RealtimeApiToken a) =
     a
 
 
-{-| The Cloudflare account tag (the account id, not the Realtime app id). Used as `accountTag`
-when querying the GraphQL Analytics API.
-
-OpaqueVariants
-
+{-| OpaqueVariants
 -}
 type AccountId
     = AccountId String
@@ -94,11 +90,7 @@ accountIdToString (AccountId a) =
     a
 
 
-{-| A Cloudflare API token with the "Account Analytics" read permission. Kept distinct from
-`RealtimeApiToken` (which is scoped to the Realtime app) so the two can't be mixed up.
-
-OpaqueVariants
-
+{-| OpaqueVariants
 -}
 type AnalyticsApiToken
     = AnalyticsApiToken String
