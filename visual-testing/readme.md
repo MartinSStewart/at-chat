@@ -57,7 +57,3 @@ $ ls snapshots
 On subsequent runs each snapshot is captured as `*-actual.png` and compared
 against its baseline using [`odiff`](https://github.com/dmtrKovalenko/odiff),
 writing a `*-odiff.png` diff mask when they differ.
-
-## Other explorations
-
-See the explorations folder, each runner has a description at the beggining of the file.
