@@ -62,7 +62,7 @@ init _ _ _ =
             (\error ->
                 let
                     _ =
-                        Debug.log "error" (Debug.toString error)
+                        Debug.log "Failed to load" error
                 in
                 ()
             )
