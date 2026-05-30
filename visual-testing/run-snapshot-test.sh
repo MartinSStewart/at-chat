@@ -42,6 +42,25 @@ current_dir="$vt_dir/snapshots/current"
 baseline_dir="$vt_dir/snapshots/baseline-$base_sha"
 diff_dir="$vt_dir/snapshots/diff"
 
+# Guarded `rm -rf`. Refuses to delete anything that isn't strictly inside this
+# repo's snapshots/ folder, so a bug that leaves a path variable empty (e.g.
+# "$vt_dir" unset turning "$diff_dir" into the root-anchored "/snapshots/diff")
+# can never blow away an unexpected directory.
+safe_rmrf() {
+  local target="$1"
+  if [ -z "$vt_dir" ] || [ -z "$target" ]; then
+    echo "❌ safe_rmrf: refusing to delete (empty path; vt_dir='$vt_dir' target='$target')" >&2
+    exit 1
+  fi
+  case "$target" in
+    "$vt_dir/snapshots/"?*) rm -rf "$target" ;;
+    *)
+      echo "❌ safe_rmrf: refusing to delete '$target' (not inside '$vt_dir/snapshots/')" >&2
+      exit 1
+      ;;
+  esac
+}
+
 # Install this folder's node deps if missing (webdriverio, esbuild, odiff, ...).
 if [ ! -d node_modules/webdriverio ]; then
   echo "Installing visual-testing node dependencies..."
@@ -54,7 +73,7 @@ fi
 render_snapshots() {
   local repo_dir="$1"
   local out="$2"
-  rm -rf "$out"
+  safe_rmrf "$out"
   (
     cd "$repo_dir"
     if command -v lamdera >/dev/null 2>&1; then
@@ -125,5 +144,5 @@ fi
 # --- 5. Diff current vs baseline -------------------------------------------
 echo ""
 echo "🔍 Comparing current branch against baseline..."
-rm -rf "$diff_dir"
+safe_rmrf "$diff_dir"
 node compare-snapshots.js "$baseline_dir" "$current_dir" "$diff_dir"
