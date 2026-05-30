@@ -2,12 +2,19 @@
 
 Harness version of runner-candidate.js
 
+Render-only: boots the compiled snapshot harness in a headless browser and
+writes one PNG per snapshot into SNAPSHOT_OUT (default: ./snapshots).
+
+It does NOT compare against a baseline - that is done separately by
+compare-snapshots.js so that the same rendering code can be used to produce
+both the "current" and the "baseline" (base commit) images. See
+run-snapshot-test.sh for the orchestration.
+
 */
 
 const { remote } = require('webdriverio')
 const { join } = require('path');
 const { markTime } = require('./marktimer')
-const { compare } = require("odiff-bin");
 const fs = require("fs");
 
 const http = require('http')
@@ -15,13 +22,12 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const sanitize = require("sanitize-filename");
 
-// @TODO paramaterise
-const port = 8877
+const port = parseInt(process.env.SNAPSHOT_PORT || '8877', 10)
+const outDir = process.env.SNAPSHOT_OUT || 'snapshots'
 const projectAssets = '../public'
 
-// webdriverio's saveScreenshot throws if the target directory doesn't exist,
-// and the snapshots folder is gitignored, so ensure it exists on a fresh checkout.
-fs.mkdirSync('snapshots', { recursive: true })
+// webdriverio's saveScreenshot throws if the target directory doesn't exist.
+fs.mkdirSync(outDir, { recursive: true })
 
 
 var app = express()
@@ -71,7 +77,7 @@ server.listen(port, () => {
     });
     markTime("remote")
 
-    await browser.navigateTo("http://localhost:8877");
+    await browser.navigateTo(`http://localhost:${port}`);
 
     await browser.waitUntil(async function () {
       const state = await browser.execute(function () {
@@ -95,45 +101,14 @@ server.listen(port, () => {
       window.advanceSnapshotRequested(readyForSnapshotCallback)
     });
 
-    const mismatches = []
+    var count = 0
 
     while (snapshot.hasMore) {
       // @TODO security
       // snapshotName = sanitize(snapshotName);
       browser.setWindowSize(snapshot.width, snapshot.height);
-      var exists = false;
-      try {
-        // exists = await fs.promises.access(join(process.cwd(), `/snapshots/${snapshot.name}-baseline.png`), fs.constants.F_OK)
-        exists = fs.existsSync(`snapshots/${snapshot.name}-baseline.png`)
-      } catch(err) {
-        exists = false;
-      }
-
-      if (exists) {
-
-        // console.log("Saving actual: ", `snapshots/${snapshot.name}-actual.png`)
-        await browser.saveScreenshot(`snapshots/${snapshot.name}-actual.png`);
-        // markTime("actual screenshot")
-
-        // Await the comparison so the diff mask is fully written before we move
-        // on / call process.exit() (otherwise a mismatch on the last snapshot
-        // could be cut off before odiff finishes writing).
-        const { match, reason } = await compare(
-          `snapshots/${snapshot.name}-baseline.png`,
-          `snapshots/${snapshot.name}-actual.png`,
-          `snapshots/${snapshot.name}-odiff.png`,
-          { outputDiffMask: true }
-        );
-        // markTime("odiff")
-        if (!match) {
-          console.log(`❌ Snapshot changed: ${snapshot.name} (${reason}) -> snapshots/${snapshot.name}-odiff.png`);
-          mismatches.push(snapshot.name);
-        }
-
-      } else {
-        console.log("Setting baseline: ", `snapshots/${snapshot.name}-baseline.png`)
-        await browser.saveScreenshot(`snapshots/${snapshot.name}-baseline.png`);
-      }
+      await browser.saveScreenshot(`${outDir}/${snapshot.name}.png`);
+      count++;
 
       snapshot = await browser.executeAsync(function(readyForSnapshotCallback) {
         window.advanceSnapshotRequested(readyForSnapshotCallback)
@@ -142,14 +117,8 @@ server.listen(port, () => {
 
     await browser.deleteSession()
 
-    if (mismatches.length > 0) {
-      console.log(`\n❌ ${mismatches.length} snapshot(s) changed:`)
-      mismatches.forEach((name) => console.log(`   - ${name}`))
-      process.exit(1)
-    } else {
-      console.log("\n✅ All snapshots match")
-      process.exit(0)
-    }
+    console.log(`📸 Wrote ${count} snapshot(s) to ${outDir}`)
+    process.exit(0)
 
 })().catch((err) => {
     console.error(err)
