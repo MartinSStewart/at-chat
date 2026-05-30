@@ -68,7 +68,11 @@ type alias FrontendDmChannel =
     , goMatches :
         SeqDict
             (Id ChannelMessageId)
-            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : Maybe (SecretId GoMatchPublicId) }
+            { setup : Go.ValidatedSetup
+            , actions : Array Go.ActionWithTime
+            , cache : Maybe Go.GameState
+            , publicLink : Maybe (SecretId GoMatchPublicId)
+            }
     }
 
 
@@ -120,6 +124,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
             (\matchId ( setup, actions ) ->
                 { setup = setup
                 , actions = actions
+                , cache = Nothing
                 , publicLink = OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds
                 }
             )

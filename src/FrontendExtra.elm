@@ -3939,7 +3939,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 | goMatches =
                                     SeqDict.insert
                                         matchId
-                                        { setup = setup, actions = Array.empty, publicLink = Nothing }
+                                        { setup = setup, actions = Array.empty, cache = Nothing, publicLink = Nothing }
                                         dmChannel2.goMatches
                             }
 

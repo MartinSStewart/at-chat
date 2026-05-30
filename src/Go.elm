@@ -473,6 +473,7 @@ type alias ActionWithTime =
 type alias MatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
+    , cache : Maybe GameState
     , publicLink : Maybe (SecretId GoMatchPublicId)
     }
 
