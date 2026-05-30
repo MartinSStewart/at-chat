@@ -42,18 +42,36 @@ repository root) so the Elm build's esbuild step is available.
 ./run-snapshot-test.sh
 ```
 
-- Will compile the Elm app (via `lamdera`/`npx lamdera`)
-- Will esbuild the harness
-- Will run the harness, which outputs PNGs to the `./snapshots` folder.
+This compares the visual output of your **current feature branch** against the
+point on `master` it branched from, so you can see exactly which snapshots your
+branch changed. Concretely it:
 
-On the first run every snapshot is written as a `*-baseline.png` (the
-`snapshots` folder is created automatically and is gitignored):
+1. Refuses to run if you're on `master`/`main` — you must be on a feature
+   branch (this is what defines "what changed").
+2. Renders snapshots of your current branch into `snapshots/current/`.
+3. Finds the commit on `master` your branch forked from
+   (`git merge-base master HEAD`), checks it out in a throwaway **git
+   worktree**, and renders baseline snapshots into
+   `snapshots/baseline-<sha>/`. Your branch, working tree and uncommitted
+   changes are never touched. To keep the base/current comparison fair, the
+   base app code is rendered with the *current* test harness + runner (only the
+   app/test code differs, not the tooling).
+4. Removes the worktree, leaving you exactly where you started.
+5. Diffs `current/` against `baseline-<sha>/` with
+   [`odiff`](https://github.com/dmtrKovalenko/odiff), writing a diff mask per
+   changed snapshot into `snapshots/diff/` and printing which snapshots changed
+   (or were added / removed). Exits non-zero if anything differs, so it's
+   usable as a pass/fail check.
+
+Baselines are cached per base commit (`snapshots/baseline-<sha>/`), so steps 3
+and 4 are skipped on repeat runs against the same base. Delete that folder (or
+the whole `snapshots/` folder) to force a fresh baseline. Everything under
+`snapshots/` is gitignored.
 
 ```
 $ ls snapshots
-"Test login: homepage-baseline.png"  "Test login: login-baseline.png"  ...
+baseline-2460e7e…/   current/   diff/
 ```
 
-On subsequent runs each snapshot is captured as `*-actual.png` and compared
-against its baseline using [`odiff`](https://github.com/dmtrKovalenko/odiff),
-writing a `*-odiff.png` diff mask when they differ.
+It compiles the Elm app via `lamdera` (falling back to `npx lamdera` when
+lamdera isn't on your `PATH`), esbuilds the harness, then renders.
