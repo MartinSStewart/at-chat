@@ -933,6 +933,7 @@ voiceChatTest normalConfig =
                         , user.click 100 (Dom.id "guild_voiceChat")
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserOpensVoiceChat)
                         , admin.click 100 (Dom.id "guild_startVoiceChat")
+                        , tallSnapshot admin 100 { name = "Started a DM call" }
                         , T.checkBackend 200
                             (\m ->
                                 case
@@ -965,6 +966,7 @@ voiceChatTest normalConfig =
                             )
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
                         , user.click 100 (Dom.id "guild_startVoiceChat")
+                        , tallSnapshot user 100 { name = "Joined a DM call" }
                         , T.checkBackend 200
                             (\m ->
                                 case
@@ -1028,6 +1030,8 @@ voiceChatTest normalConfig =
                             )
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterPullsComplete)
                         , admin.click 100 (Dom.id "guild_leaveVoiceChat")
+                        , tallSnapshot admin 100 { name = "Left a DM call admin perspective" }
+                        , tallSnapshot user 100 { name = "Left a DM call user perspective" }
                         ]
                     ]
                 )
@@ -1047,12 +1051,14 @@ voiceChatTest normalConfig =
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "started a call" ])
                     , admin.click 100 (Dom.id "guild_voiceChat")
                     , admin.click 100 (Dom.id "guild_startVoiceChat")
+                    , tallSnapshot admin 100 { name = "Started a DM call with self" }
                     , admin.checkView
                         100
                         (Test.Html.Query.has [ Test.Html.Selector.text "started a call" ])
                     , admin.checkView
                         100
                         (Test.Html.Query.hasNot [ Test.Html.Selector.text "Call ended" ])
+                    , tallSnapshot admin 100 { name = "Ended a DM call with self" }
                     , admin.navigateBack 100
                     , admin.navigateBack 100
                     , admin.click 100 (Dom.id "guild_openDm_1")
@@ -2919,6 +2925,7 @@ publicGoMatchViewTest normalConfig =
                                                             , viewer.checkView
                                                                 100
                                                                 (Test.Html.Query.hasNot [ Test.Html.Selector.id "go_cell_5_5" ])
+                                                            , tallSnapshot viewer 100 { name = "Spectating Go match" }
                                                             ]
                                                         )
                                                     ]
