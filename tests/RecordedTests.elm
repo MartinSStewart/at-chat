@@ -972,17 +972,17 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             (\admin user ->
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , RecordedTestExtra.writeMessage admin 100 "See if notification appears next to guild icon"
-                , user.snapshotView 100 { name = "Guild icon new message notification" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "Guild icon new message notification" }
                 , T.connectFrontend
                     100
                     RecordedTestExtra.sessionId1
                     (Route.encode Route.HomePageRoute)
                     RecordedTestExtra.desktopWindow
                     (\_ ->
-                        [ user.snapshotView 100 { name = "Guild icon new message notification on reload" } ]
+                        [ RecordedTestExtra.tallSnapshot user 100 { name = "Guild icon new message notification on reload" } ]
                     )
                 , RecordedTestExtra.writeMessage admin 100 "@Stevie Steve now you should see a red icon"
-                , user.snapshotView 100 { name = "Guild icon new mention notification" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "Guild icon new mention notification" }
                 ]
             )
         ]
@@ -1146,9 +1146,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail user
                 , user.click 100 (Dom.id "guild_showUserOptions")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
-                , user.snapshotView 100 { name = "2FA setup" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA setup" }
                 , user.input 100 (Dom.id "userOverview_twoFactorCodeInput") "123123"
-                , user.snapshotView 100 { name = "2FA setup with wrong code" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA setup with wrong code" }
                 , T.andThen
                     100
                     (\data ->
@@ -1173,7 +1173,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                             "Two factor authentication enabled!"
                                                         ]
                                                     )
-                                                , user.snapshotView 100 { name = "2FA setup complete" }
+                                                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA setup complete" }
                                                 ]
 
                                             Err _ ->
@@ -1195,7 +1195,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             RecordedTestExtra.desktopWindow
             (\user ->
                 [ RecordedTestExtra.handleLogin RecordedTestExtra.firefoxDesktop RecordedTestExtra.adminEmail user
-                , user.snapshotView 100 { name = "2FA login step" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA login step" }
                 , T.andThen
                     100
                     (\data ->
@@ -1221,11 +1221,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                         , Test.Html.Selector.exactText "Two factor authentication was enabled "
                                                         ]
                                                     )
-                                                , user.snapshotView 100 { name = "user overview with two factor already complete" }
+                                                , RecordedTestExtra.tallSnapshot user 100 { name = "user overview with two factor already complete" }
                                                 , user.click 100 (Dom.id "userOverview_startDisable2Fa")
-                                                , user.snapshotView 100 { name = "2FA disable prompt" }
+                                                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA disable prompt" }
                                                 , user.input 100 (Dom.id "userOverview_disableTwoFactorCodeInput") "123123"
-                                                , user.snapshotView 100 { name = "2FA disable with wrong code" }
+                                                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA disable with wrong code" }
                                                 , user.input
                                                     100
                                                     (Dom.id "userOverview_disableTwoFactorCodeInput")
@@ -1248,7 +1248,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                                         else
                                                             Ok ()
                                                     )
-                                                , user.snapshotView 100 { name = "2FA disabled" }
+                                                , RecordedTestExtra.tallSnapshot user 100 { name = "2FA disabled" }
                                                 ]
 
                                             Err _ ->
@@ -1301,7 +1301,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                         )
                     |> T.group
                 , user.checkView 100 (Test.Html.Query.has tooManyIncorrectAttempts)
-                , user.snapshotView 100 { name = "Too many incorrect attempts" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "Too many incorrect attempts" }
                 , T.andThen
                     100
                     (\data ->
@@ -1320,7 +1320,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                     |> List.repeat 6
                     |> T.group
                 , RecordedTestExtra.hasText user [ "Too many login attempts have been made." ]
-                , user.snapshotView 100 { name = "Too many login attempts" }
+                , RecordedTestExtra.tallSnapshot user 100 { name = "Too many login attempts" }
                 , -- Should be able to log in again after some time has passed
                   openLoginAndSubmitEmail (5 * 60 * 1000)
                 , T.andThen

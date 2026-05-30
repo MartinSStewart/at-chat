@@ -63,6 +63,7 @@ module RecordedTestExtra exposing
     , startTest
     , startTime
     , stringToJson
+    , tallSnapshot
     , userEmail
     , voiceChatTest
     , websocketByDiscordToken
@@ -78,6 +79,8 @@ import Call
 import ChannelDescription
 import Cloudflare
 import Codec
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Dict
 import Discord
 import Duration
@@ -1477,6 +1480,37 @@ discordUserAuth =
                 ]
             )
     }
+
+
+tallSnapshot :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> DelayInMs
+    -> { name : String }
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+tallSnapshot user delayInMs name =
+    T.andThen
+        0
+        (\data ->
+            case SeqDict.get user.clientId data.frontends of
+                Just frontend ->
+                    let
+                        windowSize : Coord CssPixels
+                        windowSize =
+                            case frontend of
+                                Types.Loading loading ->
+                                    loading.windowSize
+
+                                Types.Loaded loaded ->
+                                    loaded.windowSize
+                    in
+                    [ user.resizeWindow delayInMs { width = Coord.xRaw windowSize, height = 1000 }
+                    , user.snapshotView 50 name
+                    , user.resizeWindow delayInMs { width = Coord.xRaw windowSize, height = Coord.yRaw windowSize }
+                    ]
+
+                Nothing ->
+                    [ user.checkModel 0 (\_ -> Err "Couldn't get window size in order to do a snapshot") ]
+        )
 
 
 linkDiscordUrl : String
