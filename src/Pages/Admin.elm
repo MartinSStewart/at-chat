@@ -1846,7 +1846,7 @@ pushSubscriptionToString pushSubscription =
         NotSubscribed ->
             "Not subscribed"
 
-        Subscribed _ ->
+        Subscribed _ _ ->
             "Subscribed"
 
         SubscriptionError _ ->

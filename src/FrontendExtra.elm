@@ -192,7 +192,7 @@ pendingChangesText localChange =
         Local_SetNotificationMode _ ->
             "Set notification mode"
 
-        Local_RegisterPushSubscription _ ->
+        Local_RegisterPushSubscription _ _ ->
             "Register push subscription"
 
         Local_TextEditor _ ->
@@ -2608,7 +2608,7 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | session = { session | notificationMode = notificationMode } } }
 
-                Local_RegisterPushSubscription pushSubscription ->
+                Local_RegisterPushSubscription time pushSubscription ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -2620,7 +2620,7 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | session = { session | pushSubscription = Subscribed pushSubscription } }
+                            { localUser | session = { session | pushSubscription = Subscribed pushSubscription time } }
                     }
 
                 Local_TextEditor localChange2 ->

@@ -4558,7 +4558,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_RegisterPushSubscription pushSubscription ->
+                Local_RegisterPushSubscription _ pushSubscription ->
                     asUser
                         model
                         sessionId
@@ -4567,11 +4567,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | sessions =
                                     SeqDict.insert
                                         sessionId
-                                        { session | pushSubscription = Subscribed pushSubscription }
+                                        { session | pushSubscription = Subscribed pushSubscription time }
                                         model.sessions
                               }
                             , Command.batch
-                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                [ LocalChangeResponse changeId (Local_RegisterPushSubscription time pushSubscription)
+                                    |> Lamdera.sendToFrontend clientId
                                 , Broadcast.pushNotification
                                     sessionId
                                     session.userId

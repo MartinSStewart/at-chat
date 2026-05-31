@@ -1060,6 +1060,18 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         )
                         model.users
                         usersMentioned
+
+                ( sessions, notificationCmds ) =
+                    Broadcast.messageNotification
+                        usersMentioned
+                        time
+                        session.userId
+                        guildId
+                        channelId
+                        threadRouteNoReply
+                        richText
+                        (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                        model
             in
             ( { model
                 | guilds =
@@ -1094,6 +1106,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         )
                         users2
                 , sendMessageRateLimits = sendMessageRateLimits
+                , sessions = sessions
               }
             , Command.batch
                 [ LocalChangeResponse
@@ -1114,16 +1127,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         |> ServerChange
                     )
                     model
-                , Broadcast.messageNotification
-                    usersMentioned
-                    time
-                    session.userId
-                    guildId
-                    channelId
-                    threadRouteNoReply
-                    richText
-                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                    model
+                , Command.batch notificationCmds
                 , embedCmds
                 ]
             )
@@ -1170,6 +1174,20 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
 
                 ( messageId, dmChannel2 ) =
                     LocalState.createThreadMessageBackend threadId message dmChannel
+
+                ( sessions, notificationCmds ) =
+                    Broadcast.broadcastDm
+                        changeId
+                        time
+                        clientId
+                        session.userId
+                        otherUserId
+                        text
+                        richText
+                        threadRouteWithReplyTo
+                        attachedFiles
+                        stickers
+                        model
             in
             ( { model
                 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
@@ -1185,20 +1203,10 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         }
                         model.users
                 , sendMessageRateLimits = sendMessageRateLimits
+                , sessions = sessions
               }
             , Command.batch
-                [ Broadcast.broadcastDm
-                    changeId
-                    time
-                    clientId
-                    session.userId
-                    otherUserId
-                    text
-                    richText
-                    threadRouteWithReplyTo
-                    attachedFiles
-                    stickers
-                    model
+                [ notificationCmds
                 , Command.map identity (GotDmMessageEmbed dmChannelId (ViewThreadWithMessage threadId messageId)) embedCmds
                 ]
             )
@@ -1217,6 +1225,20 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
 
                 ( messageId, dmChannel2 ) =
                     LocalState.createChannelMessageBackend message dmChannel
+
+                ( sessions, notificationCmds ) =
+                    Broadcast.broadcastDm
+                        changeId
+                        time
+                        clientId
+                        session.userId
+                        otherUserId
+                        text
+                        richText
+                        threadRouteWithReplyTo
+                        attachedFiles
+                        stickers
+                        model
             in
             ( { model
                 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
@@ -1229,20 +1251,10 @@ sendDm model time clientId changeId otherUserId threadRouteWithReplyTo text atta
                         }
                         model.users
                 , sendMessageRateLimits = sendMessageRateLimits
+                , sessions = sessions
               }
             , Command.batch
-                [ Broadcast.broadcastDm
-                    changeId
-                    time
-                    clientId
-                    session.userId
-                    otherUserId
-                    text
-                    richText
-                    threadRouteWithReplyTo
-                    attachedFiles
-                    stickers
-                    model
+                [ notificationCmds
                 , Command.map identity (GotDmMessageEmbed dmChannelId (NoThreadWithMessage messageId)) embedCmds
                 ]
             )
@@ -1361,7 +1373,7 @@ toBackendLog toBackend =
                 Local_SetNotificationMode _ ->
                     ToBackendLog_Local_SetNotificationMode
 
-                Local_RegisterPushSubscription _ ->
+                Local_RegisterPushSubscription _ _ ->
                     ToBackendLog_Local_RegisterPushSubscription
 
                 Local_TextEditor _ ->
