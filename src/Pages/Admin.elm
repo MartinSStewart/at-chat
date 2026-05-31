@@ -96,7 +96,8 @@ import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
 import User exposing (AdminUiSection(..), BackendUser, LocalUser)
-import UserSession exposing (ToBeFilledInByBackend(..))
+import UserAgent exposing (UserAgent)
+import UserSession exposing (NotificationMode(..), PushSubscription(..), ToBeFilledInByBackend(..), UserSession)
 
 
 type Msg
@@ -273,6 +274,7 @@ type alias InitAdminData =
     , vulnerabilityChecks : String
     , serverSecretRegeneratedAt : Maybe Time.Posix
     , websocketCloseEvents : Array WebsocketClosedEvent
+    , sessions : SeqDict SessionIdHash UserSession
     }
 
 
@@ -1730,6 +1732,7 @@ view isMobile2 version time local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
+            , sessionsSection user adminData
             , websocketCloseEventsSection time local.localUser.timezone user adminData model
             , voiceChatSection adminData model user
             , filesSection user adminData
@@ -1784,6 +1787,88 @@ connectionsSection timezone user adminData =
                     (SeqDict.toList adminData.connections)
                 )
         ]
+
+
+sessionsSection : BackendUser -> AdminData -> Element Msg
+sessionsSection user adminData =
+    section
+        8
+        user.expandedSections
+        SessionsSection
+        [ if SeqDict.isEmpty adminData.sessions then
+            Ui.text "No sessions"
+
+          else
+            Ui.column
+                [ Ui.spacing 8 ]
+                (List.map
+                    (\( sessionIdHash, session ) ->
+                        Ui.column
+                            [ Ui.spacing 2, Ui.Font.size 14, Ui.widthMax 600 ]
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
+                            , Ui.text ("User ID: " ++ Id.toString session.userId)
+                            , Ui.text ("Notifications: " ++ notificationModeToString session.notificationMode)
+                            , Ui.text ("Push subscription: " ++ pushSubscriptionToString session.pushSubscription)
+                            , Ui.text
+                                ("Currently viewing: "
+                                    ++ (case session.currentlyViewing of
+                                            Just _ ->
+                                                "yes"
+
+                                            Nothing ->
+                                                "no"
+                                       )
+                                )
+                            , Ui.text ("User agent: " ++ userAgentToString session.userAgent)
+                            ]
+                    )
+                    (SeqDict.toList adminData.sessions)
+                )
+        ]
+
+
+notificationModeToString : NotificationMode -> String
+notificationModeToString mode =
+    case mode of
+        NoNotifications ->
+            "None"
+
+        NotifyWhenRunning ->
+            "When running"
+
+        PushNotifications ->
+            "Push"
+
+
+pushSubscriptionToString : PushSubscription -> String
+pushSubscriptionToString pushSubscription =
+    case pushSubscription of
+        NotSubscribed ->
+            "Not subscribed"
+
+        Subscribed _ ->
+            "Subscribed"
+
+        SubscriptionError _ ->
+            "Subscription error"
+
+
+userAgentToString : UserAgent -> String
+userAgentToString userAgent =
+    let
+        device : String
+        device =
+            case userAgent.device of
+                UserAgent.Desktop ->
+                    "desktop"
+
+                UserAgent.Mobile ->
+                    "mobile"
+
+                UserAgent.Tablet ->
+                    "tablet"
+    in
+    UserAgent.browserToString userAgent.browser ++ " (" ++ device ++ ")"
 
 
 websocketCloseEventToString : WebsocketClosedEvent -> ( ( String, String ), Time.Posix )

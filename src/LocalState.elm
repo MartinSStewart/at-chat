@@ -154,7 +154,7 @@ import UInt64
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendUser, FrontendUser, LocalUser)
-import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..))
+import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -521,6 +521,7 @@ type alias AdminData =
     , vulnerabilityChecks : String
     , serverSecretRefreshedAt : ServerSecretStatus
     , websocketCloseEvents : Array WebsocketClosedEvent
+    , sessions : SeqDict SessionIdHash UserSession
     }
 
 

@@ -4168,6 +4168,7 @@ initAdminData adminData =
     , vulnerabilityChecks = adminData.vulnerabilityChecks
     , serverSecretRefreshedAt = LocalState.NotBeingRegenerated adminData.serverSecretRegeneratedAt
     , websocketCloseEvents = adminData.websocketCloseEvents
+    , sessions = adminData.sessions
     }
 
 

@@ -926,6 +926,10 @@ adminData model lastLogPageViewed =
                                 ""
     , serverSecretRegeneratedAt = model.serverSecretRegeneratedAt
     , websocketCloseEvents = model.websocketCloseEvents
+    , sessions =
+        SeqDict.values model.sessions
+            |> List.map (\session -> ( session.sessionIdHash, session ))
+            |> SeqDict.fromList
     }
 
 
