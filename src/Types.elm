@@ -736,7 +736,7 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
-    | GetPublicGoMatchResponse (Result () Go.PublicGoMatchData)
+    | GetPublicGoMatchResponse (Result () Go.PublicGoMatchResponse)
 
 
 type alias LoginData =

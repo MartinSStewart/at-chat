@@ -14,6 +14,7 @@ module Go exposing
     , OutMsg(..)
     , Phase
     , PublicGoMatchData
+    , PublicGoMatchResponse
     , SetupModel
     , SetupMsg(..)
     , SizeSelection(..)
@@ -22,12 +23,15 @@ module Go exposing
     , Stone(..)
     , TimeControl
     , ValidatedSetup
+    , addAction
+    , addPublicLink
     , boardSize9
     , currentPlayersTurn
     , deadStones
     , foldActions
     , hasPendingTurn
     , initGame
+    , initMatchData
     , pressedKey
     , spectatorView
     , update
@@ -70,7 +74,15 @@ import UserSession exposing (ToBeFilledInByBackend(..))
 type alias PublicGoMatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
-    , cache : Maybe GameState
+    , cache : GameState
+    , blackPlayer : FrontendUser
+    , whitePlayer : FrontendUser
+    }
+
+
+type alias PublicGoMatchResponse =
+    { setup : ValidatedSetup
+    , actions : Array ActionWithTime
     , blackPlayer : FrontendUser
     , whitePlayer : FrontendUser
     }
@@ -358,6 +370,25 @@ initGame =
     { viewingMovesBack = 0, lastError = Nothing }
 
 
+initMatchData : ValidatedSetup -> Array ActionWithTime -> Maybe (SecretId GoMatchPublicId) -> MatchData
+initMatchData setup actions publicLink =
+    { setup = setup, actions = actions, cache = foldActions setup actions, publicLink = publicLink } |> MatchData
+
+
+addAction : ActionWithTime -> MatchData -> MatchData
+addAction action (MatchData match) =
+    { match
+        | actions = Array.push action match.actions
+        , cache = updateAction match.setup action match.cache
+    }
+        |> MatchData
+
+
+addPublicLink : SecretId GoMatchPublicId -> MatchData -> MatchData
+addPublicLink publicLink (MatchData match) =
+    { match | publicLink = Just publicLink } |> MatchData
+
+
 initGameState : ValidatedSetup -> GameState
 initGameState setup =
     let
@@ -471,12 +502,15 @@ type alias ActionWithTime =
     { time : Time.Posix, change : Action }
 
 
-type alias MatchData =
-    { setup : ValidatedSetup
-    , actions : Array ActionWithTime
-    , cache : Maybe GameState
-    , publicLink : Maybe (SecretId GoMatchPublicId)
-    }
+{-| OpaqueVariants
+-}
+type MatchData
+    = MatchData
+        { setup : ValidatedSetup
+        , actions : Array ActionWithTime
+        , cache : GameState
+        , publicLink : Maybe (SecretId GoMatchPublicId)
+        }
 
 
 type LocalChange
@@ -1053,14 +1087,14 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
             case maybeMatchId of
                 Just matchId ->
                     case SeqDict.get matchId matches of
-                        Just match ->
+                        Just (MatchData match) ->
                             let
                                 ( game2, cmd, maybeChange ) =
                                     updateGame
                                         currentUserId
                                         gameMsg
                                         match.setup
-                                        (foldActions match)
+                                        match.cache
                                         (case model of
                                             Just (Game game) ->
                                                 game
@@ -1140,10 +1174,10 @@ pressedKey key maybeMatchId matches model =
     case maybeMatchId of
         Just matchId ->
             case ( model, SeqDict.get matchId matches ) of
-                ( Just (Game model2), Just match ) ->
+                ( Just (Game model2), Just (MatchData match) ) ->
                     case key of
                         "ArrowLeft" ->
-                            stepBack (foldActions match) model2 |> Game |> Just
+                            stepBack match.cache model2 |> Game |> Just
 
                         "ArrowRight" ->
                             stepForward model2 |> Game |> Just
@@ -1282,14 +1316,9 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-foldActions : { a | setup : ValidatedSetup, actions : Array ActionWithTime, cache : Maybe GameState } -> GameState
-foldActions match =
-    case match.cache of
-        Just cache ->
-            cache
-
-        Nothing ->
-            Array.foldl (updateAction match.setup) (initGameState match.setup) match.actions
+foldActions : ValidatedSetup -> Array ActionWithTime -> GameState
+foldActions setup actions =
+    Array.foldl (updateAction setup) (initGameState setup) actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
@@ -1644,16 +1673,25 @@ matchSwitcherView isMobile lastCopied maybeMatchId matches =
                 Just matchId ->
                     Ui.row
                         [ Ui.spacing 4, Ui.alignRight ]
-                        (case SeqDict.get matchId matches |> Maybe.andThen .publicLink of
-                            Just publicLink ->
-                                [ Ui.text "Share"
-                                , MyUi.copyBox
-                                    (Dom.id "go_shareLink")
-                                    PressedCopyLink
-                                    NoOpMsg
-                                    { lastCopied = lastCopied }
-                                    (publicGoMatchUrl publicLink)
-                                ]
+                        (case SeqDict.get matchId matches of
+                            Just (MatchData match) ->
+                                case match.publicLink of
+                                    Just publicLink ->
+                                        [ Ui.text "Share"
+                                        , MyUi.copyBox
+                                            (Dom.id "go_shareLink")
+                                            PressedCopyLink
+                                            NoOpMsg
+                                            { lastCopied = lastCopied }
+                                            (publicGoMatchUrl publicLink)
+                                        ]
+
+                                    Nothing ->
+                                        [ MyUi.simpleButton
+                                            (Dom.id "go_share")
+                                            (PressedShareGoMatch matchId)
+                                            (Ui.text "Share")
+                                        ]
 
                             Nothing ->
                                 [ MyUi.simpleButton
@@ -2101,18 +2139,13 @@ isLocalUsersTurn currentUserId setup state =
 hasPendingTurn : Id UserId -> SeqDict (Id ChannelMessageId) MatchData -> SeqSet (Id ChannelMessageId)
 hasPendingTurn userId matches =
     SeqDict.foldl
-        (\matchId match set ->
-            let
-                state : GameState
-                state =
-                    foldActions match
-            in
-            case state.phase of
+        (\matchId (MatchData match) set ->
+            case match.cache.phase of
                 Scored _ ->
                     set
 
                 _ ->
-                    if isLocalUsersTurn userId match.setup state then
+                    if isLocalUsersTurn userId match.setup match.cache then
                         SeqSet.insert matchId set
 
                     else
@@ -2131,7 +2164,7 @@ spectatorView windowSize data model =
 
         state : GameState
         state =
-            foldActions data
+            data.cache
     in
     Ui.column
         [ Ui.spacing
@@ -2174,7 +2207,7 @@ gameView :
     -> MatchData
     -> GameModel
     -> Element GameMsg
-gameView windowSize localUser data model =
+gameView windowSize localUser (MatchData data) model =
     let
         isMobile : Bool
         isMobile =
@@ -2182,7 +2215,7 @@ gameView windowSize localUser data model =
 
         state : GameState
         state =
-            foldActions data
+            data.cache
 
         clickable : Bool
         clickable =

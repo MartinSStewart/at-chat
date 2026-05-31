@@ -4370,7 +4370,7 @@ updateLoaded msg model =
                 PublicGoMatch_Loaded data gameModel ->
                     ( { model
                         | publicGoMatch =
-                            Go.updateSpectator spectatorMsg (Go.foldActions data.actions data.setup) gameModel
+                            Go.updateSpectator spectatorMsg data.cache gameModel
                                 |> PublicGoMatch_Loaded data
                       }
                     , Command.none
@@ -5616,7 +5616,14 @@ updateFromBackend msg model =
                             | publicGoMatch =
                                 case result of
                                     Ok ok ->
-                                        PublicGoMatch_Loaded ok Go.initGame
+                                        PublicGoMatch_Loaded
+                                            { setup = ok.setup
+                                            , actions = ok.actions
+                                            , cache = Go.foldActions ok.setup ok.actions
+                                            , blackPlayer = ok.blackPlayer
+                                            , whitePlayer = ok.whitePlayer
+                                            }
+                                            Go.initGame
 
                                     Err () ->
                                         PublicGoMatch_Missing
@@ -6344,8 +6351,15 @@ updateLoadedFromBackend msg model =
             ( { model
                 | publicGoMatch =
                     case result of
-                        Ok data ->
-                            PublicGoMatch_Loaded data Go.initGame
+                        Ok ok ->
+                            PublicGoMatch_Loaded
+                                { setup = ok.setup
+                                , actions = ok.actions
+                                , cache = Go.foldActions ok.setup ok.actions
+                                , blackPlayer = ok.blackPlayer
+                                , whitePlayer = ok.whitePlayer
+                                }
+                                Go.initGame
 
                         Err () ->
                             PublicGoMatch_Missing
