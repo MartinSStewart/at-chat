@@ -2400,8 +2400,7 @@ historyView state model =
                 |> Ui.html
                 |> Ui.el [ Ui.width (Ui.px 220) ]
             , MyUi.simpleButton (Dom.id "go_arrowRight") PressedArrowRight (Ui.html (Icons.arrowRight 20))
-            , Ui.el [ Ui.Font.size 14 ]
-                (Ui.text ("Move " ++ String.fromInt currentMove ++ " / " ++ String.fromInt total))
+            , Ui.el [ Ui.Font.bold ] (Ui.text (String.fromInt currentMove ++ " / " ++ String.fromInt total))
             ]
 
 
