@@ -95,7 +95,32 @@ server.listen(port, () => {
 
     var snapshot = { hasMore: true }
 
-    await browser.setTimeout({ script: 2000 })
+    // This budget covers each executeAsync below, including waiting for web
+    // fonts to load before a screenshot.
+    await browser.setTimeout({ script: 10000 })
+
+    // Web fonts (e.g. the app's Montserrat @font-face, declared with
+    // `font-display: swap`) are fetched lazily and can finish *after* the page
+    // load event. A screenshot taken in that window captures fallback-font text
+    // and produces a spurious diff. Before each screenshot we force every
+    // declared font face to load and then await document.fonts.ready, so the
+    // render is deterministic regardless of network timing.
+    async function waitForFonts() {
+      await browser.executeAsync(function (done) {
+        var loads = [];
+        document.fonts.forEach(function (face) {
+          if (face.status !== 'loaded') {
+            // .load() resolves once the face's file is fetched; swallow
+            // failures (e.g. a face whose file 404s) so one bad font can't
+            // hang the whole run.
+            loads.push(face.load().catch(function () {}));
+          }
+        });
+        Promise.all(loads)
+          .then(function () { return document.fonts.ready; })
+          .then(function () { done(); }, function () { done(); });
+      });
+    }
 
     snapshot = await browser.executeAsync(function(readyForSnapshotCallback) {
       window.advanceSnapshotRequested(readyForSnapshotCallback)
@@ -107,6 +132,7 @@ server.listen(port, () => {
       // @TODO security
       // snapshotName = sanitize(snapshotName);
       browser.setWindowSize(snapshot.width, snapshot.height);
+      await waitForFonts();
       await browser.saveScreenshot(`${outDir}/${snapshot.name}.png`);
       count++;
 
