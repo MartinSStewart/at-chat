@@ -70,6 +70,7 @@ import UserSession exposing (ToBeFilledInByBackend(..))
 type alias PublicGoMatchData =
     { setup : ValidatedSetup
     , actions : Array ActionWithTime
+    , cache : Maybe GameState
     , blackPlayer : FrontendUser
     , whitePlayer : FrontendUser
     }
@@ -1059,7 +1060,7 @@ update time currentUserId otherUserId msg maybeMatchId matches model =
                                         currentUserId
                                         gameMsg
                                         match.setup
-                                        (foldActions match.actions match.setup)
+                                        (foldActions match)
                                         (case model of
                                             Just (Game game) ->
                                                 game
@@ -1142,7 +1143,7 @@ pressedKey key maybeMatchId matches model =
                 ( Just (Game model2), Just match ) ->
                     case key of
                         "ArrowLeft" ->
-                            stepBack (foldActions match.actions match.setup) model2 |> Game |> Just
+                            stepBack (foldActions match) model2 |> Game |> Just
 
                         "ArrowRight" ->
                             stepForward model2 |> Game |> Just
@@ -1281,9 +1282,14 @@ selectedDimensions model =
                     Err ("Height: " ++ err)
 
 
-foldActions : Array ActionWithTime -> ValidatedSetup -> GameState
-foldActions actions setup =
-    Array.foldl (updateAction setup) (initGameState setup) actions
+foldActions : { a | setup : ValidatedSetup, actions : Array ActionWithTime, cache : Maybe GameState } -> GameState
+foldActions match =
+    case match.cache of
+        Just cache ->
+            cache
+
+        Nothing ->
+            Array.foldl (updateAction match.setup) (initGameState match.setup) match.actions
 
 
 updateAction : ValidatedSetup -> ActionWithTime -> GameState -> GameState
@@ -2099,7 +2105,7 @@ hasPendingTurn userId matches =
             let
                 state : GameState
                 state =
-                    foldActions match.actions match.setup
+                    foldActions match
             in
             case state.phase of
                 Scored _ ->
@@ -2125,7 +2131,7 @@ spectatorView windowSize data model =
 
         state : GameState
         state =
-            foldActions data.actions data.setup
+            foldActions data
     in
     Ui.column
         [ Ui.spacing
@@ -2176,7 +2182,7 @@ gameView windowSize localUser data model =
 
         state : GameState
         state =
-            foldActions data.actions data.setup
+            foldActions data
 
         clickable : Bool
         clickable =
