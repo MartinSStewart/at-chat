@@ -183,22 +183,25 @@ sendLoginEmail :
     -> Command BackendOnly toFrontend backendMsg
 sendLoginEmail msg emailAddress loginCode postmarkServerToken =
     let
+        loginCode2 =
+            String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode)
+
         _ =
-            Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
+            Debug.log "login" loginCode2
     in
     { from = { name = "", email = noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }
     , subject = loginEmailSubject
     , body =
         Postmark.BodyBoth
-            (loginEmailContent loginCode)
-            ("Here is your code " ++ String.fromInt loginCode ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
+            (loginEmailContent loginCode2)
+            ("Here is your code " ++ loginCode2 ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
     , messageStream = "outbound"
     }
         |> Postmark.sendEmail msg postmarkServerToken
 
 
-loginEmailContent : Int -> Email.Html.Html
+loginEmailContent : String -> Email.Html.Html
 loginEmailContent loginCode =
     Email.Html.div
         [ Email.Html.Attributes.padding "8px" ]
@@ -207,8 +210,7 @@ loginEmailContent loginCode =
             [ Email.Html.Attributes.fontSize "36px"
             , Email.Html.Attributes.fontFamily "monospace"
             ]
-            (String.fromInt loginCode
-                |> String.toList
+            (String.toList loginCode
                 |> List.map
                     (\char ->
                         Email.Html.span
