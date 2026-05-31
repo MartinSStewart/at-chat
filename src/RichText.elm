@@ -2189,6 +2189,7 @@ preview onPressLink config nonempty =
         , stickers = SeqDict.empty
         , customEmojis = config.customEmojis
         , animationMode = Sticker.LoopAFewTimesOnLoad
+        , timezone = config.timezone
         }
         Array.empty
         0
@@ -2204,6 +2205,7 @@ type alias Config a userId =
     , stickers : SeqDict (Id StickerId) StickerData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
     , animationMode : Sticker.AnimationMode
+    , timezone : Time.Zone
     }
 
 
@@ -2213,6 +2215,7 @@ type alias PreviewConfig a userId =
     , users : SeqDict userId { a | name : PersonName }
     , attachedFiles : SeqDict (Id FileId) FileData
     , customEmojis : SeqDict (Id CustomEmojiId) CustomEmojiData
+    , timezone : Time.Zone
     }
 
 
@@ -2536,6 +2539,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                         case ( embed == Embed.empty, showLargeContent ) of
                                             ( False, ShowLargeContent containerWidth ) ->
                                                 embedView
+                                                    config.timezone
                                                     onPressLink
                                                     containerWidth
                                                     config.domainWhitelist
@@ -2783,8 +2787,8 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             content
 
 
-embedView : (Url -> msg) -> Int -> SeqSet Domain -> Sticker.AnimationMode -> Url -> EmbedData -> Html msg
-embedView onPressLink containerWidth domainWhitelist playAnimation url embed =
+embedView : Time.Zone -> (Url -> msg) -> Int -> SeqSet Domain -> Sticker.AnimationMode -> Url -> EmbedData -> Html msg
+embedView timezone onPressLink containerWidth domainWhitelist playAnimation url embed =
     embedContainer
         (List.filterMap
             identity
@@ -2878,7 +2882,7 @@ embedView onPressLink containerWidth domainWhitelist playAnimation url embed =
                         , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
                         , Html.Attributes.style "margin-top" "6px"
                         ]
-                        [ Html.text (formatPosix createdAt) ]
+                        [ Html.text (formatPosix timezone createdAt) ]
                         |> Just
 
                 Nothing ->
@@ -3014,9 +3018,9 @@ urlAddPrefixed prefix maybeSegment starter =
             starter ++ prefix ++ segment
 
 
-formatPosix : Time.Posix -> String
-formatPosix time =
-    MyUi.datestamp time
+formatPosix : Time.Zone -> Time.Posix -> String
+formatPosix timezone time =
+    MyUi.datestamp timezone time
 
 
 inlineEmbedView : ShowLargeContent -> (Url -> msg) -> SeqSet Domain -> Url -> Html msg

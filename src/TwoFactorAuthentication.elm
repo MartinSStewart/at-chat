@@ -264,8 +264,8 @@ updateFromBackend toFrontend model =
                     model
 
 
-view : Bool -> Maybe { a | htmlId : HtmlId, selection : Range } -> Time.Posix -> TwoFactorState -> Element Msg
-view isMobile textInputFocus time twoFactorStatus =
+view : Bool -> Maybe { a | htmlId : HtmlId, selection : Range } -> Time.Zone -> Time.Posix -> TwoFactorState -> Element Msg
+view isMobile textInputFocus timezone time twoFactorStatus =
     MyUi.container
         MyUi.background1
         isMobile
@@ -299,7 +299,7 @@ view isMobile textInputFocus time twoFactorStatus =
                     [ Ui.Prose.paragraph
                         [ Ui.paddingXY 0 4 ]
                         [ Ui.text "Two factor authentication was enabled "
-                        , MyUi.timeElapsedView time enabledAt
+                        , MyUi.timeElapsedView timezone time enabledAt
                         , Ui.text "."
                         ]
                     , MyUi.simpleButton

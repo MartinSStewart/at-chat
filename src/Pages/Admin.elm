@@ -1722,7 +1722,7 @@ view isMobile2 version time local adminData user model =
                     )
                 ]
             , adminData.vulnerabilityChecks |> Ui.text
-            , userSection user adminData model
+            , userSection local.localUser.timezone user adminData model
             , guildsSection user adminData
             , deletedGuildsSection user adminData
             , discordGuildsSection user adminData
@@ -1732,7 +1732,7 @@ view isMobile2 version time local adminData user model =
             , logSection isMobile2 local.localUser user adminData model
             , apiKeysSection local user adminData model
             , connectionsSection local.localUser.timezone user adminData
-            , sessionsSection user adminData
+            , sessionsSection local.localUser.timezone user adminData
             , websocketCloseEventsSection time local.localUser.timezone user adminData model
             , voiceChatSection adminData model user
             , filesSection user adminData
@@ -1769,7 +1769,11 @@ connectionsSection timezone user adminData =
                                             [ Ui.text ("Client: " ++ Lamdera.clientIdToString clientId)
                                             , (case data.lastRequest of
                                                 LastRequest time ->
-                                                    Ui.text ("Last request: " ++ MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone)
+                                                    "Last request: "
+                                                        ++ MyUi.datestamp timezone time
+                                                        ++ " "
+                                                        ++ MyUi.timestamp time timezone
+                                                        |> Ui.text
 
                                                 NoRequestsMade ->
                                                     Ui.text "No requests made"
@@ -1789,8 +1793,8 @@ connectionsSection timezone user adminData =
         ]
 
 
-sessionsSection : BackendUser -> AdminData -> Element Msg
-sessionsSection user adminData =
+sessionsSection : Time.Zone -> BackendUser -> AdminData -> Element Msg
+sessionsSection timezone user adminData =
     section
         8
         user.expandedSections
@@ -1808,7 +1812,7 @@ sessionsSection user adminData =
                             [ Ui.el [ Ui.Font.bold ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
                             , Ui.text ("User ID: " ++ Id.toString session.userId)
                             , Ui.text ("Notifications: " ++ notificationModeToString session.notificationMode)
-                            , Ui.text ("Push subscription: " ++ pushSubscriptionToString session.pushSubscription)
+                            , Ui.text ("Push subscription: " ++ pushSubscriptionToString timezone session.pushSubscription)
                             , Ui.text
                                 ("Currently viewing: "
                                     ++ (case session.currentlyViewing of
@@ -1840,14 +1844,14 @@ notificationModeToString mode =
             "Push"
 
 
-pushSubscriptionToString : PushSubscription -> String
-pushSubscriptionToString pushSubscription =
+pushSubscriptionToString : Time.Zone -> PushSubscription -> String
+pushSubscriptionToString timezone pushSubscription =
     case pushSubscription of
         NotSubscribed ->
             "Not subscribed"
 
-        Subscribed _ _ ->
-            "Subscribed"
+        Subscribed _ time ->
+            "Subscribed, last notification sent at " ++ MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone
 
         SubscriptionError _ ->
             "Subscription error"
@@ -2081,7 +2085,7 @@ websocketCloseEventListItem timezone ( index, event ) =
         [ Ui.el [ Ui.width Ui.shrink ]
             (Ui.text ("#" ++ String.fromInt (index + 1)))
         , Ui.el [ Ui.width Ui.shrink ]
-            (Ui.text (MyUi.datestamp time ++ " " ++ MyUi.timestamp time timezone))
+            (Ui.text (MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone))
         , Ui.el [ Ui.width Ui.shrink, Ui.Font.bold ] (Ui.text label)
         , Ui.text details
         ]
@@ -3059,7 +3063,7 @@ apiKeysSection local user adminData2 model =
                     case time of
                         Just time2 ->
                             "Last regenerated at "
-                                ++ MyUi.datestamp time2
+                                ++ MyUi.datestamp local.localUser.timezone time2
                                 ++ " "
                                 ++ MyUi.timestamp time2 local.localUser.timezone
                                 |> Ui.text
@@ -3076,8 +3080,8 @@ apiKeysSection local user adminData2 model =
         ]
 
 
-userSection : BackendUser -> AdminData -> Model -> Element Msg
-userSection user adminData model =
+userSection : Time.Zone -> BackendUser -> AdminData -> Model -> Element Msg
+userSection timezone user adminData model =
     let
         emailNotificationsLabel : { element : Element msg, id : Ui.Input.Label }
         emailNotificationsLabel =
@@ -3137,7 +3141,7 @@ userSection user adminData model =
                 }
             , discordLinkingEnabledLabel.element
             ]
-        , Ui.Lazy.lazy3 userTableView model.userTable adminData.users adminData.twoFactorAuthentication
+        , Ui.Lazy.lazy4 userTableView timezone model.userTable adminData.users adminData.twoFactorAuthentication
         , Ui.row
             [ Ui.spacing 16 ]
             (MyUi.simpleButton
@@ -3749,14 +3753,15 @@ saveUserChangesButtonId =
 
 
 userTableView :
-    UserTable
+    Time.Zone
+    -> UserTable
     -> NonemptyDict (Id UserId) BackendUser
     -> SeqDict (Id UserId) Time.Posix
     -> Element Msg
-userTableView tableState users twoFactorAuthentication =
+userTableView timezone tableState users twoFactorAuthentication =
     Ui.Table.viewWithState
         tableAttributes
-        (userTableColumns tableState twoFactorAuthentication)
+        (userTableColumns timezone tableState twoFactorAuthentication)
         tableState.table
         (List.map
             (\( userId, user ) ->
@@ -3986,10 +3991,11 @@ userColumnToTitle userColumn =
 
 
 userTableColumns :
-    UserTable
+    Time.Zone
+    -> UserTable
     -> SeqDict (Id UserId) Time.Posix
     -> Ui.Table.Config Table.Model rowState ( UserTableId, EditedBackendUser ) Msg
-userTableColumns tableState twoFactorAuthentication =
+userTableColumns timezone tableState twoFactorAuthentication =
     Table.tableConfig
         (Dom.id "Admin_userTable")
         True
@@ -4048,7 +4054,7 @@ userTableColumns tableState twoFactorAuthentication =
                         , cellBackgroundColor userTableId tableState
                         , Ui.height Ui.fill
                         ]
-                        (Ui.text (MyUi.datestamp user.createdAt))
+                        (Ui.text (MyUi.datestamp timezone user.createdAt))
           , sortBy = Just (List.sortBy (\( _, user ) -> Time.posixToMillis user.createdAt))
           }
         , { title = "Admin"
@@ -4082,7 +4088,7 @@ userTableColumns tableState twoFactorAuthentication =
                             ExistingUserId userId ->
                                 case SeqDict.get userId twoFactorAuthentication of
                                     Just enabledAt ->
-                                        Ui.text (MyUi.datestamp enabledAt)
+                                        Ui.text (MyUi.datestamp timezone enabledAt)
 
                                     Nothing ->
                                         Ui.none

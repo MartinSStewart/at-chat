@@ -4435,7 +4435,13 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                     |> Dom.idToString
                     |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
+                [ replyToHeaderAboveMessage
+                    isMobile
+                    local.localUser.timezone
+                    maybeRepliedTo2
+                    revealedSpoilers
+                    local.localUser.customEmojis
+                    allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -4571,7 +4577,13 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                 , Ui.spacing 4
                 , threadMessageHtmlId messageId |> Dom.idToString |> Ui.id
                 ]
-                [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers local.localUser.customEmojis allUsers
+                [ replyToHeaderAboveMessage
+                    isMobile
+                    local.localUser.timezone
+                    maybeRepliedTo2
+                    revealedSpoilers
+                    local.localUser.customEmojis
+                    allUsers
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy allUsers
@@ -5467,7 +5479,13 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
+            [ replyToHeaderAboveMessage
+                isMobile
+                localUser.timezone
+                maybeRepliedTo2
+                revealedSpoilers
+                localUser.customEmojis
+                allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5497,6 +5515,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
+                    , timezone = localUser.timezone
                     }
                     message2.embeds
                     message2.content
@@ -5514,7 +5533,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                                     [ Html.span
                                         [ Html.Attributes.style "color" "rgb(200,200,200)"
                                         , Html.Attributes.style "font-size" "12px"
-                                        , MyUi.datestamp editedAt |> Html.Attributes.title
+                                        , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
                                         ]
                                         [ Html.text " (edited)" ]
                                     ]
@@ -5568,7 +5587,13 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
             )
         , Ui.column
             []
-            [ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers localUser.customEmojis allUsers
+            [ replyToHeaderAboveMessage
+                isMobile
+                localUser.timezone
+                maybeRepliedTo2
+                revealedSpoilers
+                localUser.customEmojis
+                allUsers
             , Ui.row
                 []
                 [ User.toString message2.createdBy allUsers
@@ -5598,6 +5623,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     , customEmojis = localUser.customEmojis
                     , stickers = localUser.stickers
                     , animationMode = isHoveredToAnimationMode isHovered
+                    , timezone = localUser.timezone
                     }
                     message2.embeds
                     message2.content
@@ -5606,7 +5632,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                                 [ Html.span
                                     [ Html.Attributes.style "color" "rgb(200,200,200)"
                                     , Html.Attributes.style "font-size" "12px"
-                                    , MyUi.datestamp editedAt |> Html.Attributes.title
+                                    , MyUi.datestamp localUser.timezone editedAt |> Html.Attributes.title
                                     ]
                                     [ Html.text " (edited)" ]
                                 ]
@@ -5670,18 +5696,20 @@ messageTimestamp createdAt timezone =
 
 replyToHeaderAboveMessage :
     Bool
+    -> Time.Zone
     -> Maybe ( Id messageId, Message messageId userId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> Element MessageViewMsg
-replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
+replyToHeaderAboveMessage isMobile timezone maybeRepliedTo2 revealedSpoilers customEmojis allUsers =
     case maybeRepliedTo2 of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             replyToHeaderAboveMessageHelper
                 isMobile
                 repliedToIndex
                 (userTextMessagePreview
+                    timezone
                     customEmojis
                     allUsers
                     (case SeqDict.get repliedToIndex revealedSpoilers of
@@ -5720,12 +5748,13 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo2 revealedSpoilers customEmojis
 
 
 userTextMessagePreview :
-    SeqDict (Id CustomEmojiId) CustomEmojiData
+    Time.Zone
+    -> SeqDict (Id CustomEmojiId) CustomEmojiData
     -> SeqDict userId { a | name : PersonName }
     -> SeqSet Int
     -> UserTextMessageData messageId userId
     -> Element MessageViewMsg
-userTextMessagePreview customEmojis allUsers revealedSpoilers message =
+userTextMessagePreview timezone customEmojis allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "overflow" "hidden"
@@ -5743,6 +5772,7 @@ userTextMessagePreview customEmojis allUsers revealedSpoilers message =
                 , attachedFiles = message.attachedFiles
                 , customEmojis = customEmojis
                 , domainWhitelist = SeqSet.empty
+                , timezone = timezone
                 }
                 message.content
         )
@@ -6164,6 +6194,7 @@ previewThreadLastMessage timezone customEmojis allUsers messageId thread =
                                         , attachedFiles = data.attachedFiles
                                         , customEmojis = customEmojis
                                         , domainWhitelist = SeqSet.empty
+                                        , timezone = timezone
                                         }
                                         data.content
 

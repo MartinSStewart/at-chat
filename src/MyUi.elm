@@ -207,20 +207,20 @@ errorBackground =
     Ui.background (Ui.rgb 61 16 36)
 
 
-timeElapsedView : Time.Posix -> Time.Posix -> Element msg
-timeElapsedView now event =
+timeElapsedView : Time.Zone -> Time.Posix -> Time.Posix -> Element msg
+timeElapsedView timezone now event =
     Ui.el
-        [ hoverText (datestamp now) ]
+        [ hoverText (datestamp timezone now) ]
         (timeElapsed now event |> Ui.text)
 
 
-datestamp : Time.Posix -> String
-datestamp time =
-    String.padLeft 2 '0' (String.fromInt (Time.toDay Time.utc time))
+datestamp : Time.Zone -> Time.Posix -> String
+datestamp timezone time =
+    String.padLeft 2 '0' (String.fromInt (Time.toDay timezone time))
         ++ "/"
-        ++ String.padLeft 2 '0' (String.fromInt (monthToInt (Time.toMonth Time.utc time)))
+        ++ String.padLeft 2 '0' (String.fromInt (monthToInt (Time.toMonth timezone time)))
         ++ "/"
-        ++ String.right 2 (String.fromInt (Time.toYear Time.utc time))
+        ++ String.right 2 (String.fromInt (Time.toYear timezone time))
 
 
 datestampDate : Date -> String
