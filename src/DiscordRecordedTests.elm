@@ -12,6 +12,7 @@ import Expect
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), GuildOrDmId(..), ThreadRoute(..))
 import Json.Encode
+import Log
 import MembersAndOwner
 import MessageInput
 import Pages.Guild
@@ -34,6 +35,82 @@ discordTests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 discordTests normalConfig discordOp0Ready discordOp0ReadySupplemental =
     [ RecordedTestExtra.startTest
+        "Relationship add event does not log a websocket parse error"
+        RecordedTestExtra.startTime
+        normalConfig
+        [ RecordedTestExtra.linkDiscordAndLogin
+            RecordedTestExtra.sessionId0
+            (PersonName.toString Backend.adminUser.name)
+            RecordedTestExtra.adminEmail
+            False
+            discordOp0Ready
+            discordOp0ReadySupplemental
+            (\admin ->
+                [ RecordedTestExtra.andThenWebsocket
+                    (\connection _ ->
+                        let
+                            relationshipAdd : Json.Encode.Value
+                            relationshipAdd =
+                                Json.Encode.object
+                                    [ ( "t", Json.Encode.string "RELATIONSHIP_ADD" )
+                                    , ( "s", Json.Encode.int 47 )
+                                    , ( "op", Json.Encode.int 0 )
+                                    , ( "d"
+                                      , Json.Encode.object
+                                            [ ( "user_ignored", Json.Encode.bool False )
+                                            , ( "user"
+                                              , Json.Encode.object
+                                                    [ ( "username", Json.Encode.string "someuser" )
+                                                    , ( "public_flags", Json.Encode.int 0 )
+                                                    , ( "primary_guild", Json.Encode.null )
+                                                    , ( "id", Json.Encode.string "123123123123123123" )
+                                                    , ( "global_name", Json.Encode.null )
+                                                    , ( "display_name_styles", Json.Encode.null )
+                                                    , ( "discriminator", Json.Encode.string "0" )
+                                                    , ( "collectibles", Json.Encode.null )
+                                                    , ( "clan", Json.Encode.null )
+                                                    , ( "avatar_decoration_data", Json.Encode.null )
+                                                    , ( "avatar", Json.Encode.string "dc36cf5eec7a6522d2de4d5df67e606b" )
+                                                    ]
+                                              )
+                                            , ( "type", Json.Encode.int 3 )
+                                            , ( "since", Json.Encode.string "2026-05-30T17:02:50.779043+00:00" )
+                                            , ( "should_notify", Json.Encode.bool True )
+                                            , ( "nickname", Json.Encode.null )
+                                            , ( "is_spam_request", Json.Encode.bool False )
+                                            , ( "id", Json.Encode.string "123123123123123123" )
+                                            ]
+                                      )
+                                    ]
+                        in
+                        [ admin.click 100 (Dom.id "guild_openDiscordGuild_705745250815311942")
+                        , T.websocketSendString 100 connection (Json.Encode.encode 0 relationshipAdd)
+                        , T.checkBackend
+                            100
+                            (\model ->
+                                if
+                                    Array.toList model.logs
+                                        |> List.any
+                                            (\entry ->
+                                                case entry.log of
+                                                    Log.FailedToParseDiscordWebsocket maybeEventName _ ->
+                                                        maybeEventName == Just "RELATIONSHIP_ADD"
+
+                                                    _ ->
+                                                        False
+                                            )
+                                then
+                                    Err "A FailedToParseDiscordWebsocket log was recorded for the RELATIONSHIP_ADD event"
+
+                                else
+                                    Ok ()
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Got rich text embed"
         RecordedTestExtra.startTime
         normalConfig

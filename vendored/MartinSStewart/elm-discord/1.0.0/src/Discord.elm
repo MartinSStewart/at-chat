@@ -5187,6 +5187,9 @@ decodeDispatchUserEvent eventName =
             JD.field "d" decodeGuildScheduledEventUserData
                 |> JD.map DispatchUser_GuildScheduledEventUserRemove
 
+        "RELATIONSHIP_ADD" ->
+            JD.succeed DispatchUser_RelationshipAdd
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -5505,6 +5508,7 @@ type OpDispatchUserEvent
     | DispatchUser_UserUpdate User
     | DispatchUser_GuildScheduledEventUserAdd GuildScheduledEventUserData
     | DispatchUser_GuildScheduledEventUserRemove GuildScheduledEventUserData
+    | DispatchUser_RelationshipAdd
 
 
 type alias ContentInventoryInboxStale =
@@ -6625,6 +6629,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildScheduledEventUserRemove eventUserData ->
                             ( model, [ UserOutMsg_GuildScheduledEventUserRemove eventUserData ] )
+
+                        DispatchUser_RelationshipAdd ->
+                            ( model, [] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
