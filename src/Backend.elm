@@ -5086,7 +5086,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             case OneToOne.second publicGoMatchId model.goMatchPublicIds of
                 Just ( channelId, messageId ) ->
                     let
-                        response : Result () Go.PublicGoMatchData
+                        response : Result () Go.PublicGoMatchResponse
                         response =
                             case SeqDict.get channelId model.dmChannels of
                                 Just dmChannel ->

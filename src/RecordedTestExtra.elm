@@ -793,6 +793,27 @@ voiceChatFromJsPayloads data =
             )
 
 
+
+--{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
+--{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
+--{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
+--{"tag":"publish-connected","args":[]}
+--{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
+--{"tag":"publish-connected","args":[]}
+--{"tag":"request-pull-tracks","args":[{"roomId":"1","otherClientId":"1 clientId 2"},"sfu-session-1",["0","1"]]}
+--{"tag":"request-pull-tracks","args":[{"roomId":"0","otherClientId":"0 clientId 1"},"sfu-session-0",["0","1"]]}
+--{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
+--{"tag":"got-media-devices","args":[[{"deviceId":"microphoneDeviceId","groupId":"microphoneGroupId","kind":"audioinput","label":"Default microphone"},{"deviceId":"webcameraDeviceId","groupId":"webcameraGroupId","kind":"videoinput","label":"Default webcamera"},{"deviceId":"speakersDeviceId","groupId":"speakersGroupId","kind":"audiooutput","label":"Default speakers"}],["microphoneDeviceId","webcameraDeviceId","speakersDeviceId"]]}
+--{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
+--{"tag":"publish-connected","args":[]}
+--{"tag":"publish-offer","args":["fake-publish-offer-sdp",["0","1"]]}
+--{"tag":"publish-connected","args":[]}
+--{"tag":"request-pull-tracks","args":[{"roomId":"1","otherClientId":"1 clientId 2"},"sfu-session-1",["0","1"]]}
+--{"tag":"request-pull-tracks","args":[{"roomId":"0","otherClientId":"0 clientId 1"},"sfu-session-0",["0","1"]]}
+--{"tag":"pull-answer","args":[{"roomId":"1","otherClientId":"1 clientId 2"},"fake-pull-answer-sdp"]}
+--{"tag":"pull-answer","args":[{"roomId":"0","otherClientId":"0 clientId 1"},"fake-pull-answer-sdp"]}
+
+
 addCloudflareRealtimeApiKeys :
     T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -966,7 +987,6 @@ voiceChatTest normalConfig =
                             )
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterAdminPublishes)
                         , user.click 100 (Dom.id "guild_startVoiceChat")
-                        , tallSnapshot user 100 { name = "Joined a DM call" }
                         , T.checkBackend 200
                             (\m ->
                                 case
@@ -998,6 +1018,7 @@ voiceChatTest normalConfig =
                                             )
                             )
                         , T.checkState 100 (checkVoiceChatFromJsEvents fromJsAfterUserPublishes)
+                        , tallSnapshot user 100 { name = "Joined a DM call" }
                         , T.checkBackend 500
                             (\m ->
                                 case

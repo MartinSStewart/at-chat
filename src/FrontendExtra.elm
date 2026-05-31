@@ -3939,17 +3939,14 @@ goChangeUpdate changeBy otherUserId goChange local =
                                 | goMatches =
                                     SeqDict.insert
                                         matchId
-                                        { setup = setup, actions = Array.empty, publicLink = Nothing }
+                                        (Go.initMatchData setup Array.empty Nothing)
                                         dmChannel2.goMatches
                             }
 
                         Go.Action matchId actionWithTime ->
                             { dmChannel
                                 | goMatches =
-                                    SeqDict.updateIfExists
-                                        matchId
-                                        (\match -> { match | actions = Array.push actionWithTime match.actions })
-                                        dmChannel.goMatches
+                                    SeqDict.updateIfExists matchId (Go.addAction actionWithTime) dmChannel.goMatches
                             }
 
                         Go.CreatePublicLink matchId data ->
@@ -3959,7 +3956,7 @@ goChangeUpdate changeBy otherUserId goChange local =
                                         | goMatches =
                                             SeqDict.updateIfExists
                                                 matchId
-                                                (\match -> { match | publicLink = Just publicId })
+                                                (Go.addPublicLink publicId)
                                                 dmChannel.goMatches
                                     }
 

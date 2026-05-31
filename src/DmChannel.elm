@@ -65,10 +65,7 @@ type alias FrontendDmChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
-    , goMatches :
-        SeqDict
-            (Id ChannelMessageId)
-            { setup : Go.ValidatedSetup, actions : Array Go.ActionWithTime, publicLink : Maybe (SecretId GoMatchPublicId) }
+    , goMatches : SeqDict (Id ChannelMessageId) Go.MatchData
     }
 
 
@@ -118,10 +115,7 @@ toFrontend threadRoute dmChannelId goMatchPublicIds dmChannel =
     , goMatches =
         SeqDict.map
             (\matchId ( setup, actions ) ->
-                { setup = setup
-                , actions = actions
-                , publicLink = OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds
-                }
+                Go.initMatchData setup actions (OneToOne.first ( dmChannelId, matchId ) goMatchPublicIds)
             )
             dmChannel.goMatches
     }
