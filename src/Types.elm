@@ -524,6 +524,7 @@ type FrontendMsg
     | FileDragEnter
     | FileDragLeave
     | FileDropped (List File)
+    | PressedUnregisterServiceWorkers
 
 
 type ScrollPosition

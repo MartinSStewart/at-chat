@@ -32,6 +32,18 @@ exports.init = async function init(app)
         }
     });
 
+    app.ports.unregister_service_worker_to_js.subscribe(() => {
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              for (let registration of registrations) {
+                registration.unregister().then(function () {
+                  console.log("Service Worker Unregistered:", registration.scope)
+                })
+              }
+            });
+            location.reload();
+        }
+    });
 
     class LottiePlayer extends HTMLElement {
       static get observedAttributes() { return ['src', 'start-playing']; }

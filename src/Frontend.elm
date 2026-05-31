@@ -4385,6 +4385,9 @@ updateLoaded msg model =
                 PublicGoMatch_Missing ->
                     ( model, Command.none )
 
+        PressedUnregisterServiceWorkers ->
+            ( model, Ports.unregisterServiceWorker )
+
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
 copyText text model =

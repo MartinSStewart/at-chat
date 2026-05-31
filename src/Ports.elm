@@ -35,6 +35,7 @@ port module Ports exposing
     , showNotification
     , smoothScrollBy
     , textInputSelectAll
+    , unregisterServiceWorker
     , userAgentSub
     , visualViewportResized
     )
@@ -221,6 +222,14 @@ fixCursorPosition htmlId =
 registerServiceWorker : Command FrontendOnly toMsg msg
 registerServiceWorker =
     Command.sendToJs "register_service_worker_to_js" register_service_worker_to_js Json.Encode.null
+
+
+port unregister_service_worker_to_js : Json.Encode.Value -> Cmd msg
+
+
+unregisterServiceWorker : Command FrontendOnly toMsg msg
+unregisterServiceWorker =
+    Command.sendToJs "unregister_service_worker_to_js" unregister_service_worker_to_js Json.Encode.null
 
 
 getScrollbarWidth : Command FrontendOnly toMsg msg
