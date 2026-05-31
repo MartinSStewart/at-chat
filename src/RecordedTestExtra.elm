@@ -2088,7 +2088,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                 Local_SetNotificationMode _ ->
                     False
 
-                Local_RegisterPushSubscription _ ->
+                Local_RegisterPushSubscription _ _ ->
                     False
 
                 Local_TextEditor _ ->
@@ -2464,7 +2464,7 @@ allAttackerLocalChanges =
     , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
     , Local_NewInviteLink messageTime legitGuildId EmptyPlaceholder
-    , Local_RegisterPushSubscription { endpoint = domain, auth = "auth", p256dh = "p256dh" }
+    , Local_RegisterPushSubscription (Time.millisToPosix 9) { endpoint = domain, auth = "auth", p256dh = "p256dh" }
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty
     , Local_SendMessage messageTime (GuildOrDmId_Guild legitGuildId channelId) normalText threadRouteWithMaybeMessage SeqDict.empty
