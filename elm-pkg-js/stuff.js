@@ -1,46 +1,3 @@
-// IndexedDB helper matching the one in public/service-worker.js. When a push
-// notification is tapped, the service worker stashes the target route here
-// (because the iOS Declarative Web Push `navigate` field reloads the SPA and
-// kills any postMessage target). On boot we read it back and route to it.
-const pendingNotificationDb = 'at-chat-notifications';
-const pendingNotificationStore = 'kv';
-const pendingNotificationKey = 'pendingNotificationUrl';
-// Ignore a stashed route older than this; it belongs to a click that a live
-// window already handled (via postMessage), not to this launch.
-const pendingNotificationMaxAge = 60 * 1000;
-
-function openPendingNotificationDb() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(pendingNotificationDb, 1);
-        request.onupgradeneeded = () => {
-            request.result.createObjectStore(pendingNotificationStore);
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
-
-// Reads and clears the stashed notification route, returning the URL string if
-// one is present and recent, otherwise null.
-function readAndClearPendingNotification() {
-    return openPendingNotificationDb().then((db) => new Promise((resolve, reject) => {
-        const tx = db.transaction(pendingNotificationStore, 'readwrite');
-        const store = tx.objectStore(pendingNotificationStore);
-        const getRequest = store.get(pendingNotificationKey);
-        getRequest.onsuccess = () => {
-            const value = getRequest.result;
-            store.delete(pendingNotificationKey);
-            if (value && typeof value.url === 'string' && (Date.now() - value.time) < pendingNotificationMaxAge) {
-                resolve(value.url);
-            } else {
-                resolve(null);
-            }
-        };
-        getRequest.onerror = () => reject(getRequest.error);
-        tx.oncomplete = () => db.close();
-    }));
-}
-
 async function loadAudio(url, context, sounds) {
     try {
         const response = await fetch("/" + url + ".mp3");
@@ -71,18 +28,6 @@ exports.init = async function init(app)
                     console.log(event);
                     app.ports.service_worker_message_from_js.send(event.data);
                 });
-
-                // If this launch was triggered by tapping a push notification,
-                // the service worker stashed the target route in IndexedDB
-                // before the (iOS) navigate-triggered reload. Replay it now that
-                // the app is running so it can show the right page, using the
-                // same port a live postMessage would. The route is delivered as
-                // data, not a URL navigation, so navigation history is untouched.
-                readAndClearPendingNotification().then((url) => {
-                    if (url) {
-                        app.ports.service_worker_message_from_js.send(url);
-                    }
-                }).catch(() => {});
             });
         }
     });
