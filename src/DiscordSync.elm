@@ -863,8 +863,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                         case LocalState.createDiscordDmChannelMessageBackend discordMessage.id message channel of
                             Ok ( messageId, channel2 ) ->
                                 let
-                                    notification : Command BackendOnly toMsg BackendMsg
-                                    notification =
+                                    ( sessions, notification ) =
                                         Broadcast.discordDmNotification
                                             discordMessage.timestamp
                                             dmChannelId
@@ -897,6 +896,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                         addDiscordUserData
                                             (Discord.userToPartialUser discordMessage.author)
                                             model2.discordUsers
+                                    , sessions = sessions
                                   }
                                 , Command.batch
                                     [ case
@@ -953,7 +953,7 @@ handleCreateMessage websocketJson discordMessage attachments model =
                                                     )
                                                     model2
                                                 ]
-                                    , notification
+                                    , Command.batch notification
                                     , Command.map identity (DiscordGotDmMessageEmbed dmChannelId messageId) embedCmds
                                     , logCmd
                                     ]
@@ -1071,8 +1071,20 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                             (Discord.userToPartialUser discordMessage.author)
                                                             model.discordUsers
                                                 }
+
+                                            ( sessions, notificationCmds ) =
+                                                Broadcast.discordGuildMessageNotification
+                                                    SeqSet.empty
+                                                    discordMessage.timestamp
+                                                    discordMessage.author.id
+                                                    discordGuildId
+                                                    channelId
+                                                    NoThread
+                                                    (Nonempty (UserMention discordMessage.author.id) [ NormalText ' ' "joined!" ])
+                                                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                    model2
                                         in
-                                        ( model2
+                                        ( { model2 | sessions = sessions }
                                         , Command.batch
                                             [ Broadcast.toDiscordGuild
                                                 discordGuildId
@@ -1086,16 +1098,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                 )
                                                 model2
                                             , userAvatars
-                                            , Broadcast.discordGuildMessageNotification
-                                                SeqSet.empty
-                                                discordMessage.timestamp
-                                                discordMessage.author.id
-                                                discordGuildId
-                                                channelId
-                                                NoThread
-                                                (Nonempty (UserMention discordMessage.author.id) [ NormalText ' ' "joined!" ])
-                                                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                model2
+                                            , Command.batch notificationCmds
                                             ]
                                         )
 
@@ -1224,6 +1227,18 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
 
                                                 else
                                                     ( model, Command.none )
+
+                                            ( sessions, notificationCmds ) =
+                                                Broadcast.discordGuildMessageNotification
+                                                    usersMentioned
+                                                    discordMessage.timestamp
+                                                    discordMessage.author.id
+                                                    discordGuildId
+                                                    channelId
+                                                    threadRouteNoReply
+                                                    richText
+                                                    (MembersAndOwner.membersAndOwner guild.membersAndOwner)
+                                                    model2
                                         in
                                         ( { model2
                                             | discordGuilds =
@@ -1272,6 +1287,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                     usersMentioned
                                             , pendingDiscordCreateMessages =
                                                 SeqDict.remove ( discordMessage.author.id, threadOrChannelId ) model2.pendingDiscordCreateMessages
+                                            , sessions = sessions
                                           }
                                         , Command.batch
                                             [ case SeqDict.get ( discordMessage.author.id, threadOrChannelId ) model2.pendingDiscordCreateMessages of
@@ -1323,16 +1339,7 @@ handleDiscordCreateGuildMessage websocketJson discordGuildId content discordMess
                                                         )
                                                         model2
                                             , getUserAvatars model2.serverSecret model2.discordUsers [ discordMessage.author ]
-                                            , Broadcast.discordGuildMessageNotification
-                                                usersMentioned
-                                                discordMessage.timestamp
-                                                discordMessage.author.id
-                                                discordGuildId
-                                                channelId
-                                                threadRouteNoReply
-                                                richText
-                                                (MembersAndOwner.membersAndOwner guild.membersAndOwner)
-                                                model2
+                                            , Command.batch notificationCmds
                                             , embedCmds
                                             , logCmd
                                             ]

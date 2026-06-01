@@ -220,7 +220,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view isMobile textInputFocus time loggedIn.twoFactor
+                , TwoFactorAuthentication.view isMobile textInputFocus local.localUser.timezone time loggedIn.twoFactor
                     |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1
@@ -273,7 +273,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                             NotSubscribed ->
                                 Ui.none
 
-                            Subscribed _ ->
+                            Subscribed _ _ ->
                                 Ui.none
 
                             SubscriptionError error ->

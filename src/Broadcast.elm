@@ -47,6 +47,7 @@ import NonemptyDict
 import PersonName
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import SecretId exposing (SecretId, ServerSecret)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -393,7 +394,7 @@ messageNotification :
     -> Nonempty (RichText (Id UserId))
     -> List (Id UserId)
     -> BackendModel
-    -> Command restriction toMsg BackendMsg
+    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
 messageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
         plainText : String
@@ -426,7 +427,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
     SeqSet.union alwaysNotify usersMentioned
         |> SeqSet.remove sender
         |> SeqSet.foldl
-            (\userId2 cmds ->
+            (\userId2 ( sessions, cmds ) ->
                 let
                     isViewing =
                         List.any
@@ -441,7 +442,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                             (userGetAllSessions userId2 model)
                 in
                 if isViewing then
-                    cmds
+                    ( sessions, cmds )
 
                 else
                     case NonemptyDict.get sender model.users of
@@ -453,14 +454,14 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                                 user2.icon
                                 plainText
                                 (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends Nothing) |> Just)
+                                sessions
                                 model
-                                :: cmds
+                                |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
 
                         Nothing ->
-                            cmds
+                            ( sessions, cmds )
             )
-            []
-        |> Command.batch
+            ( model.sessions, [] )
 
 
 discordGuildMessageNotification :
@@ -473,7 +474,7 @@ discordGuildMessageNotification :
     -> Nonempty (RichText (Discord.Id Discord.UserId))
     -> List (Discord.Id Discord.UserId)
     -> BackendModel
-    -> Command restriction toMsg BackendMsg
+    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
 discordGuildMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
         alwaysNotify : SeqSet (Discord.Id Discord.UserId)
@@ -507,7 +508,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
     SeqSet.union alwaysNotify usersMentioned
         |> SeqSet.remove sender
         |> SeqSet.foldl
-            (\userId2 cmds ->
+            (\userId2 ( sessions, cmds ) ->
                 case SeqDict.get userId2 model.discordUsers of
                     Just (FullData discordUser) ->
                         let
@@ -525,7 +526,7 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                     (userGetAllSessions discordUser.linkedTo model)
                         in
                         if isViewing then
-                            cmds
+                            ( sessions, cmds )
 
                         else
                             case NonemptyDict.get discordUser.linkedTo model.users of
@@ -543,17 +544,17 @@ discordGuildMessageNotification usersMentioned time sender guildId channelId thr
                                             }
                                             |> Just
                                         )
+                                        sessions
                                         model
-                                        :: cmds
+                                        |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
 
                                 Nothing ->
-                                    cmds
+                                    ( sessions, cmds )
 
                     _ ->
-                        cmds
+                        ( sessions, cmds )
             )
-            []
-        |> Command.batch
+            ( model.sessions, [] )
 
 
 userGetAllSessions : Id UserId -> BackendModel -> List ( SessionId, UserSession )
@@ -569,15 +570,20 @@ notification :
     -> Maybe FileHash
     -> String
     -> Maybe Route
-    -> BackendModel
-    -> Command restriction toMsg BackendMsg
-notification time userToNotify senderName senderIcon text navigateTo model =
+    -> SeqDict SessionId UserSession
+    -> { a | serverSecret : SecretId ServerSecret, privateVapidKey : PrivateVapidKey }
+    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
+notification time userToNotify senderName senderIcon text navigateTo sessions model =
     SeqDict.foldl
-        (\sessionId session cmds ->
+        (\sessionId session ( sessions2, cmds ) ->
             if session.userId == userToNotify then
                 case ( session.notificationMode, session.pushSubscription ) of
-                    ( PushNotifications, Subscribed pushSubscription ) ->
-                        pushNotification
+                    ( PushNotifications, Subscribed pushSubscription _ ) ->
+                        ( SeqDict.insert
+                            sessionId
+                            { session | pushSubscription = Subscribed pushSubscription time }
+                            sessions2
+                        , pushNotification
                             sessionId
                             session.userId
                             time
@@ -594,16 +600,16 @@ notification time userToNotify senderName senderIcon text navigateTo model =
                             pushSubscription
                             model
                             :: cmds
+                        )
 
                     _ ->
-                        cmds
+                        ( sessions2, cmds )
 
             else
-                cmds
+                ( sessions2, cmds )
         )
-        []
-        model.sessions
-        |> Command.batch
+        ( sessions, [] )
+        sessions
 
 
 isViewingDiscordDm : Discord.Id Discord.PrivateChannelId -> Id UserId -> BackendModel -> Bool
@@ -628,7 +634,7 @@ discordDmNotification :
     -> Maybe FileHash
     -> String
     -> BackendModel
-    -> Command restriction toMsg BackendMsg
+    -> ( SeqDict SessionId UserSession, List (Command restriction toMsg BackendMsg) )
 discordDmNotification time channelId senderId senderName senderIcon text model =
     let
         usersToNotify : SeqDict (Id UserId) (Discord.Id Discord.UserId)
@@ -659,8 +665,8 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
                 Nothing ->
                     SeqDict.empty
     in
-    List.map
-        (\( userId, discordUserId ) ->
+    SeqDict.foldl
+        (\userId discordUserId ( sessions, cmds ) ->
             notification
                 time
                 userId
@@ -676,10 +682,12 @@ discordDmNotification time channelId senderId senderName senderIcon text model =
                     }
                     |> Just
                 )
+                sessions
                 model
+                |> Tuple.mapSecond (\a -> Command.batch a :: cmds)
         )
-        (SeqDict.toList usersToNotify)
-        |> Command.batch
+        ( model.sessions, [] )
+        usersToNotify
 
 
 toDmChannelExcludingOne :
@@ -759,7 +767,7 @@ pushNotification :
     -> String
     -> Maybe Route
     -> SubscribeData
-    -> BackendModel
+    -> { a | serverSecret : SecretId ServerSecret, privateVapidKey : PrivateVapidKey }
     -> Command restriction toFrontend BackendMsg
 pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
     Http.request
@@ -866,9 +874,43 @@ broadcastDm :
     -> SeqDict (Id FileId) FileData
     -> SeqDict (Id StickerId) StickerData
     -> BackendModel
-    -> Command BackendOnly ToFrontend BackendMsg
+    -> ( SeqDict SessionId UserSession, Command BackendOnly ToFrontend BackendMsg )
 broadcastDm changeId time clientId userId otherUserId text richText threadRouteWithReplyTo attachedFiles stickers model =
-    Command.batch
+    let
+        ( sessions, cmds ) =
+            if userId == otherUserId then
+                ( model.sessions, [] )
+
+            else
+                case NonemptyDict.get otherUserId model.users of
+                    Just otherUser ->
+                        notification
+                            time
+                            otherUserId
+                            (PersonName.toString otherUser.name)
+                            otherUser.icon
+                            (String.Nonempty.toString text)
+                            (DmRoute
+                                { channelId = DmChannel.channelIdFromUserIds userId otherUserId
+                                , threadRoute =
+                                    case threadRouteWithReplyTo of
+                                        NoThreadWithMaybeMessage _ ->
+                                            NoThreadWithFriends Nothing HideMembersTab
+
+                                        ViewThreadWithMaybeMessage threadId _ ->
+                                            ViewThreadWithFriends threadId Nothing HideMembersTab
+                                , tab = Nothing
+                                }
+                                |> Just
+                            )
+                            model.sessions
+                            model
+
+                    Nothing ->
+                        ( model.sessions, [] )
+    in
+    ( sessions
+    , Command.batch
         [ LocalChangeResponse
             changeId
             (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text threadRouteWithReplyTo attachedFiles)
@@ -888,33 +930,6 @@ broadcastDm changeId time clientId userId otherUserId text richText threadRouteW
                     stickers
             )
             model
-        , if userId == otherUserId then
-            Command.none
-
-          else
-            case NonemptyDict.get otherUserId model.users of
-                Just otherUser ->
-                    notification
-                        time
-                        otherUserId
-                        (PersonName.toString otherUser.name)
-                        otherUser.icon
-                        (String.Nonempty.toString text)
-                        (DmRoute
-                            { channelId = DmChannel.channelIdFromUserIds userId otherUserId
-                            , threadRoute =
-                                case threadRouteWithReplyTo of
-                                    NoThreadWithMaybeMessage _ ->
-                                        NoThreadWithFriends Nothing HideMembersTab
-
-                                    ViewThreadWithMaybeMessage threadId _ ->
-                                        ViewThreadWithFriends threadId Nothing HideMembersTab
-                            , tab = Nothing
-                            }
-                            |> Just
-                        )
-                        model
-
-                Nothing ->
-                    Command.none
+        , Command.batch cmds
         ]
+    )

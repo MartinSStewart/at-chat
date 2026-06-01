@@ -15,6 +15,7 @@ module UserSession exposing
 import Discord
 import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
+import Effect.Time as Time
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
 import SeqDict exposing (SeqDict)
@@ -42,7 +43,7 @@ type alias FrontendUserSession =
 
 type PushSubscription
     = NotSubscribed
-    | Subscribed SubscribeData
+    | Subscribed SubscribeData Time.Posix
     | SubscriptionError Http.Error
 
 

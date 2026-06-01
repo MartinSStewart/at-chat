@@ -2680,7 +2680,7 @@ updateLoaded msg model =
                         Ok endpoint ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_RegisterPushSubscription endpoint |> Just)
+                                (Local_RegisterPushSubscription model.time endpoint |> Just)
                                 loggedIn
                                 Command.none
 
