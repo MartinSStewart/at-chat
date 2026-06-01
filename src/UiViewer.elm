@@ -79,6 +79,7 @@ main =
                     , stickers = stickers
                     , customEmojis = SeqDict.empty
                     , animationMode = Sticker.LoopForever
+                    , timezone = Time.utc
                     }
                     Array.empty
                     (Nonempty
@@ -174,6 +175,7 @@ stickersSection =
             , stickers = stickers
             , customEmojis = SeqDict.empty
             , animationMode = Sticker.LoopForever
+            , timezone = Time.utc
             }
             Array.empty
             (Nonempty (NormalText 'T' "est") [ Sticker (Id.fromInt 123) ])
@@ -259,7 +261,7 @@ loginEmail : Html msg
 loginEmail =
     emailView
         BackendExtra.loginEmailSubject
-        (BackendExtra.loginEmailContent 12345678)
+        (BackendExtra.loginEmailContent "12345678")
 
 
 exampleEmail : EmailAddress
@@ -339,6 +341,7 @@ embedExamples whitelistedDomains =
                 , customEmojis = SeqDict.empty
                 , stickers = SeqDict.empty
                 , animationMode = Sticker.LoopForever
+                , timezone = Time.utc
                 }
                 (Array.fromList embeds)
                 (RichText.fromNonemptyString SeqDict.empty text)
