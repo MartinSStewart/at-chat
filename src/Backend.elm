@@ -6612,6 +6612,16 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 Nothing ->
                     ( model, BackendExtra.invalidChangeResponse changeId clientId )
 
+        Pages.Admin.DeleteSession sessionIdHash ->
+            case Broadcast.getSessionFromSessionIdHash sessionIdHash model of
+                Just ( sessionId, _ ) ->
+                    ( { model | sessions = SeqDict.remove sessionId model.sessions }
+                    , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                    )
+
+                Nothing ->
+                    ( model, BackendExtra.invalidChangeResponse changeId clientId )
+
         Pages.Admin.RegenerateServerSecret _ ->
             ( model
             , Http.task

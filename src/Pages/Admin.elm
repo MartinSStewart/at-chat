@@ -157,6 +157,7 @@ type Msg
     | PressedUnhideLog (Id ItemId)
     | PressedShowHiddenLogs Bool
     | PressedDisconnectClient SessionIdHash ClientId
+    | PressedDeleteSession SessionIdHash
     | PressedRegenerateServerSecret
     | PressedDeleteCall
     | PressedWebsocketCloseEventsPage Int
@@ -313,6 +314,7 @@ type AdminChange
     | HideLog (Id ItemId)
     | UnhideLog (Id ItemId)
     | DisconnectClient SessionIdHash ClientId
+    | DeleteSession SessionIdHash
     | RegenerateServerSecret (ToBeFilledInByBackend (Result Http.Error Time.Posix))
     | EndAllCalls
 
@@ -647,6 +649,12 @@ updateAdmin changedBy change adminData local =
                             IsAdmin adminData
             }
 
+        DeleteSession sessionIdHash ->
+            { local
+                | adminData =
+                    IsAdmin { adminData | sessions = SeqDict.remove sessionIdHash adminData.sessions }
+            }
+
         RegenerateServerSecret time ->
             { local
                 | adminData =
@@ -773,6 +781,9 @@ update navigationKey time adminData localState msg model =
 
         PressedDisconnectClient sessionIdHash clientId ->
             ( model, Command.none, DisconnectClient sessionIdHash clientId |> AdminChange )
+
+        PressedDeleteSession sessionIdHash ->
+            ( model, Command.none, DeleteSession sessionIdHash |> AdminChange )
 
         PressedCollapseSection section2 ->
             ( model, Command.none, CollapseSection section2 |> AdminChange )
@@ -1691,6 +1702,9 @@ pendingChangesText change =
         DisconnectClient _ _ ->
             "Disconnect client"
 
+        DeleteSession _ ->
+            "Deleted session"
+
         RegenerateServerSecret _ ->
             "Regenerate server secret"
 
@@ -1809,7 +1823,13 @@ sessionsSection timezone user adminData =
                     (\( sessionIdHash, session ) ->
                         Ui.column
                             [ Ui.spacing 2, Ui.Font.size 14, Ui.widthMax 600 ]
-                            [ Ui.el [ Ui.Font.bold ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
+                            [ Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.el [ Ui.Font.bold ] (Ui.text ("Session hash: " ++ SessionIdHash.toString sessionIdHash))
+                                , MyUi.deleteButton
+                                    (Dom.id ("admin_deleteSession_" ++ SessionIdHash.toString sessionIdHash))
+                                    (PressedDeleteSession sessionIdHash)
+                                ]
                             , Ui.text ("User ID: " ++ Id.toString session.userId)
                             , Ui.text ("Notifications: " ++ notificationModeToString session.notificationMode)
                             , Ui.text ("Push subscription: " ++ pushSubscriptionToString timezone session.pushSubscription)
