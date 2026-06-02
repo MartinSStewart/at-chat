@@ -220,7 +220,12 @@ view isMobile textInputFocus time local loggedIn loaded model =
 
                     IsNotAdmin ->
                         Ui.none
-                , TwoFactorAuthentication.view isMobile textInputFocus local.localUser.timezone time loggedIn.twoFactor
+                , TwoFactorAuthentication.view
+                    loaded.windowSize
+                    textInputFocus
+                    local.localUser.timezone
+                    time
+                    loggedIn.twoFactor
                     |> Ui.map TwoFactorMsg
                 , MyUi.container
                     MyUi.background1

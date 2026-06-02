@@ -6473,7 +6473,7 @@ view model =
                                 LoginForm.view
                                     notLoggedIn.textInputFocus
                                     (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
-                                    (MyUi.isMobile loaded)
+                                    loaded.windowSize
                                     loaded.pwaStatus
                                     |> Ui.map LoginFormMsg
                                     |> FrontendExtra.layout loaded
@@ -6525,7 +6525,11 @@ view model =
                                         ]
                                         (case notLoggedIn.loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view notLoggedIn.textInputFocus loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus
+                                                LoginForm.view
+                                                    notLoggedIn.textInputFocus
+                                                    loginForm2
+                                                    loaded.windowSize
+                                                    loaded.pwaStatus
                                                     |> Ui.map LoginFormMsg
 
                                             Nothing ->
@@ -6633,7 +6637,7 @@ view model =
                                         , LoginForm.view
                                             notLoggedIn.textInputFocus
                                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
-                                            (MyUi.isMobile loaded)
+                                            loaded.windowSize
                                             -- Don't show PWA warning on this login screen
                                             InstalledPwa
                                             |> Ui.map LoginFormMsg
