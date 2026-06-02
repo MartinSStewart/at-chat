@@ -38,8 +38,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import Test.Html.Query
 import Test.Html.Selector
 import Time
-import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), LoginTokenData(..), ToBackend(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LocalChange(..), ToBackend(..), ToFrontend)
 import VisibleMessages
 
 
