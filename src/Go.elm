@@ -8,11 +8,11 @@ module Go exposing
     , GameState
     , KomiHalfPoints(..)
     , LocalChange(..)
-    , MatchData
+    , MatchData(..)
     , Model(..)
     , Msg(..)
     , OutMsg(..)
-    , Phase
+    , Phase(..)
     , PublicGoMatchData
     , PublicGoMatchResponse
     , SetupModel
@@ -93,6 +93,8 @@ type Stone
     | White
 
 
+{-| OpaqueVariants
+-}
 type Phase
     = Playing { previousPlayerPassed : Bool }
     | Marking
