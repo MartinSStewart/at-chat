@@ -1853,8 +1853,8 @@ pushSubscriptionToString timezone pushSubscription =
         Subscribed _ time ->
             "Subscribed, last notification sent at " ++ MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone
 
-        SubscriptionError _ ->
-            "Subscription error"
+        SubscriptionError error ->
+            Log.httpErrorToString error
 
 
 userAgentToString : UserAgent -> String
