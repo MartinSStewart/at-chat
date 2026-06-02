@@ -1532,7 +1532,7 @@ tallSnapshot user delayInMs name =
                                 Types.Loaded loaded ->
                                     loaded.windowSize
                     in
-                    [ user.resizeWindow delayInMs { width = Coord.xRaw windowSize, height = 1000 }
+                    [ user.resizeWindow delayInMs { width = Coord.xRaw windowSize, height = 2000 }
                     , user.snapshotView 50 name
                     , user.resizeWindow delayInMs { width = Coord.xRaw windowSize, height = Coord.yRaw windowSize }
                     ]
@@ -2975,6 +2975,7 @@ loginTests :
     -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 loginTests isMobile normalConfig =
     let
+        windowSize : { width : number, height : number }
         windowSize =
             if isMobile then
                 mobileWindow
@@ -2991,10 +2992,10 @@ loginTests isMobile normalConfig =
     in
     [ startTest
         (if isMobile then
-            "Test login"
+            "Test login mobile"
 
          else
-            "Test login mobile"
+            "Test login"
         )
         startTime
         normalConfig
@@ -3034,10 +3035,10 @@ loginTests isMobile normalConfig =
         ]
     , startTest
         (if isMobile then
-            "Enable 2FA"
+            "Enable 2FA mobile"
 
          else
-            "Enable 2FA mobile"
+            "Enable 2FA"
         )
         startTime
         normalConfig
