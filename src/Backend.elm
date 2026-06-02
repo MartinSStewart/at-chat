@@ -1696,10 +1696,10 @@ update msg model =
                                             session.signedInAt
                             in
                             if Duration.from latestRequest time |> Quantity.lessThan (Duration.days 30) then
-                                Just sessionId
+                                Nothing
 
                             else
-                                Nothing
+                                Just sessionId
                         )
                         (SeqDict.toList model.sessions)
             in
