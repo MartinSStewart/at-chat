@@ -29,6 +29,8 @@ module LoginForm exposing
     , view
     )
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import EmailAddress exposing (EmailAddress)
@@ -343,55 +345,67 @@ mobileWarning : Element msg
 mobileWarning =
     Ui.column
         [ Ui.spacing 8 ]
-        [ --Ui.Prose.paragraph
-          --   [ Ui.Font.bold
-          --   , Ui.Font.color (Ui.rgb 204 153 0) -- Orange/brown text
-          --   ]
-          --   [ Ui.el [ Ui.width (Ui.px 48) ] (Ui.html Icons.addApp)
-          --   , Ui.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
-          --   ]
-          Html.div
+        [ Html.div
             []
             [ Html.div
                 [ Html.Attributes.style "float" "left"
                 , Html.Attributes.style "width" "44px"
                 , Html.Attributes.style "height" "40px"
                 , Html.Attributes.style "margin-right" "8px"
-                , Html.Attributes.style "color" "rgb(179,128,0)"
                 ]
                 [ Icons.addApp ]
             , Html.b
-                [ Html.Attributes.style "color" "rgb(204,153,0)" ]
+                []
                 [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
             ]
             |> Ui.html
         , Ui.Prose.paragraph
-            [ Ui.Font.color (Ui.rgb 179 128 0) -- Darker orange/brown text
+            [ Ui.Font.color MyUi.font3
             , Ui.Font.size 16
             ]
             [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
         ]
 
 
-view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Bool -> PwaStatus -> Element Msg
-view textSelection loginForm isMobile pwaStatus =
+view : Maybe { a | htmlId : HtmlId, selection : Range } -> LoginForm -> Coord CssPixels -> PwaStatus -> Element Msg
+view textSelection loginForm windowSize pwaStatus =
+    let
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+
+        installWarning =
+            isMobile && pwaStatus == BrowserView
+    in
     Ui.column
         [ MyUi.montserrat
-        , Ui.padding 16
+        , if isMobile then
+            MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 72px) 8px 0 8px")
+
+          else
+            Ui.padding 16
         , Ui.centerX
-        , Ui.centerY
+        , if isMobile then
+            Ui.alignTop
+
+          else
+            Ui.centerY
         , Ui.widthMax 520
         , Ui.spacing 24
-        , Ui.Font.color MyUi.font1
+        , if installWarning then
+            Ui.Font.color MyUi.font3
+
+          else
+            Ui.Font.color MyUi.font1
         ]
         [ -- PWA warning for mobile users not using installed PWA
-          if isMobile && pwaStatus == BrowserView then
+          if installWarning then
             Ui.el
                 [ Ui.background (Ui.rgba 255 242 204 0.1) -- Light yellow/orange background (0.1 alpha = 26)
                 , Ui.border 1
-                , Ui.borderColor (Ui.rgba 255 242 204 1) -- Light yellow/orange border (0.8 alpha = 204)
+                , Ui.borderColor MyUi.white
                 , Ui.rounded 8
                 , Ui.padding 16
+                , Ui.Font.color MyUi.font1
                 ]
                 mobileWarning
 
@@ -402,10 +416,10 @@ view textSelection loginForm isMobile pwaStatus =
                 enterEmailView enterEmail2
 
             EnterLoginCode enterLoginCode ->
-                enterLoginCodeView textSelection enterLoginCode
+                enterLoginCodeView windowSize textSelection enterLoginCode
 
             EnterTwoFactorCode enterTwoFactorCode ->
-                enterTwoFactorCodeView textSelection enterTwoFactorCode
+                enterTwoFactorCodeView windowSize textSelection enterTwoFactorCode
 
             EnterUserData data ->
                 let
@@ -476,15 +490,24 @@ cursorBlinking =
 
 
 loginCodeInput :
-    Int
+    Coord CssPixels
+    -> Int
     -> (String -> msg)
     -> Maybe { a | htmlId : HtmlId, selection : Range }
     -> String
     -> { element : Element msg, id : Ui.Input.Label }
     -> Element msg
-loginCodeInput codeLength onInput textInputFocus loginCode label =
+loginCodeInput windowSize codeLength onInput textInputFocus loginCode label =
     Ui.el
         [ Ui.Font.size 36
+        , if Coord.xRaw windowSize < 380 then
+            Ui.scale 0.85
+
+          else if Coord.xRaw windowSize < 430 then
+            Ui.scale 0.9
+
+          else
+            Ui.noAttr
         , Ui.Prose.paragraph
             [ Ui.Font.letterSpacing 26
             , Ui.paddingXY 0 6
@@ -614,8 +637,8 @@ inputFont =
     Ui.Font.family [ Ui.Font.typeface "Consolas", Ui.Font.monospace ]
 
 
-enterLoginCodeView : Maybe { a | htmlId : HtmlId, selection : Range } -> EnterLoginCode2 -> Element Msg
-enterLoginCodeView textSelection model =
+enterLoginCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterLoginCode2 -> Element Msg
+enterLoginCodeView windowSize textSelection model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -647,7 +670,7 @@ enterLoginCodeView textSelection model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput loginCodeLength TypedLoginCode textSelection model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput windowSize loginCodeLength TypedLoginCode textSelection model.code label)
             , if SeqDict.size model.attempts < maxLoginAttempts then
                 case validateCode loginCodeLength model.code of
                     Ok loginCode ->
@@ -669,8 +692,8 @@ enterLoginCodeView textSelection model =
         ]
 
 
-enterTwoFactorCodeView : Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
-enterTwoFactorCodeView textSelection model =
+enterTwoFactorCodeView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> EnterTwoFactorCode2 -> Element Msg
+enterTwoFactorCodeView windowSize textSelection model =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -695,7 +718,7 @@ enterTwoFactorCodeView textSelection model =
         [ label.element
         , Ui.column
             [ Ui.spacing 8, Ui.centerX, Ui.width Ui.shrink, Ui.move (Ui.right 18) ]
-            [ Ui.el [ Ui.centerX ] (loginCodeInput twoFactorCodeLength TypedTwoFactorCode textSelection model.code label)
+            [ Ui.el [ Ui.centerX ] (loginCodeInput windowSize twoFactorCodeLength TypedTwoFactorCode textSelection model.code label)
             , if model.attemptCount < maxLoginAttempts then
                 case validateCode twoFactorCodeLength model.code of
                     Ok loginCode ->

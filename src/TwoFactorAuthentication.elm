@@ -17,6 +17,8 @@ module TwoFactorAuthentication exposing
     , view
     )
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -264,8 +266,12 @@ updateFromBackend toFrontend model =
                     model
 
 
-view : Bool -> Maybe { a | htmlId : HtmlId, selection : Range } -> Time.Zone -> Time.Posix -> TwoFactorState -> Element Msg
-view isMobile textInputFocus timezone time twoFactorStatus =
+view : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> Time.Zone -> Time.Posix -> TwoFactorState -> Element Msg
+view windowSize textInputFocus timezone time twoFactorStatus =
+    let
+        isMobile =
+            MyUi.isMobile { windowSize = windowSize }
+    in
     MyUi.container
         MyUi.background1
         isMobile
@@ -284,7 +290,7 @@ view isMobile textInputFocus timezone time twoFactorStatus =
                     (Ui.text "Loading...")
 
             TwoFactorSetup data ->
-                setupView isMobile textInputFocus data
+                setupView windowSize textInputFocus data
 
             TwoFactorComplete ->
                 Ui.column
@@ -309,12 +315,12 @@ view isMobile textInputFocus timezone time twoFactorStatus =
                     ]
 
             TwoFactorDisable _ data ->
-                disableView textInputFocus data
+                disableView windowSize textInputFocus data
         ]
 
 
-disableView : Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorDisableData -> Element Msg
-disableView textInputFocus { code, attempts } =
+disableView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorDisableData -> Element Msg
+disableView windowSize textInputFocus { code, attempts } =
     let
         label : { element : Element msg, id : Ui.Input.Label }
         label =
@@ -331,7 +337,7 @@ disableView textInputFocus { code, attempts } =
     Ui.column
         [ Ui.spacing 16 ]
         [ label.element
-        , LoginForm.loginCodeInput LoginForm.twoFactorCodeLength TypedDisableTwoFactorCode textInputFocus code label
+        , LoginForm.loginCodeInput windowSize LoginForm.twoFactorCodeLength TypedDisableTwoFactorCode textInputFocus code label
         , case LoginForm.validateCode LoginForm.twoFactorCodeLength code of
             Ok code2 ->
                 case SeqDict.get code2 attempts of
@@ -350,8 +356,8 @@ disableView textInputFocus { code, attempts } =
         ]
 
 
-setupView : Bool -> Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorSetupData -> Element Msg
-setupView isMobile textInputFocus { qrCodeUrl, code, attempts } =
+setupView : Coord CssPixels -> Maybe { a | htmlId : HtmlId, selection : Range } -> TwoFactorSetupData -> Element Msg
+setupView windowSize textInputFocus { qrCodeUrl, code, attempts } =
     case QRCode.fromString qrCodeUrl of
         Ok qrCode ->
             let
@@ -416,7 +422,7 @@ setupView isMobile textInputFocus { qrCodeUrl, code, attempts } =
                             , Ui.padding 12
                             , Ui.rounded 8
                             , Ui.width Ui.shrink
-                            , if isMobile then
+                            , if MyUi.isMobile { windowSize = windowSize } then
                                 Ui.centerX
 
                               else
@@ -433,7 +439,13 @@ setupView isMobile textInputFocus { qrCodeUrl, code, attempts } =
                     (Ui.column
                         [ Ui.spacing 8 ]
                         [ label.element
-                        , LoginForm.loginCodeInput LoginForm.twoFactorCodeLength TypedTwoFactorCode textInputFocus code label
+                        , LoginForm.loginCodeInput
+                            windowSize
+                            LoginForm.twoFactorCodeLength
+                            TypedTwoFactorCode
+                            textInputFocus
+                            code
+                            label
                         , case LoginForm.validateCode LoginForm.twoFactorCodeLength code of
                             Ok code2 ->
                                 case SeqDict.get code2 attempts of
