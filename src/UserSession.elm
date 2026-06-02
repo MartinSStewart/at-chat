@@ -14,10 +14,11 @@ module UserSession exposing
 
 import Discord
 import Effect.Http as Http
-import Effect.Lamdera exposing (SessionId)
+import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
+import NonemptyDict exposing (NonemptyDict)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Url exposing (Url)
@@ -31,6 +32,7 @@ type alias UserSession =
     , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
+    , signedInAt : Time.Posix
     }
 
 
@@ -101,14 +103,15 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
-init sessionId userId currentlyViewing userAgent =
+init : Time.Posix -> SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
+init time sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
     , pushSubscription = NotSubscribed
     , currentlyViewing = currentlyViewing
     , userAgent = userAgent
     , sessionIdHash = SessionIdHash.fromSessionId sessionId
+    , signedInAt = time
     }
 
 

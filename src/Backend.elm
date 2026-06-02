@@ -1669,6 +1669,39 @@ update msg model =
 
                         Just lastScheduledExportTime ->
                             Duration.from lastScheduledExportTime time |> Quantity.greaterThanOrEqualTo (Duration.hours 4)
+
+                expiredSessions : List SessionId
+                expiredSessions =
+                    List.filterMap
+                        (\( sessionId, session ) ->
+                            let
+                                latestRequest : Time.Posix
+                                latestRequest =
+                                    case SeqDict.get sessionId model.connections of
+                                        Just connections ->
+                                            NonemptyDict.foldl
+                                                (\_ data latestRequest2 ->
+                                                    case data.lastRequest of
+                                                        NoRequestsMade ->
+                                                            latestRequest2
+
+                                                        LastRequest time2 ->
+                                                            max (Time.posixToMillis time2) (Time.posixToMillis latestRequest2)
+                                                                |> Time.millisToPosix
+                                                )
+                                                session.signedInAt
+                                                connections
+
+                                        Nothing ->
+                                            session.signedInAt
+                            in
+                            if Duration.from latestRequest time |> Quantity.lessThan (Duration.days 30) then
+                                Nothing
+
+                            else
+                                Just sessionId
+                        )
+                        (SeqDict.toList model.sessions)
             in
             ( if shouldExport then
                 startExport time model
@@ -1688,6 +1721,8 @@ update msg model =
                                 Duration.from deletedGuild.deletedAt time |> Quantity.lessThan (Duration.days 30)
                             )
                             model.deletedGuilds
+                    , connections = List.foldl SeqDict.remove model.connections expiredSessions
+                    , sessions = List.foldl SeqDict.remove model.sessions expiredSessions
                 }
             , Command.batch
                 [ Discord.getStickerPacksPayload
@@ -2240,6 +2275,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             session : UserSession
                             session =
                                 UserSession.init
+                                    time
                                     sessionId
                                     userId
                                     (BackendExtra.requestedForToGuildOrDmId userId requestMessagesFor)
@@ -2285,6 +2321,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         session : UserSession
                                         session =
                                             UserSession.init
+                                                time
                                                 sessionId
                                                 pendingLogin.userId
                                                 (BackendExtra.requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
