@@ -1844,6 +1844,12 @@ sessionsSection timezone user adminData =
                                        )
                                 )
                             , Ui.text ("User agent: " ++ userAgentToString session.userAgent)
+                            , Ui.text
+                                ("Signed in at: "
+                                    ++ MyUi.datestamp timezone session.signedInAt
+                                    ++ " "
+                                    ++ MyUi.timestamp session.signedInAt timezone
+                                )
                             ]
                     )
                     (SeqDict.toList adminData.sessions)
