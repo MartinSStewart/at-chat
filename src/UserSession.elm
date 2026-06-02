@@ -14,11 +14,10 @@ module UserSession exposing
 
 import Discord
 import Effect.Http as Http
-import Effect.Lamdera exposing (ClientId, SessionId)
+import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
-import NonemptyDict exposing (NonemptyDict)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Url exposing (Url)
