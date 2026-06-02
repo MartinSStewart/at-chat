@@ -314,6 +314,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 session : UserSession
                                 session =
                                     UserSession.init
+                                        time
                                         sessionId
                                         pendingLogin.userId
                                         (requestedForToGuildOrDmId pendingLogin.userId requestMessagesFor)
