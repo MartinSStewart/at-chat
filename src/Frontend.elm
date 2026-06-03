@@ -2587,19 +2587,11 @@ updateLoaded msg model =
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case result of
-                        GotSubscribeData subscribeData ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_RegisterPushSubscription model.time subscribeData |> Just)
-                                loggedIn
-                                Command.none
-
-                        MissingNavigatorServiceWorker ->
-                            Debug.todo ""
-
-                        SubscribeJsException string ->
-                            Debug.todo ""
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_RegisterPushSubscription model.time result |> Just)
+                        loggedIn
+                        Command.none
                 )
                 model
 

@@ -6,6 +6,8 @@ port module Ports exposing
     , NotificationPermission(..)
     , PwaStatus(..)
     , RegisterPushSubscription(..)
+    , SubscribeData
+    , SubscribeKeys
     , checkNotificationPermission
     , checkNotificationPermissionResponse
     , checkPwaStatus
@@ -52,9 +54,8 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection(..))
-import Url
+import Url exposing (Url)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (SubscribeData, SubscribeKeys)
 
 
 port exec_command_to_js : Json.Encode.Value -> Cmd msg
@@ -393,28 +394,31 @@ registerPushSubscriptionToJs publicKey =
 
 type RegisterPushSubscription
     = GotSubscribeData SubscribeData
-    | MissingNavigatorServiceWorker
     | SubscribeJsException String
 
 
 registerPushSubscriptionCodec : Codec RegisterPushSubscription
 registerPushSubscriptionCodec =
     Codec.custom
-        (\a b c encoder ->
+        (\a c encoder ->
             case encoder of
                 GotSubscribeData a0 ->
                     a a0
-
-                MissingNavigatorServiceWorker ->
-                    b
 
                 SubscribeJsException c0 ->
                     c c0
         )
         |> Codec.variant1 "GotSubscribeData" GotSubscribeData subscribeDataCodec
-        |> Codec.variant0 "MissingNavigatorServiceWorker" MissingNavigatorServiceWorker
         |> Codec.variant1 "SubscribeJsException" SubscribeJsException Codec.string
         |> Codec.buildCustom
+
+
+type alias SubscribeData =
+    { endpoint : Url, keys : SubscribeKeys }
+
+
+type alias SubscribeKeys =
+    { auth : String, p256dh : String }
 
 
 subscribeDataCodec : Codec SubscribeData

@@ -114,7 +114,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (FrontendUserSession, NotificationMode, PushSubscription, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
+import UserSession exposing (FrontendUserSession, NotificationMode, PushSubscription, SetViewing, ToBeFilledInByBackend, UserSession)
 
 
 type FrontendModel
@@ -886,7 +886,7 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
-    | Local_RegisterPushSubscription Time.Posix SubscribeData
+    | Local_RegisterPushSubscription Time.Posix RegisterPushSubscription
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id Discord.UserId)
     | Local_StartReloadingDiscordUser Time.Posix (Discord.Id Discord.UserId)

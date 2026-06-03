@@ -56,6 +56,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import PersonName
+import Ports exposing (RegisterPushSubscription(..))
 import Postmark
 import Quantity
 import RateLimit
@@ -4600,28 +4601,42 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model
                         sessionId
                         (\session _ ->
-                            ( { model
-                                | sessions =
-                                    SeqDict.insert
-                                        sessionId
-                                        { session | pushSubscription = Subscribed pushSubscription time }
-                                        model.sessions
-                              }
-                            , Command.batch
-                                [ LocalChangeResponse changeId (Local_RegisterPushSubscription time pushSubscription)
-                                    |> Lamdera.sendToFrontend clientId
-                                , Broadcast.pushNotification
-                                    sessionId
-                                    session.userId
-                                    time
-                                    "Success!"
-                                    "Push notifications enabled"
-                                    "https://at-chat.app/at-logo-no-background.png"
-                                    Nothing
-                                    pushSubscription
-                                    model
-                                ]
-                            )
+                            case pushSubscription of
+                                GotSubscribeData subscribeData ->
+                                    ( { model
+                                        | sessions =
+                                            SeqDict.insert
+                                                sessionId
+                                                { session | pushSubscription = Subscribed subscribeData time }
+                                                model.sessions
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId (Local_RegisterPushSubscription time pushSubscription)
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.pushNotification
+                                            sessionId
+                                            session.userId
+                                            time
+                                            "Success!"
+                                            "Push notifications enabled"
+                                            "https://at-chat.app/at-logo-no-background.png"
+                                            Nothing
+                                            subscribeData
+                                            model
+                                        ]
+                                    )
+
+                                SubscribeJsException jsError ->
+                                    ( { model
+                                        | sessions =
+                                            SeqDict.insert
+                                                sessionId
+                                                { session | pushSubscription = SubscriptionJsException jsError time }
+                                                model.sessions
+                                      }
+                                    , LocalChangeResponse changeId (Local_RegisterPushSubscription time pushSubscription)
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
                         )
 
                 Local_TextEditor localChange ->

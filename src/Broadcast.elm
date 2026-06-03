@@ -45,6 +45,7 @@ import LocalState exposing (PrivateVapidKey(..))
 import MembersAndOwner exposing (IsMember(..))
 import NonemptyDict
 import PersonName
+import Ports exposing (SubscribeData)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId, ServerSecret)
@@ -56,7 +57,7 @@ import String.Nonempty exposing (NonemptyString)
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Url
 import User exposing (BackendUser)
-import UserSession exposing (NotificationMode(..), PushSubscription(..), SubscribeData, UserSession)
+import UserSession exposing (NotificationMode(..), PushSubscription(..), UserSession)
 
 
 adminUserId : Id UserId

@@ -287,17 +287,17 @@ exports.init = async function init(app)
                     });
                 }).then(function(subscription) {
                   // Send the subscription details to the server using the Fetch API.
-                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription ]);
+                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription ]});
                 }).catch((e) =>
-                    app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ])
+                    app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]})
                 );
             }
             catch (e) {
-                app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]);
+                app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]});
             }
 
         } else {
-            app.ports.register_push_subscription_from_js.send({ tag: "MissingNavigatorServiceWorker", args: []});
+            app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ "navigator.serviceWorker is missing" ]});
         }
     });
 

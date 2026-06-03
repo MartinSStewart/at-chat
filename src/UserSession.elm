@@ -3,8 +3,6 @@ module UserSession exposing
     , NotificationMode(..)
     , PushSubscription(..)
     , SetViewing(..)
-    , SubscribeData
-    , SubscribeKeys
     , ToBeFilledInByBackend(..)
     , UserSession
     , init
@@ -19,6 +17,7 @@ import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
+import Ports exposing (RegisterPushSubscription, SubscribeData)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Url exposing (Url)
@@ -47,14 +46,7 @@ type PushSubscription
     = NotSubscribed
     | Subscribed SubscribeData Time.Posix
     | SubscriptionError Http.Error
-
-
-type alias SubscribeData =
-    { endpoint : Url, keys : SubscribeKeys }
-
-
-type alias SubscribeKeys =
-    { auth : String, p256dh : String }
+    | SubscriptionJsException String Time.Posix
 
 
 type NotificationMode

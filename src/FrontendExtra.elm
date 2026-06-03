@@ -67,7 +67,7 @@ import Pages.Admin exposing (InitAdminData)
 import Pages.Guild
 import Pagination
 import PersonName
-import Ports
+import Ports exposing (RegisterPushSubscription(..))
 import Range exposing (Range)
 import RichText exposing (Domain, RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -2637,7 +2637,18 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | session = { session | pushSubscription = Subscribed pushSubscription time } }
+                            { localUser
+                                | session =
+                                    { session
+                                        | pushSubscription =
+                                            case pushSubscription of
+                                                GotSubscribeData subscribeData ->
+                                                    Subscribed subscribeData time
+
+                                                SubscribeJsException jsError ->
+                                                    SubscriptionJsException jsError time
+                                    }
+                            }
                     }
 
                 Local_TextEditor localChange2 ->
