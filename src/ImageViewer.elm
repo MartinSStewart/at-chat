@@ -1,4 +1,4 @@
-module ImageViewer exposing (Interaction, Model, Msg(..), init, isPressMsg, subscriptions, update, view)
+module ImageViewer exposing (Interaction(..), Model, Msg(..), init, isPressMsg, subscriptions, update, view)
 
 {-| A fullscreen overlay for viewing an image. The image is shown on top of a
 black background and can be zoomed and dragged around, both with a bit of
@@ -60,6 +60,8 @@ type alias Model =
     }
 
 
+{-| OpaqueVariants
+-}
 type Interaction
     = NoInteraction
     | Dragging
