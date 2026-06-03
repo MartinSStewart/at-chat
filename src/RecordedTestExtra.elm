@@ -1859,7 +1859,7 @@ imageViewerTests imageUploadConfig =
                     let
                         imageUrl : String
                         imageUrl =
-                            "https://example.com/file/some-image.png"
+                            Env.domain ++ "/file/1/123123123"
                     in
                     [ -- Attach an image to the message and send it.
                       admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
