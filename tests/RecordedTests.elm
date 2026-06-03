@@ -218,6 +218,86 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
     , RecordedTestExtra.startTest
+        "Clicking an image attachment opens a zoomable image viewer overlay"
+        RecordedTestExtra.startTime
+        (T.Config
+            Frontend.app_
+            Backend.app_
+            handleNormalHttpRequests
+            RecordedTestExtra.handlePortToJs
+            handleFileRequest
+            (\_ ->
+                UploadMultipleFiles
+                    (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                    []
+            )
+            RecordedTestExtra.domain
+        )
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                [ -- Attach an image to the message, wait for the upload to
+                  -- finish, then send the message.
+                  admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , RecordedTestExtra.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView
+                    0
+                    (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+
+                -- Clicking the image opens the overlay instead of a new tab. Once
+                -- the overlay is open it is independent of the message, so it
+                -- stays open as the rest of the app keeps rendering.
+                , admin.click 0 (Dom.id "spoiler_1_image_1")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_close" ])
+                , admin.snapshotView 100 { name = "Image viewer overlay" }
+
+                -- The image can be dragged around.
+                , admin.mouseDown 100 (Dom.id "imageViewer_overlay") ( 100, 100 ) []
+                , admin.mouseMove 100 (Dom.id "imageViewer_overlay") ( 250, 180 ) []
+                , admin.mouseUp 100 (Dom.id "imageViewer_overlay") ( 250, 180 ) []
+                , T.checkState
+                    100
+                    (\data ->
+                        if
+                            List.any
+                                (\( _, frontend ) ->
+                                    case frontend of
+                                        Types.Loaded loaded ->
+                                            case loaded.imageViewer of
+                                                Just imageViewer ->
+                                                    imageViewer.offsetX == 150 && imageViewer.offsetY == 80
+
+                                                Nothing ->
+                                                    False
+
+                                        Types.Loading _ ->
+                                            False
+                                )
+                                (SeqDict.toList data.frontends)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Dragging the image should have moved it by (150, 80)"
+                    )
+
+                -- Zooming in keeps the overlay open.
+                , admin.click 100 (Dom.id "imageViewer_zoomIn")
+                , admin.click 100 (Dom.id "imageViewer_zoomIn")
+                , admin.snapshotView 100 { name = "Image viewer overlay zoomed in" }
+
+                -- The x button closes the overlay.
+                , admin.click 100 (Dom.id "imageViewer_close")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_close" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Admin can open admin page"
         RecordedTestExtra.startTime
         normalConfig

@@ -47,6 +47,7 @@ import Html.Events
 import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
+import ImageViewer
 import Json.Decode
 import Json.Decode.Extra
 import List.Nonempty exposing (Nonempty)
@@ -389,6 +390,15 @@ layout model attributes child =
             :: Ui.Font.size 16
             :: Ui.Font.color MyUi.font1
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
+            :: (case model.imageViewer of
+                    Just imageViewer ->
+                        ImageViewer.view imageViewer
+                            |> Ui.map ImageViewerMsg
+                            |> Ui.inFront
+
+                    Nothing ->
+                        Ui.noAttr
+               )
             :: attributes
             ++ (if MyUi.isMobile model then
                     [ Html.Events.on "touchstart" (Touch.decodeTouchEvent (TouchStart Nothing)) |> Ui.htmlAttribute
@@ -1658,6 +1668,9 @@ isPressMsg msg =
 
         MessageViewMsg _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
+
+        ImageViewerMsg imageViewerMsg ->
+            ImageViewer.isPressMsg imageViewerMsg
 
         GotRegisterPushSubscription _ ->
             False

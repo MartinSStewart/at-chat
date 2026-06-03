@@ -5502,6 +5502,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     containerWidth
                     MessageView_PressedNonWhitelistLink
                     MessageView_PressedSpoiler
+                    MessageView_PressedImage
                     { revealedSpoilers =
                         case SeqDict.get messageIndex revealedSpoilers of
                             Just nonempty ->
@@ -5610,6 +5611,7 @@ discordUserTextMessageContent spoilerHtmlId containerWidth isMobile maybeReplied
                     containerWidth
                     MessageView_PressedNonWhitelistLink
                     MessageView_PressedSpoiler
+                    MessageView_PressedImage
                     { revealedSpoilers =
                         case SeqDict.get messageIndex revealedSpoilers of
                             Just nonempty ->

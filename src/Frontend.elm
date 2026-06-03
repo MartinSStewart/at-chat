@@ -35,6 +35,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
+import ImageViewer
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -331,6 +332,7 @@ initLoadedFrontend loading clientId time userAgent loginResult =
             , versionNumber = Nothing
             , emojiData = Nothing
             , publicGoMatch = loading.publicGoMatch
+            , imageViewer = Nothing
             , toFrontendLogs = Nothing
             }
 
@@ -2227,6 +2229,11 @@ updateLoaded msg model =
                 )
                 model
 
+        ImageViewerMsg imageViewerMsg ->
+            ( { model | imageViewer = Maybe.andThen (ImageViewer.update imageViewerMsg) model.imageViewer }
+            , Command.none
+            )
+
         MessageViewMsg guildOrDmId threadRoute messageViewMsg ->
             let
                 guildOrDmIdWithThread : ( AnyGuildOrDmId, ThreadRoute )
@@ -2589,6 +2596,9 @@ updateLoaded msg model =
                             )
                         )
                         model
+
+                MessageView.MessageView_PressedImage imageUrl ->
+                    ( { model | imageViewer = Just (ImageViewer.init imageUrl) }, Command.none )
 
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )

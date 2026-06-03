@@ -72,6 +72,7 @@ main =
                     800
                     (\_ -> ())
                     (\_ -> ())
+                    (\_ -> ())
                     { domainWhitelist = SeqSet.empty
                     , revealedSpoilers = SeqSet.fromList [ 1, 3, 5, 7 ]
                     , users = SeqDict.empty
@@ -166,6 +167,7 @@ stickersSection =
         , RichText.view
             (Dom.id "richText")
             800
+            (\_ -> ())
             (\_ -> ())
             (\_ -> ())
             { domainWhitelist = SeqSet.empty
@@ -332,6 +334,7 @@ embedExamples whitelistedDomains =
             RichText.view
                 (Dom.id "richText")
                 800
+                (\_ -> ())
                 (\_ -> ())
                 (\_ -> ())
                 { domainWhitelist = whitelistedDomains
