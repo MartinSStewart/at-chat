@@ -379,7 +379,7 @@ view textSelection loginForm windowSize pwaStatus =
     Ui.column
         [ MyUi.montserrat
         , if isMobile then
-            MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 72px) 8px 0 8px")
+            MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 88px) 8px 0 8px")
 
           else
             Ui.padding 16
@@ -400,7 +400,7 @@ view textSelection loginForm windowSize pwaStatus =
         [ -- PWA warning for mobile users not using installed PWA
           if installWarning then
             Ui.el
-                [ Ui.background (Ui.rgba 255 242 204 0.1) -- Light yellow/orange background (0.1 alpha = 26)
+                [ Ui.background (Ui.rgba 255 242 204 0.1)
                 , Ui.border 1
                 , Ui.borderColor MyUi.white
                 , Ui.rounded 8
