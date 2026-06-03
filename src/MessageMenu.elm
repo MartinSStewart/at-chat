@@ -94,7 +94,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local model =
-    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False Coord.origin local model
+    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.imageUrl Coord.origin local model
         |> List.length
         |> mobileMenuMaxHeightHelper
         |> CssPixels.cssPixels
@@ -115,7 +115,7 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId threadRoute False Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId threadRoute False Nothing Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -212,6 +212,7 @@ viewMobile offset extraOptions loggedIn local model =
                 extraOptions.guildOrDmId
                 extraOptions.threadRoute
                 extraOptions.isThreadStarter
+                extraOptions.imageUrl
                 extraOptions.position
                 local
                 model
@@ -358,6 +359,7 @@ view model extraOptions local loggedIn =
                     extraOptions.guildOrDmId
                     extraOptions.threadRoute
                     extraOptions.isThreadStarter
+                    extraOptions.imageUrl
                     extraOptions.position
                     local
                     model
@@ -404,8 +406,8 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
+menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl position local model =
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
@@ -621,6 +623,40 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 )
                 (PressedCopyText text)
                 |> Just
+            , case maybeImageUrl of
+                Just imageUrl ->
+                    button
+                        isMobile
+                        (Dom.id "messageMenu_copyImage")
+                        Icons.image
+                        (case model.lastCopied of
+                            Just lastCopied ->
+                                if lastCopied.copiedText == imageUrl then
+                                    "Copied!"
+
+                                else
+                                    "Copy image"
+
+                            Nothing ->
+                                "Copy image"
+                        )
+                        (PressedCopyImage imageUrl)
+                        |> Just
+
+                Nothing ->
+                    Nothing
+            , case maybeImageUrl of
+                Just imageUrl ->
+                    button
+                        isMobile
+                        (Dom.id "messageMenu_copyImageLink")
+                        Icons.copyIcon
+                        "Copy image link"
+                        (PressedCopyText imageUrl)
+                        |> Just
+
+                Nothing ->
+                    Nothing
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button

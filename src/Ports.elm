@@ -10,6 +10,7 @@ port module Ports exposing
     , checkPwaStatus
     , checkPwaStatusResponse
     , closeNotifications
+    , copyImageToClipboard
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
@@ -65,6 +66,9 @@ port play_sound : Json.Encode.Value -> Cmd msg
 
 
 port copy_to_clipboard_to_js : Json.Encode.Value -> Cmd msg
+
+
+port copy_image_to_clipboard_to_js : Json.Encode.Value -> Cmd msg
 
 
 port text_input_select_all_to_js : Json.Encode.Value -> Cmd msg
@@ -527,6 +531,11 @@ textInputSelectAll htmlId =
 copyToClipboard : String -> Command FrontendOnly toMsg msg
 copyToClipboard text =
     Command.sendToJs "copy_to_clipboard_to_js" copy_to_clipboard_to_js (Json.Encode.string text)
+
+
+copyImageToClipboard : String -> Command FrontendOnly toMsg msg
+copyImageToClipboard imageUrl =
+    Command.sendToJs "copy_image_to_clipboard_to_js" copy_image_to_clipboard_to_js (Json.Encode.string imageUrl)
 
 
 port martinsstewart_crop_image_to_js : Json.Encode.Value -> Cmd msg

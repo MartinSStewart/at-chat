@@ -1511,6 +1511,9 @@ isPressMsg msg =
         PressedCopyText _ ->
             True
 
+        PressedCopyImage _ ->
+            True
+
         PressedCreateGuild ->
             True
 

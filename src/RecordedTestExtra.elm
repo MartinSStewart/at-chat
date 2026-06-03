@@ -181,6 +181,9 @@ handlePortToJs requestAndData =
         "copy_to_clipboard_to_js" ->
             Nothing
 
+        "copy_image_to_clipboard_to_js" ->
+            Nothing
+
         "register_push_subscription_to_js" ->
             ( "register_push_subscription_from_js"
             , Json.Encode.object
@@ -1843,6 +1846,128 @@ imageViewerTests imageUploadConfig =
                     , admin.mouseUp 50 (Dom.id "imageViewer_overlay") ( 350, 350 ) []
                     , admin.snapshotView 30 { name = "Image viewer background faded" }
                     , admin.checkView 1000 (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
+                    ]
+                )
+            ]
+        , startTest
+            "Right clicking an image attachment adds Copy image options to the message menu"
+            startTime
+            imageUploadConfig
+            [ connectTwoUsersAndJoinNewGuild
+                desktopWindow
+                (\admin _ ->
+                    let
+                        imageUrl : String
+                        imageUrl =
+                            "https://example.com/file/some-image.png"
+                    in
+                    [ -- Attach an image to the message and send it.
+                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                    , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                    , admin.checkView
+                        0
+                        (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+
+                    -- Right clicking somewhere on the message that isn't an image opens
+                    -- the message menu without the image specific options.
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_copyImage" ])
+
+                    -- Right clicking the image itself includes its full-size url (exposed
+                    -- via the data-image-url attribute) so the menu offers the image
+                    -- specific copy options.
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            , ( "target"
+                              , Json.Encode.object
+                                    [ ( "dataset"
+                                      , Json.Encode.object [ ( "imageUrl", Json.Encode.string imageUrl ) ]
+                                      )
+                                    ]
+                              )
+                            ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.id "messageMenu_copyImage" ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.id "messageMenu_copyImageLink" ]
+                        )
+                    , admin.snapshotView 100 { name = "Message menu with copy image options" }
+
+                    -- "Copy image" copies the actual image data to the clipboard.
+                    , admin.click 100 (Dom.id "messageMenu_copyImage")
+                    , T.andThen
+                        100
+                        (\data ->
+                            case
+                                List.Extra.findMap
+                                    (\request ->
+                                        if request.clientId == admin.clientId && request.portName == "copy_image_to_clipboard_to_js" then
+                                            Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                        else
+                                            Nothing
+                                    )
+                                    data.portRequests
+                            of
+                                Just copiedUrl ->
+                                    if copiedUrl == imageUrl then
+                                        []
+
+                                    else
+                                        [ T.checkState 0 (\_ -> Err ("Copy image copied the wrong url: " ++ copiedUrl)) ]
+
+                                Nothing ->
+                                    [ T.checkState 0 (\_ -> Err "Copy image should have triggered the copy_image_to_clipboard_to_js port") ]
+                        )
+
+                    -- "Copy image link" copies the image's url as text instead.
+                    , admin.click 100 (Dom.id "messageMenu_copyImageLink")
+                    , T.andThen
+                        100
+                        (\data ->
+                            case
+                                List.Extra.findMap
+                                    (\request ->
+                                        if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
+                                            Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                        else
+                                            Nothing
+                                    )
+                                    data.portRequests
+                            of
+                                Just copiedUrl ->
+                                    if copiedUrl == imageUrl then
+                                        []
+
+                                    else
+                                        [ T.checkState 0 (\_ -> Err ("Copy image link copied the wrong url: " ++ copiedUrl)) ]
+
+                                Nothing ->
+                                    [ T.checkState 0 (\_ -> Err "Copy image link should have triggered the copy_to_clipboard_to_js port") ]
+                        )
                     ]
                 )
             ]

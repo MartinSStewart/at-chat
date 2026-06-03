@@ -2694,6 +2694,9 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                         :: Html.Attributes.style "display" "block"
                                                                         :: Html.Attributes.width (round width)
                                                                         :: Html.Attributes.height (round height)
+                                                                        -- Exposes the full-size image url so that a right-click (contextmenu)
+                                                                        -- on the image can offer "Copy image"/"Copy image link" options.
+                                                                        :: Html.Attributes.attribute "data-image-url" fileUrl
                                                                         :: extraAttributes
                                                                     )
                                                                     []

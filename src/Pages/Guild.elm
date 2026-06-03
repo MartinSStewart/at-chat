@@ -5902,6 +5902,24 @@ messagePaddingX =
     8
 
 
+{-| Decodes a "contextmenu" event into a message that opens the message menu.
+If the right-click landed on an image attachment we also grab the image's
+full-size url (exposed via the "data-image-url" attribute) so that the menu
+can offer "Copy image"/"Copy image link" options.
+-}
+messageContextMenuDecoder : Bool -> Json.Decode.Decoder ( MessageViewMsg, Bool )
+messageContextMenuDecoder isThreadStarter =
+    Json.Decode.map3
+        (\x y maybeImageUrl ->
+            ( MessageView_AltPressedMessage isThreadStarter maybeImageUrl (Coord.xy (round x) (round y))
+            , True
+            )
+        )
+        (Json.Decode.field "clientX" Json.Decode.float)
+        (Json.Decode.field "clientY" Json.Decode.float)
+        (Json.Decode.maybe (Json.Decode.at [ "target", "dataset", "imageUrl" ] Json.Decode.string))
+
+
 messageContainer :
     Bool
     -> Time.Zone
@@ -5940,16 +5958,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
                         )
                 )
             )
-         , Ui.Events.preventDefaultOn "contextmenu"
-            (Json.Decode.map2
-                (\x y ->
-                    ( MessageView_AltPressedMessage isThreadStarter (Coord.xy (round x) (round y))
-                    , True
-                    )
-                )
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
-            )
+         , Ui.Events.preventDefaultOn "contextmenu" (messageContextMenuDecoder isThreadStarter)
          , Ui.paddingWith
             { left = messagePaddingX
             , right = messagePaddingX
@@ -6057,16 +6066,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
                         )
                 )
             )
-         , Ui.Events.preventDefaultOn "contextmenu"
-            (Json.Decode.map2
-                (\x y ->
-                    ( MessageView_AltPressedMessage False (Coord.xy (round x) (round y))
-                    , True
-                    )
-                )
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
-            )
+         , Ui.Events.preventDefaultOn "contextmenu" (messageContextMenuDecoder False)
          , Ui.paddingWith
             { left = messagePaddingX
             , right = messagePaddingX

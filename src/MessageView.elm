@@ -30,7 +30,7 @@ type MessageViewMsg
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Bool (Coord CssPixels)
+    | MessageView_AltPressedMessage Bool (Maybe String) (Coord CssPixels)
     | MessageView_PressedReactionEmoji_Remove EmojiOrCustomEmoji
     | MessageView_PressedReactionEmoji_Add EmojiOrCustomEmoji
     | MessageView_PressedReplyLink
@@ -66,7 +66,7 @@ isPressMsg msg =
         MessageView_TouchStart _ _ _ ->
             False
 
-        MessageView_AltPressedMessage _ _ ->
+        MessageView_AltPressedMessage _ _ _ ->
             True
 
         MessageView_PressedReactionEmoji_Remove _ ->

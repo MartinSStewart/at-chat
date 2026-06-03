@@ -255,6 +255,7 @@ type alias MessageMenuExtraOptions =
     , isThreadStarter : Bool
     , threadRoute : ThreadRouteWithMessage
     , mobileMode : MessageHoverMobileMode
+    , imageUrl : Maybe String
     }
 
 
@@ -426,6 +427,7 @@ type FrontendMsg
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
+    | PressedCopyImage String
     | PressedCreateGuild
     | NewGuildFormChanged NewGuildForm
     | PressedSubmitNewGuild NewGuildForm
