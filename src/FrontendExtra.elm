@@ -392,7 +392,7 @@ layout model attributes child =
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: (case model.imageViewer of
                     Just imageViewer ->
-                        ImageViewer.view isMobile imageViewer
+                        ImageViewer.view isMobile model.windowSize imageViewer
                             |> Ui.map ImageViewerMsg
                             |> Ui.inFront
 

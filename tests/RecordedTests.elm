@@ -532,6 +532,33 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
             )
         ]
     , RecordedTestExtra.startTest
+        "The image viewer background fades as the image is dragged off screen"
+        RecordedTestExtra.startTime
+        imageUploadConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , RecordedTestExtra.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+                , admin.click 0 (Dom.id "spoiler_1_image_1")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+
+                -- Drag the image until its center sits in the bottom-right corner
+                -- of the 1000x600 window, leaving only its top-left quarter (25%
+                -- of the area) visible, so the black background is half faded.
+                , admin.mouseDown 100 (Dom.id "imageViewer_overlay") ( 100, 100 ) []
+                , admin.mouseMove 100 (Dom.id "imageViewer_overlay") ( 600, 400 ) []
+                , admin.mouseUp 100 (Dom.id "imageViewer_overlay") ( 600, 400 ) []
+                , admin.snapshotView 100 { name = "Image viewer background faded" }
+
+                -- A quarter of the image is still on screen, so the viewer stays open.
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
         "Admin can open admin page"
         RecordedTestExtra.startTime
         normalConfig

@@ -440,6 +440,51 @@ isOffScreen windowSize model =
         || (imageCenterY - dh / 2 > vh)
 
 
+{-| The black background fades out as the image is dragged off the screen: it's
+fully opaque while at least half of the image is visible, and fades linearly to
+fully transparent as the visible fraction drops to zero.
+-}
+backgroundOpacity : Coord CssPixels -> Model -> Float
+backgroundOpacity windowSize model =
+    let
+        vw : Float
+        vw =
+            toFloat (Coord.xRaw windowSize)
+
+        vh : Float
+        vh =
+            toFloat (Coord.yRaw windowSize)
+
+        ( dw, dh ) =
+            displayedSize windowSize model
+
+        imageCenterX : Float
+        imageCenterX =
+            vw / 2 + model.offsetX
+
+        imageCenterY : Float
+        imageCenterY =
+            vh / 2 + model.offsetY
+
+        visibleWidth : Float
+        visibleWidth =
+            max 0 (min (imageCenterX + dw / 2) vw - max (imageCenterX - dw / 2) 0)
+
+        visibleHeight : Float
+        visibleHeight =
+            max 0 (min (imageCenterY + dh / 2) vh - max (imageCenterY - dh / 2) 0)
+
+        visibleFraction : Float
+        visibleFraction =
+            if dw * dh <= 0 then
+                0
+
+            else
+                (visibleWidth * visibleHeight) / (dw * dh)
+    in
+    clamp 0 1 (visibleFraction / 0.5)
+
+
 distance : ( Float, Float ) -> ( Float, Float ) -> Float
 distance ( x1, y1 ) ( x2, y2 ) =
     sqrt (((x2 - x1) ^ 2) + ((y2 - y1) ^ 2))
@@ -574,13 +619,13 @@ touchPositions event =
     List.map .clientPos event.touches
 
 
-view : Bool -> Model -> Element Msg
-view isMobile model =
+view : Bool -> Coord CssPixels -> Model -> Element Msg
+view isMobile windowSize model =
     Ui.el
         ([ Ui.id "imageViewer_overlay"
          , Ui.width Ui.fill
          , Ui.height Ui.fill
-         , Ui.background (Ui.rgb 0 0 0)
+         , Ui.background (Ui.rgba 0 0 0 (backgroundOpacity windowSize model))
          , Ui.clip
          , Json.Decode.map (\msg -> ( msg, True )) (clientPositionDecoder MouseDown)
             |> Html.Events.preventDefaultOn "mousedown"
