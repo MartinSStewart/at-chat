@@ -1412,7 +1412,7 @@ updateLoaded msg model =
             ( { model | pwaStatus = pwaStatus }, Command.none )
 
         TouchStart maybeGuildOrDmIdAndMessageIndex time touches ->
-            touchStart maybeGuildOrDmIdAndMessageIndex time touches model
+            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing time touches model
 
         TouchMoved time newTouches ->
             case model.drag of
@@ -1722,7 +1722,7 @@ updateLoaded msg model =
                 )
                 model
 
-        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter ->
+        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl ->
             case model.drag of
                 DragStart dragStart _ ->
                     if startTime == dragStart then
@@ -1732,8 +1732,8 @@ updateLoaded msg model =
                                     guildOrDmId
                                     threadRoute
                                     isThreadStarter
-                                    Nothing
-                                    Nothing
+                                    maybeImageUrl
+                                    maybeLinkUrl
                                     Coord.origin
                                     loggedIn
                                     (Local.model loggedIn.localState)
@@ -2236,8 +2236,8 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart time isThreadStarter touches ->
-                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) time touches model
+                MessageView.MessageView_TouchStart time isThreadStarter maybeImageUrl maybeLinkUrl touches ->
+                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl time touches model
 
                 MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
                     FrontendExtra.updateLoggedIn
@@ -5287,11 +5287,13 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 touchStart :
     Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )
+    -> Maybe String
+    -> Maybe String
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
+touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touches model =
     case model.drag of
         NoDrag ->
             if isTouchingTextInput touches then
@@ -5306,7 +5308,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
                                 Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
                                     Process.sleep (Duration.seconds 0.5)
                                         |> Task.perform
-                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
+                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter maybeImageUrl maybeLinkUrl)
 
                                 Nothing ->
                                     Command.none

@@ -5917,11 +5917,18 @@ decodeMessageContextMenu isThreadStarter =
         )
         (Json.Decode.field "clientX" Json.Decode.float)
         (Json.Decode.field "clientY" Json.Decode.float)
-        (Json.Decode.oneOf
-            [ Json.Decode.field "target" (decodeContextMenuTarget 20)
-            , Json.Decode.succeed emptyContextMenuTarget
-            ]
-        )
+        decodeEventTarget
+
+
+{-| Reads the "data-image-url"/"data-link-url" off the event's target (walking up
+its ancestors). Falls back to no urls when there is no target (e.g. in tests).
+-}
+decodeEventTarget : Json.Decode.Decoder ContextMenuTarget
+decodeEventTarget =
+    Json.Decode.oneOf
+        [ Json.Decode.field "target" (decodeContextMenuTarget 20)
+        , Json.Decode.succeed emptyContextMenuTarget
+        ]
 
 
 type alias ContextMenuTarget =
@@ -5999,16 +6006,22 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
          , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
-            (Touch.decodeTouchEvent
-                (\time touches ->
-                    MessageView_TouchStart
-                        time
-                        isThreadStarter
-                        (NonemptyDict.map
-                            (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
-                            touches
-                        )
+            (Json.Decode.map2
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (Touch.decodeTouchEvent
+                    (\time touches imageUrl linkUrl ->
+                        MessageView_TouchStart
+                            time
+                            isThreadStarter
+                            imageUrl
+                            linkUrl
+                            (NonemptyDict.map
+                                (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
+                                touches
+                            )
+                    )
                 )
+                decodeEventTarget
             )
          , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu isThreadStarter)
          , Ui.paddingWith
@@ -6107,16 +6120,22 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
          , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
-            (Touch.decodeTouchEvent
-                (\time touches ->
-                    MessageView_TouchStart
-                        time
-                        False
-                        (NonemptyDict.map
-                            (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
-                            touches
-                        )
+            (Json.Decode.map2
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (Touch.decodeTouchEvent
+                    (\time touches imageUrl linkUrl ->
+                        MessageView_TouchStart
+                            time
+                            False
+                            imageUrl
+                            linkUrl
+                            (NonemptyDict.map
+                                (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
+                                touches
+                            )
+                    )
                 )
+                decodeEventTarget
             )
          , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu False)
          , Ui.paddingWith

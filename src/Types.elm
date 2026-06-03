@@ -465,7 +465,7 @@ type FrontendMsg
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
-    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool
+    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
