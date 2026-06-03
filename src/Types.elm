@@ -114,7 +114,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (FrontendUserSession, NotificationMode, PushSubscription, SetViewing, ToBeFilledInByBackend, UserSession)
+import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, ToBeFilledInByBackend, UserSession)
 
 
 type FrontendModel

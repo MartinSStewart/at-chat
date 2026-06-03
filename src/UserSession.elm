@@ -17,10 +17,9 @@ import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
-import Ports exposing (RegisterPushSubscription, SubscribeData)
+import Ports exposing (SubscribeData)
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
-import Url exposing (Url)
 import UserAgent exposing (UserAgent)
 
 

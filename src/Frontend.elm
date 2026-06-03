@@ -54,7 +54,7 @@ import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
-import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
+import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)

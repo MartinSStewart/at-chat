@@ -287,7 +287,7 @@ view isMobile textInputFocus time local loggedIn loaded model =
                                     PressedCopyText
                                     (Log.httpErrorToString error)
 
-                            SubscriptionJsException jsError posix ->
+                            SubscriptionJsException jsError _ ->
                                 MyUi.errorBox
                                     (Dom.id "userOptions_pushNotificationError")
                                     PressedCopyText
