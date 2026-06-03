@@ -222,31 +222,31 @@ update windowSize msg model =
                 frames =
                     Duration.inMilliseconds duration / frameMs
 
-                eased : Model
-                eased =
+                model2 : Model
+                model2 =
                     applyZoomEasing windowSize frames model
             in
-            case eased.interaction of
+            case model2.interaction of
                 Dragging _ ->
-                    Just (sampleDragVelocity frames eased)
+                    Just (sampleDragVelocity frames model2)
 
                 Pinching _ ->
-                    Just eased
+                    Just model2
 
                 NoInteraction ->
                     let
                         ( nearestEdge, t ) =
-                            nearestViewportEdge windowSize model
+                            nearestViewportEdge windowSize model |> Debug.log "a"
                     in
                     if t <= 0 then
                         Nothing
 
                     else if t < 1 then
-                        { model
-                            | offsetX = model.offsetX + (model.velocityX * frames)
-                            , offsetY = model.offsetY + (model.velocityY * frames)
+                        { model2
+                            | offsetX = model2.offsetX + (model2.velocityX * frames)
+                            , offsetY = model2.offsetY + (model2.velocityY * frames)
                             , velocityX =
-                                model.velocityX
+                                model2.velocityX
                                     + (case nearestEdge of
                                         ViewportLeft ->
                                             frames * 3
@@ -261,7 +261,7 @@ update windowSize msg model =
                                             0
                                       )
                             , velocityY =
-                                model.velocityY
+                                model2.velocityY
                                     + (case nearestEdge of
                                         ViewportLeft ->
                                             0
@@ -286,19 +286,19 @@ update windowSize msg model =
 
                             newVelocityX : Float
                             newVelocityX =
-                                model.velocityX * decay
+                                model2.velocityX * decay
 
                             newVelocityY : Float
                             newVelocityY =
-                                model.velocityY * decay
+                                model2.velocityY * decay
 
                             stopped : Bool
                             stopped =
                                 (newVelocityX * newVelocityX) + (newVelocityY * newVelocityY) < (panVelocityThreshold * panVelocityThreshold)
                         in
-                        { model
-                            | offsetX = model.offsetX + (model.velocityX * frames)
-                            , offsetY = model.offsetY + (model.velocityY * frames)
+                        { model2
+                            | offsetX = model2.offsetX + (model2.velocityX * frames)
+                            , offsetY = model2.offsetY + (model2.velocityY * frames)
                             , velocityX =
                                 if stopped then
                                     0
