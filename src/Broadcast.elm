@@ -778,8 +778,8 @@ pushNotification sessionId userId time title body icon navigateTo pushSubscripti
             Codec.encodeToValue
                 pushNotificationCodec
                 { endpoint = Url.toString pushSubscription.endpoint
-                , p256dh = pushSubscription.p256dh
-                , auth = pushSubscription.auth
+                , p256dh = pushSubscription.keys.p256dh
+                , auth = pushSubscription.keys.auth
                 , privateKey = model.privateVapidKey
                 , title = title
                 , body = body

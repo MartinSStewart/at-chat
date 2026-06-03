@@ -54,7 +54,7 @@ import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
-import Ports exposing (PwaStatus(..))
+import Ports exposing (PwaStatus(..), RegisterPushSubscription(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
@@ -2597,15 +2597,18 @@ updateLoaded msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     case result of
-                        Ok endpoint ->
+                        GotSubscribeData subscribeData ->
                             FrontendExtra.handleLocalChange
                                 model.time
-                                (Local_RegisterPushSubscription model.time endpoint |> Just)
+                                (Local_RegisterPushSubscription model.time subscribeData |> Just)
                                 loggedIn
                                 Command.none
 
-                        Err _ ->
-                            ( loggedIn, Command.none )
+                        MissingNavigatorServiceWorker ->
+                            Debug.todo ""
+
+                        SubscribeJsException string ->
+                            Debug.todo ""
                 )
                 model
 

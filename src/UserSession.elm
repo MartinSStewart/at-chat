@@ -4,6 +4,7 @@ module UserSession exposing
     , PushSubscription(..)
     , SetViewing(..)
     , SubscribeData
+    , SubscribeKeys
     , ToBeFilledInByBackend(..)
     , UserSession
     , init
@@ -49,7 +50,11 @@ type PushSubscription
 
 
 type alias SubscribeData =
-    { endpoint : Url, auth : String, p256dh : String }
+    { endpoint : Url, keys : SubscribeKeys }
+
+
+type alias SubscribeKeys =
+    { auth : String, p256dh : String }
 
 
 type NotificationMode

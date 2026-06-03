@@ -93,7 +93,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, ExportSubset, InitAdminData)
 import Pagination exposing (PageId)
 import PersonName exposing (PersonName)
-import Ports exposing (NotificationPermission, PwaStatus)
+import Ports exposing (NotificationPermission, PwaStatus, RegisterPushSubscription)
 import Postmark
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection)
@@ -114,7 +114,7 @@ import Untrusted exposing (Untrusted)
 import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
+import UserSession exposing (FrontendUserSession, NotificationMode, PushSubscription, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
 
 type FrontendModel
@@ -488,7 +488,7 @@ type FrontendMsg
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
     | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
     | ImageViewerMsg ImageViewer.Msg
-    | GotRegisterPushSubscription (Result String SubscribeData)
+    | GotRegisterPushSubscription RegisterPushSubscription
     | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | PressedDiscordGuildNotificationLevel (Discord.Id Discord.UserId) (Discord.Id Discord.GuildId) NotificationLevel
