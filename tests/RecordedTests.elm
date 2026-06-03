@@ -288,14 +288,43 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Err "Dragging the image should have moved it by (150, 80)"
                     )
 
-                -- Scroll-zoom anchors on the cursor: zooming in at (700, 400),
-                -- which is down and to the right of the 1000x600 viewport center,
-                -- shifts the image so that point stays under the cursor. Starting
-                -- from offset (150, 80) and scale 1, scrolling in by 1.1x gives
-                -- offsetX = 200*(1-1.1) + 1.1*150 = 145 and offsetY = 100*(1-1.1) + 1.1*80 = 78.
+                -- Scroll-zoom glides toward its target rather than snapping: a
+                -- frame or two after the wheel event the scale is partway between
+                -- 1 and 1.1.
                 , admin.wheel 100 (Dom.id "imageViewer_overlay") -1 ( 700, 400 ) [] []
                 , T.checkState
-                    100
+                    50
+                    (\data ->
+                        if
+                            List.any
+                                (\( _, frontend ) ->
+                                    case frontend of
+                                        Types.Loaded loaded ->
+                                            case loaded.imageViewer of
+                                                Just imageViewer ->
+                                                    imageViewer.scale > 1.0 && imageViewer.scale < 1.1
+
+                                                Nothing ->
+                                                    False
+
+                                        Types.Loading _ ->
+                                            False
+                                )
+                                (SeqDict.toList data.frontends)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Scroll-zoom should glide toward its target (zoom inertia)"
+                    )
+
+                -- Once it settles, the zoom anchors on the cursor: zooming in at
+                -- (700, 400), down and to the right of the 1000x600 viewport
+                -- center, shifts the image so that point stays under the cursor.
+                -- From offset (150, 80) and scale 1, scrolling in by 1.1x gives
+                -- offsetX = 200*(1-1.1) + 1.1*150 = 145 and offsetY = 100*(1-1.1) + 1.1*80 = 78.
+                , T.checkState
+                    2000
                     (\data ->
                         if
                             List.any
@@ -319,13 +348,13 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Ok ()
 
                         else
-                            Err "Scroll-zooming should keep the point under the cursor anchored"
+                            Err "Scroll-zooming should settle anchored on the cursor"
                     )
 
                 -- Zooming in keeps the overlay open.
                 , admin.click 100 (Dom.id "imageViewer_zoomIn")
                 , admin.click 100 (Dom.id "imageViewer_zoomIn")
-                , admin.snapshotView 100 { name = "Image viewer overlay zoomed in" }
+                , admin.snapshotView 2000 { name = "Image viewer overlay zoomed in" }
 
                 -- The x button closes the overlay.
                 , admin.click 100 (Dom.id "imageViewer_close")
@@ -418,6 +447,87 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "Flinging the image in the viewer keeps it moving (inertia)"
+        RecordedTestExtra.startTime
+        imageUploadConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.desktopWindow
+            (\admin _ ->
+                [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , RecordedTestExtra.focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+                , admin.click 0 (Dom.id "spoiler_1_image_1")
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+
+                -- Flick: move by (20, 10) and release on the same frame (delay 0)
+                -- so the velocity is preserved as momentum.
+                , admin.mouseDown 100 (Dom.id "imageViewer_overlay") ( 500, 300 ) []
+                , admin.mouseMove 100 (Dom.id "imageViewer_overlay") ( 520, 310 ) []
+                , admin.mouseUp 0 (Dom.id "imageViewer_overlay") ( 520, 310 ) []
+
+                -- Right after release the image has only moved by the drag amount.
+                , T.checkState
+                    0
+                    (\data ->
+                        if
+                            List.any
+                                (\( _, frontend ) ->
+                                    case frontend of
+                                        Types.Loaded loaded ->
+                                            case loaded.imageViewer of
+                                                Just imageViewer ->
+                                                    imageViewer.offsetX == 20 && imageViewer.offsetY == 10
+
+                                                Nothing ->
+                                                    False
+
+                                        Types.Loading _ ->
+                                            False
+                                )
+                                (SeqDict.toList data.frontends)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Right after the flick the image should have moved by exactly the drag amount"
+                    )
+
+                -- After the momentum settles the image has coasted much further in
+                -- the same direction, but stayed on screen.
+                , T.checkState
+                    2000
+                    (\data ->
+                        if
+                            List.any
+                                (\( _, frontend ) ->
+                                    case frontend of
+                                        Types.Loaded loaded ->
+                                            case loaded.imageViewer of
+                                                Just imageViewer ->
+                                                    (imageViewer.offsetX > 100)
+                                                        && (imageViewer.offsetX < 400)
+                                                        && (imageViewer.offsetY > 50)
+                                                        && (imageViewer.offsetY < 300)
+
+                                                Nothing ->
+                                                    False
+
+                                        Types.Loading _ ->
+                                            False
+                                )
+                                (SeqDict.toList data.frontends)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Momentum should have coasted the image further after release"
+                    )
+                , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
                 ]
             )
         ]

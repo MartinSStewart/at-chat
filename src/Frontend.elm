@@ -147,6 +147,12 @@ subscriptions model =
 
                         _ ->
                             Subscription.none
+                    , case loaded.imageViewer of
+                        Just imageViewer ->
+                            ImageViewer.subscriptions imageViewer |> Subscription.map ImageViewerMsg
+
+                        Nothing ->
+                            Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
                             Subscription.batch

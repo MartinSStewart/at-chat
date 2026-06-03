@@ -1,7 +1,9 @@
-module ImageViewer exposing (Model, Msg(..), init, isPressMsg, update, view)
+module ImageViewer exposing (Model, Msg(..), init, isPressMsg, subscriptions, update, view)
 
 {-| A fullscreen overlay for viewing an image. The image is shown on top of a
-black background and can be zoomed and dragged around.
+black background and can be zoomed and dragged around, both with a bit of
+inertia: flinging the image keeps it moving and gradually slows down, and
+zooming glides to its target instead of snapping.
 
 This is rendered as an overlay (instead of navigating away or opening a new tab)
 so that the channel underneath keeps rendering and doesn't lose its scroll
@@ -16,7 +18,11 @@ the edge of the screen to dismiss it.
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Events
+import Effect.Command exposing (FrontendOnly)
+import Effect.Subscription as Subscription exposing (Subscription)
 import Html
 import Html.Attributes
 import Html.Events
@@ -35,6 +41,20 @@ type alias Model =
     , offsetX : Float
     , offsetY : Float
     , interaction : Interaction
+
+    -- Pan momentum (in CSS pixels per 60fps frame) applied after a fling.
+    , velocityX : Float
+    , velocityY : Float
+
+    -- Offset sampled on the previous animation frame, used to measure the drag
+    -- velocity so a paused drag doesn't fling.
+    , prevOffsetX : Float
+    , prevOffsetY : Float
+
+    -- The zoom level glides toward targetScale, anchored on (zoomFocusX, zoomFocusY).
+    , targetScale : Float
+    , zoomFocusX : Float
+    , zoomFocusY : Float
     }
 
 
@@ -63,6 +83,7 @@ type Msg
     | TouchStart (List ( Float, Float ))
     | TouchMove (List ( Float, Float ))
     | TouchEnd
+    | AnimationFrame Duration
 
 
 init : { url : String, imageSize : Coord CssPixels } -> Model
@@ -73,11 +94,39 @@ init { url, imageSize } =
     , offsetX = 0
     , offsetY = 0
     , interaction = NoInteraction
+    , velocityX = 0
+    , velocityY = 0
+    , prevOffsetX = 0
+    , prevOffsetY = 0
+    , targetScale = 1
+    , zoomFocusX = 0
+    , zoomFocusY = 0
     }
 
 
+{-| Animation frames are only needed while something is moving: an active drag
+or pinch, leftover pan momentum, or a zoom still gliding toward its target.
+-}
+subscriptions : Model -> Subscription FrontendOnly Msg
+subscriptions model =
+    if isAnimating model then
+        Effect.Browser.Events.onAnimationFrameDelta AnimationFrame
+
+    else
+        Subscription.none
+
+
+isAnimating : Model -> Bool
+isAnimating model =
+    (model.interaction /= NoInteraction)
+        || (abs model.velocityX > panVelocityThreshold)
+        || (abs model.velocityY > panVelocityThreshold)
+        -- Keep ticking until the zoom easing snaps scale exactly onto targetScale.
+        || (model.scale /= model.targetScale)
+
+
 {-| Returns Nothing when the viewer should be closed (the close button was
-pressed, or the image was dragged off the screen).
+pressed, or the image was dragged/flung off the screen).
 -}
 update : Coord CssPixels -> Msg -> Model -> Maybe Model
 update windowSize msg model =
@@ -86,13 +135,13 @@ update windowSize msg model =
             Nothing
 
         PressedZoomIn ->
-            Just { model | scale = clampScale (model.scale * 1.25) }
+            Just (zoomTowards (centerX windowSize) (centerY windowSize) (model.targetScale * 1.25) model)
 
         PressedZoomOut ->
-            Just { model | scale = clampScale (model.scale / 1.25) }
+            Just (zoomTowards (centerX windowSize) (centerY windowSize) (model.targetScale / 1.25) model)
 
         MouseDown x y ->
-            Just { model | interaction = startDrag x y model }
+            Just (beginDrag x y model)
 
         MouseMove x y ->
             Just (continueDrag x y model)
@@ -102,10 +151,9 @@ update windowSize msg model =
 
         Wheeled deltaY x y ->
             Just
-                (zoomAround windowSize
-                    x
+                (zoomTowards x
                     y
-                    (model.scale
+                    (model.targetScale
                         * (if deltaY > 0 then
                             0.9
 
@@ -126,10 +174,12 @@ update windowSize msg model =
                                     { startDistance = max 1 (distance first second)
                                     , startScale = model.scale
                                     }
+                            , velocityX = 0
+                            , velocityY = 0
                         }
 
                 [ ( x, y ) ] ->
-                    Just { model | interaction = startDrag x y model }
+                    Just (beginDrag x y model)
 
                 [] ->
                     Just model
@@ -140,14 +190,18 @@ update windowSize msg model =
                     let
                         ( midX, midY ) =
                             midpoint first second
+
+                        zoomed : Model
+                        zoomed =
+                            zoomAround windowSize
+                                midX
+                                midY
+                                (pinch.startScale * distance first second / pinch.startDistance)
+                                model
                     in
-                    Just
-                        (zoomAround windowSize
-                            midX
-                            midY
-                            (pinch.startScale * distance first second / pinch.startDistance)
-                            model
-                        )
+                    -- Pinch tracks the fingers directly, so keep targetScale in
+                    -- sync to avoid the easing fighting the gesture.
+                    Just { zoomed | targetScale = zoomed.scale, zoomFocusX = midX, zoomFocusY = midY }
 
                 ( Dragging _, ( x, y ) :: _ ) ->
                     Just (continueDrag x y model)
@@ -158,32 +212,167 @@ update windowSize msg model =
         TouchEnd ->
             endInteraction windowSize model
 
+        AnimationFrame duration ->
+            let
+                frames : Float
+                frames =
+                    Duration.inMilliseconds duration / frameMs
 
-startDrag : Float -> Float -> Model -> Interaction
-startDrag x y model =
-    Dragging
-        { startX = x
-        , startY = y
-        , offsetStartX = model.offsetX
-        , offsetStartY = model.offsetY
-        }
+                eased : Model
+                eased =
+                    applyZoomEasing windowSize frames model
+            in
+            case eased.interaction of
+                Dragging _ ->
+                    Just (sampleDragVelocity frames eased)
+
+                Pinching _ ->
+                    Just eased
+
+                NoInteraction ->
+                    let
+                        moved : Model
+                        moved =
+                            applyMomentum frames eased
+                    in
+                    if isOffScreen windowSize moved then
+                        Nothing
+
+                    else
+                        Just moved
+
+
+beginDrag : Float -> Float -> Model -> Model
+beginDrag x y model =
+    { model
+        | interaction =
+            Dragging
+                { startX = x
+                , startY = y
+                , offsetStartX = model.offsetX
+                , offsetStartY = model.offsetY
+                }
+        , velocityX = 0
+        , velocityY = 0
+        , prevOffsetX = model.offsetX
+        , prevOffsetY = model.offsetY
+    }
 
 
 continueDrag : Float -> Float -> Model -> Model
 continueDrag x y model =
     case model.interaction of
         Dragging drag ->
+            let
+                newOffsetX : Float
+                newOffsetX =
+                    drag.offsetStartX + (x - drag.startX)
+
+                newOffsetY : Float
+                newOffsetY =
+                    drag.offsetStartY + (y - drag.startY)
+            in
             { model
-                | offsetX = drag.offsetStartX + (x - drag.startX)
-                , offsetY = drag.offsetStartY + (y - drag.startY)
+                | offsetX = newOffsetX
+                , offsetY = newOffsetY
+
+                -- Capture an immediate velocity so a quick flick (released before
+                -- the next animation frame) still has momentum.
+                , velocityX = newOffsetX - model.offsetX
+                , velocityY = newOffsetY - model.offsetY
             }
 
         _ ->
             model
 
 
+{-| Measure the drag velocity from how far the image moved since the previous
+frame. If the drag paused, the velocity decays to zero and there's no fling.
+-}
+sampleDragVelocity : Float -> Model -> Model
+sampleDragVelocity frames model =
+    { model
+        | velocityX = (model.offsetX - model.prevOffsetX) / frames
+        , velocityY = (model.offsetY - model.prevOffsetY) / frames
+        , prevOffsetX = model.offsetX
+        , prevOffsetY = model.offsetY
+    }
+
+
+applyMomentum : Float -> Model -> Model
+applyMomentum frames model =
+    let
+        decay : Float
+        decay =
+            panDecay ^ frames
+
+        newVelocityX : Float
+        newVelocityX =
+            model.velocityX * decay
+
+        newVelocityY : Float
+        newVelocityY =
+            model.velocityY * decay
+
+        stopped : Bool
+        stopped =
+            (newVelocityX * newVelocityX) + (newVelocityY * newVelocityY) < (panVelocityThreshold * panVelocityThreshold)
+    in
+    { model
+        | offsetX = model.offsetX + (model.velocityX * frames)
+        , offsetY = model.offsetY + (model.velocityY * frames)
+        , velocityX =
+            if stopped then
+                0
+
+            else
+                newVelocityX
+        , velocityY =
+            if stopped then
+                0
+
+            else
+                newVelocityY
+    }
+
+
+{-| Set a new zoom target. The actual scale glides towards it on each animation
+frame, anchored on the given focus point.
+-}
+zoomTowards : Float -> Float -> Float -> Model -> Model
+zoomTowards focusX focusY newTargetScale model =
+    { model
+        | targetScale = clampScale newTargetScale
+        , zoomFocusX = focusX
+        , zoomFocusY = focusY
+    }
+
+
+applyZoomEasing : Coord CssPixels -> Float -> Model -> Model
+applyZoomEasing windowSize frames model =
+    let
+        diff : Float
+        diff =
+            model.targetScale - model.scale
+    in
+    if abs diff < scaleEpsilon then
+        if model.scale == model.targetScale then
+            model
+
+        else
+            zoomAround windowSize model.zoomFocusX model.zoomFocusY model.targetScale model
+
+    else
+        let
+            t : Float
+            t =
+                1 - ((1 - zoomEaseRate) ^ frames)
+        in
+        zoomAround windowSize model.zoomFocusX model.zoomFocusY (model.scale + (diff * t)) model
+
+
 {-| When an interaction ends, close the viewer if the image has been dragged
-entirely off the screen, otherwise just clear the interaction state.
+entirely off the screen, otherwise keep whatever fling velocity was built up.
 -}
 endInteraction : Coord CssPixels -> Model -> Maybe Model
 endInteraction windowSize model =
@@ -237,18 +426,18 @@ isOffScreen windowSize model =
         ( dw, dh ) =
             displayedSize windowSize model
 
-        centerX : Float
-        centerX =
+        imageCenterX : Float
+        imageCenterX =
             vw / 2 + model.offsetX
 
-        centerY : Float
-        centerY =
+        imageCenterY : Float
+        imageCenterY =
             vh / 2 + model.offsetY
     in
-    (centerX + dw / 2 < 0)
-        || (centerX - dw / 2 > vw)
-        || (centerY + dh / 2 < 0)
-        || (centerY - dh / 2 > vh)
+    (imageCenterX + dw / 2 < 0)
+        || (imageCenterX - dw / 2 > vw)
+        || (imageCenterY + dh / 2 < 0)
+        || (imageCenterY - dh / 2 > vh)
 
 
 distance : ( Float, Float ) -> ( Float, Float ) -> Float
@@ -259,6 +448,16 @@ distance ( x1, y1 ) ( x2, y2 ) =
 midpoint : ( Float, Float ) -> ( Float, Float ) -> ( Float, Float )
 midpoint ( x1, y1 ) ( x2, y2 ) =
     ( (x1 + x2) / 2, (y1 + y2) / 2 )
+
+
+centerX : Coord CssPixels -> Float
+centerX windowSize =
+    toFloat (Coord.xRaw windowSize) / 2
+
+
+centerY : Coord CssPixels -> Float
+centerY windowSize =
+    toFloat (Coord.yRaw windowSize) / 2
 
 
 {-| Change the zoom level while keeping the point under (focusX, focusY) (in
@@ -328,6 +527,34 @@ isPressMsg msg =
 
         TouchEnd ->
             False
+
+        AnimationFrame _ ->
+            False
+
+
+frameMs : Float
+frameMs =
+    1000 / 60
+
+
+panDecay : Float
+panDecay =
+    0.9
+
+
+panVelocityThreshold : Float
+panVelocityThreshold =
+    0.3
+
+
+zoomEaseRate : Float
+zoomEaseRate =
+    0.22
+
+
+scaleEpsilon : Float
+scaleEpsilon =
+    0.0005
 
 
 clampScale : Float -> Float
@@ -443,7 +670,6 @@ closeButton =
         , Ui.paddingXY 16 16
         , Ui.Font.color MyUi.white
         , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
-        , Ui.background (Ui.rgba 0 0 0 0.5)
         ]
         (Ui.html Icons.x)
 
@@ -456,7 +682,7 @@ zoomButton htmlId onPress label =
         [ Ui.width (Ui.px 40)
         , Ui.height (Ui.px 40)
         , Ui.rounded 20
-        , Ui.background (Ui.rgba 0 0 0 0.5)
+        , Ui.background (Ui.rgba 255 255 255 0.15)
         , Ui.Font.color MyUi.white
         , Ui.Font.size 24
         , Ui.contentCenterX
