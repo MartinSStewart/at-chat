@@ -1,4 +1,4 @@
-module ImageViewer exposing (Model, Msg(..), init, isPressMsg, subscriptions, update, view)
+module ImageViewer exposing (Interaction, Model, Msg(..), init, isPressMsg, subscriptions, update, view)
 
 {-| A fullscreen overlay for viewing an image. The image is shown on top of a
 black background and can be zoomed and dragged around, both with a bit of
@@ -29,7 +29,6 @@ import Html.Events
 import Html.Events.Extra.Touch
 import Icons
 import Json.Decode
-import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import NonemptyExtra
@@ -236,7 +235,7 @@ update windowSize msg model =
                 NoInteraction ->
                     let
                         ( nearestEdge, t ) =
-                            nearestViewportEdge windowSize model
+                            nearestViewportEdge windowSize model2
                     in
                     if t <= 0 then
                         Nothing
@@ -490,12 +489,12 @@ fully transparent as the visible fraction drops to zero.
 nearestViewportEdge : Coord CssPixels -> Model -> ( NearestEdge, Float )
 nearestViewportEdge windowSize model =
     let
-        vw : Float
-        vw =
+        viewWidth : Float
+        viewWidth =
             toFloat (Coord.xRaw windowSize)
 
-        vh : Float
-        vh =
+        viewHeight : Float
+        viewHeight =
             toFloat (Coord.yRaw windowSize)
 
         ( imageWidth, imageHeight ) =
@@ -503,41 +502,41 @@ nearestViewportEdge windowSize model =
 
         imageCenterX : Float
         imageCenterX =
-            vw / 2 + model.offsetX
+            viewWidth / 2 + model.offsetX
 
         imageCenterY : Float
         imageCenterY =
-            vh / 2 + model.offsetY
+            viewHeight / 2 + model.offsetY
 
-        imageX0 =
+        imageXA =
             imageCenterX - imageWidth / 2
 
-        imageY0 =
+        imageYA =
             imageCenterY - imageHeight / 2
 
-        imageX1 =
+        imageXB =
             imageCenterX + imageWidth / 2
 
-        imageY1 =
+        imageYB =
             imageCenterY + imageHeight / 2
     in
     Nonempty
-        ( ViewportLeft, (vw - imageX0) / vw |> (*) 4 |> clamp 0 1 )
-        [ ( ViewportRight, imageX1 / vw |> (*) 4 |> clamp 0 1 )
-        , ( ViewportTop, (vh - imageY0) / vh |> (*) 4 |> clamp 0 1 )
-        , ( ViewportBottom, imageY1 / vh |> (*) 4 |> clamp 0 1 )
+        ( ViewportLeft, (viewWidth - imageXA) / viewWidth |> (*) 4 |> clamp 0 1 )
+        [ ( ViewportRight, imageXB / viewWidth |> (*) 4 |> clamp 0 1 )
+        , ( ViewportTop, (viewHeight - imageYA) / viewHeight |> (*) 4 |> clamp 0 1 )
+        , ( ViewportBottom, imageYB / viewHeight |> (*) 4 |> clamp 0 1 )
         ]
         |> NonemptyExtra.minimumBy Tuple.second
 
 
 distance : ( Float, Float ) -> ( Float, Float ) -> Float
-distance ( x1, y1 ) ( x2, y2 ) =
-    sqrt (((x2 - x1) ^ 2) + ((y2 - y1) ^ 2))
+distance ( xA, yA ) ( xB, yB ) =
+    sqrt (((xB - xA) ^ 2) + ((yB - yA) ^ 2))
 
 
 midpoint : ( Float, Float ) -> ( Float, Float ) -> ( Float, Float )
-midpoint ( x1, y1 ) ( x2, y2 ) =
-    ( (x1 + x2) / 2, (y1 + y2) / 2 )
+midpoint ( xA, yA ) ( xB, yB ) =
+    ( (xA + xB) / 2, (yA + yB) / 2 )
 
 
 centerX : Coord CssPixels -> Float
@@ -652,8 +651,8 @@ clampScale scale =
     clamp 0.2 8 scale
 
 
-clientPositionDecoder : (Float -> Float -> Msg) -> Json.Decode.Decoder Msg
-clientPositionDecoder toMsg =
+decodeClientPosition : (Float -> Float -> Msg) -> Json.Decode.Decoder Msg
+decodeClientPosition toMsg =
     Json.Decode.map2 toMsg
         (Json.Decode.field "clientX" Json.Decode.float)
         (Json.Decode.field "clientY" Json.Decode.float)
@@ -672,12 +671,12 @@ view isMobile windowSize model =
          , Ui.height Ui.fill
          , Ui.background (Ui.rgba 0 0 0 (nearestViewportEdge windowSize model |> Tuple.second))
          , Ui.clip
-         , Json.Decode.map (\msg -> ( msg, True )) (clientPositionDecoder MouseDown)
+         , Json.Decode.map (\msg -> ( msg, True )) (decodeClientPosition MouseDown)
             |> Html.Events.preventDefaultOn "mousedown"
             |> Ui.htmlAttribute
          , case model.interaction of
             Dragging _ ->
-                clientPositionDecoder MouseMove
+                decodeClientPosition MouseMove
                     |> Html.Events.on "mousemove"
                     |> Ui.htmlAttribute
 

@@ -2686,8 +2686,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                     imageSize
                                                                     fileData.contentType
                                                                     fileData.fileHash
-                                                        in
-                                                        let
+
                                                             imageElement : List (Html.Attribute msg) -> Html msg
                                                             imageElement extraAttributes =
                                                                 Html.img
