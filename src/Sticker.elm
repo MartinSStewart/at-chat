@@ -152,6 +152,7 @@ animatedImageView isInline width height yOffset url animationMode =
         ([ Html.Attributes.style "width" width
          , Html.Attributes.style "height" height
          , Html.Attributes.attribute "src" url
+         , Html.Attributes.attribute "data-image-url" url
          , Html.Attributes.style "display" "block"
          , Html.Attributes.attribute "start-playing" (animationModeToInt animationMode)
          , Html.Attributes.style

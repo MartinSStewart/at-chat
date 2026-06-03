@@ -15,6 +15,7 @@ import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import Env
 import FileStatus
 import Html exposing (Html)
 import Icons
@@ -24,7 +25,7 @@ import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
 import MessageView
-import MyUi
+import MyUi exposing (Copied(..))
 import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
@@ -94,7 +95,17 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local model =
-    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False Coord.origin local model
+    menuItems
+        True
+        extraOptions.guildOrDmId
+        extraOptions.threadRoute
+        False
+        extraOptions.imageUrl
+        extraOptions.linkUrl
+        Coord.origin
+        local
+        model
+        |> .items
         |> List.length
         |> mobileMenuMaxHeightHelper
         |> CssPixels.cssPixels
@@ -115,7 +126,11 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId threadRoute False Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId threadRoute False Nothing Nothing Coord.origin local model
+                |> .items
+                |> List.length
+                |> toFloat
+                |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -123,11 +138,6 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
 messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
 messageMenuSpeed =
     Quantity.rate (CssPixels.cssPixels 800) Duration.second
-
-
-desktopMenuHeightHelper : Int -> Int
-desktopMenuHeightHelper itemCount =
-    itemCount * buttonHeight False + 2 + desktopMenuPaddingTop + desktopMenuPaddingBottom
 
 
 desktopMenuPaddingTop : number
@@ -205,13 +215,14 @@ viewMobile offset extraOptions loggedIn local model =
         height =
             1000
 
-        menuItems2 : List (Element FrontendMsg)
-        menuItems2 =
+        { items } =
             menuItems
                 True
                 extraOptions.guildOrDmId
                 extraOptions.threadRoute
                 extraOptions.isThreadStarter
+                extraOptions.imageUrl
+                extraOptions.linkUrl
                 extraOptions.position
                 local
                 model
@@ -257,7 +268,7 @@ viewMobile offset extraOptions loggedIn local model =
                             editView charsLeft richText allUsers =
                                 MessageInput.editView
                                     (Dom.id "messageMenu_editMobile")
-                                    (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
+                                    (mobileMenuMaxHeightHelper (List.length items) |> round |> (+) -32)
                                     True
                                     True
                                     editMessageTextInputId
@@ -329,7 +340,7 @@ viewMobile offset extraOptions loggedIn local model =
                                 ]
                                 Ui.none
                             )
-                            menuItems2
+                            items
                )
         )
 
@@ -351,20 +362,17 @@ view model extraOptions local loggedIn =
 
     else
         let
-            menuItems2 : List (Element FrontendMsg)
-            menuItems2 =
+            { items, height } =
                 menuItems
                     False
                     extraOptions.guildOrDmId
                     extraOptions.threadRoute
                     extraOptions.isThreadStarter
+                    extraOptions.imageUrl
+                    extraOptions.linkUrl
                     extraOptions.position
                     local
                     model
-
-            height : Int
-            height =
-                desktopMenuHeightHelper (List.length menuItems2)
 
             x =
                 Coord.xRaw extraOptions.position
@@ -396,7 +404,7 @@ view model extraOptions local loggedIn =
             , Ui.paddingWith { left = 8, right = 8, top = desktopMenuPaddingTop, bottom = desktopMenuPaddingBottom }
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            menuItems2
+            items
 
 
 editMessageTextInputId : HtmlId
@@ -404,8 +412,18 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
+menuItems :
+    Bool
+    -> AnyGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> Bool
+    -> Maybe String
+    -> Maybe String
+    -> Coord CssPixels
+    -> LocalState
+    -> LoadedFrontend
+    -> { items : List (Element FrontendMsg), height : Int }
+menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
@@ -566,7 +584,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                   else
                     Ui.none
                 ]
-                |> Just
+                |> ButtonItem
             , if canEditAndDelete then
                 button
                     isMobile
@@ -574,12 +592,12 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                     Icons.pencil
                     "Edit message"
                     (MessageMenu_PressedEditMessage guildOrDmId threadRoute)
-                    |> Just
+                    |> ButtonItem
 
               else
-                Nothing
+                NoItem
             , if isThreadStarter then
-                Nothing
+                NoItem
 
               else
                 button
@@ -588,10 +606,10 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                     Icons.reply
                     "Reply to"
                     (MessageMenu_PressedReply threadRoute)
-                    |> Just
+                    |> ButtonItem
             , case ( threadRoute, guildOrDmId ) of
                 ( _, DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ) ->
-                    Nothing
+                    NoItem
 
                 ( NoThreadWithMessage messageId, _ ) ->
                     button
@@ -600,17 +618,17 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Icons.hashtag
                         "Start thread"
                         (MessageMenu_PressedOpenThread messageId)
-                        |> Just
+                        |> ButtonItem
 
                 ( ViewThreadWithMessage _ _, _ ) ->
-                    Nothing
+                    NoItem
             , button
                 isMobile
                 (Dom.id "messageMenu_copy")
                 Icons.copyIcon
                 (case model.lastCopied of
                     Just lastCopied ->
-                        if lastCopied.copiedText == text then
+                        if lastCopied.copied == CopiedText text then
                             "Copied!"
 
                         else
@@ -620,7 +638,23 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         "Copy message"
                 )
                 (PressedCopyText text)
-                |> Just
+                |> ButtonItem
+            , case maybeImageUrl of
+                Just imageUrl ->
+                    GroupItem
+                        [ HorizontalLineItem
+                        , copyImageButton isMobile imageUrl model.lastCopied
+                        , copyImageLinkButton isMobile imageUrl model.lastCopied |> ButtonItem
+                        ]
+
+                Nothing ->
+                    NoItem
+            , case maybeLinkUrl of
+                Just linkUrl ->
+                    copyLinkButton isMobile linkUrl model.lastCopied |> ButtonItem
+
+                Nothing ->
+                    NoItem
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button
@@ -629,40 +663,149 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Icons.plusIcon
                         "Get stickers & emojis"
                         (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
-                        |> Just
+                        |> ButtonItem
 
                 Nothing ->
-                    Nothing
-            , if canEditAndDelete && not isMobile then
-                Ui.el
-                    [ Ui.height (Ui.px (buttonHeight False))
-                    , Ui.contentCenterY
-                    , Ui.paddingXY 8 0
-                    ]
-                    (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
-                    |> Just
-
-              else
-                Nothing
+                    NoItem
             , if canEditAndDelete then
-                Ui.el
-                    [ Ui.Font.color MyUi.errorColor ]
-                    (button
-                        isMobile
-                        (Dom.id "messageMenu_deleteMessage")
-                        Icons.delete
-                        "Delete message"
-                        (MessageMenu_PressedDeleteMessage guildOrDmId threadRoute)
-                    )
-                    |> Just
+                GroupItem
+                    [ HorizontalLineItem
+                    , Ui.el
+                        [ Ui.Font.color MyUi.errorColor ]
+                        (button
+                            isMobile
+                            (Dom.id "messageMenu_deleteMessage")
+                            Icons.delete
+                            "Delete message"
+                            (MessageMenu_PressedDeleteMessage guildOrDmId threadRoute)
+                        )
+                        |> ButtonItem
+                    ]
 
               else
-                Nothing
+                NoItem
             ]
-                |> List.filterMap identity
+                |> menuItemsHelper isMobile
 
         Nothing ->
-            []
+            { items = [], height = 0 }
+
+
+menuItemsHelper : Bool -> List ContextMenuItem -> { items : List (Element FrontendMsg), height : Int }
+menuItemsHelper isMobile a =
+    List.foldl
+        (\item { items, height } ->
+            case item of
+                NoItem ->
+                    { items = items, height = height }
+
+                HorizontalLineItem ->
+                    if isMobile then
+                        { items = items, height = height }
+
+                    else
+                        { items = horizontalLine :: items, height = height + horizontalLineHeight }
+
+                ButtonItem element ->
+                    { items = element :: items, height = height + buttonHeight isMobile }
+
+                GroupItem groupItems ->
+                    let
+                        b =
+                            menuItemsHelper isMobile groupItems
+                    in
+                    { items = List.reverse b.items ++ items, height = height + b.height }
+        )
+        { items = [], height = 0 }
+        a
+        |> (\{ items, height } -> { items = List.reverse items, height = height })
+
+
+type ContextMenuItem
+    = NoItem
+    | ButtonItem (Element FrontendMsg)
+    | HorizontalLineItem
+    | GroupItem (List ContextMenuItem)
+
+
+copyImageButton : Bool -> String -> Maybe MyUi.LastCopy -> ContextMenuItem
+copyImageButton isMobile imageUrl lastCopied =
+    if String.startsWith Env.domain imageUrl then
+        button
+            isMobile
+            (Dom.id "messageMenu_copyImage")
+            (Icons.image 22)
+            (case lastCopied of
+                Just lastCopied2 ->
+                    if lastCopied2.copied == CopiedImage imageUrl then
+                        "Copied!"
+
+                    else
+                        "Copy image"
+
+                Nothing ->
+                    "Copy image"
+            )
+            (PressedCopyImage imageUrl)
+            |> ButtonItem
+
+    else
+        NoItem
+
+
+copyImageLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg
+copyImageLinkButton isMobile imageUrl lastCopied =
+    button
+        isMobile
+        (Dom.id "messageMenu_copyImageLink")
+        Icons.link
+        (case lastCopied of
+            Just lastCopied2 ->
+                if lastCopied2.copied == CopiedText imageUrl then
+                    "Copied!"
+
+                else
+                    "Copy image link"
+
+            Nothing ->
+                "Copy image link"
+        )
+        (PressedCopyText imageUrl)
+
+
+copyLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg
+copyLinkButton isMobile linkUrl lastCopied =
+    button
+        isMobile
+        (Dom.id "messageMenu_copyLink")
+        Icons.link
+        (case lastCopied of
+            Just lastCopied2 ->
+                if lastCopied2.copied == CopiedText linkUrl then
+                    "Copied!"
+
+                else
+                    "Copy link"
+
+            Nothing ->
+                "Copy link"
+        )
+        (PressedCopyText linkUrl)
+
+
+horizontalLine : Element msg
+horizontalLine =
+    Ui.el
+        [ Ui.height (Ui.px horizontalLineHeight)
+        , Ui.contentCenterY
+        , Ui.paddingXY 8 0
+        ]
+        (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
+
+
+horizontalLineHeight : number
+horizontalLineHeight =
+    16
 
 
 button : Bool -> HtmlId -> Html msg -> String -> msg -> Element msg

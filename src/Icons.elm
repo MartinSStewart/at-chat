@@ -82,7 +82,7 @@ reset =
         |> Ui.html
 
 
-link : Ui.Element msg
+link : Html msg
 link =
     Svg.svg
         [ Svg.Attributes.fill "none"
@@ -98,7 +98,6 @@ link =
             ]
             []
         ]
-        |> Ui.html
 
 
 sortAscending : Ui.Element msg
@@ -651,12 +650,12 @@ person =
         ]
 
 
-image : Html msg
-image =
+image : Int -> Html msg
+image width =
     Svg.svg
         [ Svg.Attributes.fill "none"
         , Svg.Attributes.viewBox "0 4 24 16"
-        , Svg.Attributes.width "18"
+        , Svg.Attributes.width (String.fromInt width)
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
         ]

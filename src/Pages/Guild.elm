@@ -52,7 +52,7 @@ import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
-import MyUi
+import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
@@ -1840,7 +1840,7 @@ copyableText text model =
         isCopied =
             case model.lastCopied of
                 Just copied ->
-                    (copied.copiedText == text)
+                    (copied.copied == CopiedText text)
                         && (Duration.from copied.copiedAt model.time
                                 |> Quantity.lessThan (Duration.seconds 10)
                            )
@@ -5903,6 +5903,83 @@ messagePaddingX =
     8
 
 
+{-| Decodes a "contextmenu" event into a message that opens the message menu.
+If the right-click landed on an image attachment or a hyperlink we also grab
+their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
+the menu can offer "Copy image"/"Copy image link"/"Copy link" options.
+-}
+decodeMessageContextMenu : Bool -> Json.Decode.Decoder ( MessageViewMsg, Bool )
+decodeMessageContextMenu isThreadStarter =
+    Json.Decode.map3
+        (\x y target ->
+            ( MessageView_AltPressedMessage isThreadStarter target.imageUrl target.linkUrl (Coord.xy (round x) (round y))
+            , True
+            )
+        )
+        (Json.Decode.field "clientX" Json.Decode.float)
+        (Json.Decode.field "clientY" Json.Decode.float)
+        decodeEventTarget
+
+
+{-| Reads the "data-image-url"/"data-link-url" off the event's target (walking up
+its ancestors). Falls back to no urls when there is no target (e.g. in tests).
+-}
+decodeEventTarget : Json.Decode.Decoder ContextMenuTarget
+decodeEventTarget =
+    Json.Decode.oneOf
+        [ Json.Decode.field "target" (decodeContextMenuTarget 20)
+        , Json.Decode.succeed emptyContextMenuTarget
+        ]
+
+
+type alias ContextMenuTarget =
+    { imageUrl : Maybe String, linkUrl : Maybe String }
+
+
+emptyContextMenuTarget : ContextMenuTarget
+emptyContextMenuTarget =
+    { imageUrl = Nothing, linkUrl = Nothing }
+
+
+{-| Walks up from the event target through its ancestors looking for the nearest
+"data-image-url"/"data-link-url" attributes. We have to climb the tree because
+the element actually under the cursor is often a descendant of the one carrying
+the attribute (e.g. the <canvas>/<img> that an animated-image-player web
+component appends inside itself, or the favicon/label inside a link).
+-}
+decodeContextMenuTarget : Int -> Json.Decode.Decoder ContextMenuTarget
+decodeContextMenuTarget depth =
+    Json.Decode.map2
+        (\here parent ->
+            { imageUrl = orElseMaybe here.imageUrl parent.imageUrl
+            , linkUrl = orElseMaybe here.linkUrl parent.linkUrl
+            }
+        )
+        (Json.Decode.map2 ContextMenuTarget
+            (Json.Decode.maybe (Json.Decode.at [ "dataset", "imageUrl" ] Json.Decode.string))
+            (Json.Decode.maybe (Json.Decode.at [ "dataset", "linkUrl" ] Json.Decode.string))
+        )
+        (if depth <= 0 then
+            Json.Decode.succeed emptyContextMenuTarget
+
+         else
+            Json.Decode.oneOf
+                [ Json.Decode.field "parentElement" (Json.Decode.lazy (\() -> decodeContextMenuTarget (depth - 1)))
+                , Json.Decode.succeed emptyContextMenuTarget
+                ]
+        )
+
+
+orElseMaybe : Maybe a -> Maybe a -> Maybe a
+orElseMaybe first second =
+    case first of
+        Just _ ->
+            first
+
+        Nothing ->
+            second
+
+
 messageContainer :
     Bool
     -> Time.Zone
@@ -5930,27 +6007,24 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
          , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
-            (Touch.decodeTouchEvent
-                (\time touches ->
-                    MessageView_TouchStart
-                        time
-                        isThreadStarter
-                        (NonemptyDict.map
-                            (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
-                            touches
-                        )
-                )
-            )
-         , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
-                (\x y ->
-                    ( MessageView_AltPressedMessage isThreadStarter (Coord.xy (round x) (round y))
-                    , True
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (Touch.decodeTouchEvent
+                    (\time touches imageUrl linkUrl ->
+                        MessageView_TouchStart
+                            time
+                            isThreadStarter
+                            imageUrl
+                            linkUrl
+                            (NonemptyDict.map
+                                (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
+                                touches
+                            )
                     )
                 )
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
+                decodeEventTarget
             )
+         , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu isThreadStarter)
          , Ui.paddingWith
             { left = messagePaddingX
             , right = messagePaddingX
@@ -6047,27 +6121,24 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
          , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
-            (Touch.decodeTouchEvent
-                (\time touches ->
-                    MessageView_TouchStart
-                        time
-                        False
-                        (NonemptyDict.map
-                            (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
-                            touches
-                        )
-                )
-            )
-         , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
-                (\x y ->
-                    ( MessageView_AltPressedMessage False (Coord.xy (round x) (round y))
-                    , True
+                (\toMsg target -> toMsg target.imageUrl target.linkUrl)
+                (Touch.decodeTouchEvent
+                    (\time touches imageUrl linkUrl ->
+                        MessageView_TouchStart
+                            time
+                            False
+                            imageUrl
+                            linkUrl
+                            (NonemptyDict.map
+                                (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
+                                touches
+                            )
                     )
                 )
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
+                decodeEventTarget
             )
+         , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu False)
          , Ui.paddingWith
             { left = messagePaddingX
             , right = messagePaddingX

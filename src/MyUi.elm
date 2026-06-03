@@ -1,5 +1,6 @@
 module MyUi exposing
-    ( LastCopy
+    ( Copied(..)
+    , LastCopy
     , alertColor
     , background1
     , background2
@@ -147,7 +148,12 @@ errorBox htmlId onPress error =
 
 
 type alias LastCopy =
-    { copiedAt : Time.Posix, copiedText : String }
+    { copiedAt : Time.Posix, copied : Copied }
+
+
+type Copied
+    = CopiedText String
+    | CopiedImage String
 
 
 copyBox : HtmlId -> (String -> msg) -> msg -> { a | lastCopied : Maybe LastCopy } -> String -> Element msg
@@ -185,7 +191,7 @@ copyBox htmlId pressedCopyText noOp loaded text =
             ]
             (case loaded.lastCopied of
                 Just copied ->
-                    if copied.copiedText == text then
+                    if copied.copied == CopiedText text then
                         Ui.text "Copied!"
 
                     else

@@ -255,6 +255,8 @@ type alias MessageMenuExtraOptions =
     , isThreadStarter : Bool
     , threadRoute : ThreadRouteWithMessage
     , mobileMode : MessageHoverMobileMode
+    , imageUrl : Maybe String
+    , linkUrl : Maybe String
     }
 
 
@@ -426,6 +428,7 @@ type FrontendMsg
     | PressedDeleteInviteLink (Id GuildId) (SecretId InviteLinkId)
     | FrontendNoOp
     | PressedCopyText String
+    | PressedCopyImage String
     | PressedCreateGuild
     | NewGuildFormChanged NewGuildForm
     | PressedSubmitNewGuild NewGuildForm
@@ -462,7 +465,7 @@ type FrontendMsg
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit ( AnyGuildOrDmId, ThreadRoute )
-    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool
+    | CheckMessageAltPress Time.Posix AnyGuildOrDmId ThreadRouteWithMessage Bool (Maybe String) (Maybe String)
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg

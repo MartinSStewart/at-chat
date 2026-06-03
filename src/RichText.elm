@@ -2591,6 +2591,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                     [ Html.Attributes.href (Url.toString url)
                                     , Html.Attributes.target "_blank"
                                     , Html.Attributes.rel "noreferrer"
+                                    , Html.Attributes.attribute "data-link-url" (Url.toString url)
                                     , Html.Attributes.style "color" "rgb(66,133,244)"
                                     , htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
@@ -2694,6 +2695,9 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                         :: Html.Attributes.style "display" "block"
                                                                         :: Html.Attributes.width (round width)
                                                                         :: Html.Attributes.height (round height)
+                                                                        -- Exposes the full-size image url so that a right-click (contextmenu)
+                                                                        -- on the image can offer "Copy image"/"Copy image link" options.
+                                                                        :: Html.Attributes.attribute "data-image-url" fileUrl
                                                                         :: extraAttributes
                                                                     )
                                                                     []
@@ -2728,11 +2732,11 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                            ]
 
                                 Nothing ->
-                                    currentList ++ [ Icons.image ]
+                                    currentList ++ [ Icons.image 18 ]
                             )
 
                         NoLargeContent ->
-                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image 18 ] )
 
                 EscapedChar char ->
                     ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
@@ -2746,7 +2750,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                             )
 
                         NoLargeContent ->
-                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image 18 ] )
 
                 CustomEmoji id ->
                     ( ( False, spoilerIndex2 )
@@ -2805,6 +2809,7 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             (Html.Attributes.href (Url.toString url)
                 :: Html.Attributes.target "_blank"
                 :: Html.Attributes.rel "noreferrer"
+                :: Html.Attributes.attribute "data-link-url" (Url.toString url)
                 :: attributes
             )
             content
@@ -2814,6 +2819,7 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             (Html.Events.onClick (onLinkPress url)
                 :: Html.Attributes.style "cursor" "pointer"
                 :: Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColorOnDarkBackground)
+                :: Html.Attributes.attribute "data-link-url" (Url.toString url)
                 :: attributes
             )
             content
@@ -2901,6 +2907,7 @@ embedView timezone onPressLink containerWidth domainWhitelist playAnimation url 
                             , Html.Attributes.style "border-radius" "4px"
                             , Html.Attributes.style "margin-top" "8px"
                             , Html.Attributes.style "display" "block"
+                            , Html.Attributes.attribute "data-image-url" imageData.url
                             ]
                             []
                             |> Just

@@ -447,6 +447,8 @@ exports.init = async function init(app)
 
     app.ports.copy_to_clipboard_to_js.subscribe(text => copyTextToClipboard(text));
 
+    app.ports.copy_image_to_clipboard_to_js.subscribe(imageUrl => copyImageToClipboard(imageUrl));
+
     app.ports.text_input_select_all_to_js.subscribe(htmlId => {
         var a = document.getElementById(htmlId);
         if (a) {
@@ -470,6 +472,38 @@ exports.init = async function init(app)
 
     window.addEventListener('focus', () => { app.ports.window_has_focus_from_js.send(true); });
     window.addEventListener('blur', () => { app.ports.window_has_focus_from_js.send(false); });
+
+    function copyImageToClipboard(imageUrl) {
+        if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+            // Fall back to copying the link when writing image data isn't supported.
+            copyTextToClipboard(imageUrl);
+            return;
+        }
+        fetch(imageUrl)
+            .then(function (response) { return response.blob(); })
+            .then(function (blob) {
+                // The clipboard only accepts a handful of image types (png is the safest).
+                // Re-encode anything else to png via a canvas before writing it.
+                if (blob.type === "image/png") {
+                    return navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+                }
+                return createImageBitmap(blob).then(function (bitmap) {
+                    var canvas = document.createElement("canvas");
+                    canvas.width = bitmap.width;
+                    canvas.height = bitmap.height;
+                    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+                    return new Promise(function (resolve) {
+                        canvas.toBlob(function (pngBlob) {
+                            resolve(navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]));
+                        }, "image/png");
+                    });
+                });
+            })
+            .catch(function (err) {
+                console.error('Error: Could not copy image: ', err);
+                copyTextToClipboard(imageUrl);
+            });
+    }
 
     function copyTextToClipboard(text) {
         if (!navigator.clipboard) {

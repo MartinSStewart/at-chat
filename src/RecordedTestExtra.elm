@@ -181,6 +181,9 @@ handlePortToJs requestAndData =
         "copy_to_clipboard_to_js" ->
             Nothing
 
+        "copy_image_to_clipboard_to_js" ->
+            Nothing
+
         "register_push_subscription_to_js" ->
             ( "register_push_subscription_from_js"
             , Json.Encode.object
@@ -1843,6 +1846,326 @@ imageViewerTests imageUploadConfig =
                     , admin.mouseUp 50 (Dom.id "imageViewer_overlay") ( 350, 350 ) []
                     , admin.snapshotView 30 { name = "Image viewer background faded" }
                     , admin.checkView 1000 (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
+                    ]
+                )
+            ]
+        , startTest
+            "Right clicking images and links adds copy options to the message menu"
+            startTime
+            imageUploadConfig
+            [ connectTwoUsersAndJoinNewGuild
+                desktopWindow
+                (\admin _ ->
+                    let
+                        imageUrl : String
+                        imageUrl =
+                            Env.domain ++ "/file/1/123123123"
+
+                        linkUrl : String
+                        linkUrl =
+                            "https://example.com/some-page"
+                    in
+                    [ -- Attach an image to the message and send it.
+                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    , focusEvent admin 1000 (Just (Dom.id "channel_textinput")) (Just { start = 0, end = 0 })
+                    , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                    , admin.checkView
+                        0
+                        (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+
+                    -- Right clicking somewhere on the message that isn't an image opens
+                    -- the message menu without the image specific options.
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_copyImage" ])
+
+                    -- Right clicking the image itself includes its full-size url (exposed
+                    -- via the data-image-url attribute) so the menu offers the image
+                    -- specific copy options.
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            , ( "target"
+                              , Json.Encode.object
+                                    [ ( "dataset"
+                                      , Json.Encode.object [ ( "imageUrl", Json.Encode.string imageUrl ) ]
+                                      )
+                                    ]
+                              )
+                            ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.id "messageMenu_copyImage" ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has
+                            [ Test.Html.Selector.id "messageMenu_copyImageLink" ]
+                        )
+                    , admin.snapshotView 100 { name = "Message menu with copy image options" }
+
+                    -- "Copy image" copies the actual image data to the clipboard.
+                    , admin.click 100 (Dom.id "messageMenu_copyImage")
+                    , T.andThen
+                        100
+                        (\data ->
+                            case
+                                List.Extra.findMap
+                                    (\request ->
+                                        if request.clientId == admin.clientId && request.portName == "copy_image_to_clipboard_to_js" then
+                                            Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                        else
+                                            Nothing
+                                    )
+                                    data.portRequests
+                            of
+                                Just copiedUrl ->
+                                    if copiedUrl == imageUrl then
+                                        []
+
+                                    else
+                                        [ T.checkState 0 (\_ -> Err ("Copy image copied the wrong url: " ++ copiedUrl)) ]
+
+                                Nothing ->
+                                    [ T.checkState 0 (\_ -> Err "Copy image should have triggered the copy_image_to_clipboard_to_js port") ]
+                        )
+
+                    -- "Copy image link" copies the image's url as text instead.
+                    , admin.click 100 (Dom.id "messageMenu_copyImageLink")
+                    , T.andThen
+                        100
+                        (\data ->
+                            case
+                                List.Extra.findMap
+                                    (\request ->
+                                        if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
+                                            Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                        else
+                                            Nothing
+                                    )
+                                    data.portRequests
+                            of
+                                Just copiedUrl ->
+                                    if copiedUrl == imageUrl then
+                                        []
+
+                                    else
+                                        [ T.checkState 0 (\_ -> Err ("Copy image link copied the wrong url: " ++ copiedUrl)) ]
+
+                                Nothing ->
+                                    [ T.checkState 0 (\_ -> Err "Copy image link should have triggered the copy_to_clipboard_to_js port") ]
+                        )
+
+                    -- The element under the cursor is often a descendant of the one
+                    -- carrying data-image-url (e.g. the <canvas>/<img> that an animated
+                    -- gif player appends inside itself). The menu still finds the url by
+                    -- walking up to the ancestor that has it.
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            , ( "target"
+                              , Json.Encode.object
+                                    [ ( "dataset", Json.Encode.object [] )
+                                    , ( "parentElement"
+                                      , Json.Encode.object
+                                            [ ( "dataset"
+                                              , Json.Encode.object [ ( "imageUrl", Json.Encode.string imageUrl ) ]
+                                              )
+                                            ]
+                                      )
+                                    ]
+                              )
+                            ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copyImageLink" ])
+
+                    -- Right clicking a hyperlink offers a "Copy link" option (and not the
+                    -- image options) that copies the link's url.
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "contextmenu"
+                        (Json.Encode.object
+                            [ ( "clientX", Json.Encode.float 50 )
+                            , ( "clientY", Json.Encode.float 150 )
+                            , ( "target"
+                              , Json.Encode.object
+                                    [ ( "dataset"
+                                      , Json.Encode.object [ ( "linkUrl", Json.Encode.string linkUrl ) ]
+                                      )
+                                    ]
+                              )
+                            ]
+                        )
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copyLink" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_copyImage" ])
+                    , admin.click 100 (Dom.id "messageMenu_copyLink")
+                    , T.andThen
+                        100
+                        (\data ->
+                            if
+                                List.any
+                                    (\request ->
+                                        (request.clientId == admin.clientId)
+                                            && (request.portName == "copy_to_clipboard_to_js")
+                                            && (Json.Decode.decodeValue Json.Decode.string request.value == Ok linkUrl)
+                                    )
+                                    data.portRequests
+                            then
+                                []
+
+                            else
+                                [ T.checkState 0 (\_ -> Err "Copy link should have copied the link url to the clipboard") ]
+                        )
+                    ]
+                )
+            ]
+        , startTest
+            "Long pressing images and links adds copy options to the mobile message menu"
+            startTime
+            imageUploadConfig
+            [ connectTwoUsersAndJoinNewGuild
+                mobileWindow
+                (\admin _ ->
+                    let
+                        imageUrl : String
+                        imageUrl =
+                            Env.domain ++ "/file/1/123123123"
+
+                        linkUrl : String
+                        linkUrl =
+                            "https://example.com/some-page"
+
+                        -- A "touchstart" event whose target carries the given data-*
+                        -- attributes, in the shape our Touch decoder expects (touches is
+                        -- a TouchList-like object with a length and numeric indices).
+                        longPress : List ( String, Json.Encode.Value ) -> Json.Encode.Value
+                        longPress dataset =
+                            Json.Encode.object
+                                [ ( "timeStamp", Json.Encode.float 1000 )
+                                , ( "touches"
+                                  , Json.Encode.object
+                                        [ ( "length", Json.Encode.int 1 )
+                                        , ( "0"
+                                          , Json.Encode.object
+                                                [ ( "identifier", Json.Encode.int 0 )
+                                                , ( "clientX", Json.Encode.float 50 )
+                                                , ( "clientY", Json.Encode.float 150 )
+                                                , ( "target"
+                                                  , Json.Encode.object [ ( "id", Json.Encode.string "guild_message_1" ) ]
+                                                  )
+                                                ]
+                                          )
+                                        ]
+                                  )
+                                , ( "target", Json.Encode.object [ ( "dataset", Json.Encode.object dataset ) ] )
+                                ]
+
+                        -- Releasing the touch resets the drag state so the next long press
+                        -- can be registered.
+                        touchEnd : Json.Encode.Value
+                        touchEnd =
+                            Json.Encode.object [ ( "timeStamp", Json.Encode.float 2000 ) ]
+                    in
+                    [ -- Attach an image and send the message.
+                      admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
+                    , admin.checkView
+                        0
+                        (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+
+                    -- Long pressing the image opens the mobile menu. The url is found on
+                    -- the touched element, so the menu offers the image copy options.
+                    -- (500ms after touchstart the long-press timer fires.)
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "touchstart"
+                        (longPress [ ( "imageUrl", Json.Encode.string imageUrl ) ])
+                    , admin.checkView
+                        600
+                        (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copyImage" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copyImageLink" ])
+                    , admin.snapshotView 100 { name = "Mobile message menu with copy image options" }
+                    , admin.click 100 (Dom.id "messageMenu_copyImageLink")
+                    , T.andThen
+                        100
+                        (\data ->
+                            if
+                                List.any
+                                    (\request ->
+                                        (request.clientId == admin.clientId)
+                                            && (request.portName == "copy_to_clipboard_to_js")
+                                            && (Json.Decode.decodeValue Json.Decode.string request.value == Ok imageUrl)
+                                    )
+                                    data.portRequests
+                            then
+                                []
+
+                            else
+                                [ T.checkState 0 (\_ -> Err "Copy image link should have copied the image url to the clipboard") ]
+                        )
+
+                    -- Release the touch, then long press a hyperlink instead.
+                    , admin.custom 100 (Dom.id "elm-ui-root-id") "touchend" touchEnd
+                    , admin.custom
+                        100
+                        (Dom.id "guild_message_1")
+                        "touchstart"
+                        (longPress [ ( "linkUrl", Json.Encode.string linkUrl ) ])
+                    , admin.checkView
+                        600
+                        (Test.Html.Query.has [ Test.Html.Selector.id "messageMenu_copyLink" ])
+                    , admin.checkView
+                        100
+                        (Test.Html.Query.hasNot [ Test.Html.Selector.id "messageMenu_copyImage" ])
+                    , admin.click 100 (Dom.id "messageMenu_copyLink")
+                    , T.andThen
+                        100
+                        (\data ->
+                            if
+                                List.any
+                                    (\request ->
+                                        (request.clientId == admin.clientId)
+                                            && (request.portName == "copy_to_clipboard_to_js")
+                                            && (Json.Decode.decodeValue Json.Decode.string request.value == Ok linkUrl)
+                                    )
+                                    data.portRequests
+                            then
+                                []
+
+                            else
+                                [ T.checkState 0 (\_ -> Err "Copy link should have copied the link url to the clipboard") ]
+                        )
                     ]
                 )
             ]

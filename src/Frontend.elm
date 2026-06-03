@@ -47,7 +47,7 @@ import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMe
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
-import MyUi
+import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -682,7 +682,7 @@ updateLoaded msg model =
                                     FrontendExtra.routePush { model | loginStatus = LoggedIn loggedIn2 } HomePageRoute
 
                                 Pages.Admin.CopyToClipboard text ->
-                                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+                                    ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedText text } }
                                     , Ports.copyToClipboard text
                                     )
 
@@ -1047,8 +1047,11 @@ updateLoaded msg model =
             ( model, Command.none )
 
         PressedCopyText text ->
-            ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
-            , Ports.copyToClipboard text
+            copyText text model
+
+        PressedCopyImage imageUrl ->
+            ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedImage imageUrl } }
+            , Ports.copyImageToClipboard imageUrl
             )
 
         PressedCreateGuild ->
@@ -1409,7 +1412,7 @@ updateLoaded msg model =
             ( { model | pwaStatus = pwaStatus }, Command.none )
 
         TouchStart maybeGuildOrDmIdAndMessageIndex time touches ->
-            touchStart maybeGuildOrDmIdAndMessageIndex time touches model
+            touchStart maybeGuildOrDmIdAndMessageIndex Nothing Nothing time touches model
 
         TouchMoved time newTouches ->
             case model.drag of
@@ -1719,7 +1722,7 @@ updateLoaded msg model =
                 )
                 model
 
-        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter ->
+        CheckMessageAltPress startTime guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl ->
             case model.drag of
                 DragStart dragStart _ ->
                     if startTime == dragStart then
@@ -1729,6 +1732,8 @@ updateLoaded msg model =
                                     guildOrDmId
                                     threadRoute
                                     isThreadStarter
+                                    maybeImageUrl
+                                    maybeLinkUrl
                                     Coord.origin
                                     loggedIn
                                     (Local.model loggedIn.localState)
@@ -2231,16 +2236,18 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart time isThreadStarter touches ->
-                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) time touches model
+                MessageView.MessageView_TouchStart time isThreadStarter maybeImageUrl maybeLinkUrl touches ->
+                    touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) maybeImageUrl maybeLinkUrl time touches model
 
-                MessageView.MessageView_AltPressedMessage isThreadStarter clickedAt ->
+                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( handleAltPressedMessage
                                 guildOrDmId
                                 threadRoute
                                 isThreadStarter
+                                maybeImageUrl
+                                maybeLinkUrl
                                 clickedAt
                                 loggedIn
                                 (Local.model loggedIn.localState)
@@ -2415,6 +2422,8 @@ updateLoaded msg model =
                                         , guildOrDmId = guildOrDmId
                                         , threadRoute = threadRoute
                                         , isThreadStarter = isThreadStarter
+                                        , imageUrl = Nothing
+                                        , linkUrl = Nothing
                                         , mobileMode =
                                             MessageMenuOpening
                                                 { offset = Quantity.zero
@@ -4302,7 +4311,7 @@ updateLoaded msg model =
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
 copyText text model =
-    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+    ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedText text } }
     , Ports.copyToClipboard text
     )
 
@@ -5278,11 +5287,13 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 touchStart :
     Maybe ( AnyGuildOrDmId, ThreadRouteWithMessage, Bool )
+    -> Maybe String
+    -> Maybe String
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
+touchStart maybeGuildOrDmIdAndMessageIndex maybeImageUrl maybeLinkUrl time touches model =
     case model.drag of
         NoDrag ->
             if isTouchingTextInput touches then
@@ -5297,7 +5308,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
                                 Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
                                     Process.sleep (Duration.seconds 0.5)
                                         |> Task.perform
-                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
+                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter maybeImageUrl maybeLinkUrl)
 
                                 Nothing ->
                                     Command.none
@@ -5325,8 +5336,8 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
             ( model, Command.none )
 
 
-handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
-handleAltPressedMessage guildOrDmId threadRoute isThreadStarter clickedAt loggedIn local model =
+handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Maybe String -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
             MessageMenu
@@ -5334,6 +5345,8 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter clickedAt logged
                 , threadRoute = threadRoute
                 , isThreadStarter = isThreadStarter
                 , position = clickedAt
+                , imageUrl = maybeImageUrl
+                , linkUrl = maybeLinkUrl
                 , mobileMode =
                     MessageMenuOpening
                         { offset = Quantity.zero
