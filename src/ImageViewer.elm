@@ -236,7 +236,7 @@ update windowSize msg model =
                 NoInteraction ->
                     let
                         ( nearestEdge, t ) =
-                            nearestViewportEdge windowSize model |> Debug.log "a"
+                            nearestViewportEdge windowSize model
                     in
                     if t <= 0 then
                         Nothing
