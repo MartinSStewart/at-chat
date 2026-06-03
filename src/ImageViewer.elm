@@ -29,7 +29,10 @@ import Html.Events
 import Html.Events.Extra.Touch
 import Icons
 import Json.Decode
+import List.Extra
+import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import NonemptyExtra
 import Ui exposing (Element)
 import Ui.Font
 
@@ -107,22 +110,23 @@ init { url, imageSize } =
 {-| Animation frames are only needed while something is moving: an active drag
 or pinch, leftover pan momentum, or a zoom still gliding toward its target.
 -}
-subscriptions : Model -> Subscription FrontendOnly Msg
-subscriptions model =
-    if isAnimating model then
+subscriptions : Coord CssPixels -> Model -> Subscription FrontendOnly Msg
+subscriptions windowSize model =
+    if isAnimating windowSize model then
         Effect.Browser.Events.onAnimationFrameDelta AnimationFrame
 
     else
         Subscription.none
 
 
-isAnimating : Model -> Bool
-isAnimating model =
+isAnimating : Coord CssPixels -> Model -> Bool
+isAnimating windowSize model =
     (model.interaction /= NoInteraction)
         || (abs model.velocityX > panVelocityThreshold)
         || (abs model.velocityY > panVelocityThreshold)
         -- Keep ticking until the zoom easing snaps scale exactly onto targetScale.
         || (model.scale /= model.targetScale)
+        || (Tuple.second (nearestViewportEdge windowSize model) < 1)
 
 
 {-| Returns Nothing when the viewer should be closed (the close button was
@@ -231,15 +235,84 @@ update windowSize msg model =
 
                 NoInteraction ->
                     let
-                        moved : Model
-                        moved =
-                            applyMomentum frames eased
+                        ( nearestEdge, t ) =
+                            nearestViewportEdge windowSize model
                     in
-                    if isOffScreen windowSize moved then
+                    if t <= 0 then
                         Nothing
 
+                    else if t < 1 then
+                        { model
+                            | offsetX = model.offsetX + (model.velocityX * frames)
+                            , offsetY = model.offsetY + (model.velocityY * frames)
+                            , velocityX =
+                                model.velocityX
+                                    + (case nearestEdge of
+                                        ViewportLeft ->
+                                            frames * 3
+
+                                        ViewportRight ->
+                                            -frames * 3
+
+                                        ViewportTop ->
+                                            0
+
+                                        ViewportBottom ->
+                                            0
+                                      )
+                            , velocityY =
+                                model.velocityY
+                                    + (case nearestEdge of
+                                        ViewportLeft ->
+                                            0
+
+                                        ViewportRight ->
+                                            0
+
+                                        ViewportTop ->
+                                            frames * 3
+
+                                        ViewportBottom ->
+                                            -frames * 3
+                                      )
+                        }
+                            |> Just
+
                     else
-                        Just moved
+                        let
+                            decay : Float
+                            decay =
+                                panDecay ^ frames
+
+                            newVelocityX : Float
+                            newVelocityX =
+                                model.velocityX * decay
+
+                            newVelocityY : Float
+                            newVelocityY =
+                                model.velocityY * decay
+
+                            stopped : Bool
+                            stopped =
+                                (newVelocityX * newVelocityX) + (newVelocityY * newVelocityY) < (panVelocityThreshold * panVelocityThreshold)
+                        in
+                        { model
+                            | offsetX = model.offsetX + (model.velocityX * frames)
+                            , offsetY = model.offsetY + (model.velocityY * frames)
+                            , velocityX =
+                                if stopped then
+                                    0
+
+                                else
+                                    newVelocityX
+                            , velocityY =
+                                if stopped then
+                                    0
+
+                                else
+                                    newVelocityY
+                        }
+                            |> Just
 
 
 beginDrag : Float -> Float -> Model -> Model
@@ -296,43 +369,6 @@ sampleDragVelocity frames model =
         , velocityY = (model.offsetY - model.prevOffsetY) / frames
         , prevOffsetX = model.offsetX
         , prevOffsetY = model.offsetY
-    }
-
-
-applyMomentum : Float -> Model -> Model
-applyMomentum frames model =
-    let
-        decay : Float
-        decay =
-            panDecay ^ frames
-
-        newVelocityX : Float
-        newVelocityX =
-            model.velocityX * decay
-
-        newVelocityY : Float
-        newVelocityY =
-            model.velocityY * decay
-
-        stopped : Bool
-        stopped =
-            (newVelocityX * newVelocityX) + (newVelocityY * newVelocityY) < (panVelocityThreshold * panVelocityThreshold)
-    in
-    { model
-        | offsetX = model.offsetX + (model.velocityX * frames)
-        , offsetY = model.offsetY + (model.velocityY * frames)
-        , velocityX =
-            if stopped then
-                0
-
-            else
-                newVelocityX
-        , velocityY =
-            if stopped then
-                0
-
-            else
-                newVelocityY
     }
 
 
@@ -440,12 +476,19 @@ isOffScreen windowSize model =
         || (imageCenterY - dh / 2 > vh)
 
 
+type NearestEdge
+    = ViewportLeft
+    | ViewportRight
+    | ViewportTop
+    | ViewportBottom
+
+
 {-| The black background fades out as the image is dragged off the screen: it's
 fully opaque while at least half of the image is visible, and fades linearly to
 fully transparent as the visible fraction drops to zero.
 -}
-backgroundOpacity : Coord CssPixels -> Model -> Float
-backgroundOpacity windowSize model =
+nearestViewportEdge : Coord CssPixels -> Model -> ( NearestEdge, Float )
+nearestViewportEdge windowSize model =
     let
         vw : Float
         vw =
@@ -455,7 +498,7 @@ backgroundOpacity windowSize model =
         vh =
             toFloat (Coord.yRaw windowSize)
 
-        ( dw, dh ) =
+        ( imageWidth, imageHeight ) =
             displayedSize windowSize model
 
         imageCenterX : Float
@@ -466,23 +509,25 @@ backgroundOpacity windowSize model =
         imageCenterY =
             vh / 2 + model.offsetY
 
-        visibleWidth : Float
-        visibleWidth =
-            max 0 (min (imageCenterX + dw / 2) vw - max (imageCenterX - dw / 2) 0)
+        imageX0 =
+            imageCenterX - imageWidth / 2
 
-        visibleHeight : Float
-        visibleHeight =
-            max 0 (min (imageCenterY + dh / 2) vh - max (imageCenterY - dh / 2) 0)
+        imageY0 =
+            imageCenterY - imageHeight / 2
 
-        visibleFraction : Float
-        visibleFraction =
-            if dw * dh <= 0 then
-                0
+        imageX1 =
+            imageCenterX + imageWidth / 2
 
-            else
-                (visibleWidth * visibleHeight) / (dw * dh)
+        imageY1 =
+            imageCenterY + imageHeight / 2
     in
-    clamp 0 1 (visibleFraction / 0.5)
+    Nonempty
+        ( ViewportLeft, (vw - imageX0) / vw |> (*) 4 |> clamp 0 1 )
+        [ ( ViewportRight, imageX1 / vw |> (*) 4 |> clamp 0 1 )
+        , ( ViewportTop, (vh - imageY0) / vh |> (*) 4 |> clamp 0 1 )
+        , ( ViewportBottom, imageY1 / vh |> (*) 4 |> clamp 0 1 )
+        ]
+        |> NonemptyExtra.minimumBy Tuple.second
 
 
 distance : ( Float, Float ) -> ( Float, Float ) -> Float
@@ -625,7 +670,7 @@ view isMobile windowSize model =
         ([ Ui.id "imageViewer_overlay"
          , Ui.width Ui.fill
          , Ui.height Ui.fill
-         , Ui.background (Ui.rgba 0 0 0 (backgroundOpacity windowSize model))
+         , Ui.background (Ui.rgba 0 0 0 (nearestViewportEdge windowSize model |> Tuple.second))
          , Ui.clip
          , Json.Decode.map (\msg -> ( msg, True )) (clientPositionDecoder MouseDown)
             |> Html.Events.preventDefaultOn "mousedown"
@@ -715,6 +760,7 @@ closeButton =
         , Ui.paddingXY 16 16
         , Ui.Font.color MyUi.white
         , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+        , Ui.background (Ui.rgba 0 0 0 0.5)
         ]
         (Ui.html Icons.x)
 
@@ -727,7 +773,7 @@ zoomButton htmlId onPress label =
         [ Ui.width (Ui.px 40)
         , Ui.height (Ui.px 40)
         , Ui.rounded 20
-        , Ui.background (Ui.rgba 255 255 255 0.15)
+        , Ui.background (Ui.rgba 0 0 0 0.5)
         , Ui.Font.color MyUi.white
         , Ui.Font.size 24
         , Ui.contentCenterX

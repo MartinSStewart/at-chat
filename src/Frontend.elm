@@ -149,7 +149,7 @@ subscriptions model =
                             Subscription.none
                     , case loaded.imageViewer of
                         Just imageViewer ->
-                            ImageViewer.subscriptions imageViewer |> Subscription.map ImageViewerMsg
+                            ImageViewer.subscriptions loaded.windowSize imageViewer |> Subscription.map ImageViewerMsg
 
                         Nothing ->
                             Subscription.none
