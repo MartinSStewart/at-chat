@@ -217,6 +217,20 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
+    , RecordedTestExtra.imageViewerTests
+        (T.Config
+            Frontend.app_
+            Backend.app_
+            handleNormalHttpRequests
+            RecordedTestExtra.handlePortToJs
+            handleFileRequest
+            (\_ ->
+                UploadMultipleFiles
+                    (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                    []
+            )
+            RecordedTestExtra.domain
+        )
     , RecordedTestExtra.startTest
         "Admin can open admin page"
         RecordedTestExtra.startTime

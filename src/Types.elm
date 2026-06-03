@@ -75,6 +75,7 @@ import Go
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, CustomEmojiId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GoMatchPublicId, GuildId, GuildOrDmId, Id, InviteLinkId, StickerId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import ImageEditor
+import ImageViewer
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, ConnectionData, DeletedBackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey, WebsocketClosedEvent)
@@ -165,6 +166,7 @@ type alias LoadedFrontend =
     , versionNumber : Maybe Int
     , emojiData : Maybe CachedEmojiData
     , publicGoMatch : PublicGoMatch
+    , imageViewer : Maybe ImageViewer.Model
     , -- This is here for end-to-end test purposes
       toFrontendLogs : Maybe (Array ToFrontend)
     }
@@ -482,6 +484,7 @@ type FrontendMsg
     | EditMessage_GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | FileUploadProgress ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) Http.Progress
     | MessageViewMsg AnyGuildOrDmId ThreadRouteWithMessage MessageView.MessageViewMsg
+    | ImageViewerMsg ImageViewer.Msg
     | GotRegisterPushSubscription (Result String SubscribeData)
     | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel

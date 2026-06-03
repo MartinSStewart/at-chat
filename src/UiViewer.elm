@@ -72,6 +72,7 @@ main =
                     800
                     (\_ -> ())
                     (\_ -> ())
+                    (\_ _ -> ())
                     { domainWhitelist = SeqSet.empty
                     , revealedSpoilers = SeqSet.fromList [ 1, 3, 5, 7 ]
                     , users = SeqDict.empty
@@ -168,6 +169,7 @@ stickersSection =
             800
             (\_ -> ())
             (\_ -> ())
+            (\_ _ -> ())
             { domainWhitelist = SeqSet.empty
             , revealedSpoilers = SeqSet.empty
             , users = SeqDict.empty
@@ -334,6 +336,7 @@ embedExamples whitelistedDomains =
                 800
                 (\_ -> ())
                 (\_ -> ())
+                (\_ _ -> ())
                 { domainWhitelist = whitelistedDomains
                 , revealedSpoilers = SeqSet.empty
                 , users = SeqDict.empty

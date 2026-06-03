@@ -40,6 +40,7 @@ module RichText exposing
 import Array exposing (Array)
 import Basics.Extra
 import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
@@ -2154,15 +2155,17 @@ view :
     -> Int
     -> (Url -> msg)
     -> (Int -> msg)
+    -> (String -> Coord CssPixels -> msg)
     -> Config a userId
     -> Array Embed
     -> Nonempty (RichText userId)
     -> List (Html msg)
-view htmlIdPrefix containerWidth onPressLink onPressSpoiler config embeds nonempty =
+view htmlIdPrefix containerWidth onPressLink onPressSpoiler onPressImage config embeds nonempty =
     viewHelper
         False
         (ShowLargeContent containerWidth)
         (Just ( htmlIdPrefix, onPressSpoiler ))
+        (Just onPressImage)
         onPressLink
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
@@ -2178,6 +2181,7 @@ preview onPressLink config nonempty =
     viewHelper
         False
         NoLargeContent
+        Nothing
         Nothing
         onPressLink
         0
@@ -2242,6 +2246,7 @@ viewHelper :
     Bool
     -> ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
+    -> Maybe (String -> Coord CssPixels -> msg)
     -> (Url -> msg)
     -> Int
     -> RichTextState
@@ -2250,7 +2255,7 @@ viewHelper :
     -> Int
     -> Nonempty (RichText userId)
     -> ( ( Bool, Int ), Int, List (Html msg) )
-viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink spoilerIndex state config embeds embedIndex nonempty =
+viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressImage onPressLink spoilerIndex state config embeds embedIndex nonempty =
     List.foldl
         (\item ( ( dropNextLineBreak2, spoilerIndex2 ), embedIndex2, currentList ) ->
             case item of
@@ -2278,6 +2283,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                 dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
+                                maybeOnPressImage
                                 onPressLink
                                 spoilerIndex2
                                 { state | italic = True }
@@ -2295,6 +2301,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                 dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
+                                maybeOnPressImage
                                 onPressLink
                                 spoilerIndex2
                                 { state | underline = True }
@@ -2312,6 +2319,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                 dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
+                                maybeOnPressImage
                                 onPressLink
                                 spoilerIndex2
                                 { state | bold = True }
@@ -2329,6 +2337,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                 dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
+                                maybeOnPressImage
                                 onPressLink
                                 spoilerIndex2
                                 { state | strikethrough = True }
@@ -2350,6 +2359,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                 dropNextLineBreak2
                                 showLargeContent
                                 maybePressedSpoiler
+                                maybeOnPressImage
                                 onPressLink
                                 spoilerIndex2
                                 (if revealed then
@@ -2415,6 +2425,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                                 NoLargeContent
                                         )
                                         maybePressedSpoiler
+                                        maybeOnPressImage
                                         onPressLink
                                         spoilerIndex2
                                         state
@@ -2453,6 +2464,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                 True
                                 showLargeContent
                                 maybePressedSpoiler
+                                maybeOnPressImage
                                 onPressLink
                                 spoilerIndex2
                                 state
@@ -2674,22 +2686,42 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler onPressLink sp
                                                                     imageSize
                                                                     fileData.contentType
                                                                     fileData.fileHash
+
+                                                            imageElement : List (Html.Attribute msg) -> Html msg
+                                                            imageElement extraAttributes =
+                                                                Html.img
+                                                                    (Html.Attributes.src thumbnailUrl
+                                                                        :: Html.Attributes.style "display" "block"
+                                                                        :: Html.Attributes.width (round width)
+                                                                        :: Html.Attributes.height (round height)
+                                                                        :: extraAttributes
+                                                                    )
+                                                                    []
                                                         in
-                                                        Html.a
-                                                            [ Html.Attributes.href fileUrl
-                                                            , Html.Attributes.target "_blank"
-                                                            , Html.Attributes.rel "noreferrer"
-                                                            , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
-                                                            , Html.Attributes.style "display" "block"
-                                                            ]
-                                                            [ Html.img
-                                                                [ Html.Attributes.src thumbnailUrl
-                                                                , Html.Attributes.style "display" "block"
-                                                                , Html.Attributes.width (round width)
-                                                                , Html.Attributes.height (round height)
-                                                                ]
-                                                                []
-                                                            ]
+                                                        case maybeOnPressImage of
+                                                            Just onPressImage ->
+                                                                imageElement
+                                                                    [ Html.Attributes.style "cursor" "pointer"
+                                                                    , Html.Attributes.id
+                                                                        (case maybePressedSpoiler of
+                                                                            Just ( htmlIdPrefix, _ ) ->
+                                                                                Dom.idToString htmlIdPrefix ++ "_image_" ++ Id.toString fileId
+
+                                                                            Nothing ->
+                                                                                "image_" ++ Id.toString fileId
+                                                                        )
+                                                                    , Html.Events.onClick (onPressImage fileUrl imageSize)
+                                                                    ]
+
+                                                            Nothing ->
+                                                                Html.a
+                                                                    [ Html.Attributes.href fileUrl
+                                                                    , Html.Attributes.target "_blank"
+                                                                    , Html.Attributes.rel "noreferrer"
+                                                                    , Html.Attributes.style "width" (String.fromInt (round width) ++ "px")
+                                                                    , Html.Attributes.style "display" "block"
+                                                                    ]
+                                                                    [ imageElement [] ]
 
                                                 _ ->
                                                     fileDownloadView state.spoiler fileData
