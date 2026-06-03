@@ -3686,6 +3686,7 @@ peopleAreTypingView allUsers channel currentUserId model =
             , MyUi.prewrap
             , MyUi.noShrinking
             , Ui.contentCenterY
+            , MyUi.htmlStyle "user-select" "none"
             , MyUi.htmlStyle
                 "padding"
                 ("0 calc(12px + "
