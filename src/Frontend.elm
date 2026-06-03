@@ -1733,6 +1733,7 @@ updateLoaded msg model =
                                     threadRoute
                                     isThreadStarter
                                     Nothing
+                                    Nothing
                                     Coord.origin
                                     loggedIn
                                     (Local.model loggedIn.localState)
@@ -2238,7 +2239,7 @@ updateLoaded msg model =
                 MessageView.MessageView_TouchStart time isThreadStarter touches ->
                     touchStart (Just ( guildOrDmId, threadRoute, isThreadStarter )) time touches model
 
-                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl clickedAt ->
+                MessageView.MessageView_AltPressedMessage isThreadStarter maybeImageUrl maybeLinkUrl clickedAt ->
                     FrontendExtra.updateLoggedIn
                         (\loggedIn ->
                             ( handleAltPressedMessage
@@ -2246,6 +2247,7 @@ updateLoaded msg model =
                                 threadRoute
                                 isThreadStarter
                                 maybeImageUrl
+                                maybeLinkUrl
                                 clickedAt
                                 loggedIn
                                 (Local.model loggedIn.localState)
@@ -2421,6 +2423,7 @@ updateLoaded msg model =
                                         , threadRoute = threadRoute
                                         , isThreadStarter = isThreadStarter
                                         , imageUrl = Nothing
+                                        , linkUrl = Nothing
                                         , mobileMode =
                                             MessageMenuOpening
                                                 { offset = Quantity.zero
@@ -5331,8 +5334,8 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
             ( model, Command.none )
 
 
-handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
-handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl clickedAt loggedIn local model =
+handleAltPressedMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Maybe String -> Maybe String -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
             MessageMenu
@@ -5341,6 +5344,7 @@ handleAltPressedMessage guildOrDmId threadRoute isThreadStarter maybeImageUrl cl
                 , isThreadStarter = isThreadStarter
                 , position = clickedAt
                 , imageUrl = maybeImageUrl
+                , linkUrl = maybeLinkUrl
                 , mobileMode =
                     MessageMenuOpening
                         { offset = Quantity.zero

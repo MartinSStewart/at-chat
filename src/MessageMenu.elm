@@ -95,7 +95,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local model =
-    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.imageUrl Coord.origin local model
+    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.imageUrl extraOptions.linkUrl Coord.origin local model
         |> .items
         |> List.length
         |> mobileMenuMaxHeightHelper
@@ -117,7 +117,7 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId threadRoute False Nothing Coord.origin local model
+            menuItems True guildOrDmId threadRoute False Nothing Nothing Coord.origin local model
                 |> .items
                 |> List.length
                 |> toFloat
@@ -218,6 +218,7 @@ viewMobile offset extraOptions loggedIn local model =
                 extraOptions.threadRoute
                 extraOptions.isThreadStarter
                 extraOptions.imageUrl
+                extraOptions.linkUrl
                 extraOptions.position
                 local
                 model
@@ -364,6 +365,7 @@ view model extraOptions local loggedIn =
                     extraOptions.threadRoute
                     extraOptions.isThreadStarter
                     extraOptions.imageUrl
+                    extraOptions.linkUrl
                     extraOptions.position
                     local
                     model
@@ -412,11 +414,12 @@ menuItems :
     -> ThreadRouteWithMessage
     -> Bool
     -> Maybe String
+    -> Maybe String
     -> Coord CssPixels
     -> LocalState
     -> LoadedFrontend
     -> { items : List (Element FrontendMsg), height : Int }
-menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl position local model =
+menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl maybeLinkUrl position local model =
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String, List (Id CustomEmojiId) )
         helper messageId thread =
@@ -642,6 +645,12 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl positio
 
                 Nothing ->
                     NoItem
+            , case maybeLinkUrl of
+                Just linkUrl ->
+                    copyLinkButton isMobile linkUrl model.lastCopied |> ButtonItem
+
+                Nothing ->
+                    NoItem
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
                     button
@@ -758,6 +767,26 @@ copyImageLinkButton isMobile imageUrl lastCopied =
                 "Copy image link"
         )
         (PressedCopyText imageUrl)
+
+
+copyLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg
+copyLinkButton isMobile linkUrl lastCopied =
+    button
+        isMobile
+        (Dom.id "messageMenu_copyLink")
+        Icons.link
+        (case lastCopied of
+            Just lastCopied2 ->
+                if lastCopied2.copied == CopiedText linkUrl then
+                    "Copied!"
+
+                else
+                    "Copy link"
+
+            Nothing ->
+                "Copy link"
+        )
+        (PressedCopyText linkUrl)
 
 
 horizontalLine : Element msg

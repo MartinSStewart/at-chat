@@ -256,6 +256,7 @@ type alias MessageMenuExtraOptions =
     , threadRoute : ThreadRouteWithMessage
     , mobileMode : MessageHoverMobileMode
     , imageUrl : Maybe String
+    , linkUrl : Maybe String
     }
 
 

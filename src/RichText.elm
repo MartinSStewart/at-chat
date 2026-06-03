@@ -2591,6 +2591,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                     [ Html.Attributes.href (Url.toString url)
                                     , Html.Attributes.target "_blank"
                                     , Html.Attributes.rel "noreferrer"
+                                    , Html.Attributes.attribute "data-link-url" (Url.toString url)
                                     , Html.Attributes.style "color" "rgb(66,133,244)"
                                     , htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
@@ -2808,6 +2809,7 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             (Html.Attributes.href (Url.toString url)
                 :: Html.Attributes.target "_blank"
                 :: Html.Attributes.rel "noreferrer"
+                :: Html.Attributes.attribute "data-link-url" (Url.toString url)
                 :: attributes
             )
             content
@@ -2817,6 +2819,7 @@ buttonOrA onLinkPress domainWhitelist url attributes content =
             (Html.Events.onClick (onLinkPress url)
                 :: Html.Attributes.style "cursor" "pointer"
                 :: Html.Attributes.style "color" (MyUi.colorToStyle MyUi.textLinkColorOnDarkBackground)
+                :: Html.Attributes.attribute "data-link-url" (Url.toString url)
                 :: attributes
             )
             content
