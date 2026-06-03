@@ -52,7 +52,7 @@ import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (TextInputFocus)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
-import MyUi
+import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneOrGreater exposing (OneOrGreater)
@@ -1840,7 +1840,7 @@ copyableText text model =
         isCopied =
             case model.lastCopied of
                 Just copied ->
-                    (copied.copiedText == text)
+                    (copied.copied == CopiedText text)
                         && (Duration.from copied.copiedAt model.time
                                 |> Quantity.lessThan (Duration.seconds 10)
                            )

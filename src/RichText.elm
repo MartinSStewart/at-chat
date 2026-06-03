@@ -2731,11 +2731,11 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                            ]
 
                                 Nothing ->
-                                    currentList ++ [ Icons.image ]
+                                    currentList ++ [ Icons.image 18 ]
                             )
 
                         NoLargeContent ->
-                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image 18 ] )
 
                 EscapedChar char ->
                     ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Html.text (escapedCharToString char) ] )
@@ -2749,7 +2749,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                             )
 
                         NoLargeContent ->
-                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image ] )
+                            ( ( False, spoilerIndex2 ), embedIndex2, currentList ++ [ Icons.image 18 ] )
 
                 CustomEmoji id ->
                     ( ( False, spoilerIndex2 )
@@ -2904,6 +2904,7 @@ embedView timezone onPressLink containerWidth domainWhitelist playAnimation url 
                             , Html.Attributes.style "border-radius" "4px"
                             , Html.Attributes.style "margin-top" "8px"
                             , Html.Attributes.style "display" "block"
+                            , Html.Attributes.attribute "data-image-url" imageData.url
                             ]
                             []
                             |> Just

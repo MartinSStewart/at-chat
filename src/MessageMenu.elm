@@ -15,6 +15,7 @@ import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (EmojiOrCustomEmoji(..))
+import Env
 import FileStatus
 import Html exposing (Html)
 import Icons
@@ -24,7 +25,7 @@ import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput
 import MessageView
-import MyUi
+import MyUi exposing (Copied(..))
 import NonemptySet exposing (NonemptySet)
 import OneToOne
 import PersonName exposing (PersonName)
@@ -528,160 +529,134 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl positio
                         messageCustomEmojiIdsList
                         |> NonemptySet.fromList
             in
-            [ Ui.row
-                []
-                [ -- We need to have this container around the button, otherwise the divider between button and emojis isn't centered for some reason
-                  Ui.el
+            [ [ Ui.row
                     []
-                    (button
-                        isMobile
-                        (Dom.id "messageMenu_addReaction")
-                        Icons.smile
-                        "Add reaction emoji"
-                        (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute position)
-                    )
-                , if isMobile then
-                    let
-                        commonEmojis : List (Element FrontendMsg)
-                        commonEmojis =
-                            User.commonlyUsedEmojis local.localUser.user
-                                |> List.take 3
-                                |> List.indexedMap
-                                    (\index ( emoji, _ ) ->
-                                        MyUi.elButton
-                                            (Dom.id ("messageMenu_mobileReactionEmoji_" ++ String.fromInt index))
-                                            (MessageMenu_PressedReactionEmoji emoji)
-                                            [ Ui.contentCenterX
-                                            , Ui.contentCenterY
-                                            , buttonHeight isMobile |> Ui.px |> Ui.height
-                                            , Ui.Font.size 24
-                                            ]
-                                            (Ui.html (MessageView.reactionEmojiButtonContent local.localUser.customEmojis emoji))
-                                    )
-                    in
-                    Ui.el
-                        [ Ui.paddingXY 0 4, Ui.width (Ui.px 1), Ui.height Ui.fill ]
-                        (Ui.el [ Ui.height Ui.fill, Ui.background MyUi.buttonBorder ] Ui.none)
-                        :: commonEmojis
-                        |> Ui.row [ Ui.height (Ui.px (buttonHeight True)), MyUi.noShrinking ]
+                    [ -- We need to have this container around the button, otherwise the divider between button and emojis isn't centered for some reason
+                      Ui.el
+                        []
+                        (button
+                            isMobile
+                            (Dom.id "messageMenu_addReaction")
+                            Icons.smile
+                            "Add reaction emoji"
+                            (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute position)
+                        )
+                    , if isMobile then
+                        let
+                            commonEmojis : List (Element FrontendMsg)
+                            commonEmojis =
+                                User.commonlyUsedEmojis local.localUser.user
+                                    |> List.take 3
+                                    |> List.indexedMap
+                                        (\index ( emoji, _ ) ->
+                                            MyUi.elButton
+                                                (Dom.id ("messageMenu_mobileReactionEmoji_" ++ String.fromInt index))
+                                                (MessageMenu_PressedReactionEmoji emoji)
+                                                [ Ui.contentCenterX
+                                                , Ui.contentCenterY
+                                                , buttonHeight isMobile |> Ui.px |> Ui.height
+                                                , Ui.Font.size 24
+                                                ]
+                                                (Ui.html (MessageView.reactionEmojiButtonContent local.localUser.customEmojis emoji))
+                                        )
+                        in
+                        Ui.el
+                            [ Ui.paddingXY 0 4, Ui.width (Ui.px 1), Ui.height Ui.fill ]
+                            (Ui.el [ Ui.height Ui.fill, Ui.background MyUi.buttonBorder ] Ui.none)
+                            :: commonEmojis
+                            |> Ui.row [ Ui.height (Ui.px (buttonHeight True)), MyUi.noShrinking ]
 
-                  else
-                    Ui.none
-                ]
-                |> Just
+                      else
+                        Ui.none
+                    ]
+              ]
             , if canEditAndDelete then
-                button
+                [ button
                     isMobile
                     (Dom.id "messageMenu_editMessage")
                     Icons.pencil
                     "Edit message"
                     (MessageMenu_PressedEditMessage guildOrDmId threadRoute)
-                    |> Just
+                ]
 
               else
-                Nothing
+                []
             , if isThreadStarter then
-                Nothing
+                []
 
               else
-                button
+                [ button
                     isMobile
                     (Dom.id "messageMenu_replyTo")
                     Icons.reply
                     "Reply to"
                     (MessageMenu_PressedReply threadRoute)
-                    |> Just
+                ]
             , case ( threadRoute, guildOrDmId ) of
                 ( _, DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _) ) ->
-                    Nothing
+                    []
 
                 ( NoThreadWithMessage messageId, _ ) ->
-                    button
+                    [ button
                         isMobile
                         (Dom.id "messageMenu_openThread")
                         Icons.hashtag
                         "Start thread"
                         (MessageMenu_PressedOpenThread messageId)
-                        |> Just
+                    ]
 
                 ( ViewThreadWithMessage _ _, _ ) ->
-                    Nothing
-            , button
-                isMobile
-                (Dom.id "messageMenu_copy")
-                Icons.copyIcon
-                (case model.lastCopied of
-                    Just lastCopied ->
-                        if lastCopied.copiedText == text then
-                            "Copied!"
+                    []
+            , [ button
+                    isMobile
+                    (Dom.id "messageMenu_copy")
+                    Icons.copyIcon
+                    (case model.lastCopied of
+                        Just lastCopied ->
+                            if lastCopied.copied == CopiedText text then
+                                "Copied!"
 
-                        else
+                            else
+                                "Copy message"
+
+                        Nothing ->
                             "Copy message"
-
-                    Nothing ->
-                        "Copy message"
-                )
-                (PressedCopyText text)
-                |> Just
+                    )
+                    (PressedCopyText text)
+              ]
             , case maybeImageUrl of
                 Just imageUrl ->
-                    button
-                        isMobile
-                        (Dom.id "messageMenu_copyImage")
-                        Icons.image
-                        (case model.lastCopied of
-                            Just lastCopied ->
-                                if lastCopied.copiedText == imageUrl then
-                                    "Copied!"
+                    [ if isMobile then
+                        Nothing
 
-                                else
-                                    "Copy image"
-
-                            Nothing ->
-                                "Copy image"
-                        )
-                        (PressedCopyImage imageUrl)
-                        |> Just
+                      else
+                        Just horizontalLine
+                    , copyImageButton isMobile imageUrl model.lastCopied
+                    , copyImageLinkButton isMobile imageUrl model.lastCopied |> Just
+                    ]
+                        |> List.filterMap identity
 
                 Nothing ->
-                    Nothing
-            , case maybeImageUrl of
-                Just imageUrl ->
-                    button
-                        isMobile
-                        (Dom.id "messageMenu_copyImageLink")
-                        Icons.copyIcon
-                        "Copy image link"
-                        (PressedCopyText imageUrl)
-                        |> Just
-
-                Nothing ->
-                    Nothing
+                    []
             , case newCustomEmojiIds of
                 Just newCustomEmojiIds2 ->
-                    button
+                    [ button
                         isMobile
                         (Dom.id "messageMenu_addCustomEmojis")
                         Icons.plusIcon
                         "Get stickers & emojis"
                         (MessageMenu_PressedAddCustomEmojisToUser newCustomEmojiIds2)
-                        |> Just
+                    ]
 
                 Nothing ->
-                    Nothing
+                    []
             , if canEditAndDelete && not isMobile then
-                Ui.el
-                    [ Ui.height (Ui.px (buttonHeight False))
-                    , Ui.contentCenterY
-                    , Ui.paddingXY 8 0
-                    ]
-                    (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
-                    |> Just
+                [ horizontalLine ]
 
               else
-                Nothing
+                []
             , if canEditAndDelete then
-                Ui.el
+                [ Ui.el
                     [ Ui.Font.color MyUi.errorColor ]
                     (button
                         isMobile
@@ -690,15 +665,76 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter maybeImageUrl positio
                         "Delete message"
                         (MessageMenu_PressedDeleteMessage guildOrDmId threadRoute)
                     )
-                    |> Just
+                ]
 
               else
-                Nothing
+                []
             ]
-                |> List.filterMap identity
+                |> List.concat
 
         Nothing ->
             []
+
+
+type ContextMenuItem
+    = NoItem
+    | ButtonItem
+    | HorizontalLineItem
+
+
+copyImageButton : Bool -> String -> Maybe MyUi.LastCopy -> Maybe (Element FrontendMsg)
+copyImageButton isMobile imageUrl lastCopied =
+    if String.startsWith Env.domain imageUrl then
+        button
+            isMobile
+            (Dom.id "messageMenu_copyImage")
+            (Icons.image 22)
+            (case lastCopied of
+                Just lastCopied2 ->
+                    if lastCopied2.copied == CopiedImage imageUrl then
+                        "Copied!"
+
+                    else
+                        "Copy image"
+
+                Nothing ->
+                    "Copy image"
+            )
+            (PressedCopyImage imageUrl)
+            |> Just
+
+    else
+        Nothing
+
+
+copyImageLinkButton : Bool -> String -> Maybe MyUi.LastCopy -> Element FrontendMsg
+copyImageLinkButton isMobile imageUrl lastCopied =
+    button
+        isMobile
+        (Dom.id "messageMenu_copyImageLink")
+        Icons.link
+        (case lastCopied of
+            Just lastCopied2 ->
+                if lastCopied2.copied == CopiedText imageUrl then
+                    "Copied!"
+
+                else
+                    "Copy image link"
+
+            Nothing ->
+                "Copy image link"
+        )
+        (PressedCopyText imageUrl)
+
+
+horizontalLine : Element msg
+horizontalLine =
+    Ui.el
+        [ Ui.height (Ui.px (buttonHeight False - 14))
+        , Ui.contentCenterY
+        , Ui.paddingXY 8 0
+        ]
+        (Ui.el [ Ui.height (Ui.px 1), Ui.background MyUi.border1 ] Ui.none)
 
 
 button : Bool -> HtmlId -> Html msg -> String -> msg -> Element msg

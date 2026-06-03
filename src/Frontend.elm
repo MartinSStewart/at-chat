@@ -47,7 +47,7 @@ import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMe
 import MessageInput exposing (NameSoFar(..), TextInputFocus)
 import MessageMenu
 import MessageView
-import MyUi
+import MyUi exposing (Copied(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import Pages.Admin
@@ -682,7 +682,7 @@ updateLoaded msg model =
                                     FrontendExtra.routePush { model | loginStatus = LoggedIn loggedIn2 } HomePageRoute
 
                                 Pages.Admin.CopyToClipboard text ->
-                                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+                                    ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedText text } }
                                     , Ports.copyToClipboard text
                                     )
 
@@ -1047,12 +1047,10 @@ updateLoaded msg model =
             ( model, Command.none )
 
         PressedCopyText text ->
-            ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
-            , Ports.copyToClipboard text
-            )
+            copyText text model
 
         PressedCopyImage imageUrl ->
-            ( { model | lastCopied = Just { copiedAt = model.time, copiedText = imageUrl } }
+            ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedImage imageUrl } }
             , Ports.copyImageToClipboard imageUrl
             )
 
@@ -4310,7 +4308,7 @@ updateLoaded msg model =
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
 copyText text model =
-    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+    ( { model | lastCopied = Just { copiedAt = model.time, copied = CopiedText text } }
     , Ports.copyToClipboard text
     )
 
