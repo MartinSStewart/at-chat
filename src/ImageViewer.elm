@@ -59,7 +59,7 @@ type Msg
     | MouseDown Float Float
     | MouseMove Float Float
     | MouseUp
-    | Wheeled Float
+    | Wheeled Float Float Float
     | TouchStart (List ( Float, Float ))
     | TouchMove (List ( Float, Float ))
     | TouchEnd
@@ -100,20 +100,21 @@ update windowSize msg model =
         MouseUp ->
             endInteraction windowSize model
 
-        Wheeled deltaY ->
+        Wheeled deltaY x y ->
             Just
-                { model
-                    | scale =
-                        clampScale
-                            (model.scale
-                                * (if deltaY > 0 then
-                                    0.9
+                (zoomAround windowSize
+                    x
+                    y
+                    (model.scale
+                        * (if deltaY > 0 then
+                            0.9
 
-                                   else
-                                    1.1
-                                  )
-                            )
-                }
+                           else
+                            1.1
+                          )
+                    )
+                    model
+                )
 
         TouchStart positions ->
             case positions of
@@ -136,7 +137,17 @@ update windowSize msg model =
         TouchMove positions ->
             case ( model.interaction, positions ) of
                 ( Pinching pinch, first :: second :: _ ) ->
-                    Just { model | scale = clampScale (pinch.startScale * distance first second / pinch.startDistance) }
+                    let
+                        ( midX, midY ) =
+                            midpoint first second
+                    in
+                    Just
+                        (zoomAround windowSize
+                            midX
+                            midY
+                            (pinch.startScale * distance first second / pinch.startDistance)
+                            model
+                        )
 
                 ( Dragging _, ( x, y ) :: _ ) ->
                     Just (continueDrag x y model)
@@ -245,6 +256,43 @@ distance ( x1, y1 ) ( x2, y2 ) =
     sqrt (((x2 - x1) ^ 2) + ((y2 - y1) ^ 2))
 
 
+midpoint : ( Float, Float ) -> ( Float, Float ) -> ( Float, Float )
+midpoint ( x1, y1 ) ( x2, y2 ) =
+    ( (x1 + x2) / 2, (y1 + y2) / 2 )
+
+
+{-| Change the zoom level while keeping the point under (focusX, focusY) (in
+screen coordinates) anchored in place. The image is centered in the viewport,
+so we adjust the pan offset to compensate for the change in scale.
+-}
+zoomAround : Coord CssPixels -> Float -> Float -> Float -> Model -> Model
+zoomAround windowSize focusX focusY newScaleRaw model =
+    let
+        newScale : Float
+        newScale =
+            clampScale newScaleRaw
+
+        ratio : Float
+        ratio =
+            newScale / model.scale
+
+        -- The focus point relative to the viewport center, which is where the
+        -- (un-offset) image is centered.
+        px : Float
+        px =
+            focusX - toFloat (Coord.xRaw windowSize) / 2
+
+        py : Float
+        py =
+            focusY - toFloat (Coord.yRaw windowSize) / 2
+    in
+    { model
+        | scale = newScale
+        , offsetX = (px * (1 - ratio)) + (ratio * model.offsetX)
+        , offsetY = (py * (1 - ratio)) + (ratio * model.offsetY)
+    }
+
+
 {-| Pressing the close/zoom buttons counts as a press, but dragging and zooming
 do not (so they don't interfere with other press handling).
 -}
@@ -269,7 +317,7 @@ isPressMsg msg =
         MouseUp ->
             False
 
-        Wheeled _ ->
+        Wheeled _ _ _ ->
             False
 
         TouchStart _ ->
@@ -334,8 +382,10 @@ view isMobile model =
             { stopPropagation = True, preventDefault = True }
             (\_ -> TouchEnd)
             |> Ui.htmlAttribute
-         , Json.Decode.map (\deltaY -> ( Wheeled deltaY, True ))
+         , Json.Decode.map3 (\deltaY x y -> ( Wheeled deltaY x y, True ))
             (Json.Decode.field "deltaY" Json.Decode.float)
+            (Json.Decode.field "clientX" Json.Decode.float)
+            (Json.Decode.field "clientY" Json.Decode.float)
             |> Html.Events.preventDefaultOn "wheel"
             |> Ui.htmlAttribute
          ]

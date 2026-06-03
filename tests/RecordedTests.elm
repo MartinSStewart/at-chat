@@ -288,6 +288,40 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Err "Dragging the image should have moved it by (150, 80)"
                     )
 
+                -- Scroll-zoom anchors on the cursor: zooming in at (700, 400),
+                -- which is down and to the right of the 1000x600 viewport center,
+                -- shifts the image so that point stays under the cursor. Starting
+                -- from offset (150, 80) and scale 1, scrolling in by 1.1x gives
+                -- offsetX = 200*(1-1.1) + 1.1*150 = 145 and offsetY = 100*(1-1.1) + 1.1*80 = 78.
+                , admin.wheel 100 (Dom.id "imageViewer_overlay") -1 ( 700, 400 ) [] []
+                , T.checkState
+                    100
+                    (\data ->
+                        if
+                            List.any
+                                (\( _, frontend ) ->
+                                    case frontend of
+                                        Types.Loaded loaded ->
+                                            case loaded.imageViewer of
+                                                Just imageViewer ->
+                                                    (abs (imageViewer.scale - 1.1) < 0.01)
+                                                        && (abs (imageViewer.offsetX - 145) < 0.01)
+                                                        && (abs (imageViewer.offsetY - 78) < 0.01)
+
+                                                Nothing ->
+                                                    False
+
+                                        Types.Loading _ ->
+                                            False
+                                )
+                                (SeqDict.toList data.frontends)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Scroll-zooming should keep the point under the cursor anchored"
+                    )
+
                 -- Zooming in keeps the overlay open.
                 , admin.click 100 (Dom.id "imageViewer_zoomIn")
                 , admin.click 100 (Dom.id "imageViewer_zoomIn")
@@ -343,9 +377,11 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.snapshotView 100 { name = "Image viewer overlay on mobile" }
 
                 -- Pinching with two fingers zooms in (distance goes 20 -> 100, so
-                -- the scale becomes 5x).
-                , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 190, 400 ), ( 210, 400 ) ])
-                , admin.touchMove 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 150, 400 ), ( 250, 400 ) ])
+                -- the scale becomes 5x) anchored on the pinch midpoint (300, 400).
+                -- That midpoint is to the right of the 400x800 viewport center, so
+                -- the image shifts left: offsetX = 100*(1-5) + 5*0 = -400.
+                , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 290, 400 ), ( 310, 400 ) ])
+                , admin.touchMove 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 250, 400 ), ( 350, 400 ) ])
                 , T.checkState
                     100
                     (\data ->
@@ -356,7 +392,9 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                                         Types.Loaded loaded ->
                                             case loaded.imageViewer of
                                                 Just imageViewer ->
-                                                    imageViewer.scale == 5
+                                                    (imageViewer.scale == 5)
+                                                        && (imageViewer.offsetX == -400)
+                                                        && (imageViewer.offsetY == 0)
 
                                                 Nothing ->
                                                     False
@@ -369,7 +407,7 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                             Ok ()
 
                         else
-                            Err "Pinching apart should have zoomed the image to 5x"
+                            Err "Pinching apart should zoom to 5x anchored on the pinch midpoint"
                     )
                 , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
 
