@@ -1,15 +1,21 @@
 module ImageViewer exposing (Model, Msg(..), init, isPressMsg, update, view)
 
 {-| A fullscreen overlay for viewing an image. The image is shown on top of a
-black background and can be zoomed (mouse wheel or the +/- buttons) and dragged
-around. An x button in the top right closes the overlay.
+black background and can be zoomed and dragged around.
 
 This is rendered as an overlay (instead of navigating away or opening a new tab)
 so that the channel underneath keeps rendering and doesn't lose its scroll
 position.
 
+On desktop there are +/- buttons to zoom and an x button (top right) to close.
+On mobile those buttons are hidden (taps on them are swallowed by the touch
+handlers used for dragging); instead you pinch to zoom and drag the image off
+the edge of the screen to dismiss it.
+
 -}
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html
 import Html.Attributes
@@ -17,7 +23,6 @@ import Html.Events
 import Html.Events.Extra.Touch
 import Icons
 import Json.Decode
-import List.Extra as List
 import MyUi
 import Ui exposing (Element)
 import Ui.Font
@@ -25,75 +30,75 @@ import Ui.Font
 
 type alias Model =
     { imageUrl : String
+    , imageSize : Coord CssPixels
     , scale : Float
     , offsetX : Float
     , offsetY : Float
-    , drag : Maybe DragState
+    , interaction : Interaction
     }
 
 
-type alias DragState =
-    { startX : Float
-    , startY : Float
-    , offsetStartX : Float
-    , offsetStartY : Float
-    }
+type Interaction
+    = NoInteraction
+    | Dragging
+        { startX : Float
+        , startY : Float
+        , offsetStartX : Float
+        , offsetStartY : Float
+        }
+    | Pinching
+        { startDistance : Float
+        , startScale : Float
+        }
 
 
 type Msg
     = PressedClose
-    | PointerDown Float Float
-    | PointerMove Float Float
-    | PointerUp
-    | Wheeled Float
     | PressedZoomIn
     | PressedZoomOut
+    | MouseDown Float Float
+    | MouseMove Float Float
+    | MouseUp
+    | Wheeled Float
+    | TouchStart (List ( Float, Float ))
+    | TouchMove (List ( Float, Float ))
+    | TouchEnd
 
 
-init : String -> Model
-init imageUrl =
-    { imageUrl = imageUrl
+init : { url : String, imageSize : Coord CssPixels } -> Model
+init { url, imageSize } =
+    { imageUrl = url
+    , imageSize = imageSize
     , scale = 1
     , offsetX = 0
     , offsetY = 0
-    , drag = Nothing
+    , interaction = NoInteraction
     }
 
 
-{-| Returns Nothing when the viewer should be closed.
+{-| Returns Nothing when the viewer should be closed (the close button was
+pressed, or the image was dragged off the screen).
 -}
-update : Msg -> Model -> Maybe Model
-update msg model =
+update : Coord CssPixels -> Msg -> Model -> Maybe Model
+update windowSize msg model =
     case msg of
         PressedClose ->
             Nothing
 
-        PointerDown x y ->
-            Just
-                { model
-                    | drag =
-                        Just
-                            { startX = x
-                            , startY = y
-                            , offsetStartX = model.offsetX
-                            , offsetStartY = model.offsetY
-                            }
-                }
+        PressedZoomIn ->
+            Just { model | scale = clampScale (model.scale * 1.25) }
 
-        PointerMove x y ->
-            case model.drag of
-                Just drag ->
-                    Just
-                        { model
-                            | offsetX = drag.offsetStartX + (x - drag.startX)
-                            , offsetY = drag.offsetStartY + (y - drag.startY)
-                        }
+        PressedZoomOut ->
+            Just { model | scale = clampScale (model.scale / 1.25) }
 
-                Nothing ->
-                    Just model
+        MouseDown x y ->
+            Just { model | interaction = startDrag x y model }
 
-        PointerUp ->
-            Just { model | drag = Nothing }
+        MouseMove x y ->
+            Just (continueDrag x y model)
+
+        MouseUp ->
+            endInteraction windowSize model
 
         Wheeled deltaY ->
             Just
@@ -110,15 +115,138 @@ update msg model =
                             )
                 }
 
-        PressedZoomIn ->
-            Just { model | scale = clampScale (model.scale * 1.25) }
+        TouchStart positions ->
+            case positions of
+                first :: second :: _ ->
+                    Just
+                        { model
+                            | interaction =
+                                Pinching
+                                    { startDistance = max 1 (distance first second)
+                                    , startScale = model.scale
+                                    }
+                        }
 
-        PressedZoomOut ->
-            Just { model | scale = clampScale (model.scale / 1.25) }
+                [ ( x, y ) ] ->
+                    Just { model | interaction = startDrag x y model }
+
+                [] ->
+                    Just model
+
+        TouchMove positions ->
+            case ( model.interaction, positions ) of
+                ( Pinching pinch, first :: second :: _ ) ->
+                    Just { model | scale = clampScale (pinch.startScale * distance first second / pinch.startDistance) }
+
+                ( Dragging _, ( x, y ) :: _ ) ->
+                    Just (continueDrag x y model)
+
+                _ ->
+                    Just model
+
+        TouchEnd ->
+            endInteraction windowSize model
+
+
+startDrag : Float -> Float -> Model -> Interaction
+startDrag x y model =
+    Dragging
+        { startX = x
+        , startY = y
+        , offsetStartX = model.offsetX
+        , offsetStartY = model.offsetY
+        }
+
+
+continueDrag : Float -> Float -> Model -> Model
+continueDrag x y model =
+    case model.interaction of
+        Dragging drag ->
+            { model
+                | offsetX = drag.offsetStartX + (x - drag.startX)
+                , offsetY = drag.offsetStartY + (y - drag.startY)
+            }
+
+        _ ->
+            model
+
+
+{-| When an interaction ends, close the viewer if the image has been dragged
+entirely off the screen, otherwise just clear the interaction state.
+-}
+endInteraction : Coord CssPixels -> Model -> Maybe Model
+endInteraction windowSize model =
+    if isOffScreen windowSize model then
+        Nothing
+
+    else
+        Just { model | interaction = NoInteraction }
+
+
+{-| The size the image is actually drawn at, accounting for the `max-width: 90vw`
+and `max-height: 90vh` constraints and the current zoom level.
+-}
+displayedSize : Coord CssPixels -> Model -> ( Float, Float )
+displayedSize windowSize model =
+    let
+        vw : Float
+        vw =
+            toFloat (Coord.xRaw windowSize)
+
+        vh : Float
+        vh =
+            toFloat (Coord.yRaw windowSize)
+
+        w : Float
+        w =
+            toFloat (Coord.xRaw model.imageSize) |> max 1
+
+        h : Float
+        h =
+            toFloat (Coord.yRaw model.imageSize) |> max 1
+
+        fit : Float
+        fit =
+            min 1 (min (0.9 * vw / w) (0.9 * vh / h))
+    in
+    ( w * fit * model.scale, h * fit * model.scale )
+
+
+isOffScreen : Coord CssPixels -> Model -> Bool
+isOffScreen windowSize model =
+    let
+        vw : Float
+        vw =
+            toFloat (Coord.xRaw windowSize)
+
+        vh : Float
+        vh =
+            toFloat (Coord.yRaw windowSize)
+
+        ( dw, dh ) =
+            displayedSize windowSize model
+
+        centerX : Float
+        centerX =
+            vw / 2 + model.offsetX
+
+        centerY : Float
+        centerY =
+            vh / 2 + model.offsetY
+    in
+    (centerX + dw / 2 < 0)
+        || (centerX - dw / 2 > vw)
+        || (centerY + dh / 2 < 0)
+        || (centerY - dh / 2 > vh)
+
+
+distance : ( Float, Float ) -> ( Float, Float ) -> Float
+distance ( x1, y1 ) ( x2, y2 ) =
+    sqrt (((x2 - x1) ^ 2) + ((y2 - y1) ^ 2))
 
 
 {-| Pressing the close/zoom buttons counts as a press, but dragging and zooming
-with the wheel does not (so it doesn't interfere with other press handling).
+do not (so they don't interfere with other press handling).
 -}
 isPressMsg : Msg -> Bool
 isPressMsg msg =
@@ -132,16 +260,25 @@ isPressMsg msg =
         PressedZoomOut ->
             True
 
-        PointerDown _ _ ->
+        MouseDown _ _ ->
             False
 
-        PointerMove _ _ ->
+        MouseMove _ _ ->
             False
 
-        PointerUp ->
+        MouseUp ->
             False
 
         Wheeled _ ->
+            False
+
+        TouchStart _ ->
+            False
+
+        TouchMove _ ->
+            False
+
+        TouchEnd ->
             False
 
 
@@ -157,48 +294,60 @@ clientPositionDecoder toMsg =
         (Json.Decode.field "clientY" Json.Decode.float)
 
 
-firstTouchPosition : Html.Events.Extra.Touch.Event -> ( Float, Float )
-firstTouchPosition event =
-    case List.head event.touches of
-        Just touch ->
-            touch.clientPos
-
-        Nothing ->
-            ( 0, 0 )
+touchPositions : Html.Events.Extra.Touch.Event -> List ( Float, Float )
+touchPositions event =
+    List.map .clientPos event.touches
 
 
-view : Model -> Element Msg
-view model =
+view : Bool -> Model -> Element Msg
+view isMobile model =
     Ui.el
-        [ Ui.id "imageViewer_overlay"
-        , Ui.width Ui.fill
-        , Ui.height Ui.fill
-        , Ui.background (Ui.rgb 0 0 0)
-        , Ui.clip
-        , Json.Decode.map (\msg -> ( msg, True )) (clientPositionDecoder PointerDown)
+        ([ Ui.id "imageViewer_overlay"
+         , Ui.width Ui.fill
+         , Ui.height Ui.fill
+         , Ui.background (Ui.rgb 0 0 0)
+         , Ui.clip
+         , Json.Decode.map (\msg -> ( msg, True )) (clientPositionDecoder MouseDown)
             |> Html.Events.preventDefaultOn "mousedown"
             |> Ui.htmlAttribute
-        , case model.drag of
-            Just _ ->
-                clientPositionDecoder PointerMove
+         , case model.interaction of
+            Dragging _ ->
+                clientPositionDecoder MouseMove
                     |> Html.Events.on "mousemove"
                     |> Ui.htmlAttribute
 
-            Nothing ->
+            _ ->
                 Ui.noAttr
-        , Html.Events.on "mouseup" (Json.Decode.succeed PointerUp) |> Ui.htmlAttribute
-        , Html.Events.Extra.Touch.onStart (\event -> firstTouchPosition event |> (\( x, y ) -> PointerDown x y))
+         , Html.Events.on "mouseup" (Json.Decode.succeed MouseUp) |> Ui.htmlAttribute
+         , Html.Events.Extra.Touch.onWithOptions
+            "touchstart"
+            { stopPropagation = True, preventDefault = True }
+            (\event -> TouchStart (touchPositions event))
             |> Ui.htmlAttribute
-        , Html.Events.Extra.Touch.onMove (\event -> firstTouchPosition event |> (\( x, y ) -> PointerMove x y))
+         , Html.Events.Extra.Touch.onWithOptions
+            "touchmove"
+            { stopPropagation = True, preventDefault = True }
+            (\event -> TouchMove (touchPositions event))
             |> Ui.htmlAttribute
-        , Html.Events.Extra.Touch.onEnd (\_ -> PointerUp) |> Ui.htmlAttribute
-        , Json.Decode.map (\deltaY -> ( Wheeled deltaY, True ))
+         , Html.Events.Extra.Touch.onWithOptions
+            "touchend"
+            { stopPropagation = True, preventDefault = True }
+            (\_ -> TouchEnd)
+            |> Ui.htmlAttribute
+         , Json.Decode.map (\deltaY -> ( Wheeled deltaY, True ))
             (Json.Decode.field "deltaY" Json.Decode.float)
             |> Html.Events.preventDefaultOn "wheel"
             |> Ui.htmlAttribute
-        , Ui.inFront closeButton
-        , Ui.inFront zoomButtons
-        ]
+         ]
+            ++ (if isMobile then
+                    []
+
+                else
+                    [ Ui.inFront closeButton
+                    , Ui.inFront zoomButtons
+                    ]
+               )
+        )
         (Ui.el
             [ Ui.centerX
             , Ui.centerY

@@ -40,6 +40,7 @@ module RichText exposing
 import Array exposing (Array)
 import Basics.Extra
 import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import CustomEmoji exposing (CustomEmojiData, EmojiName)
 import Dict exposing (Dict)
 import Discord exposing (EmbedType(..))
@@ -2154,7 +2155,7 @@ view :
     -> Int
     -> (Url -> msg)
     -> (Int -> msg)
-    -> (String -> msg)
+    -> (String -> Coord CssPixels -> msg)
     -> Config a userId
     -> Array Embed
     -> Nonempty (RichText userId)
@@ -2245,7 +2246,7 @@ viewHelper :
     Bool
     -> ShowLargeContent
     -> Maybe ( HtmlId, Int -> msg )
-    -> Maybe (String -> msg)
+    -> Maybe (String -> Coord CssPixels -> msg)
     -> (Url -> msg)
     -> Int
     -> RichTextState
@@ -2710,7 +2711,7 @@ viewHelper dropNextLineBreak showLargeContent maybePressedSpoiler maybeOnPressIm
                                                                             Nothing ->
                                                                                 "image_" ++ Id.toString fileId
                                                                         )
-                                                                    , Html.Events.onClick (onPressImage fileUrl)
+                                                                    , Html.Events.onClick (onPressImage fileUrl imageSize)
                                                                     ]
 
                                                             Nothing ->

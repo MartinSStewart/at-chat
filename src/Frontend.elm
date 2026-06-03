@@ -2230,7 +2230,7 @@ updateLoaded msg model =
                 model
 
         ImageViewerMsg imageViewerMsg ->
-            ( { model | imageViewer = Maybe.andThen (ImageViewer.update imageViewerMsg) model.imageViewer }
+            ( { model | imageViewer = Maybe.andThen (ImageViewer.update model.windowSize imageViewerMsg) model.imageViewer }
             , Command.none
             )
 
@@ -2597,8 +2597,10 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_PressedImage imageUrl ->
-                    ( { model | imageViewer = Just (ImageViewer.init imageUrl) }, Command.none )
+                MessageView.MessageView_PressedImage imageUrl imageSize ->
+                    ( { model | imageViewer = Just (ImageViewer.init { url = imageUrl, imageSize = imageSize }) }
+                    , Command.none
+                    )
 
                 MessageView.MessageView_NoOp ->
                     ( model, Command.none )

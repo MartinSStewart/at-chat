@@ -214,25 +214,29 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 handleFileRequest
                 handleMultiFileUpload
                 RecordedTestExtra.domain
+
+        -- Like normalConfig, but selecting files to attach yields a single image.
+        imageUploadConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        imageUploadConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                handleNormalHttpRequests
+                RecordedTestExtra.handlePortToJs
+                handleFileRequest
+                (\_ ->
+                    UploadMultipleFiles
+                        (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
+                        []
+                )
+                RecordedTestExtra.domain
     in
     [ attackerTriesToLeakSensitiveData normalConfig discordOp0Ready discordOp0ReadySupplemental
     , RecordedTestExtra.inviteUserAndDmChat normalConfig
     , RecordedTestExtra.startTest
         "Clicking an image attachment opens a zoomable image viewer overlay"
         RecordedTestExtra.startTime
-        (T.Config
-            Frontend.app_
-            Backend.app_
-            handleNormalHttpRequests
-            RecordedTestExtra.handlePortToJs
-            handleFileRequest
-            (\_ ->
-                UploadMultipleFiles
-                    (T.uploadBytesFile "test-image.png" "image/png" atUserIcon RecordedTestExtra.startTime)
-                    []
-            )
-            RecordedTestExtra.domain
-        )
+        imageUploadConfig
         [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
             RecordedTestExtra.desktopWindow
             (\admin _ ->
@@ -294,6 +298,88 @@ tests discordOp0Ready discordOp0ReadySupplemental discordStickerPacks atUserIcon
                 , admin.checkView
                     100
                     (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_close" ])
+                ]
+            )
+        ]
+    , RecordedTestExtra.startTest
+        "On mobile the image viewer has no buttons and uses pinch/drag gestures"
+        RecordedTestExtra.startTime
+        imageUploadConfig
+        [ RecordedTestExtra.connectTwoUsersAndJoinNewGuild
+            RecordedTestExtra.mobileWindow
+            (\admin _ ->
+                let
+                    touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }
+                    touchEvent points =
+                        { changedTouches = []
+                        , targetTouches =
+                            List.indexedMap
+                                (\index ( x, y ) ->
+                                    { id = index, clientPos = ( x, y ), pagePos = ( x, y ), screenPos = ( x, y ) }
+                                )
+                                points
+                        }
+                in
+                [ -- Attach an image and send the message.
+                  admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView
+                    0
+                    (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+
+                -- Tapping the image opens the overlay.
+                , admin.click 0 (Dom.id "spoiler_1_image_1")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+
+                -- On mobile the zoom and close buttons are hidden.
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_close" ])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_zoomIn" ])
+                , admin.snapshotView 100 { name = "Image viewer overlay on mobile" }
+
+                -- Pinching with two fingers zooms in (distance goes 20 -> 100, so
+                -- the scale becomes 5x).
+                , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 190, 400 ), ( 210, 400 ) ])
+                , admin.touchMove 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 150, 400 ), ( 250, 400 ) ])
+                , T.checkState
+                    100
+                    (\data ->
+                        if
+                            List.any
+                                (\( _, frontend ) ->
+                                    case frontend of
+                                        Types.Loaded loaded ->
+                                            case loaded.imageViewer of
+                                                Just imageViewer ->
+                                                    imageViewer.scale == 5
+
+                                                Nothing ->
+                                                    False
+
+                                        Types.Loading _ ->
+                                            False
+                                )
+                                (SeqDict.toList data.frontends)
+                        then
+                            Ok ()
+
+                        else
+                            Err "Pinching apart should have zoomed the image to 5x"
+                    )
+                , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
+
+                -- Dragging the image off the top of the screen dismisses it.
+                , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 200, 400 ) ])
+                , admin.touchMove 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 200, -3000 ) ])
+                , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot [ Test.Html.Selector.id "imageViewer_overlay" ])
                 ]
             )
         ]

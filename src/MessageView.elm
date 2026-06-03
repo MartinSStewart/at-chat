@@ -26,7 +26,7 @@ import User exposing (FrontendCurrentUser)
 type MessageViewMsg
     = MessageView_PressedSpoiler Int
     | MessageView_PressedNonWhitelistLink Url
-    | MessageView_PressedImage String
+    | MessageView_PressedImage String (Coord CssPixels)
     | MessageView_MouseEnteredMessage
     | MessageView_MouseExitedMessage
     | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
@@ -54,7 +54,7 @@ isPressMsg msg =
         MessageView_PressedNonWhitelistLink _ ->
             True
 
-        MessageView_PressedImage _ ->
+        MessageView_PressedImage _ _ ->
             True
 
         MessageView_MouseEnteredMessage ->
