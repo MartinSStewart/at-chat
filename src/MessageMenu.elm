@@ -95,7 +95,16 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local model =
-    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.imageUrl extraOptions.linkUrl Coord.origin local model
+    menuItems
+        True
+        extraOptions.guildOrDmId
+        extraOptions.threadRoute
+        False
+        extraOptions.imageUrl
+        extraOptions.linkUrl
+        Coord.origin
+        local
+        model
         |> .items
         |> List.length
         |> mobileMenuMaxHeightHelper
@@ -129,11 +138,6 @@ mobileMenuOpeningOffset guildOrDmId threadRoute local model =
 messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
 messageMenuSpeed =
     Quantity.rate (CssPixels.cssPixels 800) Duration.second
-
-
-desktopMenuHeightHelper : Int -> Int
-desktopMenuHeightHelper itemCount =
-    itemCount * buttonHeight False + 2 + desktopMenuPaddingTop + desktopMenuPaddingBottom
 
 
 desktopMenuPaddingTop : number
@@ -705,10 +709,10 @@ menuItemsHelper isMobile a =
                 ButtonItem element ->
                     { items = element :: items, height = height + buttonHeight isMobile }
 
-                GroupItem items2 ->
+                GroupItem groupItems ->
                     let
                         b =
-                            menuItemsHelper isMobile items2
+                            menuItemsHelper isMobile groupItems
                     in
                     { items = List.reverse b.items ++ items, height = height + b.height }
         )

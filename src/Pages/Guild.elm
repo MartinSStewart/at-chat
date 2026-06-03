@@ -5907,8 +5907,8 @@ If the right-click landed on an image attachment or a hyperlink we also grab
 their urls (exposed via the "data-image-url"/"data-link-url" attributes) so that
 the menu can offer "Copy image"/"Copy image link"/"Copy link" options.
 -}
-messageContextMenuDecoder : Bool -> Json.Decode.Decoder ( MessageViewMsg, Bool )
-messageContextMenuDecoder isThreadStarter =
+decodeMessageContextMenu : Bool -> Json.Decode.Decoder ( MessageViewMsg, Bool )
+decodeMessageContextMenu isThreadStarter =
     Json.Decode.map3
         (\x y target ->
             ( MessageView_AltPressedMessage isThreadStarter target.imageUrl target.linkUrl (Coord.xy (round x) (round y))
@@ -5918,7 +5918,7 @@ messageContextMenuDecoder isThreadStarter =
         (Json.Decode.field "clientX" Json.Decode.float)
         (Json.Decode.field "clientY" Json.Decode.float)
         (Json.Decode.oneOf
-            [ Json.Decode.field "target" (contextMenuTargetDecoder 20)
+            [ Json.Decode.field "target" (decodeContextMenuTarget 20)
             , Json.Decode.succeed emptyContextMenuTarget
             ]
         )
@@ -5939,8 +5939,8 @@ the element actually under the cursor is often a descendant of the one carrying
 the attribute (e.g. the <canvas>/<img> that an animated-image-player web
 component appends inside itself, or the favicon/label inside a link).
 -}
-contextMenuTargetDecoder : Int -> Json.Decode.Decoder ContextMenuTarget
-contextMenuTargetDecoder depth =
+decodeContextMenuTarget : Int -> Json.Decode.Decoder ContextMenuTarget
+decodeContextMenuTarget depth =
     Json.Decode.map2
         (\here parent ->
             { imageUrl = orElseMaybe here.imageUrl parent.imageUrl
@@ -5956,7 +5956,7 @@ contextMenuTargetDecoder depth =
 
          else
             Json.Decode.oneOf
-                [ Json.Decode.field "parentElement" (Json.Decode.lazy (\() -> contextMenuTargetDecoder (depth - 1)))
+                [ Json.Decode.field "parentElement" (Json.Decode.lazy (\() -> decodeContextMenuTarget (depth - 1)))
                 , Json.Decode.succeed emptyContextMenuTarget
                 ]
         )
@@ -6010,7 +6010,7 @@ messageContainer isThreadStarter timezone customEmojis allUsers highlight messag
                         )
                 )
             )
-         , Ui.Events.preventDefaultOn "contextmenu" (messageContextMenuDecoder isThreadStarter)
+         , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu isThreadStarter)
          , Ui.paddingWith
             { left = messagePaddingX
             , right = messagePaddingX
@@ -6118,7 +6118,7 @@ threadMessageContainer highlight messageIndex canEdit currentUserId currentUser 
                         )
                 )
             )
-         , Ui.Events.preventDefaultOn "contextmenu" (messageContextMenuDecoder False)
+         , Ui.Events.preventDefaultOn "contextmenu" (decodeMessageContextMenu False)
          , Ui.paddingWith
             { left = messagePaddingX
             , right = messagePaddingX
