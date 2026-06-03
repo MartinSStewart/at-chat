@@ -409,6 +409,14 @@ view isMobile model =
                     , Html.Attributes.style "max-width" "90vw"
                     , Html.Attributes.style "max-height" "90vh"
                     , Html.Attributes.style "display" "block"
+                    , Html.Attributes.style
+                        "image-rendering"
+                        (if model.scale > 1 then
+                            "pixelated"
+
+                         else
+                            "auto"
+                        )
                     , Html.Attributes.style "transform"
                         ("translate("
                             ++ String.fromFloat model.offsetX
