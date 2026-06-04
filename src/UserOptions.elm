@@ -36,6 +36,7 @@ init domainWhitelist =
     { name = Editable.init
     , showLinkDiscordSetup = False
     , domainWhitelistInput = domainWhitelistToString domainWhitelist
+    , serviceWorkerData = Nothing
     }
 
 
@@ -512,6 +513,21 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         (Dom.id "userOptions_unregisterServiceWorkers")
                         PressedUnregisterServiceWorkers
                         "Unregister service workers"
+                    , MyUi.secondaryButton
+                        (Dom.id "userOptions_loadServiceWorkerData")
+                        PressedLoadServiceWorkerData
+                        "Load service worker data"
+                    , case model.serviceWorkerData of
+                        Just serviceWorkerData ->
+                            MyUi.copyBox
+                                (Dom.id "userOptions_serviceWorkerData")
+                                PressedCopyText
+                                FrontendNoOp
+                                loaded
+                                serviceWorkerData
+
+                        Nothing ->
+                            Ui.none
                     ]
                 ]
             )

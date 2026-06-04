@@ -23,6 +23,7 @@ port module Ports exposing
     , getScrollbarWidth
     , getUserAgent
     , hapticFeedback
+    , loadServiceWorkerData
     , loadSounds
     , pageHasFocus
     , playSound
@@ -32,6 +33,7 @@ port module Ports exposing
     , requestNotificationPermission
     , scrollbarWidthSub
     , selectionChanged
+    , serviceWorkerData
     , serviceWorkerMessage
     , setCursorPosition
     , setFavicon
@@ -236,6 +238,29 @@ port unregister_service_worker_to_js : Json.Encode.Value -> Cmd msg
 unregisterServiceWorker : Command FrontendOnly toMsg msg
 unregisterServiceWorker =
     Command.sendToJs "unregister_service_worker_to_js" unregister_service_worker_to_js Json.Encode.null
+
+
+port load_service_worker_data_to_js : Json.Encode.Value -> Cmd msg
+
+
+port load_service_worker_data_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+loadServiceWorkerData : Command FrontendOnly toMsg msg
+loadServiceWorkerData =
+    Command.sendToJs "load_service_worker_data_to_js" load_service_worker_data_to_js Json.Encode.null
+
+
+serviceWorkerData : (String -> msg) -> Subscription FrontendOnly msg
+serviceWorkerData msg =
+    Subscription.fromJs
+        "load_service_worker_data_from_js"
+        load_service_worker_data_from_js
+        (\json ->
+            Json.Decode.decodeValue Json.Decode.string json
+                |> Result.withDefault ""
+                |> msg
+        )
 
 
 getScrollbarWidth : Command FrontendOnly toMsg msg

@@ -240,6 +240,7 @@ type alias UserOptionsModel =
     { name : Editable.Model
     , showLinkDiscordSetup : Bool
     , domainWhitelistInput : String
+    , serviceWorkerData : Maybe String
     }
 
 
@@ -531,6 +532,8 @@ type FrontendMsg
     | FileDragLeave
     | FileDropped (List File)
     | PressedUnregisterServiceWorkers
+    | PressedLoadServiceWorkerData
+    | GotServiceWorkerData String
 
 
 type ScrollPosition
