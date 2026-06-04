@@ -449,21 +449,25 @@ rowLinkButton htmlId route attributes content =
     MyUi.rowButton htmlId (PressedLink route) attributes content
 
 
-loggedInAsView : LocalState -> Element FrontendMsg
-loggedInAsView local =
+loggedInAsView : LocalUser -> Element FrontendMsg
+loggedInAsView localUser =
     Ui.row
         [ Ui.Font.color MyUi.font2
         , Ui.borderColor MyUi.border1
         , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
         , Ui.background MyUi.background1
         , MyUi.htmlStyle "padding" ("4px 4px calc(" ++ MyUi.insetBottom ++ " + 4px) 4px")
+        , Ui.spacing 8
         ]
-        [ Ui.text (PersonName.toString local.localUser.user.name)
+        [ User.profileImageNoRounding localUser.session.userId localUser.user.icon
+        , Ui.text (PersonName.toString localUser.user.name)
         , MyUi.elButton
             (Dom.id "guild_showUserOptions")
             PressedShowUserOption
-            [ Ui.width (Ui.px 30)
-            , Ui.paddingXY 4 0
+            [ Ui.width (Ui.px 38)
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.paddingXY 8 0
             , Ui.alignRight
             ]
             (Ui.html Icons.gear)
@@ -541,7 +545,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ guildColumnLazy True model local
                             , friendsColumnLazy (canScroll model.drag) True model.time maybeOtherUserId local
                             ]
-                        , loggedInAsView local
+                        , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
                     ]
 
@@ -557,7 +561,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                             [ guildColumnLazy False model local
                             , friendsColumnLazy (canScroll model.drag) False model.time maybeOtherUserId local
                             ]
-                        , loggedInAsView local
+                        , Ui.Lazy.lazy loggedInAsView local.localUser
                         ]
                     , case maybeOtherUserId of
                         SelectedDmChannel dmRoute ->
@@ -881,7 +885,7 @@ guildView model guildId channelRoute loggedIn local =
                                     channelRoute
                                     loggedIn.channelNameHover
                                 ]
-                            , loggedInAsView local
+                            , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
 
                     else
@@ -903,7 +907,7 @@ guildView model guildId channelRoute loggedIn local =
                                         channelRoute
                                         loggedIn.channelNameHover
                                     ]
-                                , loggedInAsView local
+                                , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , channelView channelRoute guildId guild loggedIn local model
                                 |> Ui.el
@@ -938,7 +942,7 @@ guildView model guildId channelRoute loggedIn local =
                                 [ guildColumnLazy True model local
                                 , pageMissingMobile "Guild not found"
                                 ]
-                            , loggedInAsView local
+                            , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
 
                     else
@@ -959,7 +963,7 @@ guildView model guildId channelRoute loggedIn local =
                                         ]
                                         Ui.none
                                     ]
-                                , loggedInAsView local
+                                , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , pageMissing "Guild not found"
                             ]
@@ -1079,7 +1083,7 @@ discordGuildView model routeData loggedIn local =
                                     guild
                                     loggedIn.channelNameHover
                                 ]
-                            , loggedInAsView local
+                            , Ui.Lazy.lazy loggedInAsView local.localUser
                             ]
 
                     else
@@ -1100,7 +1104,7 @@ discordGuildView model routeData loggedIn local =
                                         guild
                                         loggedIn.channelNameHover
                                     ]
-                                , loggedInAsView local
+                                , Ui.Lazy.lazy loggedInAsView local.localUser
                                 ]
                             , discordChannelView routeData guild loggedIn local model
                                 |> Ui.el
@@ -1147,7 +1151,7 @@ guildErrorPage error local model =
                 [ guildColumnLazy True model local
                 , pageMissingMobile error
                 ]
-            , loggedInAsView local
+            , Ui.Lazy.lazy loggedInAsView local.localUser
             ]
 
     else
@@ -1168,7 +1172,7 @@ guildErrorPage error local model =
                         ]
                         Ui.none
                     ]
-                , loggedInAsView local
+                , Ui.Lazy.lazy loggedInAsView local.localUser
                 ]
             , pageMissing error
             ]
