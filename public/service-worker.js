@@ -18,7 +18,6 @@ self.addEventListener('install', (event) => {
                 })
             );
         } catch (error) {
-            // Ignore: failing to record the install time shouldn't block install.
         }
         await self.skipWaiting();
     })());
