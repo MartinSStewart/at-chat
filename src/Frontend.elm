@@ -751,22 +751,13 @@ updateLoaded msg model =
 
         PressedLink route ->
             let
-                notificationRequest : Command FrontendOnly toMsg msg
-                notificationRequest =
-                    case model.notificationPermission of
-                        Ports.NotAsked ->
-                            Ports.requestNotificationPermission
-
-                        _ ->
-                            Command.none
-
                 ( model2, cmd ) =
                     FrontendExtra.updateLoggedIn (setLastViewedToLatestMessage model) model
 
                 ( model3, routeCmd ) =
                     FrontendExtra.routePush model2 route
             in
-            ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
+            ( model3, Command.batch [ cmd, routeCmd ] )
 
         DebouncedTyping ->
             FrontendExtra.updateLoggedIn
@@ -2596,16 +2587,11 @@ updateLoaded msg model =
         GotRegisterPushSubscription result ->
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
-                    case result of
-                        Ok endpoint ->
-                            FrontendExtra.handleLocalChange
-                                model.time
-                                (Local_RegisterPushSubscription model.time endpoint |> Just)
-                                loggedIn
-                                Command.none
-
-                        Err _ ->
-                            ( loggedIn, Command.none )
+                    FrontendExtra.handleLocalChange
+                        model.time
+                        (Local_RegisterPushSubscription model.time result |> Just)
+                        loggedIn
+                        Command.none
                 )
                 model
 
@@ -2621,10 +2607,13 @@ updateLoaded msg model =
                                 Command.none
 
                             NotifyWhenRunning ->
-                                Command.none
+                                Ports.requestNotificationPermission
 
                             PushNotifications ->
-                                Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
+                                Command.batch
+                                    [ Ports.requestNotificationPermission
+                                    , Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
+                                    ]
                         )
                 )
                 model

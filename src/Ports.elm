@@ -5,6 +5,9 @@ port module Ports exposing
     , ExecCommandPort
     , NotificationPermission(..)
     , PwaStatus(..)
+    , RegisterPushSubscription(..)
+    , SubscribeData
+    , SubscribeKeys
     , checkNotificationPermission
     , checkNotificationPermissionResponse
     , checkPwaStatus
@@ -51,9 +54,8 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Range exposing (Range, SelectionDirection(..))
-import Url
+import Url exposing (Url)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (SubscribeData)
 
 
 port exec_command_to_js : Json.Encode.Value -> Cmd msg
@@ -390,32 +392,63 @@ registerPushSubscriptionToJs publicKey =
         (Json.Encode.string publicKey)
 
 
-registerPushSubscription : (Result String SubscribeData -> msg) -> Subscription FrontendOnly msg
+type RegisterPushSubscription
+    = GotSubscribeData SubscribeData
+    | SubscribeJsException String
+
+
+registerPushSubscriptionCodec : Codec RegisterPushSubscription
+registerPushSubscriptionCodec =
+    Codec.custom
+        (\a c encoder ->
+            case encoder of
+                GotSubscribeData a0 ->
+                    a a0
+
+                SubscribeJsException c0 ->
+                    c c0
+        )
+        |> Codec.variant1 "GotSubscribeData" GotSubscribeData subscribeDataCodec
+        |> Codec.variant1 "SubscribeJsException" SubscribeJsException Codec.string
+        |> Codec.buildCustom
+
+
+type alias SubscribeData =
+    { endpoint : Url, keys : SubscribeKeys }
+
+
+type alias SubscribeKeys =
+    { auth : String, p256dh : String }
+
+
+subscribeDataCodec : Codec SubscribeData
+subscribeDataCodec =
+    Codec.object SubscribeData
+        |> Codec.field "endpoint" .endpoint CodecExtra.url
+        |> Codec.field "keys" .keys subscribeKeysCodec
+        |> Codec.buildObject
+
+
+subscribeKeysCodec : Codec SubscribeKeys
+subscribeKeysCodec =
+    Codec.object SubscribeKeys
+        |> Codec.field "auth" .auth Codec.string
+        |> Codec.field "p256dh" .p256dh Codec.string
+        |> Codec.buildObject
+
+
+registerPushSubscription : (RegisterPushSubscription -> msg) -> Subscription FrontendOnly msg
 registerPushSubscription msg =
     Subscription.fromJs
         "register_push_subscription_from_js"
         register_push_subscription_from_js
         (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.map3
-                    SubscribeData
-                    (Json.Decode.field "endpoint" Json.Decode.string
-                        |> Json.Decode.andThen
-                            (\text ->
-                                case Url.fromString text of
-                                    Just url ->
-                                        Json.Decode.succeed url
+            case Codec.decodeValue registerPushSubscriptionCodec json of
+                Ok ok ->
+                    msg ok
 
-                                    Nothing ->
-                                        Json.Decode.fail "Invalid endpoint"
-                            )
-                    )
-                    (Json.Decode.at [ "keys", "auth" ] Json.Decode.string)
-                    (Json.Decode.at [ "keys", "p256dh" ] Json.Decode.string)
-                )
-                json
-                |> Result.mapError Json.Decode.errorToString
-                |> msg
+                Err error ->
+                    Json.Decode.errorToString error |> SubscribeJsException |> msg
         )
 
 

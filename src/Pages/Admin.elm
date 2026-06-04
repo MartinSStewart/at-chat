@@ -1882,6 +1882,9 @@ pushSubscriptionToString timezone pushSubscription =
         SubscriptionError error ->
             Log.httpErrorToString error
 
+        SubscriptionJsException jsError time ->
+            "JS error at " ++ MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone ++ ": " ++ jsError
+
 
 userAgentToString : UserAgent -> String
 userAgentToString userAgent =

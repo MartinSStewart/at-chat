@@ -264,30 +264,40 @@ exports.init = async function init(app)
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
         if (navigator.serviceWorker) {
-            navigator.serviceWorker.ready
-            .then(function(registration) {
+            try {
+                navigator.serviceWorker.ready
+                .then(function(registration) {
 
-                // Use the PushManager to get the user's subscription to the push service.
-                return registration.pushManager.getSubscription()
-                .then(async function(subscription)
-                {
-                    // If a subscription was found, return it.
-                    if (subscription) {
-                        return subscription;
-                    }
+                    // Use the PushManager to get the user's subscription to the push service.
+                    return registration.pushManager.getSubscription()
+                    .then(async function(subscription)
+                    {
+                        // If a subscription was found, return it.
+                        if (subscription) {
+                            return subscription;
+                        }
 
 
-                    // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
-                    // send notifications that don't have a visible effect for the user).
-                    return registration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: publicKey
+                        // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
+                        // send notifications that don't have a visible effect for the user).
+                        return registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: publicKey
+                        });
                     });
-                });
-            }).then(function(subscription) {
-              // Send the subscription details to the server using the Fetch API.
-              app.ports.register_push_subscription_from_js.send(subscription.toJSON());
-            });
+                }).then(function(subscription) {
+                  // Send the subscription details to the server using the Fetch API.
+                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription ]});
+                }).catch((e) =>
+                    app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]})
+                );
+            }
+            catch (e) {
+                app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]});
+            }
+
+        } else {
+            app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ "navigator.serviceWorker is missing" ]});
         }
     });
 
