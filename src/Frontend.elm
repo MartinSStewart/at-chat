@@ -141,12 +141,7 @@ subscriptions model =
 
             Loaded loaded ->
                 Subscription.batch
-                    [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _ _ _) ->
-                            Effect.Browser.Events.onVisibilityChange VisibilityChanged
-
-                        _ ->
-                            Subscription.none
+                    [ Effect.Browser.Events.onVisibilityChange VisibilityChanged
                     , case loaded.imageViewer of
                         Just imageViewer ->
                             ImageViewer.subscriptions loaded.windowSize imageViewer |> Subscription.map ImageViewerMsg
