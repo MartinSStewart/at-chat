@@ -628,8 +628,8 @@ update msg model =
                     case String.split "," keys of
                         [ publicKey, privateKey ] ->
                             { model
-                                | publicVapidKey = publicKey
-                                , privateVapidKey = PrivateVapidKey privateKey
+                                | publicVapidKey = String.filter (\char -> char /= '"') publicKey
+                                , privateVapidKey = String.filter (\char -> char /= '"') privateKey |> PrivateVapidKey
                             }
 
                         _ ->

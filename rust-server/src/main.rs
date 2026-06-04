@@ -23,11 +23,11 @@ use web_push::SubscriptionInfo;
 use webpage::{Webpage, WebpageOptions};
 mod content_types;
 use rand::RngExt;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::SystemTime;
 use subtle::ConstantTimeEq;
-use std::sync::Arc;
-use std::sync::Mutex;
 #[tokio::main]
 async fn main() {
     // secret.txt should match Env.secretKey
@@ -110,7 +110,9 @@ async fn require_internal_secret(
 ) -> Response<Body> {
     let path = req.uri().path();
 
-    if path.to_string().starts_with("/file/internal/") && (req.method() != axum::http::Method::OPTIONS) {
+    if path.to_string().starts_with("/file/internal/")
+        && (req.method() != axum::http::Method::OPTIONS)
+    {
         let provided = req
             .headers()
             .get("x-secret-key")
@@ -118,7 +120,11 @@ async fn require_internal_secret(
 
         match provided {
             Some(token) => {
-                let authorized = token.as_bytes().to_vec().ct_eq(&state.lock().unwrap().secret_key).into();
+                let authorized = token
+                    .as_bytes()
+                    .to_vec()
+                    .ct_eq(&state.lock().unwrap().secret_key)
+                    .into();
                 if authorized {
                     next.run(req).await
                 } else {
@@ -346,7 +352,7 @@ async fn regenerate_server_secret_endpoint(state: State<Arc<Mutex<AppState>>>) -
             let mut state2 = state.lock().unwrap();
             state2.secret_key = random_string.clone().into();
             response_with_headers(StatusCode::OK, random_string)
-        },
+        }
         Err(error) => response_with_headers(
             StatusCode::BAD_REQUEST,
             format!("Write failed\n{:?}", error),
@@ -470,13 +476,14 @@ async fn push_notification_endpoint(
             StatusCode::BAD_REQUEST,
             match error {
                 web_push::WebPushError::Unspecified => String::from("Error 6"),
-                web_push::WebPushError::Unauthorized(_) => String::from("Error 7"),
-                web_push::WebPushError::BadRequest(error_info) => {
-                    format!(
-                        "Bad request. Error: {:?} Message: {:?}",
-                        &error_info.error, &error_info.message
-                    )
-                }
+                web_push::WebPushError::Unauthorized(error_info) => format!(
+                    "Error 7. Error: {:?} Message: {:?}",
+                    &error_info.error, &error_info.message
+                ),
+                web_push::WebPushError::BadRequest(error_info) => format!(
+                    "Bad request. Error: {:?} Message: {:?}",
+                    &error_info.error, &error_info.message
+                ),
                 web_push::WebPushError::ServerError {
                     retry_after: _,
                     info: _,
