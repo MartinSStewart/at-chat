@@ -34,12 +34,10 @@ exports.init = async function init(app)
 
     app.ports.register_service_worker_to_js.subscribe(() => {
         if (navigator.serviceWorker) {
-            navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-                navigator.serviceWorker.register(serviceWorkerJs);
-                navigator.serviceWorker.addEventListener("message", (event) => {
-                    console.log(event);
-                    app.ports.service_worker_message_from_js.send(event.data);
-                });
+            navigator.serviceWorker.register(serviceWorkerJs);
+            navigator.serviceWorker.addEventListener("message", (event) => {
+                console.log(event);
+                app.ports.service_worker_message_from_js.send(event.data);
             });
         }
     });
@@ -54,6 +52,89 @@ exports.init = async function init(app)
               }
             });
             location.reload();
+        }
+    });
+
+    app.ports.load_service_worker_data_to_js.subscribe(async () => {
+        try {
+            if (!navigator.serviceWorker) {
+                app.ports.load_service_worker_data_from_js.send("navigator.serviceWorker is not supported in this browser");
+                return;
+            }
+
+            const describeWorker = (worker) => {
+                if (!worker) { return null; }
+                return { scriptURL: worker.scriptURL, state: worker.state };
+            };
+
+            const describeRegistration = (registration) => {
+                if (!registration) { return null; }
+                return {
+                    scope: registration.scope,
+                    updateViaCache: registration.updateViaCache,
+                    active: describeWorker(registration.active),
+                    installing: describeWorker(registration.installing),
+                    waiting: describeWorker(registration.waiting),
+                };
+            };
+
+            const result = {};
+
+            result.controller = describeWorker(navigator.serviceWorker.controller);
+
+            // The service worker records its install time in Cache Storage on
+            // the 'install' event (see public/service-worker.js). Read it back
+            // here so we can show when the worker was last installed/updated on
+            // this device.
+            try {
+                const cache = await caches.open('service_worker_installed_at');
+                const installedAtResponse = await cache.matchAll();
+                if (installedAtResponse[0]) {
+                    result.installedAt = await installedAtResponse[0].text();
+                } else {
+                    result.installedAt = "Unknown (install time not recorded yet)";
+                }
+            } catch (e) {
+                result.installedAt = "Error: " + e.toString();
+            }
+
+            const registration = await navigator.serviceWorker.getRegistration(serviceWorkerJs);
+            result.registration = describeRegistration(registration);
+
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            result.registrations = registrations.map(describeRegistration);
+
+            if (registration) {
+                try {
+                    const notifications = await registration.getNotifications();
+                    result.notifications = notifications.map((n) => ({ title: n.title, body: n.body, tag: n.tag }));
+                } catch (e) {
+                    result.notifications = "Error: " + e.toString();
+                }
+
+                if (registration.pushManager) {
+                    try {
+                        const subscription = await registration.pushManager.getSubscription();
+                        result.pushSubscription = subscription ? subscription.toJSON() : null;
+                    } catch (e) {
+                        result.pushSubscription = "Error: " + e.toString();
+                    }
+
+                    try {
+                        result.pushPermissionState = await registration.pushManager.permissionState({ userVisibleOnly: true });
+                    } catch (e) {
+                        result.pushPermissionState = "Error: " + e.toString();
+                    }
+                }
+            }
+
+            if ("Notification" in window) {
+                result.notificationPermission = Notification.permission;
+            }
+
+            app.ports.load_service_worker_data_from_js.send(JSON.stringify(result, null, 2));
+        } catch (e) {
+            app.ports.load_service_worker_data_from_js.send("Error loading service worker data: " + e.toString());
         }
     });
 

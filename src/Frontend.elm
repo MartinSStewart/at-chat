@@ -131,6 +131,7 @@ subscriptions model =
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
+        , Ports.serviceWorkerData GotServiceWorkerData
         , Ports.visualViewportResized VisualViewportResized
         , Ports.selectionChanged TextSelectionChanged
         , Ports.focusChanged DomFocusChanged
@@ -4292,6 +4293,23 @@ updateLoaded msg model =
 
         PressedUnregisterServiceWorkers ->
             ( model, Ports.unregisterServiceWorker )
+
+        PressedLoadServiceWorkerData ->
+            ( model, Ports.loadServiceWorkerData )
+
+        GotServiceWorkerData serviceWorkerData ->
+            FrontendExtra.updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | serviceWorkerData = Just serviceWorkerData })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )
