@@ -488,7 +488,10 @@ async fn push_notification_endpoint(
                     retry_after: _,
                     info: _,
                 } => String::from("Error 8"),
-                web_push::WebPushError::NotImplemented(error_info) => String::from("Error 9"),
+                web_push::WebPushError::NotImplemented(error_info) => format!(
+                    "Error 9. Error: {:?} Message: {:?}",
+                    &error_info.error, &error_info.message
+                ),
                 web_push::WebPushError::InvalidUri => String::from("Error 10"),
                 web_push::WebPushError::EndpointNotValid(error_info) => format!(
                     "Error 11. Error: {:?} Message: {:?}",
@@ -499,10 +502,7 @@ async fn push_notification_endpoint(
                     &error_info.error, &error_info.message
                 ),
                 web_push::WebPushError::PayloadTooLarge => String::from("Error 13"),
-                web_push::WebPushError::Io(error_info) => format!(
-                    "Error 14. Error: {:?} Message: {:?}",
-                    &error_info.error, &error_info.message
-                ),
+                web_push::WebPushError::Io(_) => String::from("Error 14"),
                 web_push::WebPushError::InvalidPackageName => String::from("Error 15"),
                 web_push::WebPushError::InvalidTtl => String::from("Error 16"),
                 web_push::WebPushError::InvalidTopic => String::from("Error 17"),
