@@ -1,3 +1,19 @@
+// Encode an ArrayBuffer (such as a push subscription's applicationServerKey)
+// as an unpadded base64url string so it can be compared against the VAPID
+// public key string we get from the server.
+function arrayBufferToBase64Url(buffer) {
+    if (!buffer) { return null; }
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+}
+
 async function loadAudio(url, context, sounds) {
     try {
         const response = await fetch("/" + url + ".mp3");
@@ -272,9 +288,17 @@ exports.init = async function init(app)
                     return registration.pushManager.getSubscription()
                     .then(async function(subscription)
                     {
-                        // If a subscription was found, return it.
+                        // If a subscription was found, reuse it only when it was created with the
+                        // same VAPID public key the server is currently signing with. If the keys
+                        // were rotated or regenerated, the stale subscription's applicationServerKey
+                        // no longer matches the private key used to sign, so the push service rejects
+                        // it with "VAPID public key mismatch". In that case drop it and resubscribe.
                         if (subscription) {
-                            return subscription;
+                            const existingKey = arrayBufferToBase64Url(subscription.options.applicationServerKey);
+                            if (existingKey === publicKey) {
+                                return subscription;
+                            }
+                            await subscription.unsubscribe();
                         }
 
 
