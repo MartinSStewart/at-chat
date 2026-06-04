@@ -1388,8 +1388,9 @@ updateLoaded msg model =
                     ( model
                     , Command.batch
                         [ FrontendExtra.setFocus model Pages.Guild.channelTextInputId
-                        , Ports.setFavicon "favicon.ico"
+                        , Ports.setFavicon "/favicon.ico"
                         , Ports.closeNotifications
+                        , Ports.registerServiceWorker
                         ]
                     )
 

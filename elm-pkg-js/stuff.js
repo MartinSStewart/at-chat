@@ -35,11 +35,7 @@ exports.init = async function init(app)
     app.ports.register_service_worker_to_js.subscribe(() => {
         if (navigator.serviceWorker) {
             navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-                if (registration) {
-                }
-                else {
-                    navigator.serviceWorker.register(serviceWorkerJs);
-                }
+                navigator.serviceWorker.register(serviceWorkerJs);
                 navigator.serviceWorker.addEventListener("message", (event) => {
                     console.log(event);
                     app.ports.service_worker_message_from_js.send(event.data);
