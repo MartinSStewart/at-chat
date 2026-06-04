@@ -47,25 +47,35 @@ self.addEventListener('push', function(event) {
 });
 
 self.addEventListener('notificationclick', function(event) {
-    // Access the data that was stored with the notification
-    const notificationData = event.notification.data;
+    // The URL to navigate to was stored as the notification's `data` (see the
+    // push payload built in Broadcast.elm). It's either a full URL string or
+    // null/undefined when the notification isn't tied to a specific route.
+    const notificationData = event.notification.data || '/';
 
-    // Use the data as needed
-    console.log('Notification data:', notificationData);
-
-    // Close the notification
     event.notification.close();
 
-    // Example: Open a URL based on the data
-    clients.matchAll({ type: "window", includeUncontrolled: true })
-        .then((windowClients) => {
-            if (windowClients.length > 0) {
-                windowClients[0].postMessage(notificationData);
-            }
-            else {
-                //clients.openWindow(notificationData);
-            }
-        });
+    // Wrap the async work in waitUntil so the service worker isn't terminated
+    // before it finishes.
+    event.waitUntil(
+        clients.matchAll({ type: "window", includeUncontrolled: true })
+            .then((windowClients) => {
+                // If a window is already open, navigate it and bring it to the
+                // foreground.
+                for (const client of windowClients) {
+                    if ('focus' in client) {
+                        client.postMessage(notificationData);
+                        return client.focus();
+                    }
+                }
+
+                // No window open (the common case when the app is closed): open
+                // a new one. Previously this branch was commented out, so the
+                // notification closed without opening anything.
+                if (clients.openWindow) {
+                    return clients.openWindow(notificationData);
+                }
+            })
+    );
 
 });
 
