@@ -287,7 +287,7 @@ exports.init = async function init(app)
                     });
                 }).then(function(subscription) {
                   // Send the subscription details to the server using the Fetch API.
-                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription ]});
+                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription.toJSON() ]});
                 }).catch((e) =>
                     app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]})
                 );
