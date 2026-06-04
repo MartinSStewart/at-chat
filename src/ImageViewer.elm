@@ -71,6 +71,8 @@ type Interaction
     | Pinching
         { startDistance : Float
         , startScale : Float
+        , prevMidX : Float
+        , prevMidY : Float
         }
 
 
@@ -170,12 +172,18 @@ update windowSize msg model =
         TouchStart positions ->
             case positions of
                 first :: second :: _ ->
+                    let
+                        ( midX, midY ) =
+                            midpoint first second
+                    in
                     Just
                         { model
                             | interaction =
                                 Pinching
                                     { startDistance = max 1 (distance first second)
                                     , startScale = model.scale
+                                    , prevMidX = midX
+                                    , prevMidY = midY
                                     }
                             , velocityX = 0
                             , velocityY = 0
@@ -194,17 +202,32 @@ update windowSize msg model =
                         ( midX, midY ) =
                             midpoint first second
 
+                        -- Moving both fingers together pans the image by however
+                        -- far their midpoint moved.
+                        panned : Model
+                        panned =
+                            { model
+                                | offsetX = model.offsetX + (midX - pinch.prevMidX)
+                                , offsetY = model.offsetY + (midY - pinch.prevMidY)
+                            }
+
                         zoomed : Model
                         zoomed =
                             zoomAround windowSize
                                 midX
                                 midY
                                 (pinch.startScale * distance first second / pinch.startDistance)
-                                model
+                                panned
                     in
                     -- Pinch tracks the fingers directly, so keep targetScale in
                     -- sync to avoid the easing fighting the gesture.
-                    Just { zoomed | targetScale = zoomed.scale, zoomFocusX = midX, zoomFocusY = midY }
+                    Just
+                        { zoomed
+                            | targetScale = zoomed.scale
+                            , zoomFocusX = midX
+                            , zoomFocusY = midY
+                            , interaction = Pinching { pinch | prevMidX = midX, prevMidY = midY }
+                        }
 
                 ( Dragging _, ( x, y ) :: _ ) ->
                     Just (continueDrag x y model)

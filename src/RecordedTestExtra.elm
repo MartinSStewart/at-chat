@@ -1735,6 +1735,68 @@ imageViewerTests imageUploadConfig =
                 )
             ]
         , startTest
+            "Moving both fingers together pans the image while pinching"
+            startTime
+            imageUploadConfig
+            [ connectTwoUsersAndJoinNewGuild
+                mobileWindow
+                (\admin _ ->
+                    let
+                        touchEvent : List ( Float, Float ) -> { changedTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) }, targetTouches : List { id : Int, clientPos : ( Float, Float ), pagePos : ( Float, Float ), screenPos : ( Float, Float ) } }
+                        touchEvent points =
+                            { changedTouches = []
+                            , targetTouches =
+                                List.indexedMap
+                                    (\index ( x, y ) ->
+                                        { id = index, clientPos = ( x, y ), pagePos = ( x, y ), screenPos = ( x, y ) }
+                                    )
+                                    points
+                            }
+                    in
+                    [ admin.click 100 (Dom.id "messageMenu_channelInput_uploadFile")
+                    , admin.click 1000 (Dom.id "messageMenu_channelInput_sendMessage")
+                    , admin.checkView 0 (Test.Html.Query.has [ Test.Html.Selector.id "spoiler_1_image_1" ])
+                    , admin.click 0 (Dom.id "spoiler_1_image_1")
+                    , admin.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.id "imageViewer_overlay" ])
+
+                    -- Two fingers a constant 20px apart, with their midpoint
+                    -- sliding from (200, 400) to (300, 500). The distance doesn't
+                    -- change, so there's no zoom (scale stays 1); the image just
+                    -- pans by the (100, 100) the midpoint moved.
+                    , admin.touchStart 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 190, 400 ), ( 210, 400 ) ])
+                    , admin.touchMove 100 (Dom.id "imageViewer_overlay") (touchEvent [ ( 290, 500 ), ( 310, 500 ) ])
+                    , T.checkState
+                        100
+                        (\data ->
+                            if
+                                List.any
+                                    (\( _, frontend ) ->
+                                        case frontend of
+                                            Types.Loaded loaded ->
+                                                case loaded.imageViewer of
+                                                    Just imageViewer ->
+                                                        (imageViewer.scale == 1)
+                                                            && (imageViewer.offsetX == 100)
+                                                            && (imageViewer.offsetY == 100)
+
+                                                    Nothing ->
+                                                        False
+
+                                            Types.Loading _ ->
+                                                False
+                                    )
+                                    (SeqDict.toList data.frontends)
+                            then
+                                Ok ()
+
+                            else
+                                Err "Moving both fingers together should pan the image by the midpoint delta without zooming"
+                        )
+                    , admin.touchEnd 100 (Dom.id "imageViewer_overlay") (touchEvent [])
+                    ]
+                )
+            ]
+        , startTest
             "Flinging the image in the viewer keeps it moving (inertia)"
             startTime
             imageUploadConfig
