@@ -34,19 +34,10 @@ exports.init = async function init(app)
 
     app.ports.register_service_worker_to_js.subscribe(() => {
         if (navigator.serviceWorker) {
-            navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-                // updateViaCache: 'none' stops the browser from serving the
-                // service-worker.js script out of the HTTP cache, so a changed
-                // script is detected and installed on the next load instead of
-                // requiring a manual unregister.
-                navigator.serviceWorker.register(serviceWorkerJs, { updateViaCache: 'none' }).then((reg) => {
-                    // Explicitly check for an updated script right away.
-                    reg.update().catch(() => {});
-                });
-                navigator.serviceWorker.addEventListener("message", (event) => {
-                    console.log(event);
-                    app.ports.service_worker_message_from_js.send(event.data);
-                });
+            navigator.serviceWorker.register(serviceWorkerJs);
+            navigator.serviceWorker.addEventListener("message", (event) => {
+                console.log(event);
+                app.ports.service_worker_message_from_js.send(event.data);
             });
         }
     });
@@ -96,10 +87,10 @@ exports.init = async function init(app)
             // here so we can show when the worker was last installed/updated on
             // this device.
             try {
-                const cache = await caches.open('sw_meta');
-                const installedAtResponse = await cache.match('installedAt');
-                if (installedAtResponse) {
-                    result.installedAt = await installedAtResponse.text();
+                const cache = await caches.open('service_worker_installed_at');
+                const installedAtResponse = await cache.matchAll();
+                if (installedAtResponse[0]) {
+                    result.installedAt = await installedAtResponse[0].text();
                 } else {
                     result.installedAt = "Unknown (install time not recorded yet)";
                 }

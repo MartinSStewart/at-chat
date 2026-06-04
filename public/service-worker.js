@@ -8,7 +8,7 @@ self.addEventListener('install', (event) => {
     // timestamp so it's obvious when inspected directly in devtools.
     event.waitUntil((async () => {
         try {
-            const cache = await caches.open('sw_meta');
+            const cache = await caches.open('service_worker_installed_at');
             await cache.put(
                 'installedAt',
                 new Response(new Date().toISOString(), {
