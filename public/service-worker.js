@@ -50,19 +50,12 @@ self.addEventListener('notificationclick', function(event) {
     // The URL to navigate to was stored as the notification's `data` (see the
     // push payload built in Broadcast.elm). It's either a full URL string or
     // null/undefined when the notification isn't tied to a specific route.
-    const notificationData = event.notification.data;
+    const notificationData = event.notification.data || '/';
 
-    // The URL to open when no window is already focused. Fall back to the app
-    // root so the app still opens for notifications without a specific route.
-    const targetUrl = notificationData || '/';
-
-    // Close the notification
     event.notification.close();
 
     // Wrap the async work in waitUntil so the service worker isn't terminated
-    // before it finishes. Without this, on some mobile browsers (e.g. Samsung
-    // Internet on a Galaxy S20) tapping the notification dismisses it without
-    // ever opening the app.
+    // before it finishes.
     event.waitUntil(
         clients.matchAll({ type: "window", includeUncontrolled: true })
             .then((windowClients) => {
@@ -79,7 +72,7 @@ self.addEventListener('notificationclick', function(event) {
                 // a new one. Previously this branch was commented out, so the
                 // notification closed without opening anything.
                 if (clients.openWindow) {
-                    return clients.openWindow(targetUrl);
+                    return clients.openWindow(notificationData);
                 }
             })
     );
