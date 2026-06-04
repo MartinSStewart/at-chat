@@ -4,11 +4,19 @@
 self.addEventListener('install', (event) => {
     // Record when this service worker was installed so it can be surfaced in
     // the debug section. Stored in Cache Storage because that's readable from
-    // both the service worker and the page.
+    // both the service worker and the page. The body is a human-readable ISO
+    // timestamp so it's obvious when inspected directly in devtools.
     event.waitUntil((async () => {
         try {
             const cache = await caches.open('sw_meta');
-            await cache.put('installedAt', new Response(String(Date.now())));
+            await cache.put(
+                'installedAt',
+                new Response(new Date().toISOString(), {
+                    status: 200,
+                    statusText: 'OK',
+                    headers: { 'Content-Type': 'text/plain' }
+                })
+            );
         } catch (error) {
             // Ignore: failing to record the install time shouldn't block install.
         }

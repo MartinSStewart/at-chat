@@ -35,7 +35,14 @@ exports.init = async function init(app)
     app.ports.register_service_worker_to_js.subscribe(() => {
         if (navigator.serviceWorker) {
             navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-                navigator.serviceWorker.register(serviceWorkerJs);
+                // updateViaCache: 'none' stops the browser from serving the
+                // service-worker.js script out of the HTTP cache, so a changed
+                // script is detected and installed on the next load instead of
+                // requiring a manual unregister.
+                navigator.serviceWorker.register(serviceWorkerJs, { updateViaCache: 'none' }).then((reg) => {
+                    // Explicitly check for an updated script right away.
+                    reg.update().catch(() => {});
+                });
                 navigator.serviceWorker.addEventListener("message", (event) => {
                     console.log(event);
                     app.ports.service_worker_message_from_js.send(event.data);
@@ -92,8 +99,7 @@ exports.init = async function init(app)
                 const cache = await caches.open('sw_meta');
                 const installedAtResponse = await cache.match('installedAt');
                 if (installedAtResponse) {
-                    const installedAt = Number(await installedAtResponse.text());
-                    result.installedAt = new Date(installedAt).toISOString();
+                    result.installedAt = await installedAtResponse.text();
                 } else {
                     result.installedAt = "Unknown (install time not recorded yet)";
                 }
