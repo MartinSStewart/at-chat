@@ -4295,7 +4295,7 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         PressedUnregisterServiceWorkers ->
-            ( model, Ports.unregisterServiceWorker )
+            ( model, Command.none )
 
 
 copyText : String -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly toMsg msg )

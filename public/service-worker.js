@@ -1,3 +1,14 @@
+// Activate a newer service-worker.js as soon as it finishes installing instead
+// of waiting for every tab to close, and immediately take over already-open
+// pages so the new version applies without a manual reload.
+self.addEventListener('install', (event) => {
+    event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil(self.clients.claim());
+});
+
 // Register event listener for the 'push' event.
 self.addEventListener('push', function(event) {
     try

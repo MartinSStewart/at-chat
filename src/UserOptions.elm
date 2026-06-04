@@ -486,15 +486,6 @@ view isMobile textInputFocus time local loggedIn loaded model =
                         Nothing ->
                             Ui.none
                     ]
-                , MyUi.container
-                    MyUi.background1
-                    isMobile
-                    "Debug"
-                    [ MyUi.secondaryButton
-                        (Dom.id "userOptions_unregisterServiceWorkers")
-                        PressedUnregisterServiceWorkers
-                        "Unregister service workers"
-                    ]
                 ]
             )
         )

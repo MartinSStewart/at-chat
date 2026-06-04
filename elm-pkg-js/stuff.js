@@ -33,32 +33,28 @@ exports.init = async function init(app)
     const serviceWorkerJs = '/service-worker.js';
 
     app.ports.register_service_worker_to_js.subscribe(() => {
-        if (navigator.serviceWorker) {
-            navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-                if (registration) {
-                }
-                else {
-                    navigator.serviceWorker.register(serviceWorkerJs);
-                }
-                navigator.serviceWorker.addEventListener("message", (event) => {
-                    console.log(event);
-                    app.ports.service_worker_message_from_js.send(event.data);
-                });
-            });
-        }
-    });
+        if (!navigator.serviceWorker) { return; }
 
-    app.ports.unregister_service_worker_to_js.subscribe(() => {
-        if (navigator.serviceWorker) {
-            navigator.serviceWorker.getRegistrations().then(function (registrations) {
-              for (let registration of registrations) {
-                registration.unregister().then(function () {
-                  console.log("Service Worker Unregistered:", registration.scope)
-                })
-              }
+        navigator.serviceWorker.addEventListener("message", (event) => {
+            console.log(event);
+            app.ports.service_worker_message_from_js.send(event.data);
+        });
+
+        navigator.serviceWorker.register(serviceWorkerJs).then((registration) => {
+            // Browsers only re-check service-worker.js on navigation, so for
+            // long-lived sessions we ping it ourselves: once an hour and every
+            // time the tab becomes visible. The SW calls skipWaiting/claim on
+            // install/activate, so any newer version takes over immediately.
+            const checkForUpdate = () => { registration.update().catch(() => {}); };
+            setInterval(checkForUpdate, 60 * 60 * 1000);
+            document.addEventListener("visibilitychange", () => {
+                if (document.visibilityState === "visible") {
+                    checkForUpdate();
+                }
             });
-            location.reload();
-        }
+        }).catch((error) => {
+            console.log("Service Worker registration failed:", error);
+        });
     });
 
     class LottiePlayer extends HTMLElement {
