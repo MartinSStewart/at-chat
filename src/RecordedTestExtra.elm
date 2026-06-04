@@ -188,11 +188,20 @@ handlePortToJs requestAndData =
         "register_push_subscription_to_js" ->
             ( "register_push_subscription_from_js"
             , Json.Encode.object
-                [ ( "endpoint", Json.Encode.string "https://vapidserver.com/" )
-                , ( "keys"
-                  , Json.Encode.object
-                        [ ( "auth", Json.Encode.string "123" )
-                        , ( "p256dh", Json.Encode.string "abc" )
+                [ ( "tag", Json.Encode.string "GotSubscribeData" )
+                , ( "args"
+                  , Json.Encode.list
+                        identity
+                        [ Json.Encode.object
+                            [ ( "endpoint", Json.Encode.string "https://vapidserver.com/" )
+                            , ( "expirationTime", Json.Encode.null )
+                            , ( "keys"
+                              , Json.Encode.object
+                                    [ ( "auth", Json.Encode.string "123" )
+                                    , ( "p256dh", Json.Encode.string "abc" )
+                                    ]
+                              )
+                            ]
                         ]
                   )
                 ]
