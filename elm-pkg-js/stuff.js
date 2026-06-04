@@ -84,6 +84,23 @@ exports.init = async function init(app)
 
             result.controller = describeWorker(navigator.serviceWorker.controller);
 
+            // The service worker records its install time in Cache Storage on
+            // the 'install' event (see public/service-worker.js). Read it back
+            // here so we can show when the worker was last installed/updated on
+            // this device.
+            try {
+                const cache = await caches.open('sw_meta');
+                const installedAtResponse = await cache.match('installedAt');
+                if (installedAtResponse) {
+                    const installedAt = Number(await installedAtResponse.text());
+                    result.installedAt = new Date(installedAt).toISOString();
+                } else {
+                    result.installedAt = "Unknown (install time not recorded yet)";
+                }
+            } catch (e) {
+                result.installedAt = "Error: " + e.toString();
+            }
+
             const registration = await navigator.serviceWorker.getRegistration(serviceWorkerJs);
             result.registration = describeRegistration(registration);
 

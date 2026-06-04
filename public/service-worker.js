@@ -2,7 +2,18 @@
 // of waiting for every tab to close, and immediately take over already-open
 // pages so the new version applies without a manual reload.
 self.addEventListener('install', (event) => {
-    event.waitUntil(self.skipWaiting());
+    // Record when this service worker was installed so it can be surfaced in
+    // the debug section. Stored in Cache Storage because that's readable from
+    // both the service worker and the page.
+    event.waitUntil((async () => {
+        try {
+            const cache = await caches.open('sw_meta');
+            await cache.put('installedAt', new Response(String(Date.now())));
+        } catch (error) {
+            // Ignore: failing to record the install time shouldn't block install.
+        }
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener('activate', (event) => {
