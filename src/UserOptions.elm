@@ -18,6 +18,7 @@ import RichText
 import Route
 import SeqDict
 import SeqSet exposing (SeqSet)
+import SessionIdHash
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -490,7 +491,24 @@ view isMobile textInputFocus time local loggedIn loaded model =
                     MyUi.background1
                     isMobile
                     "Debug"
-                    [ MyUi.secondaryButton
+                    [ Ui.column
+                        [ if isMobile then
+                            Ui.width Ui.fill
+
+                          else
+                            Ui.width Ui.shrink
+                        ]
+                        [ Ui.el
+                            [ Ui.Font.size 14, Ui.Font.bold ]
+                            (Ui.text "SessionId hash")
+                        , MyUi.copyBox
+                            (Dom.id "userOptions_sessionIdHash")
+                            PressedCopyText
+                            FrontendNoOp
+                            loaded
+                            (SessionIdHash.toString local.localUser.session.sessionIdHash)
+                        ]
+                    , MyUi.secondaryButton
                         (Dom.id "userOptions_unregisterServiceWorkers")
                         PressedUnregisterServiceWorkers
                         "Unregister service workers"
