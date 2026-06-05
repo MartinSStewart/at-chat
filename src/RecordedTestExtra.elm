@@ -2962,7 +2962,7 @@ attackerShouldNotGetThisToFrontend toFrontend =
                         Types.Server_SetDiscordGuildNotificationLevel _ _ ->
                             True
 
-                        Types.Server_PushNotificationFailed _ ->
+                        Types.Server_PushNotificationFailed _ _ ->
                             True
 
                         Types.Server_NewSession _ _ ->
