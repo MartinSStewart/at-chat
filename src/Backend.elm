@@ -4603,18 +4603,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\session _ ->
                             case pushSubscription of
                                 GotSubscribeData subscribeData ->
-                                    let
-                                        -- We re-register on every load to heal expired subscriptions, so only send the
-                                        -- confirmation notification when this is actually a new or changed subscription.
-                                        alreadySubscribed : Bool
-                                        alreadySubscribed =
-                                            case session.pushSubscription of
-                                                Subscribed existing _ ->
-                                                    existing == subscribeData
-
-                                                _ ->
-                                                    False
-                                    in
                                     ( { model
                                         | sessions =
                                             SeqDict.insert
@@ -4625,20 +4613,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Command.batch
                                         [ LocalChangeResponse changeId (Local_RegisterPushSubscription time pushSubscription)
                                             |> Lamdera.sendToFrontend clientId
-                                        , if alreadySubscribed then
-                                            Command.none
-
-                                          else
-                                            Broadcast.pushNotification
-                                                sessionId
-                                                session.userId
-                                                time
-                                                "Success!"
-                                                "Push notifications enabled"
-                                                "https://at-chat.app/at-logo-no-background.png"
-                                                Nothing
-                                                subscribeData
-                                                model
+                                        , Broadcast.pushNotification
+                                            sessionId
+                                            session.userId
+                                            time
+                                            "Success!"
+                                            "Push notifications enabled"
+                                            "https://at-chat.app/at-logo-no-background.png"
+                                            Nothing
+                                            subscribeData
+                                            model
                                         ]
                                     )
 
