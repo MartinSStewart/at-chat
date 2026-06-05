@@ -593,7 +593,7 @@ update msg model =
                 Err error ->
                     BackendExtra.addLog time (Log.FailedToGetDiscordUserAvatars error) model
 
-        SentNotification sessionId userId time result ->
+        SentNotification sessionId userId time subscribeData result ->
             case result of
                 Ok () ->
                     ( model, Command.none )
@@ -606,19 +606,22 @@ update msg model =
                             | sessions =
                                 SeqDict.updateIfExists
                                     sessionId
-                                    (\session -> { session | pushSubscription = SubscriptionError error })
+                                    (\session -> { session | pushSubscription = SubscriptionError subscribeData error })
                                     model.sessions
                         }
                         (if Env.isProduction && userId /= Broadcast.adminUserId then
                             Broadcast.toSession
                                 sessionId
-                                (Server_PushNotificationFailed (Http.BadBody "Something went wrong when sending notifications"))
+                                (Server_PushNotificationFailed
+                                    subscribeData
+                                    (Http.BadBody "Something went wrong when sending notifications")
+                                )
                                 model
 
                          else
                             Broadcast.toSession
                                 sessionId
-                                (Server_PushNotificationFailed error)
+                                (Server_PushNotificationFailed subscribeData error)
                                 model
                         )
 

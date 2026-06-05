@@ -3199,7 +3199,7 @@ allAttackerLocalChanges =
     , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
     , Local_NewInviteLink messageTime legitGuildId EmptyPlaceholder
-    , Local_RegisterPushSubscription (Time.millisToPosix 9) (GotSubscribeData { endpoint = domain, keys = { auth = "auth", p256dh = "p256dh" } })
+    , Local_RegisterPushSubscription (Time.millisToPosix 9) (GotSubscribeData { endpoint = domain, expirationTime = Nothing, keys = { auth = "auth", p256dh = "p256dh" } })
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty

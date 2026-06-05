@@ -3427,7 +3427,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_PushNotificationFailed error ->
+                Server_PushNotificationFailed subscribeData error ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -3439,7 +3439,7 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | session = { session | pushSubscription = SubscriptionError error } }
+                            { localUser | session = { session | pushSubscription = SubscriptionError subscribeData error } }
                     }
 
                 Server_NewSession sessionId session ->

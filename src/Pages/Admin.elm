@@ -36,6 +36,7 @@ import Array.Extra
 import Bytes exposing (Bytes)
 import ChannelName
 import Cloudflare
+import Codec
 import CustomEmoji
 import Discord
 import DmChannel exposing (DmChannelId)
@@ -1876,11 +1877,18 @@ pushSubscriptionToString timezone pushSubscription =
         NotSubscribed ->
             "Not subscribed"
 
-        Subscribed _ time ->
-            "Subscribed, last notification sent at " ++ MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone
+        Subscribed subscribeData time ->
+            "Subscribed, last notification sent at "
+                ++ MyUi.datestamp timezone time
+                ++ " "
+                ++ MyUi.timestamp time timezone
+                ++ ", Subscription: "
+                ++ Codec.encodeToString 0 Ports.subscribeDataCodec subscribeData
 
-        SubscriptionError error ->
+        SubscriptionError subscribeData error ->
             Log.httpErrorToString error
+                ++ ", Subscription: "
+                ++ Codec.encodeToString 0 Ports.subscribeDataCodec subscribeData
 
         SubscriptionJsException jsError time ->
             "JS error at " ++ MyUi.datestamp timezone time ++ " " ++ MyUi.timestamp time timezone ++ ": " ++ jsError
