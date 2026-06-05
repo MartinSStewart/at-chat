@@ -37,6 +37,14 @@ exports.init = async function init(app)
             navigator.serviceWorker.register(serviceWorkerJs);
             navigator.serviceWorker.addEventListener("message", (event) => {
                 console.log(event);
+                // The service worker forwards a fresh subscription here when the push
+                // service rotates/expires the old one (the `pushsubscriptionchange`
+                // event). Route it to the push subscription registration flow so the
+                // backend gets the new endpoint instead of the dead one.
+                if (event.data && event.data.type === "pushsubscriptionchange") {
+                    app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ "ServiceWorkerChange", event.data.subscription ]});
+                    return;
+                }
                 app.ports.service_worker_message_from_js.send(event.data);
             });
         }
@@ -355,7 +363,7 @@ exports.init = async function init(app)
         }
     });
 
-    app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
+    app.ports.register_push_subscription_to_js.subscribe(({ source, publicKey }) => {
         if (navigator.serviceWorker) {
             try {
                 navigator.serviceWorker.ready
@@ -388,7 +396,7 @@ exports.init = async function init(app)
                     });
                 }).then(function(subscription) {
                   // Send the subscription details to the server using the Fetch API.
-                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ subscription.toJSON() ]});
+                  app.ports.register_push_subscription_from_js.send({ tag: "GotSubscribeData", args: [ source, subscription.toJSON() ]});
                 }).catch((e) =>
                     app.ports.register_push_subscription_from_js.send({ tag: "SubscribeJsException", args: [ e.toString() ]})
                 );

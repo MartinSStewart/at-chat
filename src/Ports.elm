@@ -4,6 +4,7 @@ port module Ports exposing
     , ExecCommand(..)
     , ExecCommandPort
     , NotificationPermission(..)
+    , PushSubscriptionSource(..)
     , PwaStatus(..)
     , RegisterPushSubscription(..)
     , SubscribeData
@@ -411,17 +412,66 @@ pageHasFocus msg =
         )
 
 
-registerPushSubscriptionToJs : String -> Command FrontendOnly toMsg msg
-registerPushSubscriptionToJs publicKey =
+registerPushSubscriptionToJs : PushSubscriptionSource -> String -> Command FrontendOnly toMsg msg
+registerPushSubscriptionToJs source publicKey =
     Command.sendToJs
         "register_push_subscription_to_js"
         register_push_subscription_to_js
-        (Json.Encode.string publicKey)
+        (Json.Encode.object
+            [ ( "source", Json.Encode.string (pushSubscriptionSourceToString source) )
+            , ( "publicKey", Json.Encode.string publicKey )
+            ]
+        )
 
 
 type RegisterPushSubscription
-    = GotSubscribeData SubscribeData
+    = GotSubscribeData PushSubscriptionSource SubscribeData
     | SubscribeJsException String
+
+
+{-| Describes what triggered a push subscription (re)registration. Used so the
+backend can log which code path produced the subscription, making it possible to
+verify that the self-healing paths (re-registering on app load and reacting to
+the service worker's `pushsubscriptionchange` event) are actually running.
+-}
+type PushSubscriptionSource
+    = -- The user explicitly enabled push notifications.
+      UserEnabledNotifications
+    | -- We re-registered on app load because push notifications were already enabled.
+      AppLoadRefresh
+    | -- The service worker's `pushsubscriptionchange` event fired and we resubscribed.
+      ServiceWorkerChange
+
+
+pushSubscriptionSourceToString : PushSubscriptionSource -> String
+pushSubscriptionSourceToString source =
+    case source of
+        UserEnabledNotifications ->
+            "UserEnabledNotifications"
+
+        AppLoadRefresh ->
+            "AppLoadRefresh"
+
+        ServiceWorkerChange ->
+            "ServiceWorkerChange"
+
+
+pushSubscriptionSourceCodec : Codec PushSubscriptionSource
+pushSubscriptionSourceCodec =
+    Codec.map
+        (\str ->
+            case str of
+                "AppLoadRefresh" ->
+                    AppLoadRefresh
+
+                "ServiceWorkerChange" ->
+                    ServiceWorkerChange
+
+                _ ->
+                    UserEnabledNotifications
+        )
+        pushSubscriptionSourceToString
+        Codec.string
 
 
 registerPushSubscriptionCodec : Codec RegisterPushSubscription
@@ -429,13 +479,13 @@ registerPushSubscriptionCodec =
     Codec.custom
         (\a c encoder ->
             case encoder of
-                GotSubscribeData a0 ->
-                    a a0
+                GotSubscribeData a0 a1 ->
+                    a a0 a1
 
                 SubscribeJsException c0 ->
                     c c0
         )
-        |> Codec.variant1 "GotSubscribeData" GotSubscribeData subscribeDataCodec
+        |> Codec.variant2 "GotSubscribeData" GotSubscribeData pushSubscriptionSourceCodec subscribeDataCodec
         |> Codec.variant1 "SubscribeJsException" SubscribeJsException Codec.string
         |> Codec.buildCustom
 

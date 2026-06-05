@@ -54,7 +54,7 @@ import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
-import Ports exposing (PwaStatus(..))
+import Ports exposing (PushSubscriptionSource(..), PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import Range exposing (Range, SelectionDirection)
 import RichText exposing (RichText)
@@ -454,6 +454,20 @@ loadedInitHelper timezone userAgent loginData loading =
             Call.NoVideo
             (Call.displayMode local.localUser.session.userId loading.route local.calls)
             loggedIn.voiceChat
+        , -- Re-register the push subscription on load when push notifications are
+          -- already enabled. The push service can silently invalidate a subscription
+          -- (without setting expirationTime), which leaves the backend pushing to a
+          -- dead endpoint. Re-registering here heals that: getSubscription returns the
+          -- current valid subscription (or resubscribes), and the backend is updated.
+          case local.localUser.session.notificationMode of
+            PushNotifications ->
+                Ports.registerPushSubscriptionToJs AppLoadRefresh local.publicVapidKey
+
+            NoNotifications ->
+                Command.none
+
+            NotifyWhenRunning ->
+                Command.none
         ]
     )
 
@@ -2609,7 +2623,9 @@ updateLoaded msg model =
                             PushNotifications ->
                                 Command.batch
                                     [ Ports.requestNotificationPermission
-                                    , Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
+                                    , Ports.registerPushSubscriptionToJs
+                                        UserEnabledNotifications
+                                        (Local.model loggedIn.localState).publicVapidKey
                                     ]
                         )
                 )

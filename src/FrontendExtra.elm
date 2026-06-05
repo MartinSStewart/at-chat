@@ -2648,7 +2648,7 @@ changeUpdate localMsg local =
                                     { session
                                         | pushSubscription =
                                             case pushSubscription of
-                                                GotSubscribeData subscribeData ->
+                                                GotSubscribeData _ subscribeData ->
                                                     Subscribed subscribeData time
 
                                                 SubscribeJsException jsError ->

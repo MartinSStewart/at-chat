@@ -56,7 +56,7 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (ExportSubset(..))
 import Pagination
 import PersonName
-import Ports exposing (RegisterPushSubscription(..))
+import Ports exposing (PushSubscriptionSource(..), RegisterPushSubscription(..))
 import Postmark
 import Quantity
 import RateLimit
@@ -4605,27 +4605,52 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         (\session _ ->
                             case pushSubscription of
-                                GotSubscribeData subscribeData ->
-                                    ( { model
-                                        | sessions =
-                                            SeqDict.insert
-                                                sessionId
-                                                { session | pushSubscription = Subscribed subscribeData time }
-                                                model.sessions
-                                      }
+                                GotSubscribeData source subscribeData ->
+                                    let
+                                        -- Log every (re)registration with its source so an admin can
+                                        -- verify the self-healing paths (re-registering on app load and
+                                        -- reacting to the service worker's pushsubscriptionchange event)
+                                        -- are actually running.
+                                        ( model2, logCmd ) =
+                                            BackendExtra.addLog
+                                                time
+                                                (Log.PushSubscriptionRegistered session.userId source)
+                                                { model
+                                                    | sessions =
+                                                        SeqDict.insert
+                                                            sessionId
+                                                            { session | pushSubscription = Subscribed subscribeData time }
+                                                            model.sessions
+                                                }
+                                    in
+                                    ( model2
                                     , Command.batch
                                         [ LocalChangeResponse changeId (Local_RegisterPushSubscription time pushSubscription)
                                             |> Lamdera.sendToFrontend clientId
-                                        , Broadcast.pushNotification
-                                            sessionId
-                                            session.userId
-                                            time
-                                            "Success!"
-                                            "Push notifications enabled"
-                                            "https://at-chat.app/at-logo-no-background.png"
-                                            Nothing
-                                            subscribeData
-                                            model
+                                        , logCmd
+
+                                        -- Only confirm with a "Push notifications enabled" notification when
+                                        -- the user explicitly enabled them. Re-registrations on app load or
+                                        -- from the service worker happen silently in the background, so
+                                        -- sending a notification there would spam the user.
+                                        , case source of
+                                            UserEnabledNotifications ->
+                                                Broadcast.pushNotification
+                                                    sessionId
+                                                    session.userId
+                                                    time
+                                                    "Success!"
+                                                    "Push notifications enabled"
+                                                    "https://at-chat.app/at-logo-no-background.png"
+                                                    Nothing
+                                                    subscribeData
+                                                    model2
+
+                                            AppLoadRefresh ->
+                                                Command.none
+
+                                            ServiceWorkerChange ->
+                                                Command.none
                                         ]
                                     )
 

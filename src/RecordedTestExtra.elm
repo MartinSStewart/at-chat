@@ -114,7 +114,7 @@ import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
-import Ports exposing (RegisterPushSubscription(..))
+import Ports exposing (PushSubscriptionSource(..), RegisterPushSubscription(..))
 import Range exposing (Range)
 import RichText exposing (Domain(..))
 import SafeJson exposing (SafeJson(..))
@@ -192,7 +192,8 @@ handlePortToJs requestAndData =
                 , ( "args"
                   , Json.Encode.list
                         identity
-                        [ Json.Encode.object
+                        [ Json.Encode.string "UserEnabledNotifications"
+                        , Json.Encode.object
                             [ ( "endpoint", Json.Encode.string "https://vapidserver.com/" )
                             , ( "expirationTime", Json.Encode.null )
                             , ( "keys"
@@ -3199,7 +3200,7 @@ allAttackerLocalChanges =
     , Local_NewChannel messageTime legitGuildId (Unsafe.channelName "hacked") ChannelDescription.empty
     , Local_NewGuild messageTime (Unsafe.guildName "hacked") EmptyPlaceholder
     , Local_NewInviteLink messageTime legitGuildId EmptyPlaceholder
-    , Local_RegisterPushSubscription (Time.millisToPosix 9) (GotSubscribeData { endpoint = domain, expirationTime = Nothing, keys = { auth = "auth", p256dh = "p256dh" } })
+    , Local_RegisterPushSubscription (Time.millisToPosix 9) (GotSubscribeData UserEnabledNotifications { endpoint = domain, expirationTime = Nothing, keys = { auth = "auth", p256dh = "p256dh" } })
     , Local_RegisterPushSubscription (Time.millisToPosix 9) (SubscribeJsException "")
     , Local_RemoveReactionEmoji guildOrDmId_guild threadRouteWithMessage emoji
     , Local_SendEditMessage messageTime (GuildOrDmId_Dm normalUserId) threadRouteWithMessage normalText SeqDict.empty

@@ -10,6 +10,7 @@ import Icons
 import Id exposing (ChannelMessageId, CustomEmojiId, Id, StickerId, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import MyUi
+import Ports exposing (PushSubscriptionSource(..))
 import Postmark
 import SeqDict exposing (SeqDict)
 import Sticker exposing (AnimationMode(..))
@@ -27,6 +28,7 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError (Id UserId) Http.Error
+    | PushSubscriptionRegistered (Id UserId) PushSubscriptionSource
     | FailedToDeleteDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Discord.HttpError
     | FailedToDeleteDiscordDmMessage (Discord.Id Discord.PrivateChannelId) (Id ChannelMessageId) (Discord.Id Discord.MessageId) Discord.HttpError
     | FailedToEditDiscordGuildMessage (Discord.Id Discord.GuildId) (Discord.Id Discord.ChannelId) ThreadRouteWithMessage (Discord.Id Discord.MessageId) Discord.HttpError
@@ -97,6 +99,9 @@ shouldNotifyAdmin log =
 
         PushNotificationError _ _ ->
             Just "PushNotificationError"
+
+        PushSubscriptionRegistered _ _ ->
+            Nothing
 
         FailedToDeleteDiscordGuildMessage _ _ _ _ _ ->
             Nothing
@@ -369,6 +374,14 @@ logContent onPressCopy customEmojis log =
                 [ tag errorTag "Push Notification Error"
                 , fieldRow "User" (Ui.text (Id.toString userId))
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
+                ]
+
+        PushSubscriptionRegistered userId source ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag infoTag "Push Subscription Registered"
+                , fieldRow "User" (Ui.text (Id.toString userId))
+                , fieldRow "Source" (Ui.text (pushSubscriptionSourceToString source))
                 ]
 
         FailedToDeleteDiscordGuildMessage guildId channelId _ discordMessageId httpError ->
@@ -693,6 +706,19 @@ errorDetails content =
             (Ui.text "Error:")
         , Ui.Prose.paragraph [ Ui.Font.size 13, Ui.paddingXY 0 5 ] content
         ]
+
+
+pushSubscriptionSourceToString : PushSubscriptionSource -> String
+pushSubscriptionSourceToString source =
+    case source of
+        UserEnabledNotifications ->
+            "User enabled notifications"
+
+        AppLoadRefresh ->
+            "Re-registered on app load"
+
+        ServiceWorkerChange ->
+            "Service worker subscription change"
 
 
 httpErrorToString : Http.Error -> String
