@@ -455,7 +455,7 @@ subscribeDataCodec : Codec SubscribeData
 subscribeDataCodec =
     Codec.object SubscribeData
         |> Codec.field "endpoint" .endpoint CodecExtra.url
-        |> Codec.field "expirationTime" .expirationTime (Codec.nullable expirationTimeCodec)
+        |> Codec.optionalNullableField "expirationTime" .expirationTime expirationTimeCodec
         |> Codec.field "keys" .keys subscribeKeysCodec
         |> Codec.buildObject
 
