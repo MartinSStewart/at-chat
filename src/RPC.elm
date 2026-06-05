@@ -72,7 +72,7 @@ with the new subscription. The model swap and logging happen in a time-stamped
 -}
 regeneratePushSubscription : SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd BackendMsg )
 regeneratePushSubscription _ model _ json =
-    case Decode.decodeValue regeneratePushSubscriptionDecoder json of
+    case Decode.decodeValue decodeRegeneratePushSubscription json of
         Ok { old, new } ->
             case findSessionBySubscription old model of
                 Just sessionId ->
@@ -90,8 +90,8 @@ regeneratePushSubscription _ model _ json =
             ( Err (Http.BadBody ("Invalid request: " ++ Decode.errorToString error)), model, Cmd.none )
 
 
-regeneratePushSubscriptionDecoder : Decode.Decoder { old : SubscribeData, new : SubscribeData }
-regeneratePushSubscriptionDecoder =
+decodeRegeneratePushSubscription : Decode.Decoder { old : SubscribeData, new : SubscribeData }
+decodeRegeneratePushSubscription =
     Decode.map2 (\old new -> { old = old, new = new })
         (Decode.field "old" (Codec.decoder Ports.subscribeDataCodec))
         (Decode.field "new" (Codec.decoder Ports.subscribeDataCodec))
